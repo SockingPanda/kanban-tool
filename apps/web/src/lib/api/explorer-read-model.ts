@@ -256,6 +256,8 @@ export interface ExplorerTaskListPage {
 }
 
 export const BOARD_EVENTS_PAGE_LIMIT = 150
+/** 防止恶意或无界事件历史把一次读取变成无休止的游标遍历。 */
+export const MAX_BOARD_EVENTS_PAGES = 1_024
 
 export type ExplorerEvent = ApiListEventsResponseContract["data"][number]
 
@@ -415,6 +417,7 @@ function eventFingerprint(event: ExplorerEvent): string {
 function validateEventBatch(
   events: readonly ExplorerEvent[],
   board: ExplorerBoardIdentity,
+  taskId: string | null,
   after: number,
   nextAfter: number,
   limit: number,
@@ -434,6 +437,9 @@ function validateEventBatch(
     }
     if (event.board_id !== board.id) {
       throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 不属于当前 canonical board。`)
+    }
+    if (taskId !== null && event.task_id !== taskId) {
+      throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 越过当前 task scope。`)
     }
     if (event.event_id.trim().length === 0) {
       throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 缺少 event_id。`)
@@ -503,12 +509,12 @@ export function mergeBoardEvents(
   return Object.freeze(sorted.slice(-BOARD_EVENTS_PAGE_LIMIT).map((event) => Object.freeze({ ...event })))
 }
 
-export function buildBoardEventsRequest(board: string, taskId: string | null = null): string {
+export function buildBoardEventsRequest(board: string, taskId: string | null = null, after = 0): string {
   try {
     const parsed = parseApiListEventsQuery({
       board,
       task_id: taskId,
-      after: 0,
+      after,
       limit: BOARD_EVENTS_PAGE_LIMIT,
     })
     const params = new URLSearchParams()
@@ -544,18 +550,35 @@ export async function loadBoardEvents(
     const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
     const taskId = options.taskId?.trim() || null
     if (taskId !== null) validateTaskSelector(taskId)
-    const response = parseContract(
-      "api.list-events.response",
-      parseApiListEventsResponse,
-      await getPayload(transport, buildBoardEventsRequest(board.slug, taskId), options.signal, budget),
-    )
-    validateEventBatch(response.data, board, 0, response.meta.next_after, BOARD_EVENTS_PAGE_LIMIT)
-    const events = mergeBoardEvents([], response.data, board.id)
+    let after = 0
+    let pageCount = 0
+    let events: readonly ExplorerEvent[] = []
+    while (true) {
+      if (pageCount >= MAX_BOARD_EVENTS_PAGES) {
+        throw new ExplorerReadError("anomaly", `事件读取超过 ${MAX_BOARD_EVENTS_PAGES} 页预算。`)
+      }
+      pageCount += 1
+      const response = parseContract(
+        "api.list-events.response",
+        parseApiListEventsResponse,
+        await getPayload(transport, buildBoardEventsRequest(board.slug, taskId, after), options.signal, budget),
+      )
+      validateEventBatch(response.data, board, taskId, after, response.meta.next_after, BOARD_EVENTS_PAGE_LIMIT)
+      events = mergeBoardEvents(events, response.data, board.id)
+      if (response.data.length < BOARD_EVENTS_PAGE_LIMIT) {
+        after = response.meta.next_after
+        break
+      }
+      if (response.meta.next_after <= after) {
+        throw new ExplorerReadError("anomaly", "事件响应的 next_after 必须在完整 page 后前进。")
+      }
+      after = response.meta.next_after
+    }
     return Object.freeze({
       board,
       taskId,
       events,
-      meta: Object.freeze({ count: events.length, nextAfter: response.meta.next_after, limit: BOARD_EVENTS_PAGE_LIMIT }),
+      meta: Object.freeze({ count: events.length, nextAfter: after, limit: BOARD_EVENTS_PAGE_LIMIT }),
     })
   } catch (error) {
     return wrapTransportError(error)

@@ -189,7 +189,7 @@ export function EventsPresentation({
   const offline = !online || errorKind(error) === "offline"
 
   if (!state.data && (state.loading || !state.error) && !offline) {
-    return <section className={styles.state} data-testid="events-loading" role="status"><p>{copy.loading}</p></section>
+    return <section className={styles.state} data-testid="events-loading" role="status" aria-labelledby="events-loading-heading"><h2 id="events-loading-heading">{copy.title}</h2><p>{copy.loading}</p></section>
   }
   if (!state.data && offline) {
     return (
@@ -303,68 +303,155 @@ function useBoardEventsRead(
   batch: BoardEventsBatch | null | undefined,
   online: boolean,
 ): EventsReadState & { readonly refresh: () => void } {
+  const identityKey = `${boardSelector}\u0000${taskId ?? ""}`
   const loadRef = useRef<(signal: AbortSignal) => Promise<BoardEventsReadModel>>((signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal }))
   loadRef.current = (signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal })
   const [generation, setGeneration] = useState(0)
-  const [state, setState] = useState<EventsReadState>({ data: null, loading: false, error: null, stale: false })
+  const requestKey = `${identityKey}\u0000${invalidationRevision}\u0000${generation}`
+  type InternalEventsReadState = EventsReadState & {
+    readonly identityKey: string
+    readonly requestKey: string
+  }
+  const [state, setState] = useState<InternalEventsReadState>(() => ({
+    identityKey,
+    requestKey,
+    data: null,
+    loading: false,
+    error: null,
+    stale: false,
+  }))
 
   useEffect(() => {
+    const requestIdentity = identityKey
+    const requestToken = requestKey
     if (!online) {
-      setState((current) => ({ ...current, loading: false, error: new ExplorerReadError("offline", "当前离线，无法加载事件。"), stale: current.data !== null }))
+      setState((current) => ({
+        identityKey: requestIdentity,
+        requestKey: requestToken,
+        data: current.identityKey === requestIdentity ? current.data : null,
+        loading: false,
+        error: new ExplorerReadError("offline", "当前离线，无法加载事件。"),
+        stale: current.identityKey === requestIdentity && current.data !== null,
+      }))
       return
     }
     const controller = new AbortController()
     let active = true
-    setState((current) => ({ ...current, loading: true, error: null }))
+    setState((current) => ({
+      identityKey: requestIdentity,
+      requestKey: requestToken,
+      data: current.identityKey === requestIdentity ? current.data : null,
+      loading: true,
+      error: null,
+      stale: current.identityKey === requestIdentity && current.data !== null,
+    }))
     void loadRef.current(controller.signal).then(
       (data) => {
         if (!active || controller.signal.aborted) return
         setState((current) => {
+          if (current.identityKey !== requestIdentity || current.requestKey !== requestToken) return current
           if (current.data && current.data.board.id === data.board.id && current.data.taskId === data.taskId) {
             const events = mergeBoardEvents(current.data.events, data.events, data.board.id)
             return {
+              identityKey: requestIdentity,
+              requestKey: requestToken,
               data: { ...data, events, meta: { ...data.meta, count: events.length, nextAfter: Math.max(current.data.meta.nextAfter, data.meta.nextAfter) } },
               loading: false,
               error: null,
               stale: false,
             }
           }
-          return { data, loading: false, error: null, stale: false }
+          return { identityKey: requestIdentity, requestKey: requestToken, data, loading: false, error: null, stale: false }
         })
       },
       (error: unknown) => {
         if (!active || controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
-        setState((current) => ({ data: current.data, loading: false, error: error instanceof Error ? error : new Error(String(error)), stale: current.data !== null }))
+        setState((current) => {
+          if (current.identityKey !== requestIdentity || current.requestKey !== requestToken) return current
+          return {
+            identityKey: requestIdentity,
+            requestKey: requestToken,
+            data: current.data,
+            loading: false,
+            error: error instanceof Error ? error : new Error(String(error)),
+            stale: current.data !== null,
+          }
+        })
       },
     )
     return () => {
       active = false
       controller.abort()
     }
-  }, [boardSelector, generation, invalidationRevision, online, taskId])
+  }, [boardSelector, generation, identityKey, invalidationRevision, online, requestKey, taskId])
 
   useEffect(() => {
     if (!batch) return
     setState((current) => {
-      if (!current.data || current.data.board.id !== batch.boardId) return current
+      if (current.identityKey !== identityKey || !current.data || current.data.board.id !== batch.boardId) return current
       try {
         if (!Number.isSafeInteger(batch.nextAfter) || batch.nextAfter < 0) {
           throw new ExplorerReadError("anomaly", "事件 batch 的 nextAfter 不是非负安全整数。")
+        }
+        let previousId = -1
+        let maxIncomingId = -1
+        for (const event of batch.events) {
+          if (!Number.isSafeInteger(event.id) || event.id < 0 || event.id <= previousId) {
+            throw new ExplorerReadError("anomaly", "事件 batch 的 id 必须严格递增。")
+          }
+          if (event.board_id !== batch.boardId) {
+            throw new ExplorerReadError("anomaly", "事件 batch 越过当前 board scope。")
+          }
+          if (event.event_id.trim().length === 0) {
+            throw new ExplorerReadError("anomaly", "事件 batch 缺少 event_id。")
+          }
+          if (event.id > batch.nextAfter) {
+            throw new ExplorerReadError("anomaly", "事件 batch 的 id 不得超过 nextAfter。")
+          }
+          previousId = event.id
+          maxIncomingId = event.id
+        }
+        if (batch.nextAfter < current.data.meta.nextAfter) {
+          throw new ExplorerReadError("anomaly", "事件 batch 的 nextAfter 不得回退。")
+        }
+        if (batch.events.length === 0) {
+          if (batch.nextAfter !== current.data.meta.nextAfter) {
+            throw new ExplorerReadError("anomaly", "空事件 batch 不得推进 nextAfter。")
+          }
+        } else if (batch.nextAfter !== maxIncomingId) {
+          throw new ExplorerReadError("anomaly", "事件 batch 的 nextAfter 必须等于最后一个事件 id。")
         }
         const incoming = taskId === null ? batch.events : batch.events.filter((event) => event.task_id === taskId)
         const events = mergeBoardEvents(current.data.events, incoming, batch.boardId)
         return {
           ...current,
           data: { ...current.data, events, meta: { ...current.data.meta, count: events.length, nextAfter: Math.max(current.data.meta.nextAfter, batch.nextAfter) } },
-          stale: true,
+          error: null,
+          stale: false,
         }
       } catch (error) {
         return { ...current, error: error instanceof Error ? error : new Error(String(error)), stale: true }
       }
     })
-  }, [batch, taskId])
+  }, [batch, identityKey, taskId])
 
-  return { ...state, refresh: () => setGeneration((value) => value + 1) }
+  const visibleState: EventsReadState = state.identityKey !== identityKey
+    ? {
+        data: null,
+        loading: online,
+        error: online ? null : new ExplorerReadError("offline", "当前离线，无法加载事件。"),
+        stale: false,
+      }
+    : state.requestKey !== requestKey
+      ? {
+          data: state.data,
+          loading: online,
+          error: online ? null : new ExplorerReadError("offline", "当前离线，无法加载事件。"),
+          stale: state.data !== null,
+        }
+      : state
+
+  return { ...visibleState, refresh: () => setGeneration((value) => value + 1) }
 }
 
 export function EventsView({

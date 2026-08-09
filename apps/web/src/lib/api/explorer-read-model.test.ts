@@ -185,6 +185,7 @@ describe("board events read model", () => {
   test("builds the first board page with ASC cursor order and encoded selector", () => {
     expect(buildBoardEventsRequest("board slug")).toBe("/api/v1/events?board=board+slug&after=0&limit=150")
     expect(buildBoardEventsRequest("default", "t_1")).toBe("/api/v1/events?board=default&task_id=t_1&after=0&limit=150")
+    expect(buildBoardEventsRequest("default", null, 150)).toBe("/api/v1/events?board=default&after=150&limit=150")
     expect(BOARD_EVENTS_PAGE_LIMIT).toBe(150)
   })
 
@@ -226,6 +227,68 @@ describe("board events read model", () => {
     expect(merged.at(-1)?.id).toBe(151)
     expect(() => mergeBoardEvents(first, [event(151, "b_other")], boardId)).toThrow(/board scope/)
     expect(() => mergeBoardEvents(first, [event(151, "b_default", "event-1")], boardId)).toThrow(/多个数字 id/)
+  })
+
+  test("walks ASC pages to expose the newest 150 events", async () => {
+    const paths: string[] = []
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        const after = Number(new URLSearchParams(path.split("?", 2)[1]).get("after"))
+        if (after === 0) {
+          return { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 150 } }, bytes: 1 }
+        }
+        expect(after).toBe(150)
+        return { payload: { data: Array.from({ length: 30 }, (_, index) => event(index + 151)), meta: { next_after: 180 } }, bytes: 1 }
+      },
+    }
+
+    const result = await loadBoardEvents(runtime, "default", { transport })
+    expect(result.events).toHaveLength(150)
+    expect(result.events[0]?.id).toBe(31)
+    expect(result.events.at(-1)?.id).toBe(180)
+    expect(result.meta.nextAfter).toBe(180)
+    expect(paths).toHaveLength(3)
+  })
+
+  test("rejects any task event that crosses the requested task scope", async () => {
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => path.startsWith("/api/v1/boards?")
+        ? { payload: { data: [board()] }, bytes: 1 }
+        : {
+            payload: {
+              data: [
+                { ...event(1, "b_default", "event-1"), task_id: "t_1" },
+                { ...event(2, "b_default", "event-2"), task_id: "t_other" },
+              ],
+              meta: { next_after: 2 },
+            },
+            bytes: 1,
+          },
+    }
+
+    await expect(loadBoardEvents(runtime, "default", { transport, taskId: "t_1" })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("rejects a cursor that lags the page or repeats after pagination", async () => {
+    const lagging = {
+      get: async (path: string): Promise<HttpTransportResponse> => path.startsWith("/api/v1/boards?")
+        ? { payload: { data: [board()] }, bytes: 1 }
+        : { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 149 } }, bytes: 1 },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport: lagging })).rejects.toMatchObject({ kind: "anomaly" })
+
+    const repeated = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        const after = Number(new URLSearchParams(path.split("?", 2)[1]).get("after"))
+        return after === 0
+          ? { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 150 } }, bytes: 1 }
+          : { payload: { data: [event(150)], meta: { next_after: 150 } }, bytes: 1 }
+      },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport: repeated })).rejects.toMatchObject({ kind: "anomaly" })
   })
 })
 

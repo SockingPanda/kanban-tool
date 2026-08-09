@@ -319,7 +319,10 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
       </section>
     )
   }
-  if (effectiveBoundary === "offline") {
+  // Events owns a stale/offline presentation so its last usable snapshot can
+  // remain mounted while connectivity drops. Other board views keep the
+  // shell-level offline boundary (and therefore their existing live semantics).
+  if (effectiveBoundary === "offline" && !(route.kind === "board" && route.view === "events")) {
     return (
       <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline">
         <p className={styles.eyebrow}>{t("routeBoundary")}</p>

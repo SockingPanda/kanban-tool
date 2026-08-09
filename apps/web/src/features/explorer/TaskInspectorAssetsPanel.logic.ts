@@ -105,6 +105,11 @@ export function shouldClearAssetDraft(outcome: InspectorMutationOutcome | null):
   return outcome?.committed === true
 }
 
+/** Label retries only clear a draft that still matches the original intent. */
+export function isLabelRetryDraftCurrent(current: string, attempted: string): boolean {
+  return current.trim() === attempted.trim()
+}
+
 /** Retry drafts are the original in-memory File object; same metadata is not enough. */
 export function isAttachmentRetryDraftCurrent(current: File | null, attempted: File | null): boolean {
   return current !== null && attempted !== null && current === attempted

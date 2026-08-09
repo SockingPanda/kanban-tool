@@ -42,6 +42,8 @@ interface BoardSession {
 export interface BoardSessionHandle {
   readonly release: () => void
   readonly retry: () => void
+  /** Explicit user-requested reconnect; shares the canonical session controller. */
+  readonly reconnect: () => void
   readonly generation: number
 }
 
@@ -96,6 +98,21 @@ function validatedStreamURL(runtime: WebRuntimeConfig): string {
 /** Number of live canonical-board sessions; used by focused registry tests. */
 export function activeBoardSessionCount(): number {
   return sessions.size
+}
+
+/**
+ * Ask the currently active canonical session for this runtime to reconnect.
+ * Settings uses this seam instead of constructing a second SSE transport.
+ */
+export function reconnectActiveBoardSession(runtime: WebRuntimeConfig): boolean {
+  const runtimeKey = runtimeIdentityKey(runtime)
+  for (const session of sessions.values()) {
+    if (!session.disposed && session.key.startsWith(`${runtimeKey}\u0000`)) {
+      session.controller.retry()
+      return true
+    }
+  }
+  return false
 }
 
 /** Test-only cleanup for aborted test mounts; production unmounts use release(). */
@@ -213,6 +230,9 @@ export function acquireBoardSession(
   return {
     release,
     retry: () => {
+      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
+    },
+    reconnect: () => {
       if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
     },
     generation: session.generation,

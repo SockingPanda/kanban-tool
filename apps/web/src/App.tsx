@@ -9,6 +9,7 @@ import { PreferencesProvider } from "./lib/preferences-provider"
 import { useAppRouter } from "./lib/router"
 import { useWebRuntime } from "./lib/runtime-context"
 import { astryxMessages, astryxOverrides } from "./lib/i18n"
+import { reconnectActiveBoardSession } from "./features/board/board-session-registry"
 
 function RuntimeThemedShell() {
   const runtime = useWebRuntime()
@@ -29,6 +30,7 @@ function RuntimeThemedShell() {
           boundary={router.error ? "error" : undefined}
           error={router.error instanceof Error ? router.error.message : undefined}
           onNavigate={router.navigate}
+          onReconnect={() => reconnectActiveBoardSession(runtime)}
           onRetry={() => window.location.reload()}
         >
           {boardRoute ? <BoardLive runtime={runtime} route={boardRoute} onNavigate={router.navigate} /> : null}

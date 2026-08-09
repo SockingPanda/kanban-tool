@@ -7,6 +7,7 @@ import type { BoardViewModel } from "./types"
 import {
   acquireBoardSession,
   activeBoardSessionCount,
+  reconnectActiveBoardSession,
   resourceIdentityKey,
   resetBoardSessionsForTests,
   runtimeIdentityKey,
@@ -101,6 +102,29 @@ describe("Board canonical session registry", () => {
     expect(activeBoardSessionCount()).toBe(0)
     expect(stop).toHaveBeenCalledTimes(1)
     expect(query.invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  test("exposes an explicit reconnect seam for the current canonical board session", () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const retry = vi.fn()
+    const handle = acquireBoardSession(
+      runtime,
+      model,
+      resource(query),
+      vi.fn(),
+      vi.fn(),
+      { createController: () => ({ start: vi.fn(), stop: vi.fn(), retry }) },
+    )
+
+    expect(reconnectActiveBoardSession(runtime)).toBe(true)
+    expect(retry).toHaveBeenCalledTimes(1)
+
+    handle.release()
+    expect(reconnectActiveBoardSession(runtime)).toBe(false)
   })
 
   test("does not leak a session across runtime/build identity changes", () => {

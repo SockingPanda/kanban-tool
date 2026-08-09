@@ -50,15 +50,15 @@ test.describe("Astryx product shell", () => {
 
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
-    await page.getByTestId("theme-preference").selectOption("dark")
-    await page.getByTestId("locale-preference").selectOption("en")
+    await page.getByTestId("appearance-theme").selectOption("dark")
+    await page.getByTestId("settings-locale").selectOption("en")
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1b1b1b")
 
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))
-      .toEqual(["kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
+      .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
   })
 
   test("navigates between board and settings without a router dependency", async ({ page }) => {

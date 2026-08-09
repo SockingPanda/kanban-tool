@@ -742,52 +742,52 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     return result.ok ? result.value : null
   }
 
-  async retry(key?: string): Promise<boolean> {
+  async retry(key?: string): Promise<InspectorMutationOutcome> {
     const candidate = key === undefined
       ? this.retries.values().next().value as TaskInspectorMutationRetryIntent | undefined
       : this.retries.get(key)
-    if (!candidate) return false
+    if (!candidate) return notCommittedOutcome
     if (candidate.operation === "reload") {
       const surface = this.surface
-      if (surface === null || surface.scope.taskId !== candidate.taskId) return false
+      if (surface === null || surface.scope.taskId !== candidate.taskId) return notCommittedOutcome
       const active = this.begin("reload", candidate.taskId, candidate)
-      if (active === null) return false
-      if (!this.currentFor(active.generation, active.scope)) return false
+      if (active === null) return notCommittedOutcome
+      if (!this.currentFor(active.generation, active.scope)) return notCommittedOutcome
       const currentSurface = this.surface
-      if (currentSurface === null) return false
+      if (currentSurface === null) return notCommittedOutcome
       const pendingKey = inspectorMutationKey("reload", candidate.taskId)
       try {
         await currentSurface.onCanonicalReload(candidate.event ?? createCommittedMutationEvent("edit", candidate.taskId), active.scope)
-        if (!this.currentFor(active.generation, active.scope)) return false
+        if (!this.currentFor(active.generation, active.scope)) return notCommittedOutcome
         this.errors = new Map(this.errors)
         this.errors.delete(key ?? inspectorMutationKey("reload", candidate.taskId))
         this.retries = new Map(this.retries)
         this.retries.delete(key ?? inspectorMutationKey("reload", candidate.taskId))
         this.finish(pendingKey, active)
-        return true
+        return notCommittedReconciledOutcome
       } catch (error) {
         if (this.currentFor(active.generation, active.scope)) {
           this.setFailure(key ?? inspectorMutationKey("reload", candidate.taskId), active, "reload", candidate, error, "stale")
         }
-        return false
+        return notCommittedOutcome
       }
     }
     switch (candidate.operation) {
-      case "saveTask": return (await this.saveTask(candidate.input)).reconciled
-      case "transition": return (await this.transition(candidate.command)).reconciled
-      case "addDependency": return (await this.addDependency(candidate.parentTaskId)).reconciled
-      case "removeDependency": return (await this.removeDependency(candidate.parentTaskId)).reconciled
-      case "createStep": return (await this.createStep(candidate.input)).reconciled
-      case "linkStep": return (await this.linkStep(candidate.input)).reconciled
-      case "markPlanNotRequired": return (await this.markPlanNotRequired(candidate.input)).reconciled
-      case "addLabel": return (await this.addLabel(candidate.input)).reconciled
-      case "removeLabel": return (await this.removeLabel(candidate.labelId)).reconciled
-      case "applySuggestedLabel": return (await this.applySuggestedLabel(candidate.input)).reconciled
-      case "addComment": return (await this.addComment(candidate.input)).reconciled
-      case "uploadAttachment": return (await this.uploadAttachment(candidate.input)).reconciled
-      case "downloadAttachment": return (await this.downloadAttachment(candidate.attachmentId)) !== null
-      case "deleteAttachment": return (await this.deleteAttachment(candidate.attachmentId)).reconciled
-      case "suggestLabels": return (await this.suggestLabels(candidate.query)) !== null
+      case "saveTask": return this.saveTask(candidate.input)
+      case "transition": return this.transition(candidate.command)
+      case "addDependency": return this.addDependency(candidate.parentTaskId)
+      case "removeDependency": return this.removeDependency(candidate.parentTaskId)
+      case "createStep": return this.createStep(candidate.input)
+      case "linkStep": return this.linkStep(candidate.input)
+      case "markPlanNotRequired": return this.markPlanNotRequired(candidate.input)
+      case "addLabel": return this.addLabel(candidate.input)
+      case "removeLabel": return this.removeLabel(candidate.labelId)
+      case "applySuggestedLabel": return this.applySuggestedLabel(candidate.input)
+      case "addComment": return this.addComment(candidate.input)
+      case "uploadAttachment": return this.uploadAttachment(candidate.input)
+      case "downloadAttachment": return (await this.downloadAttachment(candidate.attachmentId)) === null ? notCommittedOutcome : notCommittedReconciledOutcome
+      case "deleteAttachment": return this.deleteAttachment(candidate.attachmentId)
+      case "suggestLabels": return (await this.suggestLabels(candidate.query)) === null ? notCommittedOutcome : notCommittedReconciledOutcome
     }
   }
 }

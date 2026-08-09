@@ -5,7 +5,7 @@ mod tests {
     use std::thread::JoinHandle;
 
     use crate::domain::LabelAtomRecord;
-    use crate::shared::{optional_text_value, text_value};
+    use crate::shared::{integer_value, optional_text_value, text_value};
     use crate::store_operations::{
         CreateTaskInput, LabelSuggestionOptions, OntologyActionInput, OntologyActorInput,
         OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologySignalInput,
@@ -532,6 +532,7 @@ mod tests {
                         actor_type: "user".to_owned(),
                         agent_type: Some("luna".to_owned()),
                     },
+                    idempotency_key: None,
                     action_type: "confirm".to_owned(),
                     signal_ids: vec![signal_id.clone()],
                     reason: "confirm event".to_owned(),
@@ -682,6 +683,7 @@ mod tests {
         let signal_id = observation.signals[0].id.clone();
         let action = |action_type: &str| OntologyActionInput {
             actor: user(),
+            idempotency_key: None,
             action_type: action_type.to_owned(),
             signal_ids: vec![signal_id.clone()],
             reason: "lifecycle action".to_owned(),
@@ -728,5 +730,160 @@ mod tests {
             atom_error,
             crate::error::StoreError::InvalidInput(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn ontology_action_replay_is_idempotent_and_conflicts_on_changed_input() {
+        let (_directory, store, _path) = store("ontology-action-idempotency").await;
+        store.initialize().await.expect("initialize");
+        let task = store
+            .create_task(
+                "default",
+                task_input("t_ontology_idempotency", "Idempotent action", None),
+            )
+            .await
+            .expect("task");
+        let observation = store
+            .record_label_ontology_observation(
+                "default",
+                OntologyObservationInput {
+                    actor: user(),
+                    task_ref: task.task_ref.clone(),
+                    agent_candidates_json: "[]".to_owned(),
+                    suggestion_snapshot_json: "{}".to_owned(),
+                    final_decision_json: "{}".to_owned(),
+                    suggest_coverage: None,
+                    suggest_coverage_cosine: None,
+                    suggest_residual_norm: None,
+                    suggest_needs_new_label: false,
+                    suggest_degraded: false,
+                    diagnostics_json: "[]".to_owned(),
+                    capture_fingerprint: Some("ontology-idempotency-capture".to_owned()),
+                    signals: vec![OntologySignalInput {
+                        kind: "vocabulary_gap".to_owned(),
+                        target_label_ref: None,
+                        related_labels_json: "[]".to_owned(),
+                        proposed_action: "observe".to_owned(),
+                        candidate_atom_polarity: None,
+                        candidate_atom_kind: None,
+                        candidate_text: None,
+                        proposed_label_name: None,
+                        proposal_json: "{}".to_owned(),
+                        agent_selected: false,
+                        suggest_state: None,
+                        suggest_score: None,
+                        suggest_rank: None,
+                        final_selected: false,
+                        rationale: "idempotency test".to_owned(),
+                        confidence: None,
+                        signal_key: Some("idempotency-signal".to_owned()),
+                    }],
+                },
+            )
+            .await
+            .expect("observation");
+        let signal_id = observation.signals[0].id.clone();
+        let action = OntologyActionInput {
+            actor: user(),
+            idempotency_key: Some("ontology-ui-attempt-1".to_owned()),
+            action_type: "confirm".to_owned(),
+            signal_ids: vec![signal_id.clone()],
+            reason: "confirm once".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: "{}".to_owned(),
+            validation_status: None,
+            validation_json: "{}".to_owned(),
+        };
+        let first = store
+            .create_label_ontology_action("default", action.clone())
+            .await
+            .expect("first action");
+        let replay = store
+            .create_label_ontology_action("default", action)
+            .await
+            .expect("replayed action");
+        assert_eq!(first.id, replay.id);
+        let mut changed = replay_input_for_test(&replay, &signal_id);
+        changed.reason = "changed reason".to_owned();
+        let conflict = store
+            .create_label_ontology_action("default", changed)
+            .await
+            .expect_err("changed replay must conflict");
+        assert!(matches!(
+            conflict,
+            crate::error::StoreError::OntologyIdempotencyConflict { .. }
+        ));
+        let connection = store.connection().await.expect("connection");
+        let action_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM label_ontology_actions WHERE board_id='b_default' AND id=:id",
+                    [(":id", first.id.as_str())],
+                )
+                .await
+                .expect("action count"),
+        )
+        .await
+        .expect("action row");
+        assert_eq!(
+            integer_value(
+                action_count.get_value(0).expect("action count value"),
+                "actions"
+            )
+            .expect("action count integer"),
+            1
+        );
+        let event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE board_id='b_default' AND kind='label.ontology.action.created' AND payload_json LIKE :payload",
+                    [(":payload", format!("%{}%", first.id).as_str())],
+                )
+                .await
+                .expect("event count"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            integer_value(
+                event_count.get_value(0).expect("event count value"),
+                "events"
+            )
+            .expect("event count integer"),
+            1
+        );
+    }
+
+    fn replay_input_for_test(
+        action: &crate::domain::LabelOntologyActionRecord,
+        signal_id: &str,
+    ) -> OntologyActionInput {
+        OntologyActionInput {
+            actor: user(),
+            idempotency_key: Some("ontology-ui-attempt-1".to_owned()),
+            action_type: action.action_type.clone(),
+            signal_ids: vec![signal_id.to_owned()],
+            reason: action.reason.clone(),
+            superseded_by_signal_id: None,
+            parent_action_id: action.parent_action_id.clone(),
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: action.result_atom_id.clone(),
+            result_atom_content_hash: action.result_atom_content_hash.clone(),
+            result_proposal_id: action.result_proposal_id.clone(),
+            canonical_before_hash: action.canonical_before_hash.clone(),
+            canonical_after_hash: action.canonical_after_hash.clone(),
+            change_json: "{}".to_owned(),
+            validation_status: Some(action.validation_status.clone()),
+            validation_json: action.validation_json.clone(),
+        }
     }
 }

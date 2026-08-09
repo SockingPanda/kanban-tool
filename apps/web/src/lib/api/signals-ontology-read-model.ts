@@ -2,6 +2,9 @@ import type { CanonicalBoardId } from "../sync/contracts"
 import { asCanonicalBoardId } from "../sync/contracts"
 import { parseCanonicalBoardSlug } from "../board-slug"
 import type { WebRuntimeConfig } from "../runtime"
+import { parseApiCreateLabelOntologyActionRequest } from "./generated/contracts/api-create-label-ontology-action-request"
+import { parseApiCreateLabelOntologyActionResponse } from "./generated/contracts/api-create-label-ontology-action-response"
+import type { ApiCreateLabelOntologyActionResponseContract } from "./generated/contracts/api-create-label-ontology-action-response"
 import { parseApiExplainLabelAtomResponse } from "./generated/contracts/api-explain-label-atom-response"
 import type { ApiExplainLabelAtomResponseContract } from "./generated/contracts/api-explain-label-atom-response"
 import { parseApiGetLabelOntologySignalPath } from "./generated/contracts/api-get-label-ontology-signal-path"
@@ -34,6 +37,7 @@ export type LabelOntologySignalDetail = ApiGetLabelOntologySignalResponseContrac
 export type LabelOntologyActionRecord = LabelOntologySignalDetail["actions"][number]
 export type LabelOntologyReviewGroup = ApiReviewLabelOntologyResponseContract["data"][number]
 export type LabelAtomExplainRecord = ApiExplainLabelAtomResponseContract["data"]
+export type LabelOntologyLifecycleAction = "confirm" | "reject" | "resolve_no_change"
 
 export interface SignalListQuery {
   readonly statuses?: readonly string[]
@@ -95,6 +99,7 @@ export interface SignalsOntologyReadApi {
   reviewLabelOntology(query?: OntologyReviewQuery, signal?: AbortSignal): Promise<readonly LabelOntologyReviewGroup[]>
   getLabelOntologySignal(signalId: string, signal?: AbortSignal): Promise<LabelOntologySignalDetail>
   explainLabelAtom(atomRef: string, signal?: AbortSignal): Promise<LabelAtomExplainRecord>
+  createLabelOntologyLifecycleAction(action: LabelOntologyLifecycleAction, signalId: string, reason: string, signal?: AbortSignal): Promise<LabelOntologyActionRecord>
 }
 
 export interface SignalsOntologyReadModelOptions extends HttpTransportOptions {
@@ -207,6 +212,20 @@ function atomExplainPath(board: string, atomRef: string): string {
   return `/api/v1/boards/${encodedSegment(parsed.board)}/labels/atoms/${encodedSegment(parsed.atom_ref)}/explain`
 }
 
+function ontologyActionsPath(board: string): string {
+  return `/api/v1/boards/${encodedSegment(board)}/label-ontology/actions`
+}
+
+function stableLifecycleIdempotencyKey(boardId: CanonicalBoardId, action: LabelOntologyLifecycleAction, signalId: string, reason: string): string {
+  const input = `${boardId}\u0000${signalId}\u0000${action}\u0000${reason}`
+  let hash = 0x811c9dc5
+  for (const character of input) {
+    hash ^= character.codePointAt(0) ?? 0
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return `ontology-lifecycle:${hash.toString(16).padStart(8, "0")}`
+}
+
 function isPrintable(value: string): boolean {
   return value.length > 0 && [...value].every((character) => {
     const code = character.codePointAt(0) ?? 0
@@ -273,6 +292,19 @@ async function readPayload(transport: SignalsOntologyReadTransport, path: string
   }
 }
 
+async function writePayload(transport: SignalsOntologyReadTransport, path: string, body: unknown, signal?: AbortSignal): Promise<HttpTransportResponse> {
+  if (!transport.post) throw new SignalsOntologyReadError("http", "当前 transport 不支持 ontology lifecycle 写入。")
+  try {
+    return await transport.post(path, body, signal)
+  } catch (error) {
+    if (error instanceof SignalsOntologyReadError) throw error
+    if (error instanceof HttpTransportError) {
+      throw new SignalsOntologyReadError("http", error.message, { status: error.status ?? undefined, cause: error })
+    }
+    throw error
+  }
+}
+
 function parseResponse<T>(contractId: string, parser: (value: unknown) => T, payload: unknown): T {
   try {
     return parser(payload)
@@ -308,6 +340,18 @@ function assertOntologyDetailBoard(detail: LabelOntologySignalDetail, boardId: C
   assertBoardId(detail.observation.board_id, boardId, "ontology.detail.observation")
   for (const signal of detail.observation.signals) assertOntologySignalBoard(signal, boardId, "ontology.detail.observation.signal")
   for (const action of detail.actions) assertBoardId(action.board_id, boardId, "ontology.detail.action")
+}
+
+function assertOntologyActionScope(
+  action: ApiCreateLabelOntologyActionResponseContract["data"],
+  boardId: CanonicalBoardId,
+  expectedAction: LabelOntologyLifecycleAction,
+  expectedSignalId: string,
+): void {
+  assertBoardId(action.board_id, boardId, "ontology.action")
+  if (action.action_type !== expectedAction || !action.signal_ids.includes(expectedSignalId)) {
+    throw new SignalsOntologyReadError("board_scope", "ontology action response 不属于当前 lifecycle attempt。")
+  }
 }
 
 function assertAtomBoard(explain: LabelAtomExplainRecord, boardId: CanonicalBoardId): void {
@@ -436,6 +480,31 @@ export function createSignalsOntologyReadApi(runtime: WebRuntimeConfig, options:
       const explain = parseResponse("api.explain-label-atom.response", parseApiExplainLabelAtomResponse, response.payload).data
       assertAtomBoard(explain, identity.canonicalBoardId)
       return explain
+    },
+    async createLabelOntologyLifecycleAction(action, signalId, reason, signal) {
+      const identity = await resolveIdentity(signal)
+      const normalizedSignalId = signalId.trim()
+      const normalizedReason = reason.trim()
+      if (!normalizedSignalId || !normalizedReason) {
+        throw new SignalsOntologyReadError("invalid_response", "ontology lifecycle action 需要 signal 与 reason。")
+      }
+      if (action !== "confirm" && action !== "reject" && action !== "resolve_no_change") {
+        throw new SignalsOntologyReadError("invalid_response", "当前 Web surface 不支持该 ontology action。")
+      }
+      const request = parseApiCreateLabelOntologyActionRequest({
+        actor: { name: runtime.actor.trim() || "web", type: "user", agent_type: null },
+        idempotency_key: stableLifecycleIdempotencyKey(identity.canonicalBoardId, action, normalizedSignalId, normalizedReason),
+        action_type: action,
+        signal_ids: [normalizedSignalId],
+        reason: normalizedReason,
+      })
+      if (!transport.post) {
+        throw new SignalsOntologyReadError("http", "当前 transport 不支持 ontology lifecycle 写入。")
+      }
+      const response = await writePayload(transport, ontologyActionsPath(identity.canonicalBoardId), request, signal)
+      const parsed = parseResponse("api.create-label-ontology-action.response", parseApiCreateLabelOntologyActionResponse, response.payload).data
+      assertOntologyActionScope(parsed, identity.canonicalBoardId, action, normalizedSignalId)
+      return parsed
     },
   }
   return api

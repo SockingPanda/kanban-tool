@@ -40,6 +40,11 @@ pub(crate) enum StoreError {
         key: String,
         existing_signal_id: String,
     },
+    OntologyIdempotencyConflict {
+        board_id: String,
+        key: String,
+        existing_action_id: String,
+    },
     IdempotencyConflict {
         board_id: String,
         key: String,
@@ -100,6 +105,14 @@ impl Display for StoreError {
             } => write!(
                 formatter,
                 "信号幂等冲突：board {board_id}、key {key}、已有 signal {existing_signal_id}"
+            ),
+            Self::OntologyIdempotencyConflict {
+                board_id,
+                key,
+                existing_action_id,
+            } => write!(
+                formatter,
+                "本体动作幂等冲突：board {board_id}、key {key}、已有 action {existing_action_id}"
             ),
             Self::IdempotencyConflict {
                 board_id,
@@ -167,6 +180,13 @@ pub(crate) fn store_error(error: StoreError) -> KanbanError {
             existing_signal_id,
         } => KanbanError::IdempotencyConflict(format!(
             "board {board_id}, key {key}, existing signal {existing_signal_id}"
+        )),
+        StoreError::OntologyIdempotencyConflict {
+            board_id,
+            key,
+            existing_action_id,
+        } => KanbanError::IdempotencyConflict(format!(
+            "board {board_id}, key {key}, existing ontology action {existing_action_id}"
         )),
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
         StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),

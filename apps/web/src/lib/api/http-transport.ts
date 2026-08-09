@@ -44,6 +44,7 @@ export interface HttpTransportResponse {
 
 export interface HttpTransport {
   get(path: string, signal?: AbortSignal): Promise<HttpTransportResponse>
+  post?(path: string, body: unknown, signal?: AbortSignal): Promise<HttpTransportResponse>
 }
 
 export interface HttpTransportOptions {
@@ -333,85 +334,107 @@ export function createHttpTransport(
 ): HttpTransport {
   const fetcher = options.fetcher ?? globalThis.fetch
   const base = sameOriginBase(runtime, options.documentBaseURI ?? documentBaseURI())
-
-  return {
-    async get(path, signal) {
-      const url = requestURL(base, path)
-      let response: Response
+  async function request(
+    method: "GET" | "POST",
+    path: string,
+    signal?: AbortSignal,
+    requestBody?: unknown,
+  ): Promise<HttpTransportResponse> {
+    const url = requestURL(base, path)
+    let body: string | undefined
+    if (requestBody !== undefined) {
       try {
-        response = await fetcher(url, {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          credentials: "same-origin",
-          mode: "same-origin",
-          redirect: "error",
-          cache: "no-store",
-          signal,
-        })
+        body = JSON.stringify(requestBody)
       } catch (cause) {
-        if (isAbortError(cause)) throw cause
-        throw new HttpTransportError(
-          "offline",
-          "无法连接 kanban serve，请确认本地服务正在运行。",
-          { cause },
-        )
+        throw new HttpTransportError("invalid_json", "Web API 请求 body 无法编码为 JSON。", { cause })
       }
+    }
+    let response: Response
+    try {
+      response = await fetcher(url, {
+        method,
+        headers: body === undefined
+          ? { Accept: "application/json" }
+          : { Accept: "application/json", "Content-Type": "application/json" },
+        credentials: "same-origin",
+        mode: "same-origin",
+        redirect: "error",
+        cache: "no-store",
+        ...(body === undefined ? {} : { body }),
+        signal,
+      })
+    } catch (cause) {
+      if (isAbortError(cause)) throw cause
+      throw new HttpTransportError(
+        "offline",
+        "无法连接 kanban serve，请确认本地服务正在运行。",
+        { cause },
+      )
+    }
 
+    try {
+      validateFinalOrigin(response, base.origin)
+    } catch (error) {
+      await cancelResponseBody(response)
+      throw error
+    }
+    const contentType = responseContentType(response)
+    if (!response.ok && !isJSONContentType(contentType)) {
       try {
-        validateFinalOrigin(response, base.origin)
+        await readJSON(response)
       } catch (error) {
-        await cancelResponseBody(response)
-        throw error
-      }
-      const contentType = responseContentType(response)
-      if (!response.ok && !isJSONContentType(contentType)) {
-        try {
-          await readJSON(response)
-        } catch (error) {
-          if (error instanceof HttpTransportError && error.kind === "invalid_json") {
-            throw new HttpTransportError(
-              "http",
-              `Web API 请求失败：HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
-              { status: response.status, cause: error },
-            )
-          }
-          throw error
-        }
-        throw new HttpTransportError(
-          "http",
-          `Web API 请求失败：HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
-          { status: response.status },
-        )
-      }
-
-      if (contentType === null || !isJSONContentType(contentType)) {
-        await cancelResponseBody(response)
-        throw new HttpTransportError(
-          "invalid_content_type",
-          "Web API 成功响应必须使用 application/json 或 +json Content-Type。",
-          { status: response.status },
-        )
-      }
-
-      const body = await readJSON(response)
-      if (!response.ok) {
-        try {
-          const apiError = parseApiErrorResponse(body.payload)
-          throw new HttpTransportError(
-            "http",
-            apiError.error.message,
-            { status: response.status, apiError: apiError.error },
-          )
-        } catch (error) {
-          if (error instanceof HttpTransportError) throw error
+        if (error instanceof HttpTransportError && error.kind === "invalid_json") {
           throw new HttpTransportError(
             "http",
             `Web API 请求失败：HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
             { status: response.status, cause: error },
           )
         }
+        throw error
       }
-      return body
+      throw new HttpTransportError(
+        "http",
+        `Web API 请求失败：HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+        { status: response.status },
+      )
+    }
+
+    if (contentType === null || !isJSONContentType(contentType)) {
+      await cancelResponseBody(response)
+      throw new HttpTransportError(
+        "invalid_content_type",
+        "Web API 成功响应必须使用 application/json 或 +json Content-Type。",
+        { status: response.status },
+      )
+    }
+
+    const responseBody = await readJSON(response)
+    if (!response.ok) {
+      try {
+        const apiError = parseApiErrorResponse(responseBody.payload)
+        throw new HttpTransportError(
+          "http",
+          apiError.error.message,
+          { status: response.status, apiError: apiError.error },
+        )
+      } catch (error) {
+        if (error instanceof HttpTransportError) throw error
+        throw new HttpTransportError(
+          "http",
+          `Web API 请求失败：HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+          { status: response.status, cause: error },
+        )
+      }
+    }
+    return responseBody
+  }
+
+  return {
+    get(path, signal) {
+      return request("GET", path, signal)
+    },
+    post(path, body, signal) {
+      return request("POST", path, signal, body)
     },
   }
 }

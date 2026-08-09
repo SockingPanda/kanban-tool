@@ -30,6 +30,8 @@ import { parseApiGetRunLogPath } from "./generated/contracts/api-get-run-log-pat
 import { parseApiGetRunLogResponse, type ApiGetRunLogResponseContract } from "./generated/contracts/api-get-run-log-response"
 import { parseApiListCommentsPath } from "./generated/contracts/api-list-comments-path"
 import { parseApiListCommentsResponse, type ApiListCommentsResponseContract } from "./generated/contracts/api-list-comments-response"
+import { parseApiListAttachmentsPath } from "./generated/contracts/api-list-attachments-path"
+import { parseApiListAttachmentsResponse, type ApiListAttachmentsResponseContract } from "./generated/contracts/api-list-attachments-response"
 import { parseApiListEventsQuery } from "./generated/contracts/api-list-events-query"
 import { parseApiListEventsResponse, type ApiListEventsResponseContract } from "./generated/contracts/api-list-events-response"
 import { ContractValidationError } from "./generated/runtime"
@@ -971,6 +973,7 @@ export interface TaskInspectorReadModel {
   readonly steps: ApiListStepsResponseContract["data"]
   readonly runs: ApiListRunsResponseContract["data"]
   readonly comments: ApiListCommentsResponseContract["data"]
+  readonly attachments: ApiListAttachmentsResponseContract["data"]
   readonly events: ApiListEventsResponseContract["data"]
   readonly runtime: Pick<WebRuntimeConfig, "actor" | "apiBaseUrl" | "serverVersion" | "protocolVersion" | "webBuildId">
 }
@@ -980,6 +983,8 @@ export interface TaskInspectorReadOptions extends ExplorerReadOptions {
   readonly includeNeighborhood?: boolean
   readonly includeRuns?: boolean
   readonly includeEvents?: boolean
+  /** Attachment metadata is a separate read so downloads remain lazy bytes reads. */
+  readonly includeAttachments?: boolean
 }
 
 export interface TaskInspectorRequests {
@@ -989,6 +994,7 @@ export interface TaskInspectorRequests {
   readonly steps: string
   readonly runs: string
   readonly comments: string
+  readonly attachments: string
   readonly events: string
 }
 
@@ -1020,6 +1026,7 @@ export function buildTaskInspectorRequests(board: string, taskId: string): TaskI
       steps: `/api/v1/tasks/${encodedSegment(parseApiListStepsPath({ task_id: task }).task_id)}/steps`,
       runs: `/api/v1/tasks/${encodedSegment(parseApiListRunsPath({ task_id: task }).task_id)}/runs`,
       comments: `/api/v1/tasks/${encodedSegment(parseApiListCommentsPath({ task_id: task }).task_id)}/comments`,
+      attachments: `/api/v1/tasks/${encodedSegment(parseApiListAttachmentsPath({ task_id: task }).task_id)}/attachments`,
       events: listEventsRequest(board, task),
     }
   } catch (error) {
@@ -1079,7 +1086,7 @@ function validateNeighborhoodScope(
 }
 
 function validateInspectorScope(
-  model: Pick<TaskInspectorReadModel, "neighborhood" | "dependencies" | "steps" | "runs" | "comments" | "events">,
+  model: Pick<TaskInspectorReadModel, "neighborhood" | "dependencies" | "steps" | "runs" | "comments" | "attachments" | "events">,
   board: ExplorerBoardIdentity,
   taskId: string,
 ): void {
@@ -1095,6 +1102,9 @@ function validateInspectorScope(
   for (const run of model.runs) if (run.task_id !== taskId) throw new ExplorerReadError("anomaly", "任务运行记录越过了当前 task scope。")
   for (const comment of model.comments) {
     if (comment.board_id !== board.id || comment.task_id !== taskId) throw new ExplorerReadError("anomaly", "任务评论响应越过了当前 board/task scope。")
+  }
+  for (const attachment of model.attachments) {
+    if (attachment.board_id !== board.id || attachment.task_id !== taskId) throw new ExplorerReadError("anomaly", "任务附件响应越过了当前 board/task scope。")
   }
 }
 
@@ -1149,15 +1159,19 @@ export async function loadTaskInspector(
     const eventsPromise: Promise<ApiListEventsResponseContract["data"]> = options.includeEvents === false
       ? Promise.resolve([])
       : getPayload(transport, requests.events, linked.signal, budget).then((payload) => parseContract("api.list-events.response", parseApiListEventsResponse, payload).data)
-    const [neighborhood, dependencies, steps, runs, comments, events] = await Promise.all([
+    const attachmentsPromise: Promise<ApiListAttachmentsResponseContract["data"]> = options.includeAttachments === false
+      ? Promise.resolve([])
+      : getPayload(transport, requests.attachments, linked.signal, budget).then((payload) => parseContract("api.list-attachments.response", parseApiListAttachmentsResponse, payload).data)
+    const [neighborhood, dependencies, steps, runs, comments, attachments, events] = await Promise.all([
       neighborhoodPromise,
       getPayload(transport, requests.dependencies, linked.signal, budget).then((payload) => parseContract("api.list-dependencies.response", parseApiListDependenciesResponse, payload).data),
       getPayload(transport, requests.steps, linked.signal, budget).then((payload) => parseContract("api.list-steps.response", parseApiListStepsResponse, payload).data),
       runsPromise,
       getPayload(transport, requests.comments, linked.signal, budget).then((payload) => parseContract("api.list-comments.response", parseApiListCommentsResponse, payload).data),
+      attachmentsPromise,
       eventsPromise,
     ])
-    const detail = { neighborhood, dependencies, steps, runs, comments, events }
+    const detail = { neighborhood, dependencies, steps, runs, comments, attachments, events }
     validateInspectorScope(detail, board, taskId)
     return Object.freeze({
       board,
@@ -1167,6 +1181,7 @@ export async function loadTaskInspector(
       steps,
       runs,
       comments,
+      attachments,
       events,
       runtime: {
         actor: runtime.actor,
@@ -1255,6 +1270,31 @@ export async function loadTaskInspectorEvents(
     )
     validateEventBatch(response.data, board, taskId, 0, response.meta.next_after, 50)
     return response.data
+  } catch (error) {
+    return wrapTransportError(error)
+  }
+}
+
+export async function loadTaskInspectorAttachments(
+  runtime: WebRuntimeConfig,
+  selector: string,
+  taskId: string,
+  options: ExplorerReadOptions = {},
+): Promise<ApiListAttachmentsResponseContract["data"]> {
+  try {
+    const { board, transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
+    const requests = buildTaskInspectorRequests(board.slug, taskId)
+    const attachments = parseContract(
+      "api.list-attachments.response",
+      parseApiListAttachmentsResponse,
+      await getPayload(transport, requests.attachments, options.signal, budget),
+    ).data
+    for (const attachment of attachments) {
+      if (attachment.board_id !== board.id || attachment.task_id !== taskId) {
+        throw new ExplorerReadError("anomaly", "任务附件响应越过了当前 board/task scope。")
+      }
+    }
+    return attachments
   } catch (error) {
     return wrapTransportError(error)
   }

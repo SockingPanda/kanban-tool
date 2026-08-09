@@ -58,14 +58,22 @@ const board = {
 
 const response = <T,>(payload: T): HttpTransportResponse => ({ payload, bytes: 10 })
 
+function readOnlyRequest() {
+  return vi.fn<SignalsOntologyReadTransport["request"]>(async () => {
+    throw new Error("unexpected ontology lifecycle request")
+  })
+}
+
 describe("signals and ontology API seam", () => {
   test("validates generated query/path contracts and keeps board route encoded", async () => {
+    const request = readOnlyRequest()
     const transport: SignalsOntologyReadTransport = {
       get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
         if (path.startsWith("/api/v1/boards?")) return response({ data: [board] })
         if (path.includes("signals/review")) return response({ data: [signal], meta: { include_all: false, limit: 100 } })
         return response(signal)
       }),
+      request,
     }
     const api = createSignalsOntologyReadApi(runtime, {
       board: "b_1",
@@ -79,11 +87,13 @@ describe("signals and ontology API seam", () => {
       "/api/v1/boards/b_1/signals/review?status=open&kind=agent_cli_friction&task_ref=team%2Fone%231&include_all=false&limit=100",
       undefined,
     )
+    expect(request).not.toHaveBeenCalled()
   })
 
   test("rejects malformed response payloads at the generated validator boundary", async () => {
     const transport: SignalsOntologyReadTransport = {
       get: vi.fn(async (): Promise<HttpTransportResponse> => response({ data: [{ id: "sig_1" }] })),
+      request: readOnlyRequest(),
     }
     const api = createSignalsOntologyReadApi(runtime, {
       board: "default",
@@ -101,6 +111,7 @@ describe("signals and ontology API seam", () => {
         if (path.startsWith("/api/v1/boards/b_1/label-ontology/signals?")) return response({ data: [], meta: { include_all: false, limit: 100 } })
         return response({ data: [], meta: { group_by: "label", include_all: false, limit: 100 } })
       }),
+      request: readOnlyRequest(),
     }
     const api = createSignalsOntologyReadApi(runtime, { board: "team-one", transport })
 
@@ -121,6 +132,7 @@ describe("signals and ontology API seam", () => {
         }
         return response({ data: [board] })
       }),
+      request: readOnlyRequest(),
     }
     const api = createSignalsOntologyReadApi(runtime, { board: "team-one", transport })
 
@@ -133,6 +145,7 @@ describe("signals and ontology API seam", () => {
         if (path.includes("signals/review")) return response({ data: [signal], meta: { include_all: true, limit: 1 } })
         return response({ data: [board] })
       }),
+      request: readOnlyRequest(),
     }
     const api = createSignalsOntologyReadApi(runtime, { board: "b_1", transport })
 
@@ -144,7 +157,7 @@ describe("signals and ontology API seam", () => {
   })
 
   test("fails closed for malformed injected identity and out-of-range limits", async () => {
-    const transport: SignalsOntologyReadTransport = { get: vi.fn(async () => response({ data: [] })) }
+    const transport: SignalsOntologyReadTransport = { get: vi.fn(async () => response({ data: [] })), request: readOnlyRequest() }
     expect(() => createSignalsOntologyReadApi(runtime, {
       board: "default",
       transport,

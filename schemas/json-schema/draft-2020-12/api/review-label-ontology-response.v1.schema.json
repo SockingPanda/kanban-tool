@@ -42,8 +42,7 @@
       "enum": [
         "label",
         "candidate_atom",
-        "proposed_label",
-        "cluster"
+        "proposed_label"
       ],
       "type": "string"
     },

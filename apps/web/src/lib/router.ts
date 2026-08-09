@@ -26,7 +26,7 @@ export interface SignalsRouteFilters {
 
 export interface OntologyRouteFilters {
   readonly includeAll?: boolean
-  readonly groupBy?: "label" | "candidate_atom" | "proposed_label" | "cluster"
+  readonly groupBy?: "label" | "candidate_atom" | "proposed_label"
   readonly signal?: string
   readonly atom?: string
 }
@@ -145,7 +145,7 @@ function parseSignalsFilters(search: string): SignalsRouteFilters {
 function parseOntologyFilters(search: string): OntologyRouteFilters {
   const params = new URLSearchParams(search)
   const rawGroupBy = params.get("group_by")
-  const groupBy = rawGroupBy === "candidate_atom" || rawGroupBy === "proposed_label" || rawGroupBy === "cluster"
+  const groupBy = rawGroupBy === "candidate_atom" || rawGroupBy === "proposed_label"
     ? rawGroupBy
     : "label"
   const signal = params.get("signal")?.trim() || undefined

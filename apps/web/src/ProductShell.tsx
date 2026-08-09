@@ -15,6 +15,7 @@ import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router
 import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
 import { usePreferences } from "./lib/use-preferences"
 import { createTranslator, type MessageKey } from "./lib/i18n"
+import { BrowserConnectivityProvider } from "./lib/browser-connectivity-provider"
 import { ExplorerPage } from "./features/explorer/ExplorerPage"
 import styles from "./shell.module.css"
 
@@ -365,7 +366,9 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   // BoardLive owns loading, empty, stale and offline presentation. Keep the
   // child mounted before generic boundaries; for board routes it remains a
   // hidden session owner and Explorer owns the visible route content below.
-  if ((ownsLiveBoardRoute || ownsFeatureRoute) && children) return <>{children}</>
+  if ((ownsLiveBoardRoute || ownsFeatureRoute) && children) {
+    return <BrowserConnectivityProvider online={isOnline}>{children}</BrowserConnectivityProvider>
+  }
 
   if (effectiveBoundary === "loading") {
     return (

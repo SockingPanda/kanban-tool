@@ -262,7 +262,7 @@ export function SignalsScreenView({
           {SIGNAL_STATUSES.map((candidate) => (
             <Button
               key={candidate}
-              label={candidate === "review" ? copy.openConfirmed : candidate === "all" ? copy.all : candidate}
+              label={candidate === "review" ? copy.openConfirmed : candidate === "all" ? copy.all : copy.statusLabels[candidate]}
               variant={status === candidate ? "primary" : "ghost"}
               size="sm"
               aria-pressed={status === candidate}
@@ -317,7 +317,7 @@ export function SignalsScreenView({
           <div className={styles.panelHeader}>
             <div>
               <Heading level={2}>{copy.detail}</Heading>
-              <Text as="p" type="supporting">{selectedSignalId ?? copy.noneSelected}</Text>
+              <Text as="p" type="supporting">{selectedSignalId === null ? copy.noneSelected : <span translate="no">{selectedSignalId}</span>}</Text>
             </div>
             {selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null}
             {detail.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}

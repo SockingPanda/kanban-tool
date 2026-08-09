@@ -2811,7 +2811,7 @@
       "invalid_fixture": "schemas/fixtures/api/label-ontology-review-query.v1.invalid.json",
       "path": "api/label-ontology-review-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/label-ontology-review-query.v1.valid.json",
-      "sha256": "sha256:ed24c6eb5bb9818399f1c99da355e1cd6596ebebbe0c17ca46a3858ba3f24d24",
+      "sha256": "sha256:297523b03204fda54f4b75f66440f48f10f297761c071743765861151152ab18",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2831,7 +2831,7 @@
       "invalid_fixture": "schemas/fixtures/api/review-label-ontology-response.v1.invalid.json",
       "path": "api/review-label-ontology-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/review-label-ontology-response.v1.valid.json",
-      "sha256": "sha256:86e9b572cdadf88d99c376e1941ea10727aafe546b3000024c02092a568f9c6c",
+      "sha256": "sha256:96e192609223c5fc93ae4d56985726940ec296688ca9bbedb44eb6166303e5fa",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -4851,7 +4851,7 @@
       "invalid_fixture": "schemas/fixtures/cli/label-ontology-review-output.v1.invalid.json",
       "path": "cli/label-ontology-review-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/label-ontology-review-output.v1.valid.json",
-      "sha256": "sha256:52571e2bc80360ae6886ee0a50e6c53f8486c94026cd917d527334ea7257177a",
+      "sha256": "sha256:4fae9a564f5830ad8f5dd5f42e66640c959a147ddf395bfefb74f2ba2bbd4e33",
       "strictness": "deny_unknown_fields"
     },
     {

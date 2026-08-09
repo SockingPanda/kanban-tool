@@ -4,6 +4,7 @@ import type { AppNavigationTarget, OntologyRouteFilters, SignalsRouteFilters } f
 import type { CanonicalBoardSlug } from "../lib/board-slug"
 import type { WebRuntimeConfig } from "../lib/runtime"
 import { createTranslator } from "../lib/i18n"
+import { useBrowserOnline } from "../lib/browser-connectivity"
 import { usePreferences } from "../lib/use-preferences"
 import { createHttpTransport } from "../lib/api/http-transport"
 import { subscribeBoardSessionTelemetry } from "./board/board-session-registry"
@@ -35,6 +36,7 @@ export type FeatureRoute = {
 
 export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRouteProps) {
   const { locale } = usePreferences()
+  const online = useBrowserOnline()
   const t = createTranslator(locale)
   const routeKey = `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${runtime.serverVersion}\u0000${runtime.protocolVersion}\u0000${route.boardSlug}`
   const [state, setState] = useState<{ readonly key: string; readonly identity: FeatureBoardIdentity; readonly api: SignalsOntologyReadApi } | null>(null)
@@ -123,6 +125,7 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
         <SignalsScreen
           api={state.api}
           boardName={state.identity.name}
+          online={online}
           filters={filters as SignalsRouteFilters}
           invalidationRevision={invalidationRevision}
           selectedSignalId={selectedSignalId}
@@ -134,6 +137,7 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
         <OntologyScreen
           api={state.api}
           boardName={state.identity.name}
+          online={online}
           filters={filters as OntologyRouteFilters}
           invalidationRevision={invalidationRevision}
           selectedSignalId={selectedSignalId}

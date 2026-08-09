@@ -114,6 +114,13 @@ describe("App route parser", () => {
       view: "ontology",
       filters: { includeAll: true, groupBy: "candidate_atom", signal: "los_1", atom: "hash_1" },
     })
+    expect(parseAppRoute("/app/boards/default/ontology?group_by=cluster")).toEqual({
+      kind: "board",
+      boardSlug: "default",
+      pathname: "/app/boards/default/ontology",
+      view: "ontology",
+      filters: { includeAll: false, groupBy: "label" },
+    })
   })
 
   test("serializes feature routes without losing canonical board identity", () => {

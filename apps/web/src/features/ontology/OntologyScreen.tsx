@@ -84,6 +84,11 @@ function statusVariant(status: string): "neutral" | "info" | "success" | "warnin
   return status === "open" ? "info" : "neutral"
 }
 
+function localizedSignalStatus(status: string | undefined, copy: OntologyCopy): string {
+  if (status === undefined) return copy.none
+  return copy.statusLabels[status as keyof typeof copy.statusLabels] ?? status
+}
+
 function validationVariant(status: string): "neutral" | "info" | "success" | "warning" | "error" {
   if (status === "passed" || status === "not_required") return "success"
   if (status === "pending" || status === "partial") return "warning"
@@ -433,7 +438,7 @@ export function OntologyScreenView({
         <div className={styles.detailColumn}>
           <Card className={styles.detailPanel} padding={0}>
             <div className={styles.panelHeader}>
-              <div><Heading level={2}>{copy.signalDetail}</Heading><Text as="p" type="supporting">{detail.data?.signal.status ?? copy.none}</Text></div>
+              <div><Heading level={2}>{copy.signalDetail}</Heading><Text as="p" type="supporting">{localizedSignalStatus(detail.data?.signal.status, copy)}</Text></div>
               {selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null}
             {detail.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
             </div>

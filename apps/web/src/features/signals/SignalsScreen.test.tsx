@@ -104,6 +104,26 @@ describe("Signals screen presentation", () => {
     expect(html).toContain('translate="no">sig_1')
   })
 
+  test("localizes status filter labels while preserving machine status badges", () => {
+    const html = renderToStaticMarkup(
+      <SignalsScreenView
+        boardName="Default"
+        filters={{ status: "open" }}
+        list={state([signal()])}
+        detail={state(signal())}
+        selectedSignalId="sig_1"
+        online
+        copy={featureCopyForLocale("zh").signals}
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+      />,
+    )
+
+    expect(html).toContain("开放")
+    expect(html).toMatch(/<span translate="no"><span[^>]*>open<\/span><\/span>/)
+  })
+
   test("formats signal timestamps with the selected locale", () => {
     const enDate = new Date(1).toLocaleString("en-US")
     const zhDate = new Date(1).toLocaleString("zh-CN")

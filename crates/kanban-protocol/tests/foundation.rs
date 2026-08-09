@@ -29,12 +29,14 @@ fn exact_request_dtos_reject_legacy_wire_aliases() {
             serde_json::from_value::<kanban_protocol::LabelOntologySignalQuery>(alias).is_err()
         );
     }
-    assert!(
-        serde_json::from_value::<kanban_protocol::LabelOntologyReviewGroupByWire>(
-            serde_json::json!("candidate-atom")
-        )
-        .is_err()
-    );
+    for value in ["candidate-atom", "cluster"] {
+        assert!(
+            serde_json::from_value::<kanban_protocol::LabelOntologyReviewGroupByWire>(
+                serde_json::json!(value)
+            )
+            .is_err()
+        );
+    }
 }
 
 #[test]
@@ -1033,6 +1035,36 @@ fn generated_schema_artifacts_are_non_empty_and_deterministic() {
         "schema registry 必须生成 committed artifact"
     );
     assert_eq!(first, second, "同一 registry 连续生成必须 byte-identical");
+}
+
+#[test]
+fn ontology_review_schema_advertises_only_supported_groupings_and_limits() {
+    let artifacts = generated_artifacts();
+    let query: serde_json::Value = serde_json::from_slice(
+        artifacts
+            .get("api/label-ontology-review-query.v1.schema.json")
+            .expect("ontology review query schema artifact"),
+    )
+    .expect("valid ontology review query schema");
+    let groupings = &query["$defs"]["LabelOntologyReviewGroupByWire"]["enum"];
+    assert_eq!(
+        groupings,
+        &serde_json::json!(["label", "candidate_atom", "proposed_label"])
+    );
+    assert_eq!(query["properties"]["limit"]["default"], 100);
+    assert_eq!(query["properties"]["limit"]["minimum"], 1);
+    assert_eq!(query["properties"]["limit"]["maximum"], 100);
+
+    let response: serde_json::Value = serde_json::from_slice(
+        artifacts
+            .get("api/review-label-ontology-response.v1.schema.json")
+            .expect("ontology review response schema artifact"),
+    )
+    .expect("valid ontology review response schema");
+    assert_eq!(
+        response["$defs"]["LabelOntologyReviewGroupByWire"]["enum"],
+        serde_json::json!(["label", "candidate_atom", "proposed_label"])
+    );
 }
 
 #[test]

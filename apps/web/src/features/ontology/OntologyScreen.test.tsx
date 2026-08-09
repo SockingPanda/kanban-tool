@@ -241,6 +241,35 @@ describe("Ontology screen presentation", () => {
     expect(html).toContain('translate="no">positive / applies_when / hash_1')
   })
 
+  test("localizes the ontology detail status subtitle while preserving the machine badge", () => {
+    const html = renderToStaticMarkup(
+      <OntologyScreenView
+        boardName="Default"
+        filters={filters}
+        signals={{ phase: "success", data: [signalFixture()], error: null }}
+        groups={{ phase: "success", data: [reviewGroupFixture()], error: null }}
+        detail={{ phase: "success", data: detailFixture(), error: null }}
+        atom={{ phase: "idle", data: null, error: null }}
+        selectedSignalId="los_1"
+        atomRef=""
+        online
+        actionReason=""
+        actionPending={false}
+        copy={featureCopyForLocale("zh").ontology}
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+        onActionReasonChange={() => undefined}
+        onLifecycleAction={() => undefined}
+        onExplainAtom={() => undefined}
+        onAtomSearch={() => undefined}
+      />,
+    )
+
+    expect(html).toContain("开放")
+    expect(html).toMatch(/<span translate="no"><span[^>]*>open<\/span><\/span>/)
+  })
+
   test("selects review group source rows and avoids quality-rate claims", () => {
     const onSelectSignal = vi.fn()
     const tree = ReviewGroupsView({ phase: "success", groups: [reviewGroupFixture({ signal_ids: ["los_1"] })], onSelectSignal })

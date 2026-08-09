@@ -225,7 +225,7 @@ export type LabelOntologyValidationEffectiveOutcome =
 
 export type LabelOntologySuggestState = string
 
-export type LabelOntologyReviewGroupBy = "label" | "candidate_atom" | "proposed_label" | "cluster"
+export type LabelOntologyReviewGroupBy = "label" | "candidate_atom" | "proposed_label"
 
 export type LabelAtomRecord = {
   id: string

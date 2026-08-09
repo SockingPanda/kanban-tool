@@ -53,7 +53,7 @@ export interface OntologySignalListQuery extends SignalListQuery {
 }
 
 export interface OntologyReviewQuery {
-  readonly groupBy?: "label" | "candidate_atom" | "proposed_label" | "cluster"
+  readonly groupBy?: "label" | "candidate_atom" | "proposed_label"
   readonly includeAll?: boolean
   readonly limit?: number
 }
@@ -86,7 +86,7 @@ export class SignalsOntologyReadError extends Error {
 /** Feature adapter seam; the canonical transport keeps its strict request/bytes contract. */
 export interface SignalsOntologyReadTransport {
   readonly get: HttpTransport["get"]
-  readonly request?: HttpTransport["request"]
+  readonly request: HttpTransport["request"]
 }
 
 export interface SignalsOntologyReadApi {
@@ -297,7 +297,6 @@ async function readPayload(transport: SignalsOntologyReadTransport, path: string
 }
 
 async function writePayload(transport: SignalsOntologyReadTransport, path: string, body: unknown, signal?: AbortSignal): Promise<HttpTransportResponse> {
-  if (!transport.request) throw new SignalsOntologyReadError("http", "当前 transport 不支持 ontology lifecycle 写入。")
   try {
     return await transport.request({ method: "POST", path, body, signal })
   } catch (error) {
@@ -459,7 +458,7 @@ export function createSignalsOntologyReadApi(runtime: WebRuntimeConfig, options:
       const identity = await resolveIdentity(signal)
       const limit = requestedLimit(query?.limit)
       const groupBy = query?.groupBy ?? "label"
-      if (groupBy === "cluster") {
+      if ((groupBy as string) === "cluster") {
         throw new SignalsOntologyReadError("invalid_response", "当前 API 没有可验证的 cluster projection。")
       }
       const includeAll = query?.includeAll === true
@@ -502,9 +501,6 @@ export function createSignalsOntologyReadApi(runtime: WebRuntimeConfig, options:
         signal_ids: [normalizedSignalId],
         reason: normalizedReason,
       })
-      if (!transport.request) {
-        throw new SignalsOntologyReadError("http", "当前 transport 不支持 ontology lifecycle 写入。")
-      }
       const response = await writePayload(transport, ontologyActionsPath(identity.canonicalBoardId), request, signal)
       const parsed = parseResponse("api.create-label-ontology-action.response", parseApiCreateLabelOntologyActionResponse, response.payload).data
       assertOntologyActionScope(parsed, identity.canonicalBoardId, action, normalizedSignalId)

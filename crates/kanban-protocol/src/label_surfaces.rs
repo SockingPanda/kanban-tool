@@ -1095,7 +1095,6 @@ wire!(
         Label,
         CandidateAtom,
         ProposedLabel,
-        Cluster,
     }
 );
 fn default_label_ontology_review_group_by() -> LabelOntologyReviewGroupByWire {
@@ -1119,7 +1118,10 @@ wire!(
             default = "default_label_surface_limit",
             skip_serializing_if = "is_default_label_surface_limit"
         )]
-        #[cfg_attr(feature = "schema", schemars(extend("default" = 100)))]
+        #[cfg_attr(
+            feature = "schema",
+            schemars(extend("default" = 100, "minimum" = 1, "maximum" = 100))
+        )]
         pub limit: usize,
     }
 );

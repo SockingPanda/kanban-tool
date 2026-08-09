@@ -378,4 +378,15 @@ test.describe("Ontology lifecycle browser fences", () => {
     })
     expect(fixture.snapshotReadCounts()).toEqual(countsBeforeASettles)
   })
+
+  test("updates the feature offline banner when browser connectivity events fire", async ({ page }) => {
+    await installOntologyFixture(page, "retry")
+    await openOntology(page)
+
+    await page.evaluate(() => window.dispatchEvent(new Event("offline")))
+    await expect(page.getByTestId("ontology-screen")).toContainText("You are offline")
+
+    await page.evaluate(() => window.dispatchEvent(new Event("online")))
+    await expect(page.getByTestId("ontology-screen")).not.toContainText("You are offline")
+  })
 })

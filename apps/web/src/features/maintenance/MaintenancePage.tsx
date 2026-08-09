@@ -156,12 +156,11 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
   const mutationTokenRef = useRef(0)
 
   const abortRequests = useCallback(() => {
-    statusRequestRef.current?.controller.abort()
-    diagnosticsRequestRef.current?.controller.abort()
-    doctorRequestRef.current?.controller.abort()
+    const requests = [statusRequestRef.current, diagnosticsRequestRef.current, doctorRequestRef.current]
     statusRequestRef.current = null
     diagnosticsRequestRef.current = null
     doctorRequestRef.current = null
+    requests.forEach((request) => request?.controller.abort())
   }, [])
 
   const isCurrent = useCallback((generation: number) => mountedRef.current && generationRef.current === generation, [])

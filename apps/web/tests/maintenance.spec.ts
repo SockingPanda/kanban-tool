@@ -133,6 +133,46 @@ test.describe("Maintenance operator workflow", () => {
     await expect(page.getByTestId("maintenance-stats")).not.toContainText("alpha")
   })
 
+  test("aborts a deferred doctor request when the board changes", async ({ page }) => {
+    let releaseOldDoctor!: () => void
+    const oldDoctor = new Promise<void>((resolve) => { releaseOldDoctor = resolve })
+    let doctorRequests = 0
+    const doctorPayload = (storeName: string, migrationVersion: number) => ({
+      ...doctorFixture,
+      data: {
+        ...doctorFixture.data,
+        migration_version: migrationVersion,
+        derived_stores: [{ ...doctorFixture.data.derived_stores[0], store_name: storeName }],
+      },
+    })
+    await page.route("http://127.0.0.1:4173/api/v1/maintenance/doctor", async (route) => {
+      doctorRequests += 1
+      if (doctorRequests === 1) {
+        await oldDoctor
+        try {
+          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(doctorPayload("alpha_store", 11)) })
+        } catch {
+          // The board switch is expected to abort this stale request.
+        }
+        return
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(doctorPayload("beta_store", 22)) })
+    })
+
+    await page.goto("/app/boards/alpha/maintenance", { waitUntil: "domcontentloaded" })
+    await page.getByTestId("maintenance-doctor-submit").click()
+    await expect.poll(() => doctorRequests).toBe(1)
+    await page.evaluate(() => {
+      history.pushState({}, "", "/app/boards/beta/maintenance")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    await expect(page.getByTestId("maintenance-doctor-submit")).toBeEnabled()
+    await page.getByTestId("maintenance-doctor-submit").click()
+    await expect(page.getByTestId("maintenance-doctor")).toContainText("beta_store")
+    releaseOldDoctor()
+    await expect(page.getByTestId("maintenance-doctor")).not.toContainText("alpha_store")
+  })
+
   test("keeps the main action pending after confirmation and suppresses duplicate submits", async ({ page }) => {
     let releaseBackup!: () => void
     const backupResponse = new Promise<void>((resolve) => { releaseBackup = resolve })

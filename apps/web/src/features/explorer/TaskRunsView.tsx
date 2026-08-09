@@ -149,7 +149,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
     const offline = kind === "offline"
     return (
       <section className={styles.state} data-testid={offline ? "runs-offline" : "runs-error"} role={offline ? "status" : "alert"}>
-        <h1>{offline ? copy.offline : copy.error}</h1>
+        <h2>{offline ? copy.offline : copy.error}</h2>
         {!offline ? <p>{state.error.message}</p> : null}
         {onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}
       </section>
@@ -165,7 +165,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
     <section className={styles.runs} data-testid="runs-ready" aria-labelledby="runs-heading">
       <header className={styles.heading}>
         <p className={styles.kicker}>{copy.kicker}</p>
-        <h1 id="runs-heading">{copy.title}</h1>
+        <h2 id="runs-heading">{copy.title}</h2>
         <p className={styles.taskId} translate="no">{taskId}</p>
       </header>
       {state.error ? <div className={styles.refreshError} role="alert">{state.error.message}</div> : null}

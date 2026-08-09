@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Kanban Tool — local host</title>
+    <link rel="stylesheet" href="./bootstrap.css" />
+  </head>
+  <body>
+    <main class="shell" aria-labelledby="page-title">
+      <div class="brand-mark" aria-hidden="true">K</div>
+      <p class="eyebrow" data-copy="eyebrow">KANBAN TOOL / LOCAL FIRST</p>
+      <h1 id="page-title" data-copy="title">Connecting to your local workspace</h1>
+      <p class="lede" data-copy="lede">
+        The desktop shell is ready. We are checking the fixed loopback host before opening your board.
+      </p>
+
+      <section id="status-card" class="status-card" aria-live="polite" aria-atomic="true" aria-busy="true">
+        <div class="status-heading">
+          <span id="status-dot" class="status-dot" aria-hidden="true"></span>
+          <span id="status-label" data-copy="checking">Checking local host</span>
+        </div>
+        <dl class="facts">
+          <div>
+            <dt data-copy="phaseLabel">Phase</dt>
+            <dd id="phase">Starting local host</dd>
+          </div>
+          <div>
+            <dt data-copy="endpointLabel">Fixed endpoint</dt>
+            <dd id="endpoint"><code>http://127.0.0.1:8721</code></dd>
+          </div>
+          <div>
+            <dt data-copy="diagnosticLabel">Diagnostic</dt>
+            <dd id="diagnostic">—</dd>
+          </div>
+        </dl>
+        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+      </section>
+
+      <div class="actions" aria-label="Bootstrap actions" data-copy-aria-label="actionsLabel">
+        <button id="retry" class="button button-secondary" type="button" data-copy="retry">
+          Retry probe existing host
+        </button>
+        <button id="start" class="button button-primary" type="button" data-copy="start">
+          Start local host
+        </button>
+        <button id="open" class="button button-secondary" type="button" data-copy="open" disabled>
+          Open in browser
+        </button>
+        <button id="copy" class="button button-quiet" type="button" data-copy="copy">
+          Copy diagnostics
+        </button>
+      </div>
+
+      <p class="hint" data-copy="hint">
+        Only a fixed <code>127.0.0.1</code> URL is used. No remote content is loaded.
+      </p>
+    </main>
+    <script src="./bootstrap.js" defer></script>
+  </body>
+</html>

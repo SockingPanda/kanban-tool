@@ -2,27 +2,26 @@
 
 ## 1. 作用、范围与来源
 
-本文件是 browser-first Astryx Web UI 重写的 active migration ledger。它以现有
-`apps/desktop` 的**用户实际可见 rendered surface** 为范围，不把 `KanbanApi` 上存在但当前没有
-UI 入口的 typed operation 自动扩成产品范围。目标是由 `kanban serve` 同源托管 `/app/`，让 Browser
-和 Tauri 消费同一 Web artifact；现有功能语义、状态机、错误语义和确认边界保持不变，视觉采用
-Astryx baseline。
+本文件是 browser-first Astryx Web UI 重写的 active migration ledger。它以
+`apps/web` 的**用户实际可见 rendered surface** 为范围，不把 `KanbanApi` 上存在但当前没有
+UI 入口的 typed operation 自动扩成产品范围。`kanban serve` 同源托管 `/app/`，Browser 和
+Tauri Desktop 消费同一 Web artifact；现有功能语义、状态机、错误语义和确认边界保持不变，
+视觉采用 Astryx baseline。
 
 事实来源：
 
-- Shell/状态编排：`apps/desktop/src/App.tsx`、`apps/desktop/src/app/AppShell.tsx`、
-  `apps/desktop/src/app/useRuntimeConfigState.ts`、`useTaskCollectionState.ts`、
-  `useSelectedTaskDetailState.ts`、`useTaskMutations.ts`。
-- 页面与交互：`apps/desktop/src/features/**` 及其同名测试。
-- 当前 typed HTTP 边界：`apps/desktop/src/lib/api.ts`、`apps/desktop/src/lib/api/**`；最终 wire
-  contract 由 `kanban-protocol` 及其生成 artifact 持有。
-- 事件缓存/失效：`apps/desktop/src/features/events/event-invalidation.ts`、
-  `event-polling.ts`、`event-cache.ts`。
+- Shell/状态编排：`apps/web/src/App.tsx`、`apps/web/src/ProductShell.tsx`、
+  `apps/web/src/lib/runtime.ts`、`apps/web/src/lib/router.ts`。
+- 页面与交互：`apps/web/src/features/**` 及其同名测试。
+- 当前 typed HTTP 边界：`apps/web/src/lib/api/**`；最终 wire contract 由 `kanban-protocol`
+  及其生成 artifact 持有。
+- 事件同步/失效：`apps/web/src/lib/sync/**`、`apps/web/src/features/board-feature-invalidation.ts`。
 
-当前 URL 基线已包含 board feature routes：`/app/boards/:boardSlug/signals` 与
-`/app/boards/:boardSlug/ontology` 及其筛选/详情 query；其余尚未迁移的旧 rendered surface 仍可标为
-`none`。目标 URL 是 `/app/`、`/app/boards/:boardSlug/{board,list,map,runs,events,signals,ontology,health,maintenance}`、
-`/app/settings`，Task Inspector 使用 `?task=t_...`；每个 target route 都必须保留本表中的 capability。
+当前 URL 基线由 `apps/web/src/lib/router.ts` 持有：`/app/`、
+`/app/boards/:boardSlug/{board,list,map,runs,events,signals,ontology,health,maintenance}`、
+`/app/settings`，Task Inspector 使用 `?task=t_...`；signals/ontology 使用各自筛选/详情 query。
+表中的 `none` 只表示旧 Desktop React state URL，不代表当前 Web route 缺失；每个 current route 都
+必须保留本表中的 capability。
 
 ## 2. 统一完成规则
 
@@ -47,7 +46,7 @@ query root 与 observed-scope 规则执行；ledger 中的 `task.*`、`dependenc
 
 | id | target route / current URL | 用户结果（当前 rendered surface） | reads / writes | state / error | existing tests | future Playwright | SSE invalidation | cutover decision |
 |---|---|---|---|---|---|---|---|---|
-| `shell.runtime` | `/app/` / `none`（React state） | 加载 runtime、显示 active board/actor/API、侧栏收展、导航 10 个 view、theme cycle、全局错误条 | `runtime_config`（Tauri）或 Vite env；`GET /api/v1/boards?include_archived=false`；`GET /api/v1/boards/:board/columns`；board/list/map/runs 读 `GET /api/v1/stats?board=`；无 shell 写入（board switch 走 `set_runtime_board`/Web config） | runtime/collection/detail 错误统一 AppShell assertive alert；pending action；board switch 清理 selected/draft/filter/token/error | `app/task-explorer-chrome.test.ts`、`shadcn-controls.test.ts`、`shell-state-boundaries.test.ts`、`board-switch-state.test.ts`、`theme.test.ts`、`sidebar-state.test.ts`、`sidebar-animation.test.ts`、`input-accessibility.test.ts`、`layout-scroll-contract.test.ts`、`queue-counts.test.ts`、`task-selection.test.ts` | `P0-shell-runtime`、`P0-navigation-url`、`P1-theme-and-sidebar` | `board.created`/`board.archived`：inactive lifecycle 由 window focus + visible ≤15s global freshness 维护；active `board.archived` 立即刷新 boards/columns/task projection；未知/断线触发 runtime reconnect 或全局 error | 纳入；同源 `/app/runtime.json` 取代生产 Vite/Tauri 分叉，保持 board isolation |
+| `shell.runtime` | `/app/` / `none`（React state） | 加载 runtime、显示 active board/actor/API、侧栏收展、导航 10 个 view、theme cycle、全局错误条 | `GET /app/runtime.json` 经 generated validator；`GET /api/v1/boards?include_archived=false`；`GET /api/v1/boards/:board/columns`；board/list/map/runs 读 `GET /api/v1/stats?board=`；无 shell 写入（board switch 走 Web runtime/session state） | runtime/collection/detail 错误统一 AppShell assertive alert；pending action；board switch 清理 selected/draft/filter/token/error | `app/task-explorer-chrome.test.ts`、`shadcn-controls.test.ts`、`shell-state-boundaries.test.ts`、`board-switch-state.test.ts`、`theme.test.ts`、`sidebar-state.test.ts`、`sidebar-animation.test.ts`、`input-accessibility.test.ts`、`layout-scroll-contract.test.ts`、`queue-counts.test.ts`、`task-selection.test.ts` | `P0-shell-runtime`、`P0-navigation-url`、`P1-theme-and-sidebar` | `board.created`/`board.archived`：inactive lifecycle 由 window focus + visible ≤15s global freshness 维护；active `board.archived` 立即刷新 boards/columns/task projection；未知/断线触发 runtime reconnect 或全局 error | 纳入；同源 `/app/runtime.json` 取代生产 Vite/Tauri 分叉，保持 board isolation |
 | `task.collection` | `/app/boards/:board/{board,list}` / `none` | 全局搜索（250ms debounce）、refresh、Archived 开关；板/列表读取任务集合 | Board: `GET /api/v1/boards/:board/tasks/by-status?...`；List: `GET /api/v1/boards/:board/tasks?...`；stats/columns；无写 | loading/previous data/empty；查询错误进全局错误条；`searchMeta` 当前为 null | `features/board/useBoardTasks.test.ts`、`app/task-explorer-chrome.test.ts` | `P0-board-load`、`P0-list-search`、`P1-refresh-and-archive` | `task.*`/`dependency.*` → board tasks/stats/search status/map 按事件分类 | 纳入；当前 query/key 语义迁移为 URL state + generated API |
 | `board.view` | `/app/boards/:board/board` / `none` | 列内虚拟滚动、task card 选择、DND 跨列；卡片显示 status/priority/due/scheduled/heartbeat/steps/deps/labels/reason | 读同 `task.collection` Board endpoint；写 transitions：`POST /api/v1/tasks/:id/transitions/{specify,promote,claim,complete,submit-review,block,unblock,archive}` | 非法 drop/同列 i18n 错误；triage specify 需 description；block 需 reason；running 无 token 的 complete/block/archive force confirm | `board-card-state.test.ts`、`board-layout.test.ts`、`drag-policy.test.ts`、`useBoardTasks.test.ts` | `P0-board-dnd`、`P0-board-open-detail`、`P1-board-keyboard-transition` | `task.*`/`dependency.*` 更新 board rows、stats、map、selected detail | 纳入；保持状态机合法动作与 force-confirm |
 | `list.view` | `/app/boards/:board/list` / `none` | status/priority/plan filters、reset、列显隐/重置、sort、rows/page、pagination、open detail；当前有 row-selection count | 读 `GET /api/v1/boards/:board/tasks?...`；stats/columns；列表本身无写 | empty/loading/refreshing；页变更会 prune stale row selection；query 错误全局 alert | `features/list/table-state.test.ts`、`app/task-explorer-chrome.test.ts`、`shadcn-controls.test.ts` | `P0-list-filter-sort-page`、`P1-list-column-menu`、`P1-list-open-detail` | `task.*`/`dependency.*` → tasks/stats/search status；comment-only 不刷新 list stats | 纳入 filters/sort/page；删除没有 bulk action 或其他用户结果的 row selection |
@@ -68,7 +67,16 @@ query root 与 observed-scope 规则执行；ledger 中的 `task.*`、`dependenc
 | `task.labels` | detail `?task=` / `none`（labels section） | add/remove label；显式 request suggestions；apply suggested label；degraded reasons 展示 | reads manual `GET /api/v1/tasks/:id/labels/suggestions`；writes POST `/labels`、DELETE `/labels/:label` | suggestions 默认 disabled/not fetched；pending/error local panel + global action error；already applied disabled | `label-suggestions.test.ts`、`task-detail-capability-cutline.test.ts`、`lib/api.test.ts` | `P1-labels`、`P1-label-suggestions` | `task.label.added/removed` 与 task title/description update → 若 `task-label-suggestions(task_id)` 已观察则定向失效；其他 label/task events 仍按 catalog；不把 ontology semantics 变成 task label UI | 纳入；suggestions 保持手动，不把 ontology semantics 变成 task label UI |
 | `task.attachments` | detail `?task=` / `none`（attachments section） | file choose/upload、download、delete；metadata filename/type/size/hash/time | read `GET /api/v1/tasks/:id/attachments`；write POST `/attachments`、GET bytes `/attachments/:attachment_id`、DELETE `/attachments/:attachment_id` | no file/pending/empty；API error全局 action alert；当前 delete 无二次确认 | `lib/attachments-contract.test.ts`、`app/task-detail-capability-cutline.test.ts`、`app/task-mutation-invalidation.test.ts` | `P1-attachments` | 当前 protocol 不存在 `attachment.*`；HTTP mutation scope 定向失效 `task-attachments(task_id)`/相关 task timeline，未知 kind 走 conservative fallback；当前 §1.2 样本按 unknown 处理；若要提升为 known 或新增事件，先更新 protocol/schema/fixture/taxonomy | 纳入 rendered upload/download/delete；保持当前无二次确认的边界 |
 
-## 4. Typed-but-not-rendered 非目标
+## 4. Stage08 Desktop shell 与 package cutover 证据
+
+| area | current fact | evidence / rollback boundary |
+|---|---|---|
+| `desktop.host` | Tauri 只加载静态 `apps/desktop/bootstrap/`，固定导航到 `http://127.0.0.1:8721/app/`；先探测 `/health`、`/app/runtime.json`、`/app/manifest.json`，仅 attach 同版本 `serverVersion`、`protocolVersion`、本地 Web `webBuildId` 全匹配的 loopback host；否则启动 bundled 同版本 `kanban serve`，不随机改端口。产品是 local single-user；这组 identity probe 是 cooperative trust boundary，不是对同 UID 恶意端口重绑的 cryptographic pinning，probe→navigation race 不引入第二套 auth。 | `apps/desktop/src-tauri/src/{bootstrap,desktop_config,host_lifecycle}.rs`；`HostCompatibility` 与 loopback probe 测试覆盖 mismatch/port conflict/cancel。固定 URL、同源 runtime 与 Web artifact 是 rollback 边界。 |
+| `desktop.lifecycle` | close/tray hide 只隐藏窗口并保留 host；外部 attach host 永不由 Desktop kill；Quit 仅清理 owned sidecar，先发 graceful SIGINT，超时后 bounded SIGKILL，并由独立 session/process group 与 reaper 确认 descendant cleanup。 | `apps/desktop/src-tauri/src/{bootstrap,desktop_tray,host_lifecycle}.rs` lifecycle/ownership/reaper tests；失败保留 ownership 重试，避免 orphan 或误杀外部 host。 |
+| `desktop.package` | Desktop 是 Tauri-only shell；旧 `apps/desktop/src/**`、React/Vite tests、legacy parser/types 已退出。Deb 资源包含与 Browser 相同的 `web/` artifact 和 `kanban` sidecar（不放 `/usr/bin/kanban`），CLI Deb 仍独立提供 `/usr/bin/kanban`；`xdg-open` 由 `xdg-utils` 包依赖提供。 | `apps/desktop/src-tauri/tauri.conf.json`、`apps/desktop/bootstrap/`、`scripts/prepare-desktop-sidecar.sh`、`scripts/test-desktop-package-{config,layout}.sh`、`just desktop-check/desktop-package/cli-package-layout`；资源 manifest/hash 不匹配即拒绝发布。 |
+| `desktop.smoke` | 打包后的 Linux WebKitGTK 应从 extracted Deb 在 `xvfb`/`dbus-run-session` 下启动，验证固定 8721 host、runtime/health、`/app/` page load、Desktop 进程存活，并在 opt-in normal Quit 后确认仅 owned sidecar 退出。 | `scripts/test-desktop-packaged-smoke.sh`（由 `just desktop-packaged-smoke` 调用）；缺少 WebKitGTK/Xvfb/dbus/dpkg 前置条件时 gate 明确失败，不降级为人工说明。 |
+
+## 5. Typed-but-not-rendered 非目标
 
 以下 operation 当前只有 `KanbanApi`/contract/test 入口，没有 rendered UI；本次 parity 不自动加入：
 
@@ -88,14 +96,15 @@ query root 与 observed-scope 规则执行；ledger 中的 `task.*`、`dependenc
 若未来要纳入其中任一 operation，必须新建明确 capability、验收 flow、contract/schema 证据和 scope 决策，
 不得在迁移中以“顺手补齐”为由加入。
 
-## 5. Dead/no-op 候选与删除规则
+## 6. Dead/no-op 候选与删除规则
 
-- **删除：** `features/list/ListView.tsx` 的 `select` 列（全选/行 checkbox）只更新 `rowSelection` 并
+- **删除：** 旧 Desktop `features/list/ListView.tsx` 的 `select` 列（全选/行 checkbox）只更新 `rowSelection` 并
   显示 `{count} selected`，没有 bulk command、回调或 API。它不进入 Astryx Web。
-- **删除：** `AppShell.tsx` 的 `SearchBackendBadge` 依赖 `searchMeta`，而
-  `useBoardTasks.loadBoardTasks` 当前固定返回 `searchMeta: null`，所以它不是 rendered capability。若未来
-  要显示 search backend 状态，需要另建 capability 并接入真实 `/search/status` 或 search metadata。
-- **删除：** `features/board/board-config.ts` 的 hard-coded `fallbackColumns` 不得在新 Web 形成第二份
+- **历史退出：** 旧 Desktop `AppShell.tsx` 的 `SearchBackendBadge` 依赖 `searchMeta`，而旧
+  `useBoardTasks.loadBoardTasks` 固定返回 `searchMeta: null`；该 dead/no-op source tree 已删除，
+  不得从旧组件名推导当前 Web capability。若未来要显示 search backend 状态，需要另建 capability 并
+  接入真实 `/search/status` 或 search metadata。
+- **删除：** 旧 Desktop `features/board/board-config.ts` 的 hard-coded `fallbackColumns` 不得在新 Web 形成第二份
   board column 配置；加载失败显示 typed error，空列使用真实空态，列和状态映射只来自 server contract。
 - `RunsView` 的 RunRow 不可点击不是自动 dead：当前 run log 自动选择第一个 `has_log` run。若新设计改为可选
   run，需补 URL/Playwright/contract；否则保持自动选择并记录为 intentional。
@@ -104,11 +113,11 @@ query root 与 observed-scope 规则执行；ledger 中的 `task.*`、`dependenc
 - 旧 shell 的 command/status/inert controls 已由 `app/task-explorer-chrome.test.ts` 约束为不存在；不得在
   Astryx shell 回填。
 
-## 6. Cutover 证据索引
+## 7. Cutover 证据索引
 
 每个 row 的 `future Playwright` id 在实现阶段扩展为真实 spec 路径，并将以下证据回填到 Kanban stage task：
 
-- Browser Chromium full ledger；Firefox key paths；Linux packaged Tauri smoke；
+- Browser Chromium full ledger；Firefox key paths；Linux packaged Tauri smoke（Stage08 Desktop shell/package）；
 - SSE reconnect/catch-up/unknown-event/gap → refetch；断线 polling fallback；
 - WCAG 2.2 AA、键盘核心流程、focus、axe critical/serious zero；
 - 视觉基线与性能预算；

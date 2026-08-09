@@ -13,8 +13,6 @@
     "web:lint": "pnpm --filter @kanban-tool/web lint",
     "web:test": "pnpm --filter @kanban-tool/web test",
     "web:build": "pnpm --filter @kanban-tool/web build",
-    "desktop:typecheck": "pnpm --filter @kanban-tool/desktop typecheck",
-    "desktop:test": "pnpm --filter @kanban-tool/desktop test",
-    "desktop:build": "pnpm --filter @kanban-tool/desktop build"
+    "desktop:build": "just desktop-package"
   }
 }

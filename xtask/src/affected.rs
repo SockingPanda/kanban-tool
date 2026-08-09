@@ -412,8 +412,8 @@ mod tests {
             vec![Recipe::SchemaCheck, Recipe::DiffCheck]
         );
         assert_eq!(
-            build_plan("main".to_owned(), sources(&["apps/desktop/src/App.tsx"])).recipes,
-            vec![Recipe::DesktopCheck, Recipe::DiffCheck]
+            build_plan("main".to_owned(), sources(&["apps/web/src/App.tsx"])).recipes,
+            vec![Recipe::WebCheck, Recipe::DiffCheck]
         );
         assert_eq!(
             build_plan("main".to_owned(), sources(&["xtask/src/affected.rs"])).recipes,
@@ -570,7 +570,7 @@ mod tests {
         let paths = [
             "crates/kanban-service/src/lib.rs",
             "xtask/src/affected.rs",
-            "apps/desktop/src/App.tsx",
+            "apps/web/src/App.tsx",
             "schemas/api.json",
         ];
         let first = build_plan("main".to_owned(), sources(&paths)).recipes;
@@ -581,7 +581,7 @@ mod tests {
             vec![
                 Recipe::ToolingCheck,
                 Recipe::SchemaCheck,
-                Recipe::DesktopCheck,
+                Recipe::WebCheck,
                 Recipe::RustFast,
                 Recipe::DiffCheck,
             ]

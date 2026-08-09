@@ -6,11 +6,12 @@ Accepted
 
 ## 背景
 
-当前产品 UI 位于 Desktop 的 React/Tauri 组合中，Tauri runtime command 与 Vite 开发配置已经形成
-两种启动分支；若再增加独立浏览器入口，渲染、配置和事件同步会继续漂移。我们需要在保留现有业务
-语义的前提下，用同一份 Web artifact 覆盖浏览器和 Tauri，并让 `kanban serve` 成为唯一的运行时
-装配点。此次改造是直接升级而不是长期兼容层：旧 UI 只保留在历史 tag、构建产物或回滚材料中，
-数据库事实和 application service 不随 UI 重写改变。
+历史产品 UI 位于 Desktop 的 React/Tauri 组合中，Tauri runtime command 与 Vite 开发配置形成了
+两种启动分支；若继续保留独立渲染实现，浏览器与桌面会持续漂移。Stage08 完成后，canonical
+rendered surface 是 `apps/web`，旧 `apps/desktop/src/**` 已退出；Tauri 只承载静态 bootstrap、
+窗口/托盘和 host 生命周期。浏览器与 Tauri 通过同一份 Web artifact，由 `kanban serve` 作为唯一
+运行时装配点。此次改造是直接升级而不是长期兼容层：旧 UI 只保留在历史 tag、构建产物或回滚材料
+中，数据库事实和 application service 不随 UI 重写改变。
 
 ## 决策
 
@@ -49,19 +50,32 @@ Accepted
 - 首个发布范围是 Linux desktop/browser（Chromium、Firefox 与 Tauri WebKitGTK）；不承诺移动端和
   其他桌面平台，但组件与路由不得为未来扩展设置结构性障碍。功能语义保持现有 rendered UI 能力，
   不借此增加新的领域操作。
-- Tauri 使用私有、同版本的 `kanban serve` sidecar 和同一 Web dist。客户端先探测固定 loopback
-  端口（默认 `8721`）并 attach；无兼容 host 时再 spawn 自己的 host。端口冲突必须走可诊断的恢复
-  路径，不随机改端口。关闭窗口默认隐藏并保留 host；显式 Quit 只优雅停止本进程拥有的 child，超时
-  才 force stop，外部 host 永不被杀死。浏览器只通过 HTTP attach，不启动或管理 sidecar。
+- Tauri 使用静态 `apps/desktop/bootstrap/`，固定导航到 `http://127.0.0.1:8721/app/`，并携带同
+  版本 `kanban serve` sidecar 与同一 Web dist。客户端先探测固定 loopback 端口并 attach；无兼容
+  host 时再 spawn 自己的 host。端口冲突必须走可诊断的恢复路径，不随机改端口。关闭窗口默认隐藏
+  并保留 host；显式 Quit 只优雅停止本进程拥有的 child，超时才 force stop，外部 host 永不被杀死。
+  sidecar 进程使用独立 session/process group，cleanup 经过 bounded reaper；浏览器只通过 HTTP
+  attach，不启动或管理 sidecar。
+- 产品仍是 local single-user；loopback probe 加 exact `serverVersion`、`protocolVersion` 和 Web
+  `buildId` identity 只防止 cooperative host 的误连/版本漂移，不提供对同 UID 恶意端口重绑的
+  cryptographic host pinning。固定端口 probe 到随后 navigation 的极窄 race 属同一 trust boundary，
+  Stage08 不引入第二套 auth，也不改变 Browser/external attach。
+- Desktop Deb 仅包含 Tauri binary、静态 bootstrap、`web/` artifact 与资源目录下的 `kanban` sidecar，
+  不把 sidecar 安装到 `/usr/bin/kanban`；CLI Deb 继续独立提供 `/usr/bin/kanban`，两者必须引用同一
+  Web artifact manifest/hash。`xdg-open` 使用固定绝对路径并由 `xdg-utils` Deb 依赖保证可用。
 
 ### Cutover 与回滚
 
 - 改造期间允许旧壳与新 Web 分阶段并存，但每个阶段完成后都以新 artifact 为唯一继续演进的实现；
-  不保留历史 UI 的运行时兼容、localStorage 迁移或双写路径。新偏好使用新的 `kb:web:*` 命名空间，
-  cutover 时可直接重置主题、语言和侧栏状态。
+  Stage08 cutover 后删除旧 Desktop React/Vite source、测试与 legacy parser/type，不保留历史 UI 的
+  运行时兼容、localStorage 迁移或双写路径。新偏好使用新的 `kb:web:*` 命名空间，cutover 时可直接
+  重置主题、语言和侧栏状态。
 - 本次 UI cutover 不做数据库 schema 或 migration 重写；若实现需要改变 canonical schema，必须另开
   migration 阶段和 ADR。回滚只接受精确匹配版本的 host、Web dist、desktop/CLI deb 与 manifest
   组合，数据库保持不变；不得用“旧 UI + 新 host”或“新 UI + 旧 host”的未验证混搭作为回滚方案。
+- 发布前必须运行 packaged Linux WebKitGTK/Tauri smoke：从 extracted Desktop Deb 在 `xvfb` 与
+  `dbus-run-session` 下启动，验证固定 8721 host、`/health`、`/app/runtime.json`、`/app/` page load、
+  窗口进程和 owned sidecar 的 normal Quit cleanup；缺失图形或打包前置依赖时 gate 明确失败。
 
 ## 取舍与后果
 

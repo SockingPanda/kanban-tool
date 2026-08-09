@@ -24,6 +24,27 @@ export interface BoardTaskTransitionOption {
 
 export type BoardTaskMutationClient = Pick<TaskMutationClient, "createTask" | "createStep" | "updateTask" | "transitionTask">
 
+/** Shared claim-token seam used by Board and the Inspector mutation controller. */
+export interface BoardTaskClaimTokenStore {
+  get(taskId: string): string | null | undefined
+  set(taskId: string, token: string): void
+  delete(taskId: string): void
+}
+
+export interface BoardTaskClaimTokenStoreHandle extends BoardTaskClaimTokenStore {
+  clear(): void
+}
+
+export function createBoardTaskClaimTokenStore(): BoardTaskClaimTokenStoreHandle {
+  const tokens = new Map<string, string>()
+  return {
+    get: (taskId) => tokens.get(taskId) ?? null,
+    set: (taskId, token) => tokens.set(taskId, token),
+    delete: (taskId) => tokens.delete(taskId),
+    clear: () => tokens.clear(),
+  }
+}
+
 export interface BoardTaskMutationCommitted {
   readonly kind: "create" | "edit" | "transition"
   readonly taskId: string
@@ -39,6 +60,10 @@ export interface BoardTaskCanonicalReloadOptions {
 
 export interface BoardTaskMutationSurface {
   readonly client: BoardTaskMutationClient
+  /** Shared with the Inspector controller; this is not a second mutation path. */
+  readonly claimTokens?: BoardTaskClaimTokenStore
+  /** Full typed mutation client composed by the canonical BoardLive session. */
+  readonly inspectorClient?: TaskMutationClient
   readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => Promise<BoardViewModel | null> | void
   /** Called once after the server mutation writes commit, before reconcile. */
   readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void

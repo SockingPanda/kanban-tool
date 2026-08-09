@@ -22,7 +22,12 @@ import {
 } from "./types"
 import { toBoardViewModel } from "./board-adapter"
 import { boardSyncStatusForTelemetry, subscribeBrowserConnectivity } from "./board-live-state"
-import type { BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./task-mutation-state"
+import {
+  createBoardTaskClaimTokenStore,
+  type BoardTaskCanonicalReloadOptions,
+  type BoardTaskMutationCommitted,
+  type BoardTaskMutationSurface,
+} from "./task-mutation-state"
 import {
   acquireBoardSession,
   bindBoardResourceIdentity,
@@ -142,6 +147,8 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   const redirectedBoardRef = useRef<string | null>(null)
   const sessionHandleRef = useRef<BoardSessionHandle | null>(null)
   const sessionRetryRef = useRef<(() => void) | null>(null)
+  const claimTokenStoreRef = useRef(createBoardTaskClaimTokenStore())
+  const claimTokenBoardRef = useRef<string | null>(null)
   const [retryVersion, setRetryVersion] = useState(0)
   const [state, setState] = useState<BoardViewState>({ kind: "loading" })
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
@@ -281,6 +288,13 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   const visibleBoardSlug = visibleState.kind === "ready" ? visibleState.model.board.slug : null
   const mutationBoardSlug = visibleBoardSlug === null ? null : parseCanonicalBoardSlug(visibleBoardSlug)
 
+  useEffect(() => {
+    if (claimTokenBoardRef.current !== mutationBoardSlug) {
+      claimTokenStoreRef.current.clear()
+      claimTokenBoardRef.current = mutationBoardSlug
+    }
+  }, [mutationBoardSlug])
+
   const refreshCanonical = useCallback(async () => {
     await sessionHandleRef.current?.refresh()
     return modelRef.current
@@ -289,8 +303,11 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   const taskMutations = useMemo<BoardTaskMutationSurface | undefined>(() => {
     if (mutationBoardSlug === null) return undefined
     try {
+      const client = createTaskMutationClient(runtime, mutationBoardSlug)
       return {
-        client: createTaskMutationClient(runtime, mutationBoardSlug),
+        client,
+        claimTokens: claimTokenStoreRef.current,
+        inspectorClient: client,
         onCanonicalReload: async (options) => {
           onCanonicalReload?.(options)
           return refreshCanonical()

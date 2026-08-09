@@ -55,11 +55,11 @@ export interface BoardTaskViewModel {
   readonly description: string | null
   readonly status: BoardTaskStatus
   readonly position: number
-  readonly scheduledAt?: number | null
-  readonly dueAt?: number | null
-  readonly lastHeartbeatAt?: number | null
-  readonly statusReason?: string | null
-  readonly labels?: readonly BoardTaskLabelViewModel[]
+  readonly scheduledAt: number | null
+  readonly dueAt: number | null
+  readonly lastHeartbeatAt: number | null
+  readonly statusReason: string | null
+  readonly labels: readonly BoardTaskLabelViewModel[]
   readonly lockVersion: number
   readonly priority: 0 | 1 | 2 | 3
   readonly assignee: string | null

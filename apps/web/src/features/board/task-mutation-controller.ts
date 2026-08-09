@@ -207,6 +207,19 @@ export function useBoardTaskMutationController(
   const optimisticDirtyRef = useRef(false)
   const internalDragMime = "application/x-kanban-task"
 
+  const getClaimToken = (taskId: string): string | null => {
+    if (surface?.claimTokens !== undefined) return surface.claimTokens.get(taskId) ?? null
+    return claimTokensRef.current.get(taskId) ?? null
+  }
+  const setClaimToken = (taskId: string, token: string): void => {
+    if (surface?.claimTokens !== undefined) surface.claimTokens.set(taskId, token)
+    else claimTokensRef.current.set(taskId, token)
+  }
+  const deleteClaimToken = (taskId: string): void => {
+    surface?.claimTokens?.delete(taskId)
+    claimTokensRef.current.delete(taskId)
+  }
+
   const renderBoardIdentity = baseModel?.board?.id ?? null
   useEffect(() => {
     const claimTokens = claimTokensRef.current
@@ -422,7 +435,7 @@ export function useBoardTaskMutationController(
       if (isCurrentMutation(generation)) {
         setOptimisticModel((current) => current === null ? current : rollbackTaskOptimistically(current, snapshot, taskId))
         if (isMutationConflict(error)) {
-          if (isClaimTokenConflict(error)) claimTokensRef.current.delete(taskId)
+          if (isClaimTokenConflict(error)) deleteClaimToken(taskId)
           const reloaded = await reconcileAfterMutation("edit", generation)
           if (!isCurrentMutation(generation)) return
           // Clear the synchronous mutation fence before exposing the retry
@@ -471,7 +484,7 @@ export function useBoardTaskMutationController(
     const generation = mutationGenerationRef.current
     const task = taskForId(activeModel, taskId)
     if (task === null) return
-    const claimToken = claimTokensRef.current.get(taskId) ?? null
+    const claimToken = getClaimToken(taskId)
     const legalOption = transitionForTaskTarget(task, option.targetStatus, claimToken)
     if (legalOption === null || legalOption.action !== option.action) {
       if (retrying) {
@@ -515,16 +528,16 @@ export function useBoardTaskMutationController(
       const response = await executeBoardTaskTransition(surface.client, taskId, command)
       if (isCurrentMutation(generation)) {
         if (command.action === "claim" && "claim_token" in response.data && typeof response.data.claim_token === "string") {
-          claimTokensRef.current.set(taskId, response.data.claim_token)
+          setClaimToken(taskId, response.data.claim_token)
         } else if (command.action === "submit-review" || command.action === "complete" || command.action === "block" || command.action === "unblock" || command.action === "archive") {
-          claimTokensRef.current.delete(taskId)
+          deleteClaimToken(taskId)
         }
       }
     } catch (error) {
       if (isCurrentMutation(generation)) {
         setOptimisticModel((current) => current === null ? current : rollbackTaskOptimistically(current, snapshot, taskId))
         if (isMutationConflict(error)) {
-          if (isClaimTokenConflict(error)) claimTokensRef.current.delete(taskId)
+          if (isClaimTokenConflict(error)) deleteClaimToken(taskId)
           const reloaded = await reconcileAfterMutation("transition", generation)
           if (!isCurrentMutation(generation)) return
           setRetryIntent(reloaded ? { kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true } : { kind: "reload", mutationKind: "transition" })
@@ -559,7 +572,7 @@ export function useBoardTaskMutationController(
 
   if (activeModel === null || surface === undefined) return null
 
-  const claimTokenForTask = (taskId: string) => claimTokensRef.current.get(taskId) ?? null
+  const claimTokenForTask = (taskId: string) => getClaimToken(taskId)
   const rememberTrigger = (trigger?: HTMLElement | null) => {
     if (trigger !== undefined) dialogTriggerRef.current = trigger
   }

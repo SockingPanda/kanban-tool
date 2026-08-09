@@ -492,6 +492,8 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const [actionDialog, setActionDialog] = useState<InspectorActionDialogState | null>(null)
   const taskRef = useRef(task)
   taskRef.current = task
+  const canonicalEditorDraftKey = JSON.stringify(inspectorEditDraft(task))
+  const canonicalEditorDraftKeyRef = useRef(canonicalEditorDraftKey)
   const runsDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const eventsDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const neighborhoodDetailsRef = useRef<HTMLDetailsElement | null>(null)
@@ -539,11 +541,18 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     const currentTask = taskRef.current
     setEditing(false)
     setEditDraft(inspectorEditDraft(currentTask))
+    canonicalEditorDraftKeyRef.current = JSON.stringify(inspectorEditDraft(currentTask))
     setActionDialog(null)
     setLocalError(null)
     setLocalPending(new Set())
     retryActionRef.current = { saveTask: null, transition: null }
   }, [requestIdentity, task.id])
+
+  useEffect(() => {
+    if (editing || canonicalEditorDraftKeyRef.current === canonicalEditorDraftKey) return
+    canonicalEditorDraftKeyRef.current = canonicalEditorDraftKey
+    setEditDraft(inspectorEditDraft(task))
+  }, [canonicalEditorDraftKey, editing, task])
 
   const runMutation = useCallback(async (operation: "saveTask" | "transition", run: () => Promise<void>, retry: () => void): Promise<boolean> => {
     const key = inspectorMutationKey(operation, task.id)
@@ -579,12 +588,17 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     return runMutation("saveTask", run, retry)
   }, [editDraft, mutationHandlers, runMutation, task])
 
-  const closeEditor = useCallback(() => {
-    setEditing(false)
+  const beginEditor = useCallback(() => {
     setEditDraft(inspectorEditDraft(task))
     setLocalError(null)
-    queueMicrotask(() => editTriggerRef.current?.focus())
+    setEditing(true)
   }, [task])
+
+  const closeEditor = useCallback(() => {
+    setEditing(false)
+    setLocalError(null)
+    queueMicrotask(() => editTriggerRef.current?.focus())
+  }, [])
 
   const submitEditor = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -811,7 +825,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         <p aria-live="polite" className={styles.announcement}>{copy.openAnnouncement}</p>
         <p className={styles.identity} translate="no">{task.id}</p>
         {refreshError ? <div role={refreshOffline ? "status" : "alert"}><strong>{refreshOffline ? copy.refreshOffline : copy.refreshError}</strong>{!refreshOffline ? <span> {refreshError}</span> : null}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
-        {mutationHandlers ? <button ref={editTriggerRef} type="button" className={styles.editButton} onClick={() => setEditing(true)} disabled={editing || mutationSavePending}>{copy.edit}</button> : null}
+        {mutationHandlers ? <button ref={editTriggerRef} type="button" className={styles.editButton} onClick={beginEditor} disabled={editing || mutationSavePending}>{copy.edit}</button> : null}
         <div className={styles.badges}>
           <span className={styles.badge}>{copy.status[task.status]}</span>
           <span className={styles.badge}>P{task.priority}</span>
@@ -819,7 +833,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         </div>
       </header>
 
-      {editing && mutationHandlers ? <TaskInspectorEditForm draft={editDraft} dirty={JSON.stringify(editDraft) !== JSON.stringify(inspectorEditDraft(task))} pending={mutationSavePending} error={saveError?.message ?? null} copy={copy} onChange={setEditDraft} onSave={submitEditor} onCancel={closeEditor} /> : null}
+      {editing && mutationHandlers ? <TaskInspectorEditForm draft={editDraft} dirty={JSON.stringify(editDraft) !== canonicalEditorDraftKey} pending={mutationSavePending} error={saveError?.message ?? null} onRetry={saveError ? retry : null} copy={copy} onChange={setEditDraft} onSave={submitEditor} onCancel={closeEditor} /> : null}
       {mutationHandlers ? <TaskInspectorActionPanel task={task} claimToken={claimToken} locale={locale} copy={copy} pending={mutationTransitionPending} error={transitionError} onAction={openActionDialog} onRetry={retry} /> : null}
 
       <Section id="inspector-metadata" title={copy.sections.metadata}>

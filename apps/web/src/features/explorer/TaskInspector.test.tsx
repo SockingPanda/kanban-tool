@@ -8,6 +8,7 @@ import {
 import {
   buildInspectorTransitionCommand,
   buildInspectorSaveTaskInput,
+  inspectorEditDraft,
   inspectorActionIds,
   inspectorActionLabels,
   type InspectorEditDraft,
@@ -87,6 +88,13 @@ describe("TaskInspector", () => {
       due_at: null,
       expected_lock_version: 7,
     })
+  })
+
+  test("rebuilds the editor draft from a same-id canonical refresh", () => {
+    const refreshedTask = { ...model.task, title: "Canonical title", lockVersion: 8 }
+
+    expect(inspectorEditDraft(refreshedTask)).toMatchObject({ title: "Canonical title" })
+    expect(buildInspectorSaveTaskInput(refreshedTask, inspectorEditDraft(refreshedTask)).expected_lock_version).toBe(8)
   })
 
   test("uses shared transition policy for claim, review, force, and reason inputs", () => {

@@ -26,6 +26,7 @@ export function TaskInspectorEditForm({
   dirty,
   pending,
   error,
+  onRetry,
   copy,
   onChange,
   onSave,
@@ -35,6 +36,7 @@ export function TaskInspectorEditForm({
   readonly dirty: boolean
   readonly pending: boolean
   readonly error: string | null
+  readonly onRetry: (() => void) | null
   readonly copy: InspectorCopy
   readonly onChange: (draft: InspectorEditDraft) => void
   readonly onSave: (event: FormEvent<HTMLFormElement>) => void
@@ -44,7 +46,7 @@ export function TaskInspectorEditForm({
     <PanelSection id="inspector-edit" title={copy.edit}>
       <form className={styles.editor} data-testid="inspector-edit-form" onSubmit={onSave}>
         {dirty ? <p className={styles.unsaved} role="status">{copy.unsavedChanges}</p> : null}
-        {error ? <p className={styles.error} role="alert">{error}</p> : null}
+        {error ? <div className={styles.mutationError} role="alert" aria-live="polite"><span>{error}</span>{onRetry ? <button type="button" onClick={onRetry}>{copy.retryAction}</button> : null}</div> : null}
         <label>
           <span>{copy.editTitle}</span>
           <input name="task-title" autoComplete="off" value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} required />

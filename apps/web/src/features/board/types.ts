@@ -41,6 +41,12 @@ export interface BoardTaskReadinessViewModel {
   readonly optionalStepCount: number
 }
 
+export interface BoardTaskLabelViewModel {
+  readonly id: string
+  readonly name: string
+  readonly color: string | null
+}
+
 export interface BoardTaskViewModel {
   readonly id: string
   readonly seq: number
@@ -50,6 +56,10 @@ export interface BoardTaskViewModel {
   readonly status: BoardTaskStatus
   readonly position: number
   readonly scheduledAt?: number | null
+  readonly dueAt?: number | null
+  readonly lastHeartbeatAt?: number | null
+  readonly statusReason?: string | null
+  readonly labels?: readonly BoardTaskLabelViewModel[]
   readonly lockVersion: number
   readonly priority: 0 | 1 | 2 | 3
   readonly assignee: string | null
@@ -73,24 +83,41 @@ export type BoardViewModelValidationResult =
  * 将缺少 server column 的任务渲染成一个看似完整的 board。
  */
 export function validateBoardViewModel(model: BoardViewModel): BoardViewModelValidationResult {
-  if (!model || !model.board) return { valid: false, message: "看板身份无效" }
-  if (!Array.isArray(model.columns)) return { valid: false, message: "服务端列数据无效" }
-  if (!model.tasksByStatus || typeof model.tasksByStatus !== "object") {
+  const rawModel: unknown = model
+  if (!isRecordWithOwnKeys(rawModel, ["board", "columns", "tasksByStatus"])) {
+    return { valid: false, message: "看板身份无效" }
+  }
+
+  const rawBoard = rawModel.board
+  if (!isRecordWithOwnKeys(rawBoard, ["id", "slug", "name"])) {
+    return { valid: false, message: "看板身份无效" }
+  }
+  const board = rawBoard as unknown as BoardViewModel["board"]
+  const rawColumns = rawModel.columns
+  if (!Array.isArray(rawColumns)) return { valid: false, message: "服务端列数据无效" }
+  const rawTasksByStatus = rawModel.tasksByStatus
+  if (!isRecord(rawTasksByStatus)) {
     return { valid: false, message: "任务状态分组无效" }
   }
-  if (!hasText(model.board.id)) return { valid: false, message: "看板 id 不能为空" }
-  if (!hasText(model.board.slug)) return { valid: false, message: "看板 slug 不能为空" }
-  if (!hasText(model.board.name)) return { valid: false, message: "看板名称不能为空" }
+  if (!hasText(board.id)) return { valid: false, message: "看板 id 不能为空" }
+  if (!hasText(board.slug)) return { valid: false, message: "看板 slug 不能为空" }
+  if (!hasText(board.name)) return { valid: false, message: "看板名称不能为空" }
 
   const columnIds = new Set<string>()
   const statuses = new Set<string>()
   const positions = new Set<number>()
-  for (const column of model.columns) {
+  for (const columnValue of rawColumns as readonly unknown[]) {
+    if (!isRecordWithOwnKeys(columnValue, ["id", "status", "title", "position", "hidden"])) {
+      return { valid: false, message: "服务端列记录无效" }
+    }
+    const column = columnValue as unknown as BoardColumnViewModel
     if (!hasText(column.id)) return { valid: false, message: "服务端列 id 不能为空" }
+    if (typeof column.status !== "string") return { valid: false, message: "服务端列 status 无效" }
     if (!hasText(column.title)) return { valid: false, message: "服务端列标题不能为空" }
     if (!Number.isSafeInteger(column.position)) {
       return { valid: false, message: `服务端列 ${column.id} 的 position 必须是 safe integer` }
     }
+    if (typeof column.hidden !== "boolean") return { valid: false, message: `服务端列 ${column.id} 的 hidden 无效` }
     if (columnIds.has(column.id)) return { valid: false, message: `服务端返回重复列 id：${column.id}` }
     if (positions.has(column.position)) return { valid: false, message: `服务端返回重复列 position：${column.position}` }
     if (statuses.has(column.status)) {
@@ -102,17 +129,60 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
   }
 
   const taskIds = new Set<string>()
-  for (const [status, tasks] of Object.entries(model.tasksByStatus)) {
-    if (!Array.isArray(tasks)) return { valid: false, message: `任务状态 ${status} 的任务分组无效` }
+  for (const [status, tasksValue] of Object.entries(rawTasksByStatus)) {
+    if (!Array.isArray(tasksValue)) return { valid: false, message: `任务状态 ${status} 的任务分组无效` }
+    const tasks = tasksValue as readonly unknown[]
     if (tasks.length > 0 && !statuses.has(status)) {
       return { valid: false, message: `任务状态 ${status} 没有对应的服务端列` }
     }
-    for (const task of tasks) {
+    for (const taskValue of tasks) {
+      if (
+        !isRecordWithOwnKeys(taskValue, [
+          "id",
+          "ref",
+          "title",
+          "position",
+          "status",
+          "scheduledAt",
+          "dueAt",
+          "lastHeartbeatAt",
+          "statusReason",
+          "labels",
+        ])
+      ) {
+        return { valid: false, message: `任务列表 ${status} 含无效任务记录` }
+      }
+      const task = taskValue as unknown as BoardTaskViewModel
       if (!hasText(task.id)) return { valid: false, message: "任务 id 不能为空" }
       if (!hasText(task.ref)) return { valid: false, message: `任务 ${task.id} 的 ref 不能为空` }
       if (!hasText(task.title)) return { valid: false, message: `任务 ${task.ref} 的标题不能为空` }
+      if (typeof task.status !== "string") return { valid: false, message: `任务 ${task.ref} 的 status 无效` }
       if (!Number.isSafeInteger(task.position)) {
         return { valid: false, message: `任务 ${task.ref} 的 position 必须是 safe integer` }
+      }
+      if (
+        (task.scheduledAt !== null && !Number.isSafeInteger(task.scheduledAt))
+        || (task.dueAt !== null && !Number.isSafeInteger(task.dueAt))
+        || (task.lastHeartbeatAt !== null && !Number.isSafeInteger(task.lastHeartbeatAt))
+        || (task.statusReason !== null && typeof task.statusReason !== "string")
+      ) {
+        return { valid: false, message: `任务 ${task.ref} 的 board card fact 类型无效` }
+      }
+      if (!Array.isArray(task.labels)) return { valid: false, message: `任务 ${task.ref} 的 labels 必须是数组` }
+      const labelIds = new Set<string>()
+      for (const labelValue of task.labels) {
+        if (!isRecordWithOwnKeys(labelValue, ["id", "name", "color"])) {
+          return { valid: false, message: `任务 ${task.ref} 的标签记录无效` }
+        }
+        const label = labelValue as unknown as BoardTaskLabelViewModel
+        if (!hasText(label.id) || !hasText(label.name)) {
+          return { valid: false, message: `任务 ${task.ref} 的标签 id/name 不能为空` }
+        }
+        if (label.color !== null && typeof label.color !== "string") {
+          return { valid: false, message: `任务 ${task.ref} 的标签 color 无效` }
+        }
+        if (labelIds.has(label.id)) return { valid: false, message: `任务 ${task.ref} 返回了重复标签 ${label.id}` }
+        labelIds.add(label.id)
       }
       if (taskIds.has(task.id)) return { valid: false, message: `服务端返回重复任务 id：${task.id}` }
       if (task.status !== status) {
@@ -123,6 +193,15 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
   }
 
   return { valid: true }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isRecordWithOwnKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!isRecord(value)) return false
+  return keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
 }
 
 function hasText(value: unknown): value is string {
@@ -168,10 +247,18 @@ export interface BoardMessages {
   readonly syncCircuitOpen: string
   readonly syncStaleDescription: string
   readonly retry: string
+  readonly dateLocale: string
   readonly statusLabel: string
+  readonly statusReasonLabel: string
   readonly priorityLabel: (priority: number) => string
   readonly assigneeLabel: string
   readonly unassigned: string
+  readonly scheduledLabel: string
+  readonly dueLabel: string
+  readonly lastHeartbeatLabel: string
+  readonly labelsLabel: string
+  readonly notAvailable: string
+  readonly noLabels: string
   readonly readinessLabel: string
   readonly dependencyLabel: string
   readonly dependencyBlocked: string
@@ -254,10 +341,18 @@ export const defaultBoardMessages: BoardMessages = {
   syncCircuitOpen: "同步暂时不可用",
   syncStaleDescription: "仍显示最近一次成功读取的看板数据。",
   retry: "重试",
+  dateLocale: "zh-CN",
   statusLabel: "状态",
+  statusReasonLabel: "状态原因",
   priorityLabel: (priority) => `优先级 P${priority}`,
   assigneeLabel: "执行者",
   unassigned: "未分配",
+  scheduledLabel: "排期时间",
+  dueLabel: "截止时间",
+  lastHeartbeatLabel: "最近心跳",
+  labelsLabel: "标签",
+  notAvailable: "—",
+  noLabels: "无标签",
   readinessLabel: "就绪性事实",
   dependencyLabel: "依赖",
   dependencyBlocked: "依赖阻塞",
@@ -350,10 +445,18 @@ export const englishBoardMessages: BoardMessages = {
   syncCircuitOpen: "Sync is temporarily unavailable",
   syncStaleDescription: "The most recently loaded board data is still displayed.",
   retry: "Retry",
+  dateLocale: "en-US",
   statusLabel: "Status",
+  statusReasonLabel: "Status reason",
   priorityLabel: (priority) => `Priority P${priority}`,
   assigneeLabel: "Assignee",
   unassigned: "Unassigned",
+  scheduledLabel: "Scheduled",
+  dueLabel: "Due",
+  lastHeartbeatLabel: "Last heartbeat",
+  labelsLabel: "Labels",
+  notAvailable: "—",
+  noLabels: "No labels",
   readinessLabel: "Readiness facts",
   dependencyLabel: "Dependencies",
   dependencyBlocked: "Blocked by dependencies",

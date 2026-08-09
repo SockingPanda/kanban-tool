@@ -23,6 +23,11 @@ const model: BoardViewModel = {
         description: null,
         status: "ready",
         position: 20,
+        dueAt: null,
+        scheduledAt: null,
+        lastHeartbeatAt: null,
+        statusReason: null,
+        labels: [],
         lockVersion: 4,
         priority: 1,
         assignee: null,
@@ -43,6 +48,14 @@ const model: BoardViewModel = {
         description: null,
         status: "ready",
         position: 10,
+        dueAt: 1767225600000,
+        scheduledAt: 1767139200000,
+        lastHeartbeatAt: 1767052800000,
+        statusReason: "等待审批",
+        labels: [
+          { id: "l-ui", name: "界面", color: "#123456" },
+          { id: "l-review", name: "需要复核", color: null },
+        ],
         lockVersion: 5,
         priority: 3,
         assignee: "worker-1",
@@ -60,8 +73,12 @@ const model: BoardViewModel = {
   },
 }
 
-function expectInvalid(candidate: BoardViewModel) {
-  expect(validateBoardViewModel(candidate).valid).toBe(false)
+function expectInvalid(candidate: unknown) {
+  let validation: ReturnType<typeof validateBoardViewModel> | undefined
+  expect(() => {
+    validation = validateBoardViewModel(candidate as BoardViewModel)
+  }).not.toThrow()
+  expect(validation?.valid).toBe(false)
 }
 
 function runningTask(overrides: Partial<BoardTaskViewModel> = {}): BoardTaskViewModel {
@@ -91,6 +108,31 @@ describe("BoardView", () => {
     expect(markup).toContain("依赖阻塞")
     expect(markup).toContain("必需步骤")
     expect(markup).toContain("1 / 2")
+    expect(markup).toContain("截止时间")
+    expect(markup).toContain("排期时间")
+    expect(markup).toContain("最近心跳")
+    expect(markup).toContain("状态原因")
+    expect(markup).toContain("等待审批")
+    expect(markup).toContain("界面")
+    expect(markup).toContain("需要复核")
+  })
+
+  test("卡片在排期、截止、心跳、状态原因和标签为空时使用简洁占位", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+
+    expect(markup).toMatch(/data-testid="board-task-scheduled">—<\/dd>/)
+    expect(markup).toMatch(/data-testid="board-task-due">—<\/dd>/)
+    expect(markup).toMatch(/data-testid="board-task-heartbeat">—<\/dd>/)
+    expect(markup).toMatch(/data-testid="board-task-status-reason">—<\/dd>/)
+    expect(markup).toMatch(/data-testid="board-task-labels">无标签<\/dd>/)
+  })
+
+  test("日期事实使用消息指定的 locale，并保留可审计 ISO 时间", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} messages={englishBoardMessages} />)
+
+    expect(markup).toContain('dateTime="2026-01-01T00:00:00.000Z"')
+    expect(markup).toContain('dateTime="2025-12-31T00:00:00.000Z"')
+    expect(markup).toContain("Jan")
   })
 
   test("提供选择回调时将任务标题暴露为 Inspector opener", () => {
@@ -294,6 +336,68 @@ describe("BoardView", () => {
         tasksByStatus: {
           ...model.tasksByStatus,
           running: [runningTask({ status: "ready" })],
+        },
+      },
+    ]
+
+    for (const candidate of invalidModels) expectInvalid(candidate)
+  })
+
+  test("presentation seam 拒绝缺失 board card facts 及 malformed labels", () => {
+    const source = model.tasksByStatus.ready[0]
+    const withoutDue = { ...source } as Record<string, unknown>
+    delete withoutDue.dueAt
+    const invalidModels: readonly BoardViewModel[] = [
+      {
+        ...model,
+        tasksByStatus: { ...model.tasksByStatus, ready: [withoutDue as unknown as BoardTaskViewModel] },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          ready: [{ ...source, labels: [{ id: " ", name: "invalid", color: null }] }],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          ready: [{ ...source, labels: [{ id: "duplicate", name: "one", color: null }, { id: "duplicate", name: "two", color: null }] }],
+        },
+      },
+    ]
+
+    for (const candidate of invalidModels) expectInvalid(candidate)
+  })
+
+  test("presentation 校验在遍历前拒绝非 record 列、任务和继承字段标签", () => {
+    const source = model.tasksByStatus.ready[0]
+    const inheritedIdLabel = Object.assign(Object.create({ id: "inherited-id" }) as Record<string, unknown>, {
+      name: "标签",
+      color: null,
+    })
+    const inheritedNameLabel = Object.assign(Object.create({ name: "inherited-name" }) as Record<string, unknown>, {
+      id: "label-name",
+      color: null,
+    })
+    const invalidModels: readonly unknown[] = [
+      { ...model, columns: [null] },
+      { ...model, columns: ["not-a-column"] },
+      { ...model, tasksByStatus: { ...model.tasksByStatus, ready: [null] } },
+      { ...model, tasksByStatus: { ...model.tasksByStatus, ready: [42] } },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          ready: [{ ...source, labels: [inheritedIdLabel] }],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          ready: [{ ...source, labels: [inheritedNameLabel] }],
         },
       },
     ]

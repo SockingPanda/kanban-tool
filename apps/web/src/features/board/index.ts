@@ -11,6 +11,7 @@ export {
   type BoardMessagesOverrides,
   type BoardSyncStatus,
   type BoardTaskReadinessViewModel,
+  type BoardTaskLabelViewModel,
   type BoardTaskStatus,
   type BoardTaskViewModel,
   type BoardViewModel,

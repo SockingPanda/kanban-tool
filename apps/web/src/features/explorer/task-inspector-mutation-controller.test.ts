@@ -108,7 +108,7 @@ describe("Task Inspector mutation controller", () => {
     expect(controller.errorFor("reload", "t_1")).toMatchObject({ kind: "stale", recoverable: true })
     expect(controller.retryIntentFor("reload", "t_1")).toMatchObject({ operation: "reload", taskId: "t_1" })
 
-    await expect(controller.retry()).resolves.toBe(true)
+    await expect(controller.retry()).resolves.toEqual({ committed: false, reconciled: true })
     expect(mutationClient.updateTask).toHaveBeenCalledTimes(1)
     expect(reload).toHaveBeenCalledTimes(2)
     expect(controller.errorFor("reload", "t_1")).toBeNull()
@@ -123,7 +123,7 @@ describe("Task Inspector mutation controller", () => {
     expect(reload).toHaveBeenCalledWith({ kind: "edit", taskId: "t_1" }, scope())
     expect(controller.errorFor("saveTask", "t_1")).toMatchObject({ kind: "conflict" })
     expect(controller.retryIntentFor("saveTask", "t_1")).toBeNull()
-    await expect(controller.retry()).resolves.toBe(false)
+    await expect(controller.retry()).resolves.toEqual({ committed: false, reconciled: false })
     expect(updateTask).toHaveBeenCalledTimes(1)
   })
 
@@ -139,7 +139,7 @@ describe("Task Inspector mutation controller", () => {
     expect(controller.retryIntentFor("saveTask", "t_1")).toBeNull()
     expect(controller.errorFor("reload", "t_1")).toMatchObject({ kind: "stale" })
     expect(controller.retryIntentFor("reload", "t_1")).toMatchObject({ operation: "reload" })
-    await expect(controller.retry()).resolves.toBe(true)
+    await expect(controller.retry()).resolves.toEqual({ committed: false, reconciled: true })
     expect(updateTask).toHaveBeenCalledTimes(1)
     expect(reload).toHaveBeenCalledTimes(2)
   })
@@ -177,9 +177,46 @@ describe("Task Inspector mutation controller", () => {
     await expect(controller.saveTask({ title: "Retry me", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: false })
     expect(controller.errorFor("saveTask", "t_1")).toMatchObject({ kind: "error", recoverable: true, status: 500 })
     expect(controller.retryIntentFor("saveTask", "t_1")).toMatchObject({ operation: "saveTask", taskId: "t_1" })
-    await expect(controller.retry()).resolves.toBe(true)
+    await expect(controller.retry()).resolves.toEqual({ committed: true, reconciled: true })
     expect(updateTask).toHaveBeenCalledTimes(2)
     expect(controller.errorFor("saveTask", "t_1")).toBeNull()
+  })
+
+  test("returns the full committed-but-unreconciled outcome from a write retry", async () => {
+    const updateTask = vi.fn()
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce(response())
+    const reload = vi.fn().mockRejectedValueOnce(new Error("read failed"))
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask }), scope(), { onCanonicalReload: reload }))
+
+    await expect(controller.saveTask({ title: "Retry commit", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: false })
+    await expect(controller.retry()).resolves.toEqual({ committed: true, reconciled: false })
+    expect(updateTask).toHaveBeenCalledTimes(2)
+    expect(controller.errorFor("reload", "t_1")).toMatchObject({ kind: "stale", recoverable: true })
+  })
+
+  test("returns an empty outcome when no retry candidate exists", async () => {
+    const controller = new TaskInspectorMutationController(surface(client()))
+
+    await expect(controller.retry()).resolves.toEqual({ committed: false, reconciled: false })
+    await expect(controller.retry("saveTask:t_1")).resolves.toEqual({ committed: false, reconciled: false })
+  })
+
+  test("retries the exact requested key without consuming another intent", async () => {
+    const updateTask = vi.fn()
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce(response())
+    const suggestions = vi.fn()
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce(response({ task_id: "t_1" }))
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask }), scope(), { suggestTaskLabels: suggestions }))
+
+    await expect(controller.saveTask({ title: "keep this retry", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: false })
+    await expect(controller.suggestLabels({ limit: 5 })).resolves.toBeNull()
+    await expect(controller.retry("suggestLabels:t_1")).resolves.toEqual({ committed: false, reconciled: true })
+    expect(controller.retryIntentFor("saveTask", "t_1")).toMatchObject({ operation: "saveTask" })
+    await expect(controller.retry("saveTask:t_1")).resolves.toEqual({ committed: true, reconciled: true })
+    expect(updateTask).toHaveBeenCalledTimes(2)
   })
 
   test("allows a typed partial task update without manufacturing a title", async () => {
@@ -226,7 +263,7 @@ describe("Task Inspector mutation controller", () => {
     const controller = new TaskInspectorMutationController(surface(mutationClient))
 
     await expect(controller.createStep({ title: "retry step" })).resolves.toEqual({ committed: false, reconciled: false })
-    await expect(controller.retry()).resolves.toBe(true)
+    await expect(controller.retry()).resolves.toEqual({ committed: true, reconciled: true })
     expect(createStep.mock.calls[0]?.[1].idempotency_key).toBeTruthy()
     expect(createStep.mock.calls[1]?.[1].idempotency_key).toBe(createStep.mock.calls[0]?.[1].idempotency_key)
 
@@ -234,11 +271,11 @@ describe("Task Inspector mutation controller", () => {
     expect(createStep.mock.calls[2]?.[1].idempotency_key).toBeTruthy()
 
     await expect(controller.addComment({ body: "retry comment" })).resolves.toEqual({ committed: false, reconciled: false })
-    await expect(controller.retry()).resolves.toBe(true)
+    await expect(controller.retry()).resolves.toEqual({ committed: true, reconciled: true })
     expect(createComment.mock.calls[1]?.[1].idempotency_key).toBe(createComment.mock.calls[0]?.[1].idempotency_key)
 
     await expect(controller.uploadAttachment({ filename: "retry.txt", content: [1] })).resolves.toEqual({ committed: false, reconciled: false })
-    await expect(controller.retry()).resolves.toBe(true)
+    await expect(controller.retry()).resolves.toEqual({ committed: true, reconciled: true })
     expect(createAttachment.mock.calls[0]?.[1].id).toMatch(/^a_/)
     expect(createAttachment.mock.calls[1]?.[1].id).toBe(createAttachment.mock.calls[0]?.[1].id)
   })
@@ -359,15 +396,59 @@ describe("Task Inspector mutation controller", () => {
     expect(claimTokens.get("t_1")).toBeNull()
     expect(controller.errorFor("transition", "t_1")).toMatchObject({ kind: "conflict", recoverable: true })
     expect(controller.retryIntentFor("transition", "t_1")).toBeNull()
-    await expect(controller.retry()).resolves.toBe(false)
+    await expect(controller.retry()).resolves.toEqual({ committed: false, reconciled: false })
     expect(transitionTask).toHaveBeenCalledTimes(1)
   })
 
-  test("clears task claim tokens when a runtime identity changes", () => {
+  test("preserves a shared claim token across inspector unmount and same-identity reopen", async () => {
+    const transitionTask = vi.fn()
+      .mockResolvedValueOnce(response({ claim_token: "shared-token" }))
+      .mockResolvedValueOnce(response())
+    const claimTokens = createTaskClaimTokenStore()
+    const mutationClient = client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] })
+    const controller = new TaskInspectorMutationController(surface(mutationClient, scope(), { claimTokens }))
+
+    await expect(controller.transition({ action: "claim", input: { worker_profile: "manual", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+    controller.setSurface(null)
+    controller.setSurface(surface(mutationClient, scope(), { claimTokens }))
+    await expect(controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+
+    expect(transitionTask.mock.calls[1]?.[2]).toMatchObject({ claim_token: "shared-token" })
+  })
+
+  test("preserves a fallback claim token while switching between tasks", async () => {
+    const transitionTask = vi.fn()
+      .mockResolvedValueOnce(response({ claim_token: "fallback-token" }))
+      .mockResolvedValueOnce(response())
+    const mutationClient = client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] })
+    const controller = new TaskInspectorMutationController(surface(mutationClient, scope("t_1")))
+
+    await expect(controller.transition({ action: "claim", input: { worker_profile: "manual", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+    controller.setSurface(surface(mutationClient, scope("t_2")))
+    controller.setSurface(surface(mutationClient, scope("t_1")))
+    await expect(controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+
+    expect(transitionTask.mock.calls[1]?.[2]).toMatchObject({ claim_token: "fallback-token" })
+  })
+
+  test("clears task claim tokens when the same task is rebound to a new runtime identity", () => {
     const claimTokens = createTaskClaimTokenStore({ t_1: "old-token" })
     const controller = new TaskInspectorMutationController(surface(client(), scope(), { claimTokens }))
     controller.setSurface(surface(client(), scope("t_1", "b_other"), { claimTokens }))
     expect(claimTokens.get("t_1")).toBeNull()
+  })
+
+  test("clears the fallback claim token when the same task is rebound to a new runtime identity", async () => {
+    const transitionTask = vi.fn()
+      .mockResolvedValueOnce(response({ claim_token: "old-token" }))
+    const mutationClient = client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] })
+    const controller = new TaskInspectorMutationController(surface(mutationClient, scope("t_1")))
+
+    await expect(controller.transition({ action: "claim", input: { worker_profile: "manual", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+    controller.setSurface(surface(mutationClient, scope("t_1", "b_other")))
+    await expect(controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })).resolves.toEqual({ committed: false, reconciled: false })
+
+    expect(transitionTask).toHaveBeenCalledTimes(1)
   })
 
   test("emits exact event kinds for detail write handlers", async () => {
@@ -419,6 +500,20 @@ describe("Task Inspector mutation controller", () => {
     expect(reload).not.toHaveBeenCalled()
   })
 
+  test("returns an unreconciled write outcome for a successful download retry", async () => {
+    const downloaded: DownloadedAttachment = { content_type: "text/plain", attachment_id: "a_1", sha256: null, content: new Uint8Array([1]) }
+    const download = vi.fn()
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce(downloaded)
+    const controller = new TaskInspectorMutationController(surface(client(), scope(), {
+      attachmentDownload: { downloadAttachment: download },
+    }))
+
+    await expect(controller.downloadAttachment("a_1")).resolves.toBeNull()
+    await expect(controller.retry()).resolves.toEqual({ committed: false, reconciled: true })
+    expect(download).toHaveBeenCalledTimes(2)
+  })
+
   test("provides a fenced, retryable label suggestion read", async () => {
     const suggestions = vi.fn()
       .mockRejectedValueOnce({ status: 503 })
@@ -427,7 +522,7 @@ describe("Task Inspector mutation controller", () => {
 
     await expect(controller.suggestLabels({ limit: 5 })).resolves.toBeNull()
     expect(controller.errorFor("suggestLabels", "t_1")).toMatchObject({ status: 503, recoverable: true })
-    await expect(controller.retry()).resolves.toBe(true)
+    await expect(controller.retry()).resolves.toEqual({ committed: false, reconciled: true })
     expect(suggestions).toHaveBeenCalledTimes(2)
   })
 })

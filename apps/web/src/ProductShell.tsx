@@ -29,6 +29,8 @@ export type ProductShellProps = {
   onRetry?: () => void
   /** 现有 persistent SSE integration 的可选只读 seam。 */
   invalidationRevision?: number
+  /** 仅 recovery/gap/poll boundaries 触发 Events catch-up read。 */
+  eventsRefreshRevision?: number
   eventsBatch?: BoardEventsBatch | null
 }
 
@@ -284,7 +286,7 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
   )
 }
 
-function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, eventsBatch }: ProductShellProps) {
+function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, eventsRefreshRevision = invalidationRevision, eventsBatch }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -371,7 +373,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   if (route.kind === "board") return (
     <>
       {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
-      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} eventsBatch={eventsBatch} />
+      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} />
     </>
   )
 
@@ -387,7 +389,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   )
 }
 
-export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, eventsBatch }: ProductShellProps) {
+export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, eventsRefreshRevision = invalidationRevision, eventsBatch }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
 
@@ -414,7 +416,7 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} eventsBatch={eventsBatch}>
+                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch}>
                   {children}
                 </RouteContent>
               </div>

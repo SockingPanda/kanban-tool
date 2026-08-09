@@ -41,6 +41,8 @@ export interface EventsViewProps {
   readonly kindFilter?: string
   /** 由现有 persistent sync owner 递增，用于触发 catch-up read。 */
   readonly invalidationRevision?: number
+  /** 仅 recovery/gap/poll boundaries 递增；普通 SSE event 通过 batch 进入。 */
+  readonly eventsRefreshRevision?: number
   /** 该 sync owner 提供的可选已校验 batch；本组件不会打开 stream。 */
   readonly batch?: BoardEventsBatch | null
   readonly online?: boolean
@@ -300,7 +302,7 @@ function useBoardEventsRead(
   runtime: WebRuntimeConfig,
   boardSelector: string,
   taskId: string | null,
-  invalidationRevision: number,
+  eventsRefreshRevision: number,
   batch: BoardEventsBatch | null | undefined,
   online: boolean,
 ): EventsReadState & { readonly refresh: () => void } {
@@ -318,9 +320,15 @@ function useBoardEventsRead(
     boardSelector,
   ])
   const loadRef = useRef<(signal: AbortSignal) => Promise<BoardEventsReadModel>>((signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal }))
-  loadRef.current = (signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal })
+  const cursorRef = useRef(0)
+  const cursorIdentityRef = useRef(identityKey)
+  loadRef.current = (signal) => loadBoardEvents(runtime, boardSelector, {
+    taskId,
+    signal,
+    after: cursorIdentityRef.current === identityKey ? cursorRef.current : 0,
+  })
   const [generation, setGeneration] = useState(0)
-  const requestKey = `${identityKey}\u0000${invalidationRevision}\u0000${generation}`
+  const requestKey = `${identityKey}\u0000${eventsRefreshRevision}\u0000${generation}`
   type InternalEventsReadState = EventsReadState & {
     readonly identityKey: string
     readonly scopeKey: string
@@ -369,6 +377,8 @@ function useBoardEventsRead(
           if (current.identityKey !== requestIdentity || current.requestKey !== requestToken) return current
           if (current.data && current.data.board.id === data.board.id && current.data.taskId === data.taskId) {
             const events = mergeBoardEvents(current.data.events, data.events, data.board.id)
+            cursorRef.current = Math.max(cursorRef.current, data.meta.nextAfter)
+            cursorIdentityRef.current = requestIdentity
             return {
               identityKey: requestIdentity,
               scopeKey,
@@ -379,6 +389,8 @@ function useBoardEventsRead(
               stale: false,
             }
           }
+          cursorRef.current = data.meta.nextAfter
+          cursorIdentityRef.current = requestIdentity
           return { identityKey: requestIdentity, scopeKey, requestKey: requestToken, data, loading: false, error: null, stale: false }
         })
       },
@@ -402,7 +414,7 @@ function useBoardEventsRead(
       active = false
       controller.abort()
     }
-  }, [boardSelector, generation, identityKey, invalidationRevision, online, requestKey, scopeKey, taskId])
+  }, [boardSelector, eventsRefreshRevision, generation, identityKey, online, requestKey, scopeKey, taskId])
 
   useEffect(() => {
     if (!batch) return
@@ -430,9 +442,9 @@ function useBoardEventsRead(
           previousId = event.id
           maxIncomingId = event.id
         }
-        if (batch.nextAfter < current.data.meta.nextAfter) {
-          throw new ExplorerReadError("anomaly", "事件 batch 的 nextAfter 不得回退。")
-        }
+        // A delayed batch can legitimately be older than the initial read;
+        // it is already covered by that snapshot and must be ignored.
+        if (batch.nextAfter <= current.data.meta.nextAfter) return current
         if (batch.events.length === 0) {
           if (batch.nextAfter !== current.data.meta.nextAfter) {
             throw new ExplorerReadError("anomaly", "空事件 batch 不得推进 nextAfter。")
@@ -440,8 +452,12 @@ function useBoardEventsRead(
         } else if (batch.nextAfter !== maxIncomingId) {
           throw new ExplorerReadError("anomaly", "事件 batch 的 nextAfter 必须等于最后一个事件 id。")
         }
+        // A batch may arrive while the initial read is still in flight. The
+        // effect is retried when that read installs its snapshot below.
         const incoming = taskId === null ? batch.events : batch.events.filter((event) => event.task_id === taskId)
         const events = mergeBoardEvents(current.data.events, incoming, batch.boardId)
+        cursorRef.current = Math.max(cursorRef.current, batch.nextAfter)
+        cursorIdentityRef.current = identityKey
         return {
           ...current,
           data: { ...current.data, events, meta: { ...current.data.meta, count: events.length, nextAfter: Math.max(current.data.meta.nextAfter, batch.nextAfter) } },
@@ -452,7 +468,7 @@ function useBoardEventsRead(
         return { ...current, error: error instanceof Error ? error : new Error(String(error)), stale: true }
       }
     })
-  }, [batch, identityKey, taskId])
+  }, [batch, identityKey, state.data?.meta.nextAfter, taskId])
 
   const sameScope = state.scopeKey === scopeKey
   const visibleState: EventsReadState = state.identityKey !== identityKey
@@ -480,6 +496,7 @@ export function EventsView({
   taskId = null,
   kindFilter: kindFilterProp = "",
   invalidationRevision = 0,
+  eventsRefreshRevision = invalidationRevision,
   batch,
   online = typeof navigator === "undefined" || navigator.onLine,
   onKindFilterChange,
@@ -488,7 +505,7 @@ export function EventsView({
   const { locale } = usePreferences()
   const [localKindFilter, setLocalKindFilter] = useState(kindFilterProp)
   const kindFilter = onKindFilterChange ? kindFilterProp : localKindFilter
-  const state = useBoardEventsRead(runtime, boardSelector, taskId, invalidationRevision, batch, online)
+  const state = useBoardEventsRead(runtime, boardSelector, taskId, eventsRefreshRevision, batch, online)
   const setKindFilter = (value: string) => {
     setLocalKindFilter(value)
     onKindFilterChange?.(value)

@@ -405,6 +405,7 @@ export class WebSyncController {
       this.emit("event-applied", {
         eventId: event.eventId,
         eventKind: event.kind,
+        event: event.raw,
         source,
         createdAt: event.createdAt,
         appliedAt,

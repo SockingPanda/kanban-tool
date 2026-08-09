@@ -391,6 +391,20 @@ describe("board events read model", () => {
     expect(BOARD_EVENTS_PAGE_LIMIT).toBe(150)
   })
 
+  test("starts a catch-up read from the supplied cursor", async () => {
+    const paths: string[] = []
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        expect(new URLSearchParams(path.split("?", 2)[1]).get("after")).toBe("42")
+        return { payload: { data: [event(43)], meta: { next_after: 43 } }, bytes: 1 }
+      },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport, after: 42 })).resolves.toMatchObject({ meta: { nextAfter: 43 } })
+    expect(paths.filter((path) => path.includes("/api/v1/events?")).length).toBe(1)
+  })
+
   test("resolves canonical board identity and rejects foreign or non-ascending events", async () => {
     const transport = {
       get: async (path: string): Promise<HttpTransportResponse> => {

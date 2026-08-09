@@ -51,6 +51,7 @@ type ListCopy = {
   readonly plan: string
   readonly reset: string
   readonly error: string
+  readonly offline: string
   readonly retry: string
   readonly empty: string
   readonly table: string
@@ -67,13 +68,13 @@ type ListCopy = {
 
 const copies: Record<Locale, ListCopy> = {
   zh: {
-    eyebrow: "任务浏览", title: "任务列表", loading: "正在加载任务列表…", refreshing: "正在刷新…", search: "搜索", searchPlaceholder: "标题、ref 或描述", filters: "任务列表筛选", status: "状态", allStatuses: "全部状态", sort: "排序", pageSize: "每页", includeArchived: "包含已归档", priority: "优先级", plan: "计划", reset: "重置", error: "任务列表加载失败", retry: "重试", empty: "没有匹配的任务。", table: "任务列表内容", headers: ["Ref", "标题", "状态", "优先级", "执行者", "计划", "步骤", "更新"], blocked: "阻塞", previous: "上一页", page: "第", pageSuffix: " 页", next: "下一页",
+    eyebrow: "任务浏览", title: "任务列表", loading: "正在加载任务列表…", refreshing: "正在刷新…", search: "搜索", searchPlaceholder: "标题、ref 或描述", filters: "任务列表筛选", status: "状态", allStatuses: "全部状态", sort: "排序", pageSize: "每页", includeArchived: "包含已归档", priority: "优先级", plan: "计划", reset: "重置", error: "任务列表加载失败", offline: "当前离线，无法加载任务列表。", retry: "重试", empty: "没有匹配的任务。", table: "任务列表内容", headers: ["Ref", "标题", "状态", "优先级", "执行者", "计划", "步骤", "更新"], blocked: "阻塞", previous: "上一页", page: "第", pageSuffix: " 页", next: "下一页",
     statusValues: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planValues: { plan_needed: "需要计划", has_steps: "有步骤", incomplete_required_steps: "必需步骤未完成" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
   },
   en: {
-    eyebrow: "TASK EXPLORER", title: "Task list", loading: "Loading tasks…", refreshing: "Refreshing…", search: "Search", searchPlaceholder: "Title, ref, or description", filters: "Task list filters", status: "Status", allStatuses: "All statuses", sort: "Sort", pageSize: "Page size", includeArchived: "Include archived", priority: "Priority", plan: "Plan", reset: "Reset", error: "Task list failed to load", retry: "Retry", empty: "No matching tasks.", table: "Task list", headers: ["Ref", "Title", "Status", "Priority", "Assignee", "Plan", "Steps", "Updated"], blocked: "blocked", previous: "Previous", page: "Page", pageSuffix: "", next: "Next",
+    eyebrow: "TASK EXPLORER", title: "Task list", loading: "Loading tasks…", refreshing: "Refreshing…", search: "Search", searchPlaceholder: "Title, ref, or description", filters: "Task list filters", status: "Status", allStatuses: "All statuses", sort: "Sort", pageSize: "Page size", includeArchived: "Include archived", priority: "Priority", plan: "Plan", reset: "Reset", error: "Task list failed to load", offline: "You are offline; the task list cannot be loaded.", retry: "Retry", empty: "No matching tasks.", table: "Task list", headers: ["Ref", "Title", "Status", "Priority", "Assignee", "Plan", "Steps", "Updated"], blocked: "blocked", previous: "Previous", page: "Page", pageSuffix: "", next: "Next",
     statusValues: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planValues: { plan_needed: "Plan needed", has_steps: "Has steps", incomplete_required_steps: "Incomplete required steps" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
@@ -136,6 +137,10 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
 
   if (loading && rows.length === 0) {
     return <section className={styles.state} data-testid="task-list-loading" role="status">{copy.loading}</section>
+  }
+  const offline = error instanceof Error && "kind" in error && error.kind === "offline"
+  if (error && rows.length === 0) {
+    return <section className={styles.state} data-testid={offline ? "task-list-offline" : "task-list-error"} role={offline ? "status" : "alert"}><h2>{offline ? copy.offline : copy.error}</h2>{!offline ? <p>{error.message}</p> : null}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</section>
   }
 
   return (
@@ -208,9 +213,9 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
       </div>
 
       {error ? (
-        <div className={styles.error} role="alert" data-testid="task-list-error">
-          <strong>{copy.error}</strong>
-          <span>{error.message}</span>
+        <div className={styles.error} role={offline ? "status" : "alert"} data-testid={offline ? "task-list-offline" : "task-list-error"}>
+          <strong>{offline ? copy.offline : copy.error}</strong>
+          {!offline ? <span>{error.message}</span> : null}
           {onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}
         </div>
       ) : null}

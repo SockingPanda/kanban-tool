@@ -5,6 +5,7 @@ export {
   buildBoardEventsRequest,
   loadBoardEvents,
   mergeBoardEvents,
+  parseBoardEvent,
   type BoardEventsBatch,
   type BoardEventsReadModel,
   type ExplorerEvent,

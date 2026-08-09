@@ -20,7 +20,7 @@ import {
   type BoardViewState,
 } from "./types"
 import { toBoardViewModel } from "./board-adapter"
-import { boardSyncStatusForTelemetry } from "./board-live-state"
+import { boardSyncStatusForTelemetry, subscribeBrowserConnectivity } from "./board-live-state"
 import {
   acquireBoardSession,
   bindBoardResourceIdentity,
@@ -355,20 +355,14 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   }, [canonicalBoardId, contextKey, onSessionTelemetry, route.kind, routeBoardSlug, runtime, selector, visibleStateKind])
 
   useEffect(() => {
-    if (visibleStateKind !== "ready") return
     const onOffline = () => reportSyncStatus("offline")
     const onOnline = () => {
       reportSyncStatus("recovering")
       sessionRetryRef.current?.()
     }
     if (typeof window !== "undefined" && !window.navigator.onLine) onOffline()
-    window.addEventListener("offline", onOffline)
-    window.addEventListener("online", onOnline)
-    return () => {
-      window.removeEventListener("offline", onOffline)
-      window.removeEventListener("online", onOnline)
-    }
-  }, [contextKey, reportSyncStatus, visibleStateKind])
+    return subscribeBrowserConnectivity(window, onOffline, onOnline)
+  }, [contextKey, reportSyncStatus])
 
   const retry = useCallback(() => {
     setSyncStatus("recovering")

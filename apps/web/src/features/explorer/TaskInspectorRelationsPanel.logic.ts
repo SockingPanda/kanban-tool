@@ -1,6 +1,7 @@
 import type {
   InspectorMutationOutcome,
   InspectorCreateStepInput,
+  InspectorCommentInput,
 } from "./task-inspector-mutation-state"
 
 export type CommentSortOrder = "newest" | "oldest"
@@ -16,6 +17,44 @@ export interface CommentPageResult<T extends CommentPageItem> {
   readonly pageCount: number
   readonly hasPreviousPage: boolean
   readonly hasNextPage: boolean
+}
+
+export interface InspectorScopeEpoch {
+  readonly identity: string
+  readonly generation: number
+  readonly taskId: string
+}
+
+export function scopeEpochMatches(expected: InspectorScopeEpoch, current: InspectorScopeEpoch): boolean {
+  return expected.identity === current.identity && expected.generation === current.generation && expected.taskId === current.taskId
+}
+
+export function commentDraftMatchesRetry(kind: string, body: string, expected: InspectorCommentInput | undefined): boolean {
+  if (expected === undefined) return false
+  return (expected.kind ?? "note") === kind.trim() && expected.body.trim() === body.trim()
+}
+
+export type TaskSelectorResolver = (selector: string) => string | null
+
+export function dependencyDraftMatchesRetry(selector: string, expectedParentTaskId: string | undefined, resolver: TaskSelectorResolver): boolean {
+  if (expectedParentTaskId === undefined) return false
+  return resolveTaskSelector(selector, resolver) === expectedParentTaskId.trim()
+}
+
+export function stepDraftMatchesRetry(title: string, body: string, required: boolean, linkedTaskRef: string, expected: InspectorCreateStepInput | undefined, resolver: TaskSelectorResolver): boolean {
+  if (expected === undefined) return false
+  const expectedLink = expected.linked_task_ref?.trim() ?? ""
+  const linkMatches = expectedLink
+    ? resolveTaskSelector(linkedTaskRef, resolver) === expectedLink
+    : linkedTaskRef.trim() === ""
+  return expected.title.trim() === title.trim()
+    && (expected.body?.trim() ?? "") === body.trim()
+    && (expected.required ?? true) === required
+    && linkMatches
+}
+
+export function planDraftMatchesRetry(reason: string, expectedReason: string | undefined): boolean {
+  return expectedReason !== undefined && reason.trim() === expectedReason.trim()
 }
 
 export function buildCommentInput(kind: string, body: string) {
@@ -54,6 +93,10 @@ export function shouldClearDraft(outcome: InspectorMutationOutcome): boolean {
   return outcome.committed
 }
 
+export function shouldClearRetryDraft(outcome: InspectorMutationOutcome, draftMatchesSavedIntent: boolean): boolean {
+  return outcome.committed && draftMatchesSavedIntent
+}
+
 export function sortedComments<T extends CommentPageItem>(comments: readonly T[], sortOrder: CommentSortOrder): T[] {
   return [...comments].sort((left, right) => {
     const createdDiff = left.createdAt - right.createdAt
@@ -84,8 +127,6 @@ export function formatCommentDateTime(value: number, locale: "zh" | "en"): { rea
   return { label: formatter.format(date), iso: date.toISOString() }
 }
 
-export type TaskSelectorResolver = (selector: string) => string | null
-
 /** Resolve a user-entered canonical task id or same-board ref before a mutation. */
 export function resolveTaskSelector(selector: string, resolver: TaskSelectorResolver): string | null {
   const trimmed = selector.trim()
@@ -102,10 +143,16 @@ export function resolveTaskSelector(selector: string, resolver: TaskSelectorReso
 export const __test = {
   commentInput: buildCommentInput,
   commentPageState,
+  commentDraftMatchesRetry,
+  dependencyDraftMatchesRetry,
   formatCommentDateTime,
+  planDraftMatchesRetry,
   stepSubmission: buildStepSubmission,
   stepInput: buildStepInput,
   planInput: buildPlanInput,
   shouldClearDraft,
+  shouldClearRetryDraft,
+  stepDraftMatchesRetry,
+  scopeEpochMatches,
   resolveTaskSelector,
 }

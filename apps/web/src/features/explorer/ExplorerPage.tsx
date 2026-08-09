@@ -9,6 +9,7 @@ import type { BoardSyncStatus } from "../board/types"
 import type { BoardTaskMutationSurface } from "../board/task-mutation-state"
 import {
   ExplorerReadError,
+  loadTaskInspectorAttachments,
   loadTaskInspector,
   loadTaskInspectorEvents,
   loadTaskInspectorNeighborhood,
@@ -20,6 +21,7 @@ import {
   type TaskInspectorReadModel,
   type TaskListQueryState,
 } from "../../lib/api/explorer-read-model"
+import { createAttachmentDownloadClient } from "../../lib/api/attachment-download"
 import type { CanonicalBoardSlug } from "../../lib/board-slug"
 import type { Locale } from "../../lib/preferences"
 import type { WebRuntimeConfig } from "../../lib/runtime"
@@ -27,6 +29,10 @@ import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView
 import { usePreferences } from "../../lib/use-preferences"
 import { restoreExplorerFocus, type ExplorerFocusElement, type ExplorerFocusSnapshot } from "../../lib/explorer-focus"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
+import { TaskInspectorRelationsPanel, type TaskInspectorCommentView, type TaskInspectorDependenciesView, type TaskInspectorRelationTaskView, type TaskInspectorStepView } from "./TaskInspectorRelationsPanel"
+import { TaskInspectorAssetsPanel, type InspectorAssetAttachment, type InspectorAssetLabel } from "./TaskInspectorAssetsPanel"
+import { inspectorMutationKey, type TaskInspectorMutationHandlers, type TaskInspectorMutationSnapshot, type TaskInspectorMutationSurface } from "./task-inspector-mutation-state"
+import { useTaskInspectorMutationController } from "./task-inspector-mutation-controller"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import { TaskRunsView } from "./TaskRunsView"
 import {
@@ -303,6 +309,9 @@ function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewMod
       ref: task.ref,
       title: task.title,
       status: task.status,
+      lockVersion: task.lock_version,
+      scheduledAt: task.scheduled_at,
+      dueAt: task.due_at,
       priority: boardPriority(task.priority),
       description: task.description,
       statusReason: task.status_reason,
@@ -336,6 +345,74 @@ function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewMod
     } : undefined,
     runtime: model.runtime,
   }
+}
+
+function relationTaskView(task: TaskInspectorReadModel["dependencies"]["parents"][number]): TaskInspectorRelationTaskView {
+  return { id: task.id, ref: task.ref, title: task.title, status: task.status }
+}
+
+function linkedTaskView(task: NonNullable<TaskInspectorReadModel["steps"]["steps"][number]["linked_task"]>): TaskInspectorRelationTaskView {
+  return { id: task.id, ref: task.ref, title: task.title, status: task.status }
+}
+
+function inspectorRelationsView(model: TaskInspectorReadModel): {
+  readonly comments: readonly TaskInspectorCommentView[]
+  readonly dependencies: TaskInspectorDependenciesView
+  readonly steps: { readonly steps: readonly TaskInspectorStepView[]; readonly executionPlan: { readonly state: "unplanned" | "planned" | "not_required"; readonly reason: string | null } }
+} {
+  return {
+    comments: model.comments.map((comment) => ({
+      id: comment.id,
+      author: comment.author,
+      kind: comment.kind,
+      body: comment.body,
+      createdAt: comment.created_at,
+      metadata: comment.metadata,
+    })),
+    dependencies: {
+      parents: model.dependencies.parents.map(relationTaskView),
+      children: model.dependencies.children.map(relationTaskView),
+    },
+    steps: {
+      steps: model.steps.steps.map((step) => ({
+        id: step.id,
+        title: step.title,
+        body: step.body,
+        required: step.required,
+        status: step.status,
+        linkedTask: step.linked_task ? linkedTaskView(step.linked_task) : null,
+      })),
+      executionPlan: {
+        state: model.steps.execution_plan.state,
+        reason: model.steps.execution_plan.reason,
+      },
+    },
+  }
+}
+
+const inspectorWriteOperations = [
+  "saveTask",
+  "transition",
+  "addDependency",
+  "removeDependency",
+  "createStep",
+  "linkStep",
+  "markPlanNotRequired",
+  "addLabel",
+  "removeLabel",
+  "applySuggestedLabel",
+  "addComment",
+  "uploadAttachment",
+  "deleteAttachment",
+] as const
+
+function inspectorUiSnapshot(snapshot: TaskInspectorMutationSnapshot | null, taskId: string | null): TaskInspectorMutationSnapshot | undefined {
+  if (snapshot === null || taskId === null) return undefined
+  const reloadKey = inspectorMutationKey("reload", taskId)
+  if (!snapshot.pending.has(reloadKey)) return snapshot
+  const pending = new Set(snapshot.pending)
+  for (const operation of inspectorWriteOperations) pending.add(inspectorMutationKey(operation, taskId))
+  return { ...snapshot, pending }
 }
 
 function InspectorBoundary({ loading, error, onRetry, copy }: { readonly loading: boolean; readonly error: Error | null; readonly onRetry: () => void; readonly copy: ExplorerCopy }) {
@@ -391,8 +468,75 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }), boardRevision, online !== false)
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
   const inspectorIdentity = `${runtime.apiBaseUrl}\u0000${runtime.webBuildId}\u0000${inspectorKey}`
-  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
+  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false, includeAttachments: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
+  const attachmentsRead = useAsyncRead(showInspector, `${inspectorKey}\u0000attachments`, (signal) => taskId
+    ? loadTaskInspectorAttachments(runtime, route.boardSlug, taskId, { signal })
+    : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
   const inspectorModel = useMemo(() => inspectorRead.data ? inspectorViewModel(inspectorRead.data) : null, [inspectorRead.data])
+  const inspectorRelations = useMemo(() => inspectorRead.data ? inspectorRelationsView(inspectorRead.data) : null, [inspectorRead.data])
+  const attachmentDownload = useMemo(() => {
+    try {
+      return createAttachmentDownloadClient(runtime)
+    } catch {
+      return undefined
+    }
+  }, [runtime])
+  const inspectorMutationSurface = useMemo<TaskInspectorMutationSurface | undefined>(() => {
+    if (!taskId || !inspectorRead.data || taskMutations?.inspectorClient === undefined) return undefined
+    const client = taskMutations.inspectorClient
+    const scope = {
+      identity: inspectorIdentity,
+      boardId: inspectorRead.data.board.id,
+      taskId,
+    }
+    return {
+      scope,
+      client,
+      claimTokens: taskMutations.claimTokens,
+      attachmentDownload,
+      suggestTaskLabels: (requestTaskId, query, options) => client.suggestTaskLabels(requestTaskId, query, options),
+      onMutationCommitted: (event) => {
+        taskMutations.onMutationCommitted?.({
+          kind: event.kind === "transition" ? "transition" : "edit",
+          taskId: event.taskId,
+        })
+      },
+      onCanonicalReload: async (event) => {
+        await Promise.resolve(taskMutations.onCanonicalReload?.({
+          reason: "retry",
+          mutationKind: event.kind === "transition" ? "transition" : "edit",
+        }))
+        inspectorRead.retry()
+        attachmentsRead.retry()
+      },
+    }
+  }, [attachmentDownload, attachmentsRead, inspectorIdentity, inspectorRead, taskId, taskMutations])
+  const inspectorMutationController = useTaskInspectorMutationController(inspectorMutationSurface)
+  const inspectorMutationHandlers = useMemo<TaskInspectorMutationHandlers | undefined>(() => {
+    if (inspectorMutationController === null) return undefined
+    return {
+      saveTask: inspectorMutationController.saveTask.bind(inspectorMutationController),
+      transition: inspectorMutationController.transition.bind(inspectorMutationController),
+      addDependency: inspectorMutationController.addDependency.bind(inspectorMutationController),
+      removeDependency: inspectorMutationController.removeDependency.bind(inspectorMutationController),
+      createStep: inspectorMutationController.createStep.bind(inspectorMutationController),
+      linkStep: inspectorMutationController.linkStep.bind(inspectorMutationController),
+      markPlanNotRequired: inspectorMutationController.markPlanNotRequired.bind(inspectorMutationController),
+      addLabel: inspectorMutationController.addLabel.bind(inspectorMutationController),
+      removeLabel: inspectorMutationController.removeLabel.bind(inspectorMutationController),
+      applySuggestedLabel: inspectorMutationController.applySuggestedLabel.bind(inspectorMutationController),
+      addComment: inspectorMutationController.addComment.bind(inspectorMutationController),
+      uploadAttachment: inspectorMutationController.uploadAttachment.bind(inspectorMutationController),
+      downloadAttachment: inspectorMutationController.downloadAttachment.bind(inspectorMutationController),
+      deleteAttachment: inspectorMutationController.deleteAttachment.bind(inspectorMutationController),
+      suggestLabels: inspectorMutationController.suggestLabels.bind(inspectorMutationController),
+      retry: inspectorMutationController.retry.bind(inspectorMutationController),
+    }
+  }, [inspectorMutationController])
+  const inspectorMutationSnapshot = useMemo(
+    () => inspectorUiSnapshot(inspectorMutationController?.snapshot ?? null, taskId),
+    [inspectorMutationController?.snapshot, taskId],
+  )
 
   const navigate = useCallback((target: string, options?: { readonly replace?: boolean }) => {
     if (onNavigate) void onNavigate(target, options)
@@ -474,6 +618,18 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
       edges: neighborhood.edges.map((edge) => ({ id: edge.id, sourceTaskId: edge.source_task_id, targetTaskId: edge.target_task_id, kind: edge.kind })),
     }))
     : Promise.reject(new Error("Task Inspector 尚未选择任务")), [route.boardSlug, runtime, taskId])
+  const resolveInspectorTaskSelector = useCallback((selector: string): string | null => {
+    const value = selector.trim()
+    const model = inspectorRead.data
+    if (!model) return null
+    const candidates = [
+      model.task,
+      ...model.dependencies.parents,
+      ...model.dependencies.children,
+      ...model.steps.steps.flatMap((step) => step.linked_task ? [step.linked_task] : []),
+    ]
+    return candidates.find((candidate) => candidate.id === value || candidate.ref === value)?.id ?? null
+  }, [inspectorRead.data])
 
   const clearedTaskIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -502,7 +658,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         <main className={styles.primaryContent}>
           {view === "board" ? (
             boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
-              : boardRead.data ? <BoardView state={{ kind: "ready", model: toBoardViewModel(boardRead.data) }} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} />
+              : boardRead.data ? <BoardView state={{ kind: "ready", model: toBoardViewModel(boardRead.data) }} messages={boardMessagesForLocale(locale)} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} />
               : boardRead.error ? <div className={styles.boundary} data-testid={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "board-offline" : "board-error"} role={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "status" : "alert"}><h2>{boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? copy.boardOffline : copy.boardError}</h2><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>{copy.retry}</button></div> : null
           ) : null}
           {view === "list" ? (
@@ -560,7 +716,56 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
           ) : null}
         </main>
         {showInspector ? (
-          inspectorModel ? <TaskInspector key={inspectorIdentity} identity={inspectorIdentity} refreshRevision={inspectorRevision} model={inspectorModel} refreshError={inspectorRead.error instanceof Error ? inspectorRead.error.message : null} refreshOffline={inspectorRead.error instanceof ExplorerReadError && inspectorRead.error.kind === "offline"} online={online !== false} onRetry={inspectorRead.retry} onSelectTask={selectTask} locale={locale} onLoadRuns={loadInspectorRuns} onLoadEvents={loadInspectorEvents} onLoadNeighborhood={loadInspectorNeighborhood} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
+          inspectorModel ? (
+            <aside className={styles.inspectorStack}>
+              <TaskInspector
+                key={inspectorIdentity}
+                identity={inspectorIdentity}
+                refreshRevision={inspectorRevision}
+                model={inspectorModel}
+                refreshError={inspectorRead.error instanceof Error ? inspectorRead.error.message : null}
+                refreshOffline={inspectorRead.error instanceof ExplorerReadError && inspectorRead.error.kind === "offline"}
+                online={online !== false}
+                onRetry={inspectorRead.retry}
+                onSelectTask={selectTask}
+                locale={locale}
+                onLoadRuns={loadInspectorRuns}
+                onLoadEvents={loadInspectorEvents}
+                onLoadNeighborhood={loadInspectorNeighborhood}
+                mutationHandlers={inspectorMutationHandlers}
+                mutationSnapshot={inspectorMutationSnapshot}
+                claimToken={taskId ? taskMutations?.claimTokens?.get(taskId) ?? null : null}
+              />
+              {inspectorMutationHandlers && inspectorMutationSnapshot && inspectorRelations && taskId && inspectorRead.data ? (
+                <>
+                  <TaskInspectorRelationsPanel
+                    taskId={taskId}
+                    comments={inspectorRelations.comments}
+                    dependencies={inspectorRelations.dependencies}
+                    steps={inspectorRelations.steps}
+                    handlers={inspectorMutationHandlers}
+                    snapshot={inspectorMutationSnapshot}
+                    onSelectTask={selectTask}
+                    resolveTaskSelector={resolveInspectorTaskSelector}
+                    locale={locale}
+                  />
+                  <TaskInspectorAssetsPanel
+                    taskId={taskId}
+                    labels={inspectorRead.data.task.labels as readonly InspectorAssetLabel[]}
+                    attachments={(attachmentsRead.data ?? []) as readonly InspectorAssetAttachment[]}
+                    suggestionResult={null}
+                    suggestionRequested={false}
+                    suggestionLoading={inspectorMutationSnapshot.pending.has(inspectorMutationKey("suggestLabels", taskId))}
+                    handlers={inspectorMutationHandlers}
+                    snapshot={inspectorMutationSnapshot}
+                    attachmentLoading={attachmentsRead.loading}
+                    attachmentError={attachmentsRead.error instanceof Error ? attachmentsRead.error.message : null}
+                    locale={locale}
+                  />
+                </>
+              ) : null}
+            </aside>
+          ) : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
         ) : null}
       </div>
     </section>

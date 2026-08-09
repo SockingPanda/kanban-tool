@@ -104,6 +104,13 @@
     gap: 1rem;
   }
 
+  .inspectorStack {
+    display: grid;
+    min-width: 0;
+    gap: 1rem;
+    align-content: start;
+  }
+
   .boundary,
   .inspectorBoundary {
     display: grid;

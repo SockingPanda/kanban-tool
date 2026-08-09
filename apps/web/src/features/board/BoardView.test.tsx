@@ -116,12 +116,19 @@ describe("BoardView", () => {
   test("卡片在排期、截止、心跳、状态原因和标签为空时使用简洁占位", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
 
-    expect(markup).toContain('data-testid="board-task-due"')
-    expect(markup).toContain('data-testid="board-task-scheduled"')
-    expect(markup).toContain('data-testid="board-task-heartbeat"')
-    expect(markup).toContain('data-testid="board-task-status-reason"')
-    expect(markup).toContain('data-testid="board-task-labels"')
-    expect(markup).toContain("无")
+    expect(markup).toMatch(/data-testid="board-task-scheduled">—<\/dd>/)
+    expect(markup).toMatch(/data-testid="board-task-due">—<\/dd>/)
+    expect(markup).toMatch(/data-testid="board-task-heartbeat">—<\/dd>/)
+    expect(markup).toMatch(/data-testid="board-task-status-reason">—<\/dd>/)
+    expect(markup).toMatch(/data-testid="board-task-labels">无标签<\/dd>/)
+  })
+
+  test("日期事实使用消息指定的 locale，并保留可审计 ISO 时间", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} messages={englishBoardMessages} />)
+
+    expect(markup).toContain('dateTime="2026-01-01T00:00:00.000Z"')
+    expect(markup).toContain('dateTime="2025-12-31T00:00:00.000Z"')
+    expect(markup).toContain("Jan")
   })
 
   test("提供选择回调时将任务标题暴露为 Inspector opener", () => {
@@ -325,6 +332,34 @@ describe("BoardView", () => {
         tasksByStatus: {
           ...model.tasksByStatus,
           running: [runningTask({ status: "ready" })],
+        },
+      },
+    ]
+
+    for (const candidate of invalidModels) expectInvalid(candidate)
+  })
+
+  test("presentation seam 拒绝缺失 board card facts 及 malformed labels", () => {
+    const source = model.tasksByStatus.ready[0]
+    const withoutDue = { ...source } as Record<string, unknown>
+    delete withoutDue.dueAt
+    const invalidModels: readonly BoardViewModel[] = [
+      {
+        ...model,
+        tasksByStatus: { ...model.tasksByStatus, ready: [withoutDue as unknown as BoardTaskViewModel] },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          ready: [{ ...source, labels: [{ id: " ", name: "invalid", color: null }] }],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          ready: [{ ...source, labels: [{ id: "duplicate", name: "one", color: null }, { id: "duplicate", name: "two", color: null }] }],
         },
       },
     ]

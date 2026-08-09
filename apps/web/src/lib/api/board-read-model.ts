@@ -479,6 +479,19 @@ function parseTasksWindow(
     if (task.board_id !== identity.canonicalBoardId || task.board_slug !== identity.slug) {
       throw new BoardReadError("anomaly", `任务 ${task.id} 不属于当前 canonical board。`)
     }
+    const labelIds = new Set<string>()
+    for (const label of task.labels) {
+      if (label.id.trim().length === 0 || label.name.trim().length === 0) {
+        throw new BoardReadError("anomaly", `任务 ${task.id} 返回了空白标签 id 或 name。`)
+      }
+      if (label.board_id !== identity.canonicalBoardId) {
+        throw new BoardReadError("anomaly", `任务 ${task.id} 的标签 ${label.id} 不属于当前 canonical board。`)
+      }
+      if (labelIds.has(label.id)) {
+        throw new BoardReadError("anomaly", `任务 ${task.id} 返回了重复标签 ${label.id}。`)
+      }
+      labelIds.add(label.id)
+    }
   }
   if (window.page.total > expectedOffset && window.tasks.length === 0) {
     throw new BoardReadError("anomaly", "tasks-by-status 返回空页但 page.total 仍要求继续分页。")

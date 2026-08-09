@@ -62,18 +62,28 @@ function priorityVariant(priority: BoardTaskViewModel["priority"]): "neutral" | 
   return "neutral"
 }
 
-function taskTimestamp(value: number | null | undefined): { readonly display: string; readonly iso: string } | null {
+const taskTimestampFormatters = new Map<string, Intl.DateTimeFormat>()
+
+function taskTimestampFormatter(locale: string): Intl.DateTimeFormat {
+  const cached = taskTimestampFormatters.get(locale)
+  if (cached) return cached
+  try {
+    const formatter = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" })
+    taskTimestampFormatters.set(locale, formatter)
+    return formatter
+  } catch {
+    const fallback = taskTimestampFormatters.get("en-US") ?? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
+    taskTimestampFormatters.set("en-US", fallback)
+    return fallback
+  }
+}
+
+function taskTimestamp(value: number | null | undefined, locale: string): { readonly display: string; readonly iso: string } | null {
   if (value === null || value === undefined) return null
   const milliseconds = Math.abs(value) < 1_000_000_000_000 ? value * 1_000 : value
   const date = new Date(milliseconds)
   if (Number.isNaN(date.getTime())) return { display: String(value), iso: String(value) }
-  let display: string
-  try {
-    display = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date)
-  } catch {
-    display = date.toISOString()
-  }
-  return { display, iso: date.toISOString() }
+  return { display: taskTimestampFormatter(locale).format(date), iso: date.toISOString() }
 }
 
 function columnAnchorId(rootId: string, index: number) {
@@ -216,11 +226,11 @@ function TaskCard({
   const dependencyText = task.readiness.dependencyBlocked
     ? `${copy.dependencyBlocked}（${task.readiness.unfinishedParentCount}）`
     : copy.dependencyClear
-  const scheduledAt = taskTimestamp(task.scheduledAt)
-  const dueAt = taskTimestamp(task.dueAt)
-  const lastHeartbeatAt = taskTimestamp(task.lastHeartbeatAt)
+  const scheduledAt = taskTimestamp(task.scheduledAt, copy.dateLocale)
+  const dueAt = taskTimestamp(task.dueAt, copy.dateLocale)
+  const lastHeartbeatAt = taskTimestamp(task.lastHeartbeatAt, copy.dateLocale)
   const statusReason = task.statusReason?.trim() || copy.notAvailable
-  const labels = (task.labels ?? []).filter((label) => label.name.trim().length > 0)
+  const labels = task.labels ?? []
   const pending = controller?.isMutationPending === true
     || controller?.isPending(`transition:${task.id}`) === true
     || controller?.isPending(`edit:${task.id}`) === true

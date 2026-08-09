@@ -124,6 +124,28 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
       if (!Number.isSafeInteger(task.position)) {
         return { valid: false, message: `任务 ${task.ref} 的 position 必须是 safe integer` }
       }
+      for (const field of ["scheduledAt", "dueAt", "lastHeartbeatAt", "statusReason", "labels"] as const) {
+        if (!Object.prototype.hasOwnProperty.call(task, field)) {
+          return { valid: false, message: `任务 ${task.ref} 缺少 ${field} board card fact` }
+        }
+      }
+      if (
+        (task.scheduledAt !== null && !Number.isSafeInteger(task.scheduledAt))
+        || (task.dueAt !== null && !Number.isSafeInteger(task.dueAt))
+        || (task.lastHeartbeatAt !== null && !Number.isSafeInteger(task.lastHeartbeatAt))
+        || (task.statusReason !== null && typeof task.statusReason !== "string")
+      ) {
+        return { valid: false, message: `任务 ${task.ref} 的 board card fact 类型无效` }
+      }
+      if (!Array.isArray(task.labels)) return { valid: false, message: `任务 ${task.ref} 的 labels 必须是数组` }
+      const labelIds = new Set<string>()
+      for (const label of task.labels) {
+        if (!label || typeof label !== "object" || Array.isArray(label) || !hasText(label.id) || !hasText(label.name)) {
+          return { valid: false, message: `任务 ${task.ref} 的标签 id/name 不能为空` }
+        }
+        if (labelIds.has(label.id)) return { valid: false, message: `任务 ${task.ref} 返回了重复标签 ${label.id}` }
+        labelIds.add(label.id)
+      }
       if (taskIds.has(task.id)) return { valid: false, message: `服务端返回重复任务 id：${task.id}` }
       if (task.status !== status) {
         return { valid: false, message: `任务 ${task.ref} 的状态分组与任务事实不一致` }
@@ -178,6 +200,7 @@ export interface BoardMessages {
   readonly syncCircuitOpen: string
   readonly syncStaleDescription: string
   readonly retry: string
+  readonly dateLocale: string
   readonly statusLabel: string
   readonly statusReasonLabel: string
   readonly priorityLabel: (priority: number) => string
@@ -271,6 +294,7 @@ export const defaultBoardMessages: BoardMessages = {
   syncCircuitOpen: "同步暂时不可用",
   syncStaleDescription: "仍显示最近一次成功读取的看板数据。",
   retry: "重试",
+  dateLocale: "zh-CN",
   statusLabel: "状态",
   statusReasonLabel: "状态原因",
   priorityLabel: (priority) => `优先级 P${priority}`,
@@ -374,6 +398,7 @@ export const englishBoardMessages: BoardMessages = {
   syncCircuitOpen: "Sync is temporarily unavailable",
   syncStaleDescription: "The most recently loaded board data is still displayed.",
   retry: "Retry",
+  dateLocale: "en-US",
   statusLabel: "Status",
   statusReasonLabel: "Status reason",
   priorityLabel: (priority) => `Priority P${priority}`,

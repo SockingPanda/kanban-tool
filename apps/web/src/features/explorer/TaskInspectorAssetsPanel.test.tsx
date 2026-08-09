@@ -286,8 +286,6 @@ describe("TaskInspectorAssetsPanel", () => {
           retries: new Map([
             ["addLabel:t_1", { operation: "addLabel", taskId: "t_1", input: { name: "backend", create_missing: false } }],
             ["reload:t_1", { operation: "reload", taskId: "t_1" }],
-            ["suggestLabels:t_1", { operation: "suggestLabels", taskId: "t_1", query: { limit: 5 } }],
-            ["downloadAttachment:t_1", { operation: "downloadAttachment", taskId: "t_1", attachmentId: "a_1" }],
           ]),
         })}
       />,
@@ -299,6 +297,8 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(markup).toContain("写入已提交，但刷新失败")
     expect(markup).toContain('data-retry-key="addLabel:t_1"')
     expect(markup).toContain('data-retry-key="reload:t_1"')
+    expect(markup).not.toContain('data-retry-key="suggestLabels:t_1"')
+    expect(markup).not.toContain('data-retry-key="downloadAttachment:t_1"')
     await retry("reload:t_1")
     expect(retry).toHaveBeenCalledWith("reload:t_1")
   })

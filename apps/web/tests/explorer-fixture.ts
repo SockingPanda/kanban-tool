@@ -21,6 +21,8 @@ export type ExplorerFixtureOptions = {
   readonly failInspector?: boolean
   readonly delayList?: boolean
   readonly withAssets?: boolean
+  readonly failLabelAddOnce?: boolean
+  readonly failInspectorReadsAfterLabelAdd?: number
 }
 
 export type ExplorerFixture = {
@@ -30,6 +32,7 @@ export type ExplorerFixture = {
   readonly emitHeartbeat: () => Promise<void>
   readonly emitTaskUpdated: () => Promise<void>
   readonly releaseList: () => void
+  readonly failNextInspectorReads: (count?: number) => void
 }
 
 type FixtureEvent = {
@@ -152,8 +155,13 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
   const attachments: Record<string, unknown>[] = options.withAssets
     ? [{ id: "a_fixture", board_id: BOARD_ID, task_id: TASK_ID, filename: "fixture.txt", rel_path: "attachments/fixture.txt", content_type: "text/plain", size_bytes: 7, sha256: null, created_by: "playwright", created_at: 1 }]
     : []
+  let labelAddFailuresRemaining = options.failLabelAddOnce === true ? 1 : 0
+  let inspectorReadFailuresAfterLabelAdd = typeof options.failInspectorReadsAfterLabelAdd === "number"
+    ? Math.max(0, Math.floor(options.failInspectorReadsAfterLabelAdd))
+    : 0
   const stepsByTask = new Map<string, Record<string, unknown>[]>([[TASK_ID, []]])
   let events: FixtureEvent[] = options.emptyEvents ? [] : [fixtureEvent(1, "task.created")]
+  let inspectorReadFailuresRemaining = 0
   let releaseList: () => void = () => undefined
   const listGate = options.delayList
     ? new Promise<void>((resolve) => {
@@ -286,6 +294,11 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
 
     if (url.pathname === `/api/v1/tasks/${TASK_ID}`) {
       if (options.failInspector) {
+        await fulfillUnavailable(route)
+        return
+      }
+      if (inspectorReadFailuresRemaining > 0) {
+        inspectorReadFailuresRemaining -= 1
         await fulfillUnavailable(route)
         return
       }
@@ -471,6 +484,8 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     }
 
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/attachments/a_fixture` && route.request().method() === "DELETE") {
+      const index = attachments.findIndex((attachment) => attachment.id === "a_fixture")
+      if (index >= 0) attachments.splice(index, 1)
       await fulfillJson(route, { data: { deleted: true } })
       return
     }
@@ -495,12 +510,21 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     }
 
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/labels` && route.request().method() === "POST") {
+      if (labelAddFailuresRemaining > 0) {
+        labelAddFailuresRemaining -= 1
+        await fulfillUnavailable(route)
+        return
+      }
       const body = JSON.parse(route.request().postData() ?? "{}") as { readonly name?: unknown }
       const name = typeof body.name === "string" ? body.name : "fixture"
       const labels = Array.isArray(readyTask.labels) ? readyTask.labels : []
       const label = { id: `l_${name}`, board_id: BOARD_ID, name, color: null, created_at: 1, updated_at: 1 }
       readyTask.labels = [...labels, label]
       readyTask.lock_version = Number(readyTask.lock_version ?? 0) + 1
+      if (inspectorReadFailuresAfterLabelAdd > 0) {
+        inspectorReadFailuresRemaining = inspectorReadFailuresAfterLabelAdd
+        inspectorReadFailuresAfterLabelAdd = 0
+      }
       await fulfillJson(route, { data: readyTask, meta: null })
       return
     }
@@ -542,6 +566,9 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       const updated = fixtureEvent(2, "task.updated")
       events = [...events, updated]
       await emit(sseFrame("task.updated", updated, updated.id))
+    },
+    failNextInspectorReads(count = 1) {
+      inspectorReadFailuresRemaining = Math.max(0, Math.floor(count))
     },
   }
 }

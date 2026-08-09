@@ -45,4 +45,48 @@ test.describe("Inspector integration seam", () => {
     await expect(page.getByRole("button", { name: "Created with first step" })).toBeVisible()
     expect(fixture.apiRequests.some((request) => request.match(/\/api\/v1\/tasks\/t_[^/]+\/steps$/))).toBeTruthy()
   })
+
+  test("keeps a failed label draft editable and scopes successful attachment actions", async ({ page }) => {
+    const fixture = await installExplorerFixture(page, { withAssets: true, failLabelAddOnce: true })
+    await page.goto(`${boardPath}/list?task=${taskId}`, { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("task-inspector")).toBeVisible()
+    await expect(page.getByTestId("attachment-row")).toHaveCount(1)
+
+    const labelInput = page.getByRole("textbox", { name: "标签名称" })
+    await labelInput.fill("first-label")
+    await page.getByTestId("label-add").click()
+    await expect(page.getByTestId("inspector-mutation-error")).toBeVisible()
+    await expect(labelInput).toHaveValue("first-label")
+    await expect(labelInput).toBeEnabled()
+
+    await labelInput.fill("fresh-label")
+    await page.getByTestId("label-add").click()
+    await expect(page.getByTestId("inspector-labels")).toContainText("fresh-label")
+    await expect(page.getByTestId("inspector-labels")).not.toContainText("first-label")
+    expect(fixture.apiRequests.filter((request) => request === `/api/v1/tasks/${taskId}/labels`)).toHaveLength(2)
+
+    const downloadRequests = () => fixture.apiRequests.filter((request) => request.endsWith("/attachments/a_fixture"))
+    await page.getByTestId("attachment-download").click()
+    await expect.poll(() => downloadRequests().length).toBe(1)
+    await page.getByTestId("attachment-delete").click()
+    await expect(page.getByTestId("attachment-row")).toHaveCount(0)
+    await expect(page).toHaveURL(new RegExp(`/list\\?task=${taskId}$`))
+  })
+
+  test("waits for the scoped inspector reload before reporting a committed label", async ({ page }) => {
+    const fixture = await installExplorerFixture(page, { failInspectorReadsAfterLabelAdd: 4 })
+    await page.goto(`${boardPath}/list?task=${taskId}`, { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("task-inspector")).toBeVisible()
+
+    const labelInput = page.getByRole("textbox", { name: "标签名称" })
+    await labelInput.fill("reload-gated")
+    await page.getByTestId("label-add").click()
+    await expect(page.getByTestId("inspector-mutation-error")).toContainText("写入已提交")
+    await expect(page.getByTestId("inspector-labels")).not.toContainText("reload-gated")
+
+    fixture.failNextInspectorReads(0)
+    await page.getByTestId("inspector-retry").click()
+    await expect(page.getByTestId("inspector-labels")).toContainText("reload-gated")
+    await expect(page.getByTestId("inspector-mutation-error")).toHaveCount(0)
+  })
 })

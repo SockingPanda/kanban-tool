@@ -1,7 +1,9 @@
-import { useEffect, useState, type ReactNode, type SyntheticEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react"
 
 import type { Locale } from "../../lib/preferences"
+import { taskOpenerKey } from "../../lib/explorer-focus"
 import styles from "./TaskInspector.module.css"
+import { createInspectorAsyncFence, type InspectorAsyncFence } from "./TaskInspector.lazy"
 
 export type InspectorTaskStatus = "triage" | "todo" | "scheduled" | "ready" | "running" | "blocked" | "review" | "done" | "archived"
 export type InspectorPlanState = "unplanned" | "planned" | "not_required"
@@ -90,9 +92,14 @@ export interface TaskInspectorProps {
   readonly model: TaskInspectorViewModel
   readonly onSelectTask: (taskId: string) => void
   readonly locale?: Locale
-  readonly onLoadRuns?: () => Promise<TaskInspectorViewModel["runs"]>
-  readonly onLoadEvents?: () => Promise<TaskInspectorViewModel["events"]>
-  readonly onLoadNeighborhood?: () => Promise<NonNullable<TaskInspectorViewModel["neighborhood"]>>
+  /** Runtime/session + task identity used to fence deferred section reads. */
+  readonly identity?: string
+  readonly refreshRevision?: number
+  readonly refreshError?: string | null
+  readonly onRetry?: () => void
+  readonly onLoadRuns?: (signal: AbortSignal) => Promise<TaskInspectorViewModel["runs"]>
+  readonly onLoadEvents?: (signal: AbortSignal) => Promise<TaskInspectorViewModel["events"]>
+  readonly onLoadNeighborhood?: (signal: AbortSignal) => Promise<NonNullable<TaskInspectorViewModel["neighborhood"]>>
 }
 
 type InspectorCopy = {
@@ -149,6 +156,9 @@ type InspectorCopy = {
   readonly log: string
   readonly loading: string
   readonly loadError: string
+  readonly retry: string
+  readonly openAnnouncement: string
+  readonly refreshError: string
   readonly status: Readonly<Record<InspectorTaskStatus, string>>
   readonly planState: Readonly<Record<InspectorPlanState, string>>
   readonly stepStatus: Readonly<Record<"todo" | "done" | "skipped", string>>
@@ -158,11 +168,11 @@ type InspectorCopy = {
 
 const copies: Record<Locale, InspectorCopy> = {
   zh: {
-    ariaLabel: "任务 Inspector",
-    eyebrow: "TASK INSPECTOR",
+    ariaLabel: "任务检查器",
+    eyebrow: "任务检查器",
     dependencyBlocked: "依赖阻塞",
-    sections: { metadata: "元数据", claim: "运行时 / Claim", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
-    facts: { statusReason: "状态原因", assignee: "执行者", plan: "执行计划", requiredSteps: "必需步骤", optionalSteps: "可选步骤", createdAt: "创建时间", updatedAt: "更新时间", claimOwner: "Claim owner", claimExpires: "Claim expires", heartbeat: "Last heartbeat", currentRun: "Current run", retry: "重试", blockedParents: "阻塞父任务", actor: "执行者", api: "API", server: "服务版本", protocol: "协议版本", build: "Web 构建" },
+    sections: { metadata: "元数据", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
+    facts: { statusReason: "状态原因", assignee: "执行者", plan: "执行计划", requiredSteps: "必需步骤", optionalSteps: "可选步骤", createdAt: "创建时间", updatedAt: "更新时间", claimOwner: "认领者", claimExpires: "认领到期", heartbeat: "最近心跳", currentRun: "当前运行", retry: "重试", blockedParents: "阻塞父任务", actor: "执行者", api: "API", server: "服务版本", protocol: "协议版本", build: "Web 构建" },
     parents: "父任务",
     children: "子任务",
     description: "描述",
@@ -182,6 +192,9 @@ const copies: Record<Locale, InspectorCopy> = {
     log: "日志",
     loading: "正在加载…",
     loadError: "加载失败，请重试。",
+    retry: "重试",
+    openAnnouncement: "已打开任务检查器。",
+    refreshError: "任务数据刷新失败。",
     status: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
     stepStatus: { todo: "待办", done: "已完成", skipped: "已跳过" },
@@ -213,6 +226,9 @@ const copies: Record<Locale, InspectorCopy> = {
     log: "log",
     loading: "Loading…",
     loadError: "Failed to load. Try again.",
+    retry: "Retry",
+    openAnnouncement: "Task Inspector opened.",
+    refreshError: "Task data refresh failed.",
     status: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
     stepStatus: { todo: "To do", done: "Done", skipped: "Skipped" },
@@ -278,7 +294,7 @@ function DependencyList({
         <ul className={styles.compactList}>
           {tasks.map((task) => (
             <li key={task.id}>
-              <button type="button" className={styles.linkButton} onClick={() => onSelectTask(task.id)}>
+              <button type="button" className={styles.linkButton} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>
                 <span translate="no">{task.ref}</span>
                 <span>{task.title}</span>
                 <span className={styles.muted}>{copy.status[task.status]}</span>
@@ -312,7 +328,7 @@ function Neighborhood({ model, copy, onSelectTask }: { readonly model: NonNullab
         <ul className={styles.compactList}>
           {model.nodes.map((node) => (
             <li key={node.id}>
-              <button type="button" className={styles.linkButton} onClick={() => onSelectTask(node.id)}>
+              <button type="button" className={styles.linkButton} data-task-opener={taskOpenerKey(node.id)} onClick={() => onSelectTask(node.id)}>
                 <span translate="no">{node.ref}</span>
                 <span>{node.title}</span>
                 <span className={styles.muted}>{node.role}</span>
@@ -328,9 +344,26 @@ function Neighborhood({ model, copy, onSelectTask }: { readonly model: NonNullab
 
 type InspectorSectionStatus = "idle" | "loading" | "ready" | "error"
 
-export function TaskInspector({ model, onSelectTask, locale = "zh", onLoadRuns, onLoadEvents, onLoadNeighborhood }: TaskInspectorProps) {
+export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
+  const requestIdentity = identity ?? task.id
+  const headingRef = useRef<HTMLHeadingElement | null>(null)
+  const runsDetailsRef = useRef<HTMLDetailsElement | null>(null)
+  const eventsDetailsRef = useRef<HTMLDetailsElement | null>(null)
+  const neighborhoodDetailsRef = useRef<HTMLDetailsElement | null>(null)
+  const mountedRef = useRef(false)
+  const requestIdentityRef = useRef(requestIdentity)
+  const lastRefreshRevisionRef = useRef<number | null>(null)
+  const runsFenceRef = useRef<InspectorAsyncFence | null>(null)
+  const eventsFenceRef = useRef<InspectorAsyncFence | null>(null)
+  const neighborhoodFenceRef = useRef<InspectorAsyncFence | null>(null)
+  if (runsFenceRef.current === null) runsFenceRef.current = createInspectorAsyncFence()
+  if (eventsFenceRef.current === null) eventsFenceRef.current = createInspectorAsyncFence()
+  if (neighborhoodFenceRef.current === null) neighborhoodFenceRef.current = createInspectorAsyncFence()
+  const runsFence = runsFenceRef.current
+  const eventsFence = eventsFenceRef.current
+  const neighborhoodFence = neighborhoodFenceRef.current
   const [runs, setRuns] = useState(model.runs)
   const [events, setEvents] = useState(model.events)
   const [neighborhood, setNeighborhood] = useState(model.neighborhood)
@@ -339,45 +372,113 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", onLoadRuns, 
   const [neighborhoodStatus, setNeighborhoodStatus] = useState<InspectorSectionStatus>(model.neighborhood ? "ready" : "idle")
 
   useEffect(() => {
-    setRuns(model.runs)
-    setEvents(model.events)
-    setNeighborhood(model.neighborhood)
-    setRunsStatus(model.runs.length > 0 ? "ready" : "idle")
-    setEventsStatus(model.events.length > 0 ? "ready" : "idle")
-    setNeighborhoodStatus(model.neighborhood ? "ready" : "idle")
-  }, [model.task.id])
+    const identityChanged = requestIdentityRef.current !== requestIdentity
+    const modelHasLazyData = model.runs.length > 0 || model.events.length > 0 || model.neighborhood !== undefined
+    if (identityChanged || modelHasLazyData) {
+      runsFence.abort()
+      eventsFence.abort()
+      neighborhoodFence.abort()
+      setRuns(model.runs)
+      setEvents(model.events)
+      setNeighborhood(model.neighborhood)
+      setRunsStatus(model.runs.length > 0 ? "ready" : "idle")
+      setEventsStatus(model.events.length > 0 ? "ready" : "idle")
+      setNeighborhoodStatus(model.neighborhood ? "ready" : "idle")
+    }
+    if (!mountedRef.current || identityChanged) headingRef.current?.focus()
+    mountedRef.current = true
+    requestIdentityRef.current = requestIdentity
+    return () => {
+      if (identityChanged || modelHasLazyData) {
+        runsFence.abort()
+        eventsFence.abort()
+        neighborhoodFence.abort()
+      }
+    }
+  }, [eventsFence, model.events, model.neighborhood, model.runs, model.task.id, neighborhoodFence, requestIdentity, runsFence])
 
-  const loadRuns = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    if (!event.currentTarget.open || runsStatus !== "idle" || !onLoadRuns) return
+  useEffect(() => () => {
+    runsFence.abort()
+    eventsFence.abort()
+    neighborhoodFence.abort()
+  }, [eventsFence, neighborhoodFence, runsFence])
+
+  const startRunsLoad = useCallback((force = false) => {
+    if ((!force && runsStatus !== "idle") || !onLoadRuns) return
+    const signal = runsFence.begin(requestIdentity)
     setRunsStatus("loading")
-    void onLoadRuns().then((value) => {
+    void onLoadRuns(signal).then((value) => {
+      if (!runsFence.isCurrent(requestIdentity, signal)) return
       setRuns(value)
       setRunsStatus("ready")
-    }, () => setRunsStatus("error"))
-  }
-  const loadEvents = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    if (!event.currentTarget.open || eventsStatus !== "idle" || !onLoadEvents) return
+    }, () => {
+      if (runsFence.isCurrent(requestIdentity, signal)) setRunsStatus("error")
+    })
+  }, [onLoadRuns, requestIdentity, runsFence, runsStatus])
+  const startEventsLoad = useCallback((force = false) => {
+    if ((!force && eventsStatus !== "idle") || !onLoadEvents) return
+    const signal = eventsFence.begin(requestIdentity)
     setEventsStatus("loading")
-    void onLoadEvents().then((value) => {
+    void onLoadEvents(signal).then((value) => {
+      if (!eventsFence.isCurrent(requestIdentity, signal)) return
       setEvents(value)
       setEventsStatus("ready")
-    }, () => setEventsStatus("error"))
-  }
-  const loadNeighborhood = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    if (!event.currentTarget.open || neighborhoodStatus !== "idle" || !onLoadNeighborhood) return
+    }, () => {
+      if (eventsFence.isCurrent(requestIdentity, signal)) setEventsStatus("error")
+    })
+  }, [eventsFence, eventsStatus, onLoadEvents, requestIdentity])
+  const startNeighborhoodLoad = useCallback((force = false) => {
+    if ((!force && neighborhoodStatus !== "idle") || !onLoadNeighborhood) return
+    const signal = neighborhoodFence.begin(requestIdentity)
     setNeighborhoodStatus("loading")
-    void onLoadNeighborhood().then((value) => {
+    void onLoadNeighborhood(signal).then((value) => {
+      if (!neighborhoodFence.isCurrent(requestIdentity, signal)) return
       setNeighborhood(value)
       setNeighborhoodStatus("ready")
-    }, () => setNeighborhoodStatus("error"))
+    }, () => {
+      if (neighborhoodFence.isCurrent(requestIdentity, signal)) setNeighborhoodStatus("error")
+    })
+  }, [neighborhoodFence, neighborhoodStatus, onLoadNeighborhood, requestIdentity])
+  useEffect(() => {
+    if (refreshRevision === 0 || lastRefreshRevisionRef.current === refreshRevision) return
+    lastRefreshRevisionRef.current = refreshRevision
+    if (runsDetailsRef.current?.open) startRunsLoad(true)
+    if (eventsDetailsRef.current?.open) startEventsLoad(true)
+    if (neighborhoodDetailsRef.current?.open) startNeighborhoodLoad(true)
+  }, [refreshRevision, startEventsLoad, startNeighborhoodLoad, startRunsLoad])
+  const loadRuns = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open) {
+      runsFence.abort()
+      if (runsStatus === "loading") setRunsStatus("idle")
+      return
+    }
+    startRunsLoad()
+  }
+  const loadEvents = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open) {
+      eventsFence.abort()
+      if (eventsStatus === "loading") setEventsStatus("idle")
+      return
+    }
+    startEventsLoad()
+  }
+  const loadNeighborhood = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open) {
+      neighborhoodFence.abort()
+      if (neighborhoodStatus === "loading") setNeighborhoodStatus("idle")
+      return
+    }
+    startNeighborhoodLoad()
   }
   return (
     <aside className={styles.inspector} data-testid="task-inspector" aria-label={copy.ariaLabel}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>{copy.eyebrow}</p>
         <p className={styles.ref} translate="no">{task.ref}</p>
-        <h2>{task.title}</h2>
+        <h2 ref={headingRef} tabIndex={-1}>{task.title}</h2>
+        <p aria-live="polite" className={styles.announcement}>{copy.openAnnouncement}</p>
         <p className={styles.identity} translate="no">{task.id}</p>
+        {refreshError ? <div role="alert"><strong>{copy.refreshError}</strong><span> {refreshError}</span>{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
         <div className={styles.badges}>
           <span className={styles.badge}>{copy.status[task.status]}</span>
           <span className={styles.badge}>P{task.priority}</span>
@@ -448,9 +549,9 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", onLoadRuns, 
       </Section>
 
       <Section id="inspector-runs" title={copy.sections.runs}>
-        <details onToggle={loadRuns}>
+        <details ref={runsDetailsRef} onToggle={loadRuns}>
           <summary>{copy.sections.runs}</summary>
-          {runsStatus === "loading" ? <Empty>{copy.loading}</Empty> : runsStatus === "error" ? <Empty>{copy.loadError}</Empty> : runs.length === 0 ? <Empty>{copy.noRuns}</Empty> : (
+          {runsStatus === "loading" ? <Empty>{copy.loading}</Empty> : runsStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startRunsLoad(true)}>{copy.retry}</button></> : runs.length === 0 ? <Empty>{copy.noRuns}</Empty> : (
           <ul className={styles.compactList}>
             {runs.map((run) => (
               <li key={run.id} className={styles.row}>
@@ -464,9 +565,9 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", onLoadRuns, 
       </Section>
 
       <Section id="inspector-events" title={copy.sections.events}>
-        <details onToggle={loadEvents}>
+        <details ref={eventsDetailsRef} onToggle={loadEvents}>
           <summary>{copy.sections.events}</summary>
-          {eventsStatus === "loading" ? <Empty>{copy.loading}</Empty> : eventsStatus === "error" ? <Empty>{copy.loadError}</Empty> : events.length === 0 ? <Empty>{copy.noEvents}</Empty> : (
+          {eventsStatus === "loading" ? <Empty>{copy.loading}</Empty> : eventsStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startEventsLoad(true)}>{copy.retry}</button></> : events.length === 0 ? <Empty>{copy.noEvents}</Empty> : (
           <ol className={styles.compactList}>
             {events.map((event) => (
               <li key={event.id} className={styles.row}>
@@ -480,9 +581,9 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", onLoadRuns, 
       </Section>
 
       <Section id="inspector-neighborhood" title={copy.sections.neighborhood}>
-        <details onToggle={loadNeighborhood}>
+        <details ref={neighborhoodDetailsRef} onToggle={loadNeighborhood}>
           <summary>{copy.sections.neighborhood}</summary>
-          {neighborhoodStatus === "loading" ? <Empty>{copy.loading}</Empty> : neighborhoodStatus === "error" ? <Empty>{copy.loadError}</Empty> : neighborhood ? <Neighborhood model={neighborhood} copy={copy} onSelectTask={onSelectTask} /> : <Empty>{copy.noNeighborhood}</Empty>}
+          {neighborhoodStatus === "loading" ? <Empty>{copy.loading}</Empty> : neighborhoodStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startNeighborhoodLoad(true)}>{copy.retry}</button></> : neighborhood ? <Neighborhood model={neighborhood} copy={copy} onSelectTask={onSelectTask} /> : <Empty>{copy.noNeighborhood}</Empty>}
         </details>
       </Section>
 

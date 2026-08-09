@@ -22,6 +22,7 @@ export interface TaskRunsPresentationProps {
 export interface TaskRunsViewProps {
   readonly runtime: WebRuntimeConfig
   readonly taskId: string | null
+  readonly invalidationRevision?: number
 }
 
 type RunsCopy = {
@@ -49,7 +50,7 @@ type RunsCopy = {
 const copies: Record<Locale, RunsCopy> = {
   zh: {
     title: "运行记录",
-    kicker: "TASK RUNS",
+    kicker: "任务运行记录",
     selectTask: "选择任务后查看运行记录。",
     loading: "正在加载运行记录…",
     empty: "当前任务暂无运行记录。",
@@ -168,7 +169,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
         <h2 id="runs-heading">{copy.title}</h2>
         <p className={styles.taskId} translate="no">{taskId}</p>
       </header>
-      {state.error ? <div className={styles.refreshError} role="alert">{state.error.message}</div> : null}
+      {state.error ? <div className={styles.refreshError} role="alert">{state.error.message}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
       <div className={styles.columns}>
         <section className={styles.runListPanel} aria-labelledby="runs-list-heading" tabIndex={0}>
           <h2 id="runs-list-heading" className={styles.visuallyHidden}>{copy.title}</h2>
@@ -182,7 +183,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
   )
 }
 
-function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null): TaskRunsReadState & { readonly retry: () => void } {
+function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, invalidationRevision: number): TaskRunsReadState & { readonly retry: () => void } {
   const loadRef = useRef<((signal: AbortSignal) => Promise<TaskRunsReadModel>) | null>(null)
   loadRef.current = taskId ? (signal) => loadTaskRuns(runtime, taskId, { signal }) : null
   const [generation, setGeneration] = useState(0)
@@ -195,14 +196,14 @@ function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null): Task
     }
     const controller = new AbortController()
     let active = true
-    setState({ data: null, loading: true, error: null })
+    setState((current) => ({ data: current.data?.taskId === taskId ? current.data : null, loading: true, error: null }))
     void loadRef.current?.(controller.signal).then(
       (data) => {
         if (active) setState({ data, loading: false, error: null })
       },
       (error: unknown) => {
         if (active && !(error instanceof Error && error.name === "AbortError")) {
-          setState({ data: null, loading: false, error: error instanceof Error ? error : new Error(String(error)) })
+          setState((current) => ({ data: current.data?.taskId === taskId ? current.data : null, loading: false, error: error instanceof Error ? error : new Error(String(error)) }))
         }
       },
     )
@@ -210,13 +211,13 @@ function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null): Task
       active = false
       controller.abort()
     }
-  }, [generation, taskId])
+  }, [generation, invalidationRevision, taskId])
 
   return { ...state, retry: () => setGeneration((current) => current + 1) }
 }
 
-export function TaskRunsView({ runtime, taskId }: TaskRunsViewProps) {
+export function TaskRunsView({ runtime, taskId, invalidationRevision = 0 }: TaskRunsViewProps) {
   const { locale } = usePreferences()
-  const state = useTaskRunsRead(runtime, taskId)
+  const state = useTaskRunsRead(runtime, taskId, invalidationRevision)
   return <TaskRunsPresentation locale={locale} taskId={taskId} state={state} onRetry={state.retry} />
 }

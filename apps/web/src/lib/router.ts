@@ -154,8 +154,8 @@ function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOpt
         kind: "board",
         boardSlug: target.boardSlug,
         pathname: routePath(target, options),
-        ...(target.view ? { view: target.view } : {}),
-        ...(target.query ? { query: target.query } : {}),
+        ...("view" in target && target.view ? { view: target.view } : {}),
+        ...("query" in target && target.query ? { query: target.query } : {}),
       }
     case "settings":
       return { kind: "settings", pathname: routePath(target, options) }

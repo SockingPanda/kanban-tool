@@ -46,9 +46,12 @@ describe("TaskListView", () => {
     expect(markup).toContain("<caption")
     expect(markup).toContain('scope="col"')
     expect(markup).toContain("First task")
-    expect(markup).toContain("Page 2")
+    expect(markup).toContain("第 2 页")
     expect(markup).toContain("26")
     expect(markup).toContain('value="-updated_at"')
+    expect(markup).not.toContain("TASK EXPLORER")
+    expect(markup).not.toContain("Page")
+    expect(markup).not.toContain("包含 archived")
   })
 
   test("renders empty and loading states without inventing rows", () => {

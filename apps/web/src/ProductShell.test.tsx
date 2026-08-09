@@ -54,12 +54,12 @@ describe("ProductShell route offline boundary", () => {
     expect(markup).not.toContain('data-testid="shell-offline"')
   })
 
-  test("keeps the shell offline boundary for the Board live view", () => {
+  test("keeps the Explorer route mounted for the Board view offline", () => {
     setOffline()
     const markup = render(parseAppRoute("http://kanban.test/app/boards/default"))
 
-    expect(markup).toContain('data-testid="shell-offline"')
-    expect(markup).not.toContain('data-testid="explorer-page"')
+    expect(markup).toContain('data-testid="explorer-page"')
+    expect(markup).not.toContain('data-testid="shell-offline"')
   })
 
   test("keeps the live child hidden while the default board exposes Explorer tabs", () => {

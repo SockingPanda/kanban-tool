@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
 import { TaskInspector, type TaskInspectorViewModel } from "./TaskInspector"
+import { createInspectorAsyncFence } from "./TaskInspector.lazy"
 
 const model: TaskInspectorViewModel = {
   task: {
@@ -74,5 +75,37 @@ describe("TaskInspector", () => {
     expect(onLoadRuns).not.toHaveBeenCalled()
     expect(onLoadEvents).not.toHaveBeenCalled()
     expect(onLoadNeighborhood).not.toHaveBeenCalled()
+  })
+
+  test("keeps the Chinese inspector copy localized", () => {
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} locale="zh" />)
+
+    expect(markup).toContain("任务检查器")
+    expect(markup).toContain("认领者")
+    expect(markup).not.toContain("TASK INSPECTOR")
+    expect(markup).not.toContain("Claim owner")
+    expect(markup).not.toContain("Last heartbeat")
+  })
+
+  test("aborts and rejects a late lazy result after task/session identity changes", async () => {
+    const fence = createInspectorAsyncFence()
+    let resolveOld!: (value: string) => void
+    const oldResult = new Promise<string>((resolve) => { resolveOld = resolve })
+    const oldSignal = fence.begin("session-a|t_1")
+    let accepted: string | null = null
+    void oldResult.then((value) => {
+      if (fence.isCurrent("session-a|t_1", oldSignal)) accepted = value
+    })
+
+    const newSignal = fence.begin("session-a|t_2")
+    expect(oldSignal.aborted).toBe(true)
+    resolveOld("stale")
+    await oldResult
+
+    expect(accepted).toBeNull()
+    expect(fence.isCurrent("session-a|t_1", oldSignal)).toBe(false)
+    expect(fence.isCurrent("session-a|t_2", newSignal)).toBe(true)
+    fence.abort()
+    expect(newSignal.aborted).toBe(true)
   })
 })

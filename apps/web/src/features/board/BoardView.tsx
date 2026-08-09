@@ -5,6 +5,7 @@ import { Card } from "@astryxdesign/core/Card"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Text } from "@astryxdesign/core/Text"
 
+import { taskOpenerKey } from "../../lib/explorer-focus"
 import styles from "./BoardView.module.css"
 import {
   defaultBoardMessages,
@@ -189,7 +190,7 @@ function TaskCard({ task, copy, onSelectTask }: { readonly task: BoardTaskViewMo
       </div>
       <Heading level={3} className={styles.taskTitle}>
         {onSelectTask ? (
-          <button type="button" className={styles.taskTitleButton} onClick={() => onSelectTask(task.id)}>
+          <button type="button" className={styles.taskTitleButton} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>
             {task.title}
           </button>
         ) : task.title}

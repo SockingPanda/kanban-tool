@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react"
 
 import { BoardView } from "../board/BoardView"
 import type { BoardViewModel } from "../board/types"
@@ -20,6 +20,7 @@ import type { BoardReadModel } from "../../lib/api/board-read-model"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
+import { restoreExplorerFocus, type ExplorerFocusElement, type ExplorerFocusSnapshot } from "../../lib/explorer-focus"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import { TaskRunsView } from "./TaskRunsView"
@@ -98,12 +99,12 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
   zh: {
     eyebrow: "ASTRYX EXPLORER",
     tabsLabel: "看板浏览视图",
-    closeInspector: "关闭 Inspector",
+    closeInspector: "关闭任务检查器",
     boardLoading: "正在加载看板…",
     boardError: "看板加载失败",
     retry: "重试",
-    inspectorLoading: "正在加载 Task Inspector…",
-    inspectorError: "Task Inspector 加载失败",
+    inspectorLoading: "正在加载任务检查器…",
+    inspectorError: "任务检查器加载失败",
     board: "看板",
     list: "列表",
     map: "关系图",
@@ -135,11 +136,15 @@ function useAsyncRead<T>(
   enabled: boolean,
   key: string,
   load: (signal: AbortSignal) => Promise<T>,
+  refreshRevision = 0,
 ): AsyncReadState<T> & { readonly retry: () => void } {
   const loadRef = useRef(load)
   loadRef.current = load
   const [generation, setGeneration] = useState(0)
-  const { identityKey, requestKey } = asyncReadToken(enabled, key, generation)
+  const { identityKey, requestKey: baseRequestKey } = asyncReadToken(enabled, key, generation)
+  // A session event/poll boundary is a new request for the same visible
+  // identity. Keep the last usable data while the coalesced refresh is in flight.
+  const requestKey = `${baseRequestKey}\u0000${refreshRevision}`
   const [state, setState] = useState<AsyncReadInternalState<T>>(() => ({
     data: null,
     error: null,
@@ -338,15 +343,19 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const rawTaskId = params.get("task")?.trim() || null
   const mapUrlState = useMemo(() => parseTaskMapUrlState(route.query ?? ""), [route.query])
   const taskId = view === "map" ? mapUrlState.taskId : rawTaskId
+  const openerRef = useRef<ExplorerFocusSnapshot | null>(null)
+  const previousTaskIdRef = useRef<string | null>(taskId)
   const kindFilter = normalizeEventKindFilter(params.get("kind"))
   const showInspector = Boolean(taskId) && view !== "runs"
   const listQuery = useMemo(() => parseTaskListQuery(new URLSearchParams(route.query ?? "")), [route.query])
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
-  const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })))
-  const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }))
-  const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }))
+  const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })), invalidationRevision)
+  const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }), invalidationRevision)
+  const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }), invalidationRevision)
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
-  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
+  const inspectorIdentity = `${runtime.apiBaseUrl}\u0000${runtime.webBuildId}\u0000${inspectorKey}`
+  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")), invalidationRevision)
+  const inspectorModel = useMemo(() => inspectorRead.data ? inspectorViewModel(inspectorRead.data) : null, [inspectorRead.data])
 
   const navigate = useCallback((target: string, options?: { readonly replace?: boolean }) => {
     if (onNavigate) void onNavigate(target, options)
@@ -378,6 +387,35 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     nextParams.delete("task")
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
   }
+
+  const rememberTaskOpener = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (typeof Element === "undefined" || !(event.target instanceof Element)) return
+    const opener = event.target.closest<HTMLElement>("[data-task-opener]")
+    const encodedTaskId = opener?.getAttribute("data-task-opener")
+    if (!opener || !encodedTaskId) return
+    let openerTaskId: string
+    try {
+      openerTaskId = decodeURIComponent(encodedTaskId)
+    } catch {
+      return
+    }
+    openerRef.current = { taskId: openerTaskId, element: opener as ExplorerFocusElement }
+  }, [])
+
+  const restoreFocus = useCallback(() => {
+    if (typeof document === "undefined") return
+    const snapshot = openerRef.current
+    openerRef.current = null
+    restoreExplorerFocus(snapshot, {
+      querySelector: (selector) => document.querySelector(selector) as ExplorerFocusElement | null,
+    })
+  }, [])
+
+  useEffect(() => {
+    const previousTaskId = previousTaskIdRef.current
+    if (previousTaskId !== null && taskId === null) restoreFocus()
+    previousTaskIdRef.current = taskId
+  }, [restoreFocus, taskId])
   const updateEventKindFilter = (nextKind: string) => {
     const nextParams = new URLSearchParams(params)
     const normalizedKind = normalizeEventKindFilter(nextKind)
@@ -386,14 +424,14 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     navigate(routeTarget(route.boardSlug, "events", nextParams, runtime.webBasePath))
   }
 
-  const loadInspectorRuns = useCallback(() => taskId
-    ? loadTaskInspectorRuns(runtime, route.boardSlug, taskId).then((runs) => runs.map((run) => inspectorRunView(run)))
+  const loadInspectorRuns = useCallback((signal: AbortSignal) => taskId
+    ? loadTaskInspectorRuns(runtime, route.boardSlug, taskId, { signal }).then((runs) => runs.map((run) => inspectorRunView(run)))
     : Promise.reject(new Error("Task Inspector 尚未选择任务")), [route.boardSlug, runtime, taskId])
-  const loadInspectorEvents = useCallback(() => taskId
-    ? loadTaskInspectorEvents(runtime, route.boardSlug, taskId).then((events) => events.map((event) => inspectorEventView(event)))
+  const loadInspectorEvents = useCallback((signal: AbortSignal) => taskId
+    ? loadTaskInspectorEvents(runtime, route.boardSlug, taskId, { signal }).then((events) => events.map((event) => inspectorEventView(event)))
     : Promise.reject(new Error("Task Inspector 尚未选择任务")), [route.boardSlug, runtime, taskId])
-  const loadInspectorNeighborhood = useCallback(() => taskId
-    ? loadTaskInspectorNeighborhood(runtime, route.boardSlug, taskId).then((neighborhood) => ({
+  const loadInspectorNeighborhood = useCallback((signal: AbortSignal) => taskId
+    ? loadTaskInspectorNeighborhood(runtime, route.boardSlug, taskId, { signal }).then((neighborhood) => ({
       centerTaskId: neighborhood.center_task_id,
       nodes: neighborhood.nodes.map((node) => ({ id: node.task.id, ref: node.task.ref, title: node.task.title, role: node.role })),
       edges: neighborhood.edges.map((edge) => ({ id: edge.id, sourceTaskId: edge.source_task_id, targetTaskId: edge.target_task_id, kind: edge.kind })),
@@ -413,11 +451,11 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   }, [inspectorRead.error, mapUrlState, taskId, updateMapUrlState, view])
 
   return (
-    <section className={styles.explorer} data-testid="explorer-page">
+    <section className={styles.explorer} data-testid="explorer-page" onClickCapture={rememberTaskOpener}>
       <header className={styles.explorerHeader}>
         <div>
           <p className={styles.eyebrow}>{copy.eyebrow}</p>
-          <h1>{route.boardSlug}</h1>
+          <h1 tabIndex={-1} data-explorer-focus-fallback>{route.boardSlug}</h1>
         </div>
         {taskId ? <button type="button" className={styles.closeInspector} onClick={closeInspector}>{copy.closeInspector}</button> : null}
       </header>
@@ -426,8 +464,8 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         <main className={styles.primaryContent}>
           {view === "board" ? (
             boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
-              : boardRead.error ? <div className={styles.boundary} data-testid="board-error" role="alert"><h2>{copy.boardError}</h2><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>{copy.retry}</button></div>
-              : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} /> : null
+              : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} syncStatus={boardRead.error ? "stale" : undefined} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} />
+              : boardRead.error ? <div className={styles.boundary} data-testid="board-error" role="alert"><h2>{copy.boardError}</h2><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>{copy.retry}</button></div> : null
           ) : null}
           {view === "list" ? (
             <TaskListView
@@ -451,6 +489,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
                   identityLoading={mapIdentityRead.loading}
                   identityError={mapIdentityRead.error}
                   onRetryIdentity={mapIdentityRead.retry}
+                  invalidationRevision={invalidationRevision}
                   taskId={taskId}
                   onSelectTask={selectTask}
                   urlState={mapUrlState}
@@ -459,7 +498,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
               </Suspense>
             </TaskMapChunkBoundary>
           ) : null}
-          {view === "runs" ? <TaskRunsView runtime={runtime} taskId={taskId} /> : null}
+          {view === "runs" ? <TaskRunsView runtime={runtime} taskId={taskId} invalidationRevision={invalidationRevision} /> : null}
           {view === "events" ? (
             <EventsView
               runtime={runtime}
@@ -475,7 +514,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
           ) : null}
         </main>
         {showInspector ? (
-          inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} locale={locale} onLoadRuns={loadInspectorRuns} onLoadEvents={loadInspectorEvents} onLoadNeighborhood={loadInspectorNeighborhood} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
+          inspectorModel ? <TaskInspector key={inspectorIdentity} identity={inspectorIdentity} refreshRevision={invalidationRevision} model={inspectorModel} refreshError={inspectorRead.error instanceof Error ? inspectorRead.error.message : null} onRetry={inspectorRead.retry} onSelectTask={selectTask} locale={locale} onLoadRuns={loadInspectorRuns} onLoadEvents={loadInspectorEvents} onLoadNeighborhood={loadInspectorNeighborhood} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
         ) : null}
       </div>
     </section>

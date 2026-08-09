@@ -717,7 +717,10 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const actionDialogView = actionDialog === null
     ? null
     : inspectorActionViews(task, claimToken, copy).find((candidate) => candidate.action === actionDialog.action) ?? null
-  let currentTransitionRetryCommand = actionDialog === null ? lastTransitionCommandRef.current : null
+  let currentTransitionRetryCommand: InspectorTransitionCommand | null = null
+  if (actionDialog === null && lastTransitionCommandRef.current !== null) {
+    currentTransitionRetryCommand = buildInspectorTransitionCommand(task, lastTransitionCommandRef.current.action, {}, claimToken)
+  }
   if (actionDialog !== null && actionDialogView !== null) {
     if (actionDialog.kind === "description") {
       currentTransitionRetryCommand = buildInspectorTransitionCommand(task, actionDialogView.action, { description: actionDialog.description }, claimToken)

@@ -7,7 +7,12 @@ import {
   transitionOptionsForStatus,
   type BoardTaskTransitionOption as PolicyTransitionOption,
 } from "../board/task-mutation-state"
-import type { InspectorMutationOutcome, InspectorSaveTaskInput, InspectorTransitionCommand } from "./task-inspector-mutation-state"
+import type {
+  InspectorMutationOutcome,
+  InspectorSaveTaskInput,
+  InspectorTransitionCommand,
+  TaskInspectorMutationRetryIntent,
+} from "./task-inspector-mutation-state"
 import type { TaskInspectorViewModel } from "./TaskInspector"
 
 export const inspectorActionIds = ["specify", "promote", "claim", "heartbeat", "complete", "submit-review", "block", "unblock", "archive"] as const
@@ -20,6 +25,34 @@ export const inspectorActionLabels: Readonly<Record<Locale, readonly string[]>> 
 
 export function inspectorMutationCommitted(outcome: InspectorMutationOutcome | null): boolean {
   return outcome?.committed === true
+}
+
+function stableIntentValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableIntentValue)
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, stableIntentValue(entry)]),
+    )
+  }
+  return value
+}
+
+function sameIntentValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(stableIntentValue(left)) === JSON.stringify(stableIntentValue(right))
+}
+
+/** Compare a current editor/action value with the exact intent retained by the controller. */
+export function inspectorRetryIntentMatches(
+  intent: TaskInspectorMutationRetryIntent | undefined,
+  operation: "saveTask" | "transition",
+  current: InspectorSaveTaskInput | InspectorTransitionCommand | null,
+): boolean {
+  if (current === null || intent?.operation !== operation) return false
+  if (operation === "saveTask" && intent.operation === "saveTask") return sameIntentValue(intent.input, current)
+  if (operation === "transition" && intent.operation === "transition") return sameIntentValue(intent.command, current)
+  return false
 }
 
 export interface InspectorEditDraft {

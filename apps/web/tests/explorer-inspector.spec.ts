@@ -96,6 +96,10 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await expect(page.getByTestId("event-row")).toHaveCount(1)
     const initialConnections = await fixture.getSseConnectionCount()
     expect(initialConnections).toBe(1)
+    const eventRequests = () => fixture.apiRequests.filter((request) => request.startsWith("/api/v1/events?"))
+    const initialEventRequests = [...eventRequests()]
+    expect(initialEventRequests.length).toBeGreaterThan(0)
+    const initialAfterZeroRequests = initialEventRequests.filter((request) => new URLSearchParams(request.split("?", 2)[1]).get("after") === "0").length
 
     await fixture.emitHeartbeat()
     await expect(page.getByTestId("events-ready")).toBeVisible()
@@ -103,6 +107,8 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await expect(page.getByTestId("event-row")).toHaveCount(2)
     await expect(page.getByText("2 条事件")).toBeVisible()
     expect(await fixture.getSseConnectionCount()).toBe(initialConnections)
+    expect(eventRequests()).toHaveLength(initialEventRequests.length)
+    expect(eventRequests().filter((request) => new URLSearchParams(request.split("?", 2)[1]).get("after") === "0")).toHaveLength(initialAfterZeroRequests)
     await page.screenshot({ path: test.info().outputPath("events-sse-refresh.png"), fullPage: true })
   })
 

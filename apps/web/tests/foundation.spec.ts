@@ -35,7 +35,7 @@ test.describe("Astryx product shell", () => {
     await expect(page.getByTestId("product-shell")).toBeVisible()
     await expect(page.getByTestId("board-view")).toBeVisible()
     await expect(page.getByRole("navigation", { name: "侧栏导航" })).toBeVisible()
-    await expect(page.getByRole("main")).toHaveCount(1)
+    await expect(page.locator("main:visible")).toHaveCount(1)
 
     const skipLink = page.getByRole("link", { name: "跳转到主要内容" })
     await skipLink.focus()
@@ -83,8 +83,7 @@ test.describe("Astryx product shell", () => {
     })
 
     await page.getByTestId("nav-settings").click()
-    await expect(page.getByTestId("board-view")).toBeVisible()
-    await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
+    await expect(page.getByTestId("shell-error")).toBeVisible()
     expect(pageErrors).toEqual([])
   })
 

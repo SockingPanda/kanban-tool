@@ -367,4 +367,75 @@ describe("task mutation operations", () => {
       headers: { "X-KB-Actor": "web-user" },
     })
   })
+
+  test("requests manual label suggestions with generated query contracts and preserves degraded reasons", async () => {
+    const request = vi.fn<HttpTransport["request"]>(async () => ({
+      payload: {
+        data: {
+          task_id: "t_1",
+          board_id: "b_default",
+          selected_labels: [],
+          candidates: [],
+          coverage: 0,
+          coverage_cosine: 0,
+          residual_norm: 1,
+          needs_new_label: false,
+          reason_codes: ["degraded_result", "vector_store_disabled"],
+          degraded: true,
+          diagnostics: ["vector_store_disabled"],
+        },
+      },
+      bytes: 1,
+    }))
+    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
+    const signal = new AbortController().signal
+
+    const result = await client.suggestTaskLabels("t_1", {
+      limit: 3,
+      candidate_limit: 32,
+      atom_limit: 80,
+      max_selected_labels: 4,
+      min_score: 0.15,
+    }, { signal })
+
+    expect(result.data).toMatchObject({
+      task_id: "t_1",
+      reason_codes: ["degraded_result", "vector_store_disabled"],
+      degraded: true,
+      diagnostics: ["vector_store_disabled"],
+    })
+    expect(request).toHaveBeenCalledWith({
+      method: "GET",
+      path: "/api/v1/tasks/t_1/labels/suggestions?limit=3&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15",
+      headers: {},
+      signal,
+    })
+  })
+
+  test("rejects a malformed label suggestion response through its generated validator", async () => {
+    const request = vi.fn<HttpTransport["request"]>(async () => ({
+      payload: {
+        data: {
+          task_id: "t_1",
+          board_id: "b_default",
+          selected_labels: [],
+          candidates: [],
+          coverage: "unknown",
+          coverage_cosine: 0,
+          residual_norm: 1,
+          needs_new_label: false,
+          reason_codes: [],
+          degraded: false,
+          diagnostics: [],
+        },
+      },
+      bytes: 1,
+    }))
+    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
+
+    await expect(client.suggestTaskLabels("t_1")).rejects.toMatchObject({
+      name: "ContractValidationError",
+      contractId: "api.suggest-task-labels.response",
+    })
+  })
 })

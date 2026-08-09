@@ -14,6 +14,7 @@ import { parseApiAddTaskLabelPath } from "./generated/contracts/api-add-task-lab
 import { parseApiAddTaskLabelHeaders } from "./generated/contracts/api-add-task-label-headers"
 import { parseApiAddTaskLabelRequest } from "./generated/contracts/api-add-task-label-request"
 import { parseApiAddTaskLabelResponse, type ApiAddTaskLabelResponseContract } from "./generated/contracts/api-add-task-label-response"
+import { parseApiLabelSuggestionQuery, type ApiLabelSuggestionQueryContract } from "./generated/contracts/api-label-suggestion-query"
 import { parseApiArchiveTaskPath } from "./generated/contracts/api-archive-task-path"
 import { parseApiArchiveTaskHeaders } from "./generated/contracts/api-archive-task-headers"
 import { parseApiArchiveTaskRequest } from "./generated/contracts/api-archive-task-request"
@@ -87,6 +88,9 @@ import { parseApiSubmitReviewTaskPath } from "./generated/contracts/api-submit-r
 import { parseApiSubmitReviewTaskHeaders } from "./generated/contracts/api-submit-review-task-headers"
 import { parseApiSubmitReviewTaskRequest } from "./generated/contracts/api-submit-review-task-request"
 import { parseApiSubmitReviewTaskResponse, type ApiSubmitReviewTaskResponseContract } from "./generated/contracts/api-submit-review-task-response"
+import { parseApiSuggestTaskLabelsHeaders } from "./generated/contracts/api-suggest-task-labels-headers"
+import { parseApiSuggestTaskLabelsPath } from "./generated/contracts/api-suggest-task-labels-path"
+import { parseApiSuggestTaskLabelsResponse, type ApiSuggestTaskLabelsResponseContract } from "./generated/contracts/api-suggest-task-labels-response"
 import { parseApiUnblockTaskPath } from "./generated/contracts/api-unblock-task-path"
 import { parseApiUnblockTaskHeaders } from "./generated/contracts/api-unblock-task-headers"
 import { parseApiUnblockTaskRequest } from "./generated/contracts/api-unblock-task-request"
@@ -104,6 +108,7 @@ export type UpdateTaskIntent = Omit<import("./generated/contracts/api-update-tas
   readonly expected_lock_version: number
 }
 export type AddTaskLabelIntent = Omit<import("./generated/contracts/api-add-task-label-request").ApiAddTaskLabelRequestContract, "actor">
+export type SuggestTaskLabelsQuery = Partial<ApiLabelSuggestionQueryContract>
 export type SpecifyTaskIntent = Omit<import("./generated/contracts/api-specify-task-request").ApiSpecifyTaskRequestContract, "actor">
 export type PromoteTaskIntent = Omit<import("./generated/contracts/api-promote-task-request").ApiPromoteTaskRequestContract, "actor">
 export type ClaimTaskIntent = Omit<import("./generated/contracts/api-claim-task-request").ApiClaimTaskRequestContract, "actor" | "ttl_ms">
@@ -169,6 +174,7 @@ export interface TaskMutationClient {
   updateTask(taskId: string, input: UpdateTaskIntent, options?: MutationRequestOptions): Promise<ApiUpdateTaskResponseContract>
   addTaskLabel(taskId: string, input: AddTaskLabelIntent, options?: MutationRequestOptions): Promise<ApiAddTaskLabelResponseContract>
   removeTaskLabel(taskId: string, labelId: string, options?: MutationRequestOptions): Promise<ApiRemoveTaskLabelResponseContract>
+  suggestTaskLabels(taskId: string, query?: SuggestTaskLabelsQuery, options?: MutationRequestOptions): Promise<ApiSuggestTaskLabelsResponseContract>
   transitionTask(taskId: string, action: "specify", input?: SpecifyTaskIntent, options?: MutationRequestOptions): Promise<ApiSpecifyTaskResponseContract>
   transitionTask(taskId: string, action: "promote", input?: PromoteTaskIntent, options?: MutationRequestOptions): Promise<ApiPromoteTaskResponseContract>
   transitionTask(taskId: string, action: "claim", input?: ClaimTaskIntent, options?: MutationRequestOptions): Promise<ApiClaimTaskResponseContract>
@@ -254,6 +260,24 @@ function updateTaskPath(taskId: string): string {
   return `/api/v1/tasks/${taskPath(parsed.task_id)}`
 }
 
+function suggestTaskLabelsPath(taskId: string): string {
+  const parsed = parseApiSuggestTaskLabelsPath({ task_id: taskId })
+  return `/api/v1/tasks/${taskPath(parsed.task_id)}/labels/suggestions`
+}
+
+function suggestTaskLabelsRequestPath(taskId: string, input: SuggestTaskLabelsQuery = {}): string {
+  const path = suggestTaskLabelsPath(taskId)
+  const query = parseApiLabelSuggestionQuery(input)
+  const params = new URLSearchParams()
+  if (query.limit !== undefined) params.set("limit", String(query.limit))
+  if (query.candidate_limit !== undefined) params.set("candidate_limit", String(query.candidate_limit))
+  if (query.atom_limit !== undefined) params.set("atom_limit", String(query.atom_limit))
+  if (query.max_selected_labels !== undefined) params.set("max_selected_labels", String(query.max_selected_labels))
+  if (query.min_score !== undefined) params.set("min_score", String(query.min_score))
+  const encodedQuery = params.toString()
+  return encodedQuery.length === 0 ? path : `${path}?${encodedQuery}`
+}
+
 function transitionPath(taskId: string, action: TaskTransitionAction): string {
   const pathByAction: Record<TaskTransitionAction, (value: unknown) => { task_id: string }> = {
     specify: (value) => parseApiSpecifyTaskPath(value),
@@ -297,6 +321,18 @@ function createClient(
   const removeTaskLabel = (taskId: string, labelId: string, options: MutationRequestOptions = {}) => {
     const path = parseApiRemoveTaskLabelPath({ task_id: taskId, label_id: labelId })
     return requestContract(transport, "DELETE", `/api/v1/tasks/${taskPath(path.task_id)}/labels/${encodedSegment(path.label_id)}`, undefined, actorHeaders(parseApiRemoveTaskLabelHeaders, actor), parseApiRemoveTaskLabelResponse, options.signal)
+  }
+
+  const suggestTaskLabels = (taskId: string, query: SuggestTaskLabelsQuery = {}, options: MutationRequestOptions = {}) => {
+    return requestContract(
+      transport,
+      "GET",
+      suggestTaskLabelsRequestPath(taskId, query),
+      undefined,
+      readHeaders(parseApiSuggestTaskLabelsHeaders),
+      parseApiSuggestTaskLabelsResponse,
+      options.signal,
+    )
   }
 
   function transitionTask(taskId: string, action: "specify", input?: SpecifyTaskIntent, options?: MutationRequestOptions): Promise<ApiSpecifyTaskResponseContract>
@@ -416,6 +452,7 @@ function createClient(
     updateTask,
     addTaskLabel,
     removeTaskLabel,
+    suggestTaskLabels,
     transitionTask,
     listDependencies,
     addDependency,

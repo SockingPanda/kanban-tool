@@ -227,6 +227,7 @@ describe("board events read model", () => {
     expect(merged.at(-1)?.id).toBe(151)
     expect(() => mergeBoardEvents(first, [event(151, "b_other")], boardId)).toThrow(/board scope/)
     expect(() => mergeBoardEvents(first, [event(151, "b_default", "event-1")], boardId)).toThrow(/多个数字 id/)
+    expect(() => mergeBoardEvents([], [event(0)], boardId)).toThrow(/id 必须严格递增/)
   })
 
   test("walks ASC pages to expose the newest 150 events", async () => {
@@ -289,6 +290,19 @@ describe("board events read model", () => {
       },
     }
     await expect(loadBoardEvents(runtime, "default", { transport: repeated })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("fails fast when an ignored transport resolves after abort", async () => {
+    const controller = new AbortController()
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        controller.abort()
+        return { payload: { data: [event(1)], meta: { next_after: 1 } }, bytes: 1 }
+      },
+    }
+
+    await expect(loadBoardEvents(runtime, "default", { transport, signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" })
   })
 })
 

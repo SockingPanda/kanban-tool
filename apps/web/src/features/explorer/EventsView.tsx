@@ -303,7 +303,13 @@ function useBoardEventsRead(
   batch: BoardEventsBatch | null | undefined,
   online: boolean,
 ): EventsReadState & { readonly refresh: () => void } {
-  const identityKey = `${boardSelector}\u0000${taskId ?? ""}`
+  const identityKey = JSON.stringify([
+    runtime.apiBaseUrl,
+    runtime.webBasePath,
+    runtime.webBuildId,
+    boardSelector,
+    taskId,
+  ])
   const loadRef = useRef<(signal: AbortSignal) => Promise<BoardEventsReadModel>>((signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal }))
   loadRef.current = (signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal })
   const [generation, setGeneration] = useState(0)
@@ -396,7 +402,7 @@ function useBoardEventsRead(
         let previousId = -1
         let maxIncomingId = -1
         for (const event of batch.events) {
-          if (!Number.isSafeInteger(event.id) || event.id < 0 || event.id <= previousId) {
+          if (!Number.isSafeInteger(event.id) || event.id <= 0 || event.id <= previousId) {
             throw new ExplorerReadError("anomaly", "事件 batch 的 id 必须严格递增。")
           }
           if (event.board_id !== batch.boardId) {

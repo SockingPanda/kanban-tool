@@ -283,6 +283,13 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError"
 }
 
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return
+  const error = new Error("Explorer 事件读取已取消。")
+  error.name = "AbortError"
+  throw error
+}
+
 function wrapTransportError(error: unknown): never {
   if (isAbortError(error)) throw error
   if (error instanceof ExplorerReadError) throw error
@@ -403,6 +410,10 @@ function safeEventCursor(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
 }
 
+function safeEventId(value: unknown): value is number {
+  return safeEventCursor(value) && value > 0
+}
+
 function stableEventValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableEventValue)
   if (typeof value !== "object" || value === null) return value
@@ -471,7 +482,7 @@ export function mergeBoardEvents(
   const byEventId = new Map<string, ExplorerEvent>()
 
   const add = (event: ExplorerEvent): void => {
-    if (!safeEventCursor(event.id) || event.event_id.trim().length === 0) {
+    if (!safeEventId(event.id) || event.event_id.trim().length === 0) {
       throw new ExplorerReadError("anomaly", "事件 batch 含有无效 canonical id。")
     }
     if (event.board_id !== boardId) {
@@ -499,7 +510,7 @@ export function mergeBoardEvents(
   for (const event of existing) add(event)
   let previousIncomingId = -1
   for (const event of incoming) {
-    if (!safeEventCursor(event.id) || event.id <= previousIncomingId) {
+    if (!safeEventId(event.id) || event.id <= previousIncomingId) {
       throw new ExplorerReadError("anomaly", "事件 batch 的 id 必须严格递增。")
     }
     add(event)
@@ -554,14 +565,18 @@ export async function loadBoardEvents(
     let pageCount = 0
     let events: readonly ExplorerEvent[] = []
     while (true) {
+      throwIfAborted(options.signal)
       if (pageCount >= MAX_BOARD_EVENTS_PAGES) {
         throw new ExplorerReadError("anomaly", `事件读取超过 ${MAX_BOARD_EVENTS_PAGES} 页预算。`)
       }
       pageCount += 1
+      throwIfAborted(options.signal)
+      const payload = await getPayload(transport, buildBoardEventsRequest(board.slug, taskId, after), options.signal, budget)
+      throwIfAborted(options.signal)
       const response = parseContract(
         "api.list-events.response",
         parseApiListEventsResponse,
-        await getPayload(transport, buildBoardEventsRequest(board.slug, taskId, after), options.signal, budget),
+        payload,
       )
       validateEventBatch(response.data, board, taskId, after, response.meta.next_after, BOARD_EVENTS_PAGE_LIMIT)
       events = mergeBoardEvents(events, response.data, board.id)

@@ -28,6 +28,7 @@ export interface BoardFixture {
   setReadyTaskTitle(title: string): void
   getSseConnectionCount(): Promise<number>
   waitForSseConnection(afterCount: number): Promise<void>
+  cancelSseConnection(connectionCount: number): Promise<void>
   closeSse(): Promise<void>
   emitHeartbeat(): Promise<void>
   emitTaskUpdated(): Promise<void>
@@ -168,6 +169,8 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
   await page.addInitScript(() => {
     let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
     let streamConnectionCount = 0
+    const streamCancels = new Map<number, () => void>()
+    let activeClose: (() => void) | null = null
     const pendingFrames: string[] = []
     const encoder = new TextEncoder()
     const pushFrame = (frame: string) => {
@@ -175,12 +178,13 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
       else streamController.enqueue(encoder.encode(frame))
     }
     Object.defineProperty(window, "__kanbanPushSse", { configurable: true, value: pushFrame })
-    Object.defineProperty(window, "__kanbanCloseSse", {
+    Object.defineProperty(window, "__kanbanCloseSse", { configurable: true, value: () => activeClose?.() })
+    Object.defineProperty(window, "__kanbanLateCancelSse", {
       configurable: true,
-      value: () => {
-        const controller = streamController
-        streamController = null
-        controller?.error(new Error("fixture SSE disconnect"))
+      value: (connectionCount: number) => {
+        const cancel = streamCancels.get(connectionCount)
+        if (cancel === undefined) throw new Error(`SSE fixture connection ${connectionCount} is not installed`)
+        cancel()
       },
     })
     Object.defineProperty(window, "__kanbanSseConnectionCount", { configurable: true, get: () => streamConnectionCount })
@@ -191,16 +195,35 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
       const target = new URL(inputURL, window.location.href)
       if (target.pathname !== "/api/v1/stream/events") return nativeFetch(input, init)
 
+      let ownController: ReadableStreamDefaultController<Uint8Array> | null = null
+      let ownClosed = false
+      const connectionCount = streamConnectionCount + 1
+      const clearOwnController = () => {
+        const controller = ownController
+        if (controller !== null && streamController === controller) streamController = null
+        if (activeClose === closeOwn) activeClose = null
+        ownController = null
+      }
+      const closeOwn = () => {
+        const controller = ownController
+        if (controller === null || ownClosed) return
+        ownClosed = true
+        if (streamController === controller) streamController = null
+        controller.error(new Error("fixture SSE disconnect"))
+      }
+      streamCancels.set(connectionCount, clearOwnController)
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
+          ownController = controller
           streamController = controller
           streamConnectionCount += 1
           for (const frame of pendingFrames.splice(0)) controller.enqueue(encoder.encode(frame))
         },
         cancel() {
-          streamController = null
+          clearOwnController()
         },
       })
+      activeClose = closeOwn
       const response = new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } })
       Object.defineProperty(response, "url", { configurable: true, value: target.toString() })
       return response
@@ -225,6 +248,13 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
     },
     waitForSseConnection(afterCount) {
       return page.waitForFunction((count) => ((window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0) > count, afterCount)
+    },
+    cancelSseConnection(connectionCount) {
+      return page.evaluate((count) => {
+        const cancel = (window as unknown as { __kanbanLateCancelSse?: (value: number) => void }).__kanbanLateCancelSse
+        if (cancel === undefined) throw new Error("SSE fixture is not installed")
+        cancel(count)
+      }, connectionCount)
     },
     closeSse() {
       return page.evaluate(() => {

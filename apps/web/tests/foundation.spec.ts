@@ -46,8 +46,9 @@ test.describe("Astryx product shell", () => {
   })
 
   test("persists theme, locale, and sidebar preferences in kb:web keys", async ({ page }) => {
-    await page.goto("/app/settings", { waitUntil: "networkidle" })
+    await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
 
+    await expect(page.getByTestId("settings-page")).toBeVisible()
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
     await page.getByTestId("theme-preference").selectOption("dark")
@@ -119,13 +120,13 @@ test.describe("Astryx product shell", () => {
   })
 
   test("renders an explicit 404 boundary for an unknown route", async ({ page }) => {
-    await page.goto("/app/unknown", { waitUntil: "networkidle" })
+    await page.goto("/app/unknown", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("shell-not-found")).toBeVisible()
     await expect(page.getByRole("heading", { name: "页面不存在" })).toBeVisible()
   })
 
   test("renders an explicit invalid-slug boundary without rewriting the address", async ({ page }) => {
-    await page.goto("/app/boards/Bad%20Board/board", { waitUntil: "networkidle" })
+    await page.goto("/app/boards/Bad%20Board/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("shell-route-error")).toBeVisible()
     await expect(page).toHaveURL(/\/app\/boards\/Bad%20Board\/board$/)
   })

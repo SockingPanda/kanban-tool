@@ -91,6 +91,7 @@ test.describe("BoardLive browser pipeline", () => {
     await expect(page.getByTestId("board-sync-banner")).toHaveAttribute("data-sync-state", "recovering")
     await fixture.closeSse()
     await fixture.waitForSseConnection(initialConnectionCount)
+    await fixture.cancelSseConnection(initialConnectionCount)
     await fixture.emitHeartbeat()
     fixture.setReadyTaskTitle("Recovered ready task")
     await fixture.emitTaskUpdated()

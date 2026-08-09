@@ -68,6 +68,10 @@ describe("ProductShell route offline boundary", () => {
 
     expect(markup).toContain('data-testid="explorer-page"')
     expect(markup).toContain('aria-label="看板浏览视图"')
+    expect(markup).toContain('href="/app/boards/default/list"')
+    expect(markup).toContain('href="/app/boards/default/map"')
+    expect(markup).toContain('href="/app/boards/default/runs"')
+    expect(markup).toContain('href="/app/boards/default/events"')
     expect(markup).toContain('data-testid="board-live-session"')
     expect(markup).toContain('data-testid="live-board-child"')
   })

@@ -217,6 +217,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
       {rows.length > 0 ? (
         <div className={styles.tableWrap} role="region" aria-label={copy.table} tabIndex={0}>
           <table className={styles.table}>
+            <caption className={styles.visuallyHidden}>{copy.table}</caption>
             <thead><tr>{copy.headers.map((header) => <th key={header} scope="col">{header}</th>)}</tr></thead>
             <tbody>
               {rows.map((task) => (

@@ -43,6 +43,8 @@ describe("TaskListView", () => {
     expect(markup).toContain('data-testid="task-list"')
     expect(markup).toContain('data-testid="list-search"')
     expect(markup).toContain('data-testid="task-row"')
+    expect(markup).toContain("<caption")
+    expect(markup).toContain('scope="col"')
     expect(markup).toContain("First task")
     expect(markup).toContain("Page 2")
     expect(markup).toContain("26")

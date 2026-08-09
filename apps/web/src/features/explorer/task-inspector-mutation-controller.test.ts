@@ -235,6 +235,53 @@ describe("Task Inspector mutation controller", () => {
     expect(controller.retryIntentFor("reload", "t_1")).toBeNull()
   })
 
+  test("blocks a write while manual reload retry is pending, then resumes after reload release", async () => {
+    const pendingReload = deferred<void>()
+    const updateTask = vi.fn(async () => response())
+    const reload = vi.fn()
+      .mockRejectedValueOnce(new Error("read failed"))
+      .mockImplementationOnce(() => pendingReload.promise)
+      .mockResolvedValueOnce(undefined)
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask }), scope(), { onCanonicalReload: reload }))
+
+    await expect(controller.saveTask({ title: "write A", expected_lock_version: 3 })).resolves.toEqual({ committed: true, reconciled: false })
+    const reloadRetry = controller.retry("reload:t_1")
+    await Promise.resolve()
+    expect(reload).toHaveBeenCalledTimes(2)
+    await expect(controller.saveTask({ title: "blocked write", expected_lock_version: 4 })).resolves.toEqual({ committed: false, reconciled: false })
+    expect(updateTask).toHaveBeenCalledTimes(1)
+
+    pendingReload.resolve()
+    await expect(reloadRetry).resolves.toEqual({ committed: false, reconciled: true })
+    await expect(controller.saveTask({ title: "write B", expected_lock_version: 5 })).resolves.toEqual({ committed: true, reconciled: true })
+    expect(updateTask).toHaveBeenCalledTimes(2)
+    expect(reload).toHaveBeenCalledTimes(3)
+  })
+
+  test("blocks manual reload retry while a write is pending and prevents stale overwrite", async () => {
+    const pendingWrite = deferred<ReturnType<typeof response>>()
+    const updateTask = vi.fn()
+      .mockResolvedValueOnce(response())
+      .mockImplementationOnce(() => pendingWrite.promise)
+    const reload = vi.fn()
+      .mockRejectedValueOnce(new Error("read failed"))
+      .mockResolvedValueOnce(undefined)
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask }), scope(), { onCanonicalReload: reload }))
+
+    await expect(controller.saveTask({ title: "write A", expected_lock_version: 3 })).resolves.toEqual({ committed: true, reconciled: false })
+    const write = controller.saveTask({ title: "write B", expected_lock_version: 4 })
+    await Promise.resolve()
+    expect(controller.isPending("saveTask", "t_1")).toBe(true)
+    await expect(controller.retry("reload:t_1")).resolves.toEqual({ committed: false, reconciled: false })
+    expect(reload).toHaveBeenCalledTimes(1)
+
+    pendingWrite.resolve(response())
+    await expect(write).resolves.toEqual({ committed: true, reconciled: true })
+    expect(reload).toHaveBeenCalledTimes(2)
+    expect(controller.errorFor("reload", "t_1")).toBeNull()
+    expect(controller.retryIntentFor("reload", "t_1")).toBeNull()
+  })
+
   test("allows a typed partial task update without manufacturing a title", async () => {
     const updateTask = vi.fn(async () => response())
     const controller = new TaskInspectorMutationController(surface(client({ updateTask })))

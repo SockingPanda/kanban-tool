@@ -56,7 +56,7 @@ pub fn run() {
                     format!("初始化系统托盘失败: {error}"),
                 ));
             }
-            if state.snapshot().diagnostic.is_none() {
+            if state.setup_can_start() {
                 let _ = start_background_attempt(app.handle().clone(), AttemptKind::StartLocal);
             }
             Ok(())
@@ -76,9 +76,9 @@ pub fn run() {
             }
             tauri::WindowEvent::Destroyed => {
                 if let Some(host) = window.app_handle().try_state::<DesktopHost>()
-                    && let Err(error) = host.shutdown()
+                    && host.request_exit(window.app_handle().clone(), 0)
                 {
-                    eprintln!("kanban window destroyed cleanup 失败：{error}");
+                    window.app_handle().exit(0);
                 }
             }
             _ => {}
@@ -86,19 +86,17 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("运行 kanban 桌面端时出错")
         .run(|app, event| {
-            if matches!(event, tauri::RunEvent::ExitRequested { .. })
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event
                 && let Some(host) = app.try_state::<DesktopHost>()
-                && let Err(error) = host.shutdown()
+                && !host.request_exit(app.clone(), code.unwrap_or(0))
             {
-                eprintln!("kanban owned host shutdown 失败：{error}");
+                api.prevent_exit();
             }
         });
 }
 
 #[cfg(test)]
 mod tests {
-    use super::bootstrap::FIXED_APP_URL;
-
     #[test]
     fn static_bootstrap_contract_uses_external_assets_and_supported_ipc() {
         let html = include_str!("../../bootstrap/index.html");
@@ -128,14 +126,11 @@ mod tests {
             config["build"]["frontendDist"],
             serde_json::Value::String("../bootstrap".to_owned())
         );
-        assert_eq!(
-            config["build"]["devUrl"],
-            serde_json::Value::String(FIXED_APP_URL.to_owned())
-        );
+        assert!(config["build"]["devUrl"].is_null());
         assert!(
             config["build"]["beforeDevCommand"]
                 .as_str()
-                .is_some_and(|command| command.contains("@kanban-tool/web"))
+                .is_some_and(|command| command.contains("desktop-dev-prep"))
         );
         assert!(
             config["build"]["beforeBuildCommand"]
@@ -156,6 +151,10 @@ mod tests {
         assert_eq!(
             config["bundle"]["resources"]["../../web/dist/"],
             serde_json::Value::String("web/".to_owned())
+        );
+        assert_eq!(
+            config["bundle"]["resources"]["bin/kanban"],
+            serde_json::Value::String("kanban".to_owned())
         );
     }
 }

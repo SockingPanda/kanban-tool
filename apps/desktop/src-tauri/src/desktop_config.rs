@@ -6,7 +6,7 @@ use super::host_lifecycle::HostLaunchConfig;
 
 pub(crate) fn host_launch_config(app: &tauri::App) -> tauri::Result<HostLaunchConfig> {
     let resource_dir = app.path().resource_dir()?;
-    let web_dir = resource_dir.join("web");
+    let web_dir = resolve_web_dir(&resource_dir);
     let sidecar_path = resolve_sidecar_path(&resource_dir);
     let app_data_dir = app.path().app_data_dir()?;
     fs::create_dir_all(&app_data_dir)?;
@@ -25,6 +25,15 @@ pub(crate) fn host_launch_config(app: &tauri::App) -> tauri::Result<HostLaunchCo
 
 pub(crate) fn resolve_sidecar_path(resource_dir: &std::path::Path) -> PathBuf {
     resource_dir.join("kanban")
+}
+
+fn resolve_web_dir(resource_dir: &std::path::Path) -> PathBuf {
+    let packaged = resource_dir.join("web");
+    #[cfg(debug_assertions)]
+    if !packaged.is_dir() {
+        return PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web/dist");
+    }
+    packaged
 }
 
 fn first_non_empty_env(names: &[&str]) -> Option<String> {
@@ -49,6 +58,8 @@ pub(crate) fn set_main_window_title(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
+
     use super::desktop_window_title;
 
     #[test]
@@ -56,6 +67,28 @@ mod tests {
         assert_eq!(
             desktop_window_title(),
             format!("kanban {}", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn sidecar_path_matches_package_resource_destination() {
+        let resource_dir = Path::new("/tmp/kanban-resource");
+        assert_eq!(
+            super::resolve_sidecar_path(resource_dir),
+            resource_dir.join("kanban")
+        );
+    }
+
+    #[test]
+    fn web_path_prefers_resource_bundle() {
+        let resource_dir = Path::new("/tmp/kanban-resource");
+        assert_eq!(
+            super::resolve_web_dir(resource_dir),
+            if cfg!(debug_assertions) {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web/dist")
+            } else {
+                resource_dir.join("web")
+            }
         );
     }
 }

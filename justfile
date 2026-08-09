@@ -147,19 +147,32 @@ web-check:
     just web-build
     just web-artifact-check
 
+desktop-dev-prep:
+    just web-build
+    just web-artifact-check
+    scripts/cargo-build-lock.sh -- cargo build --locked -p kanban-cli
+    scripts/prepare-desktop-sidecar.sh dev
+
 desktop-check:
     just node-lock-check
-    scripts/cargo-build-lock.sh -- cargo check -p kanban-desktop --tests
+    just web-build
+    just web-artifact-check
+    scripts/cargo-build-lock.sh -- cargo build --locked -p kanban-cli --release
+    scripts/prepare-desktop-sidecar.sh
+    scripts/cargo-build-lock.sh -- cargo check --locked -p kanban-desktop --tests
     pnpm --filter @kanban-tool/desktop typecheck
     pnpm --filter @kanban-tool/desktop test
 
 desktop-build:
-    pnpm --filter @kanban-tool/desktop build
-
-desktop-package:
+    just node-lock-check
     just web-build
     just web-artifact-check
+    scripts/cargo-build-lock.sh -- cargo build --locked -p kanban-cli --release
+    scripts/prepare-desktop-sidecar.sh
     scripts/cargo-build-lock.sh -- pnpm --filter @kanban-tool/desktop tauri build
+
+desktop-package:
+    just desktop-build
 
 cli-package:
     just web-build

@@ -6,7 +6,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex, OnceLock,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, Receiver},
     },
     thread,
@@ -28,6 +28,7 @@ pub const HOST_STARTUP_TIMEOUT: Duration = Duration::from_secs(8);
 pub const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 const HTTP_READ_TIMEOUT: Duration = Duration::from_millis(750);
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const HOST_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const REAPER_RETRY_INTERVAL: Duration = Duration::from_millis(25);
 const REAPER_MAX_BACKOFF: Duration = Duration::from_millis(500);
@@ -157,6 +158,7 @@ impl std::error::Error for CompatibilityError {}
 pub enum ProbeError {
     Unavailable(String),
     Incompatible(String),
+    Cancelled,
 }
 
 impl ProbeError {
@@ -179,6 +181,7 @@ impl std::fmt::Display for ProbeError {
             Self::Unavailable(message) | Self::Incompatible(message) => {
                 formatter.write_str(message)
             }
+            Self::Cancelled => formatter.write_str("host probe 已取消"),
         }
     }
 }
@@ -191,25 +194,45 @@ pub fn probe_host(endpoint: SocketAddr) -> Result<HostCompatibility, ProbeError>
     probe_host_with_timeouts(endpoint, ProbeTimeouts::default())
 }
 
+pub(crate) fn probe_host_with_cancel(
+    endpoint: SocketAddr,
+    cancel: &AtomicBool,
+) -> Result<HostCompatibility, ProbeError> {
+    probe_host_with_timeouts_cancel(endpoint, ProbeTimeouts::default(), Some(cancel))
+}
+
 fn probe_host_with_timeouts(
     endpoint: SocketAddr,
     timeouts: ProbeTimeouts,
 ) -> Result<HostCompatibility, ProbeError> {
-    let deadline = deadline_after(Instant::now(), timeouts.total);
-    probe_host_until(endpoint, timeouts, deadline)
+    probe_host_with_timeouts_cancel(endpoint, timeouts, None)
 }
 
-fn probe_host_until(
+fn probe_host_with_timeouts_cancel(
+    endpoint: SocketAddr,
+    timeouts: ProbeTimeouts,
+    cancel: Option<&AtomicBool>,
+) -> Result<HostCompatibility, ProbeError> {
+    let deadline = deadline_after(Instant::now(), timeouts.total);
+    probe_host_until_cancel(endpoint, timeouts, deadline, cancel)
+}
+
+fn probe_host_until_cancel(
     endpoint: SocketAddr,
     timeouts: ProbeTimeouts,
     deadline: Instant,
+    cancel: Option<&AtomicBool>,
 ) -> Result<HostCompatibility, ProbeError> {
+    if is_cancelled(cancel) {
+        return Err(ProbeError::Cancelled);
+    }
     if !endpoint.ip().is_loopback() {
         return Err(ProbeError::incompatible(
             "Desktop host probe 只允许 loopback 地址",
         ));
     }
-    let health = get_json::<HealthResponse>(endpoint, "/health", timeouts, deadline)?;
+    let health =
+        get_json_cancel::<HealthResponse>(endpoint, "/health", timeouts, deadline, cancel)?;
     if !health.data.ok {
         return Err(ProbeError::incompatible("host health.ok=false"));
     }
@@ -221,11 +244,25 @@ fn probe_host_until(
         )));
     }
 
-    let runtime = get_json::<WebRuntimeConfig>(endpoint, "/app/runtime.json", timeouts, deadline)?;
-    let manifest =
-        get_json::<WebArtifactManifest>(endpoint, "/app/manifest.json", timeouts, deadline)?;
+    let runtime = get_json_cancel::<WebRuntimeConfig>(
+        endpoint,
+        "/app/runtime.json",
+        timeouts,
+        deadline,
+        cancel,
+    )?;
+    let manifest = get_json_cancel::<WebArtifactManifest>(
+        endpoint,
+        "/app/manifest.json",
+        timeouts,
+        deadline,
+        cancel,
+    )?;
     let compatibility = HostCompatibility::verify(runtime, manifest, env!("CARGO_PKG_VERSION"))
         .map_err(|error| ProbeError::incompatible(error.to_string()))?;
+    if is_cancelled(cancel) {
+        return Err(ProbeError::Cancelled);
+    }
     if Instant::now() >= deadline {
         return Err(ProbeError::incompatible(
             "host probe total deadline exceeded",
@@ -234,16 +271,17 @@ fn probe_host_until(
     Ok(compatibility)
 }
 
-fn get_json<T>(
+fn get_json_cancel<T>(
     endpoint: SocketAddr,
     path: &str,
     timeouts: ProbeTimeouts,
     deadline: Instant,
+    cancel: Option<&AtomicBool>,
 ) -> Result<T, ProbeError>
 where
     T: serde::de::DeserializeOwned,
 {
-    let response = get(endpoint, path, timeouts, deadline)?;
+    let response = get_cancel(endpoint, path, timeouts, deadline, cancel)?;
     if response.status != 200 {
         return Err(ProbeError::incompatible(format!(
             "host {path} 返回 HTTP {}，需要 200",
@@ -266,42 +304,61 @@ where
         .map_err(|error| ProbeError::incompatible(format!("host {path} JSON 无法解析: {error}")))
 }
 
-fn get(
+fn get_cancel(
     endpoint: SocketAddr,
     path: &str,
     timeouts: ProbeTimeouts,
     deadline: Instant,
+    cancel: Option<&AtomicBool>,
 ) -> Result<HttpResponse, ProbeError> {
-    let mut stream = TcpStream::connect_timeout(
-        &endpoint,
-        remaining_timeout(deadline, timeouts.connect).map_err(|error| {
+    if is_cancelled(cancel) {
+        return Err(ProbeError::Cancelled);
+    }
+    let connect_timeout = remaining_timeout(deadline, timeouts.connect)
+        .map(|timeout| cancellation_timeout(timeout, cancel))
+        .map_err(|error| {
             ProbeError::unavailable(format!(
                 "无法连接固定 host http://{endpoint}{path}: {error}"
             ))
-        })?,
-    )
-    .map_err(|error| {
+        })?;
+    let mut stream = TcpStream::connect_timeout(&endpoint, connect_timeout).map_err(|error| {
         ProbeError::unavailable(format!(
             "无法连接固定 host http://{endpoint}{path}: {error}"
         ))
     })?;
     stream
-        .set_read_timeout(Some(remaining_timeout(deadline, timeouts.io).map_err(
-            |error| ProbeError::incompatible(format!("设置 host 读取超时失败: {error}")),
-        )?))
+        .set_read_timeout(Some(
+            remaining_timeout(deadline, timeouts.io)
+                .map(|timeout| cancellation_timeout(timeout, cancel))
+                .map_err(|error| {
+                    ProbeError::incompatible(format!("设置 host 读取超时失败: {error}"))
+                })?,
+        ))
         .map_err(|error| ProbeError::incompatible(format!("设置 host 读取超时失败: {error}")))?;
     stream
-        .set_write_timeout(Some(remaining_timeout(deadline, timeouts.io).map_err(
-            |error| ProbeError::incompatible(format!("设置 host 写入超时失败: {error}")),
-        )?))
+        .set_write_timeout(Some(
+            remaining_timeout(deadline, timeouts.io)
+                .map(|timeout| cancellation_timeout(timeout, cancel))
+                .map_err(|error| {
+                    ProbeError::incompatible(format!("设置 host 写入超时失败: {error}"))
+                })?,
+        ))
         .map_err(|error| ProbeError::incompatible(format!("设置 host 写入超时失败: {error}")))?;
+    if is_cancelled(cancel) {
+        return Err(ProbeError::Cancelled);
+    }
     write!(
         stream,
         "GET {path} HTTP/1.1\r\nHost: {endpoint}\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
     )
     .map_err(|error| ProbeError::incompatible(format!("发送 host probe 请求失败: {error}")))?;
-    read_http_response(&mut stream, deadline, timeouts.io)
-        .map_err(|error| ProbeError::incompatible(error.to_string()))
+    read_http_response_cancel(&mut stream, deadline, timeouts.io, cancel).map_err(|error| {
+        if error.kind() == io::ErrorKind::Interrupted {
+            ProbeError::Cancelled
+        } else {
+            ProbeError::incompatible(error.to_string())
+        }
+    })
 }
 
 #[derive(Debug)]
@@ -323,14 +380,24 @@ fn remaining_timeout(deadline: Instant, maximum: Duration) -> io::Result<Duratio
     }
 }
 
-fn read_http_response(
+fn read_http_response_cancel(
     stream: &mut TcpStream,
     deadline: Instant,
     io_timeout: Duration,
+    cancel: Option<&AtomicBool>,
 ) -> io::Result<HttpResponse> {
     let mut bytes = Vec::new();
     let header_end = loop {
-        stream.set_read_timeout(Some(remaining_timeout(deadline, io_timeout)?))?;
+        if is_cancelled(cancel) {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "host probe 已取消",
+            ));
+        }
+        stream.set_read_timeout(Some(
+            remaining_timeout(deadline, io_timeout)
+                .map(|timeout| cancellation_timeout(timeout, cancel))?,
+        ))?;
         let mut chunk = [0_u8; 4096];
         let count = stream.read(&mut chunk)?;
         if count == 0 {
@@ -464,7 +531,16 @@ fn read_http_response(
         ));
     }
     while body.len() < content_length {
-        stream.set_read_timeout(Some(remaining_timeout(deadline, io_timeout)?))?;
+        if is_cancelled(cancel) {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "host probe 已取消",
+            ));
+        }
+        stream.set_read_timeout(Some(
+            remaining_timeout(deadline, io_timeout)
+                .map(|timeout| cancellation_timeout(timeout, cancel))?,
+        ))?;
         let remaining = content_length - body.len();
         let mut chunk = vec![0_u8; remaining.min(4096)];
         let count = stream.read(&mut chunk)?;
@@ -482,6 +558,18 @@ fn read_http_response(
         content_type,
         body,
     })
+}
+
+fn is_cancelled(cancel: Option<&AtomicBool>) -> bool {
+    cancel.is_some_and(|cancel| cancel.load(Ordering::Acquire))
+}
+
+fn cancellation_timeout(timeout: Duration, cancel: Option<&AtomicBool>) -> Duration {
+    if cancel.is_some() {
+        timeout.min(CANCEL_POLL_INTERVAL)
+    } else {
+        timeout
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -543,6 +631,7 @@ pub enum HostStartupError {
         endpoint: SocketAddr,
         message: String,
     },
+    Cancelled,
 }
 
 impl std::fmt::Display for HostStartupError {
@@ -570,6 +659,7 @@ impl std::fmt::Display for HostStartupError {
                 formatter,
                 "等待固定 host {endpoint} 就绪超时：{message}；未尝试随机端口"
             ),
+            Self::Cancelled => formatter.write_str("Desktop host bootstrap 已取消"),
         }
     }
 }
@@ -605,7 +695,6 @@ pub enum HostOwnership {
 
 #[derive(Debug)]
 pub struct HostHandle {
-    endpoint: SocketAddr,
     ownership: HostOwnership,
     child: Option<OwnedChild>,
 }
@@ -629,6 +718,7 @@ struct OwnedChild {
 static REAPER_FALLBACK_QUEUE: OnceLock<Mutex<Vec<OwnedChild>>> = OnceLock::new();
 static REAPER_SERVICE: OnceLock<Mutex<Option<mpsc::Sender<OwnedChild>>>> = OnceLock::new();
 static REAPER_RETRY_PUMP_RUNNING: AtomicBool = AtomicBool::new(false);
+static REAPER_PENDING_CHILDREN: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
 static FORCE_REAPER_SPAWN_FAILURE: std::sync::atomic::AtomicBool =
@@ -718,8 +808,12 @@ impl Drop for OwnedChild {
 }
 
 impl HostHandle {
-    pub fn app_url(&self) -> String {
-        format!("http://{}/app/", self.endpoint)
+    #[cfg(test)]
+    pub(crate) fn external_for_test() -> Self {
+        Self {
+            ownership: HostOwnership::External,
+            child: None,
+        }
     }
 
     pub fn shutdown(&mut self) -> Result<ShutdownResult, ShutdownError> {
@@ -798,6 +892,54 @@ impl HostHandle {
         }
     }
 
+    pub(crate) fn shutdown_nonblocking(&mut self) -> Result<ShutdownResult, ShutdownError> {
+        if self.ownership == HostOwnership::External {
+            if let Some(child) = self.child.as_mut() {
+                child.disarm_drop_cleanup();
+            }
+            return Ok(ShutdownResult::ExternalHostKept);
+        }
+        let Some(child) = self.child.as_mut() else {
+            return Ok(ShutdownResult::AlreadyExited);
+        };
+        if child
+            .process_mut()
+            .try_wait()
+            .map_err(|error| ShutdownError::Io(error.to_string()))?
+            .is_some()
+        {
+            if finish_reaped_child(child) {
+                self.child.take();
+                return Ok(ShutdownResult::AlreadyExited);
+            }
+            return Err(ShutdownError::Io(
+                "sidecar leader 已退出但 process group 尚未确认消失；保留 ownership 重试"
+                    .to_owned(),
+            ));
+        }
+
+        let graceful_error = request_graceful_stop(child).err();
+        let cleanup = force_stop(child);
+        if cleanup.ownership() == CleanupOwnership::Release {
+            child.finish_drain();
+            child.release_process();
+            self.child.take();
+            if let Some(error) = cleanup.first_error.or(graceful_error) {
+                return Err(ShutdownError::Io(error.to_string()));
+            }
+            return Ok(ShutdownResult::Forced);
+        }
+        Err(ShutdownError::Io(
+            cleanup
+                .first_error
+                .or(graceful_error)
+                .map(|error| error.to_string())
+                .unwrap_or_else(|| {
+                    "强制停止已发出，但尚未确认 sidecar reap；保留 ownership 供重试".to_owned()
+                }),
+        ))
+    }
+
     fn cleanup_after_error(
         &mut self,
         first_error: ShutdownError,
@@ -857,35 +999,63 @@ pub enum ShutdownResult {
 pub enum ShutdownError {
     Io(String),
     GracefulRequest(String),
+    WorkerInFlight,
+    ReaperInFlight,
 }
 
 impl std::fmt::Display for ShutdownError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io(message) | Self::GracefulRequest(message) => formatter.write_str(message),
+            Self::WorkerInFlight => {
+                formatter.write_str("桌面 bootstrap worker 尚未退出；保留 host ownership 重试")
+            }
+            Self::ReaperInFlight => {
+                formatter.write_str("sidecar reaper 尚未确认 process group 清理；保留桌面进程重试")
+            }
         }
     }
 }
 
 impl std::error::Error for ShutdownError {}
 
+#[allow(dead_code)]
 pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostStartupError> {
-    match probe_host_with_timeouts(config.endpoint, config.probe_timeouts) {
+    connect_or_spawn_inner(config, None)
+}
+
+pub(crate) fn connect_or_spawn_with_cancel(
+    config: &HostLaunchConfig,
+    cancel: &AtomicBool,
+) -> Result<HostHandle, HostStartupError> {
+    connect_or_spawn_inner(config, Some(cancel))
+}
+
+fn connect_or_spawn_inner(
+    config: &HostLaunchConfig,
+    cancel: Option<&AtomicBool>,
+) -> Result<HostHandle, HostStartupError> {
+    if is_cancelled(cancel) {
+        return Err(HostStartupError::Cancelled);
+    }
+    match probe_host_with_timeouts_cancel(config.endpoint, config.probe_timeouts, cancel) {
         Ok(_) => Ok(HostHandle {
-            endpoint: config.endpoint,
             ownership: HostOwnership::External,
             child: None,
         }),
+        Err(ProbeError::Cancelled) => Err(HostStartupError::Cancelled),
         Err(ProbeError::Incompatible(message)) => Err(HostStartupError::PortConflict {
             endpoint: config.endpoint,
             message,
         }),
         Err(initial_probe @ ProbeError::Unavailable(_)) => {
+            if is_cancelled(cancel) {
+                return Err(HostStartupError::Cancelled);
+            }
             let mut child = spawn_sidecar(config)?;
-            let result = wait_for_sidecar(config, &mut child, initial_probe);
+            let result = wait_for_sidecar_with_cancel(config, &mut child, initial_probe, cancel);
             match result {
                 Ok(_) => Ok(HostHandle {
-                    endpoint: config.endpoint,
                     ownership: HostOwnership::Owned,
                     child: Some(child),
                 }),
@@ -1024,13 +1194,26 @@ fn cleanup_spawn_failure(process: Child, diagnostics: Arc<Mutex<VecDeque<u8>>>, 
     }
 }
 
+#[allow(dead_code)]
 fn wait_for_sidecar(
     config: &HostLaunchConfig,
     child: &mut OwnedChild,
     initial_probe: ProbeError,
 ) -> Result<HostCompatibility, HostStartupError> {
+    wait_for_sidecar_with_cancel(config, child, initial_probe, None)
+}
+
+fn wait_for_sidecar_with_cancel(
+    config: &HostLaunchConfig,
+    child: &mut OwnedChild,
+    initial_probe: ProbeError,
+    cancel: Option<&AtomicBool>,
+) -> Result<HostCompatibility, HostStartupError> {
     let deadline = deadline_after(Instant::now(), config.startup_timeout);
     loop {
+        if is_cancelled(cancel) {
+            return Err(HostStartupError::Cancelled);
+        }
         if Instant::now() >= deadline {
             return Err(HostStartupError::StartupTimeout {
                 endpoint: config.endpoint,
@@ -1039,11 +1222,18 @@ fn wait_for_sidecar(
         }
         let probe_deadline =
             capped_probe_deadline(Instant::now(), deadline, config.probe_timeouts.total);
-        let latest_error =
-            match probe_host_until(config.endpoint, config.probe_timeouts, probe_deadline) {
-                Ok(compatibility) => return Ok(compatibility),
-                Err(error) => error,
-            };
+        let latest_error = match probe_host_until_cancel(
+            config.endpoint,
+            config.probe_timeouts,
+            probe_deadline,
+            cancel,
+        ) {
+            Ok(compatibility) => return Ok(compatibility),
+            Err(error) => error,
+        };
+        if matches!(latest_error, ProbeError::Cancelled) {
+            return Err(HostStartupError::Cancelled);
+        }
         if let Some(status) =
             child
                 .process_mut()
@@ -1078,6 +1268,7 @@ fn wait_for_sidecar(
                     endpoint: config.endpoint,
                     message,
                 },
+                ProbeError::Cancelled => HostStartupError::Cancelled,
             });
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -1393,6 +1584,7 @@ fn force_stop(child: &mut OwnedChild) -> CleanupOutcome {
 
 /// 将仍由本进程拥有的 sidecar 交给后台 reaper，避免 UI/Drop 等待子进程。
 fn handoff_to_reaper(child: OwnedChild, context: &str) {
+    REAPER_PENDING_CHILDREN.fetch_add(1, Ordering::AcqRel);
     #[cfg(test)]
     if FORCE_REAPER_SPAWN_FAILURE.load(Ordering::Acquire) {
         eprintln!("kanban {context} 注入 reaper spawn failure；保留 Child ownership");
@@ -1414,6 +1606,26 @@ fn handoff_to_reaper(child: OwnedChild, context: &str) {
         return;
     };
     flush_pending_reapers(service, context);
+}
+
+pub(crate) fn reaper_pending_count() -> usize {
+    REAPER_PENDING_CHILDREN.load(Ordering::Acquire)
+}
+
+#[cfg(test)]
+pub(crate) fn hold_reaper_pending_for_test() {
+    REAPER_PENDING_CHILDREN.fetch_add(1, Ordering::AcqRel);
+}
+
+#[cfg(test)]
+pub(crate) fn release_reaper_pending_for_test() {
+    mark_reaper_child_released();
+}
+
+fn mark_reaper_child_released() {
+    let _ = REAPER_PENDING_CHILDREN.fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+        Some(count.saturating_sub(1))
+    });
 }
 
 fn reaper_queue_is_empty() -> bool {
@@ -1533,6 +1745,7 @@ fn run_reaper_service(receiver: mpsc::Receiver<OwnedChild>) {
             if cleanup.ownership() == CleanupOwnership::Release {
                 task.child.finish_drain();
                 task.child.release_process();
+                mark_reaper_child_released();
                 continue;
             }
             if let Some(error) = cleanup.first_error
@@ -2148,10 +2361,181 @@ mod tests {
         let _ = std::fs::remove_file(sidecar);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn cancelled_startup_reaps_sidecar_descendants_before_returning_control() {
+        let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
+        let leader_marker = std::env::temp_dir().join(format!(
+            "kanban-desktop-cancel-leader-{}-{id}",
+            std::process::id(),
+        ));
+        let descendant_marker = std::env::temp_dir().join(format!(
+            "kanban-desktop-cancel-descendant-{}-{id}",
+            std::process::id(),
+        ));
+        let sidecar = std::env::temp_dir().join(format!(
+            "kanban-desktop-cancel-sidecar-{}-{id}",
+            std::process::id(),
+        ));
+        for marker in [&leader_marker, &descendant_marker] {
+            let _ = std::fs::remove_file(marker);
+        }
+        let endpoint = TcpListener::bind((DEFAULT_HOST, 0))
+            .expect("cancel fixture endpoint")
+            .local_addr()
+            .expect("cancel fixture address");
+        let script = format!(
+            "#!/bin/sh\nprintf '%s' $$ > {}\nsleep 30 &\nprintf '%s' $! > {}\nwait\n",
+            leader_marker.display(),
+            descendant_marker.display()
+        );
+        std::fs::write(&sidecar, script).expect("cancel sidecar fixture");
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&sidecar)
+                .expect("cancel sidecar metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&sidecar, permissions).expect("cancel sidecar executable");
+        }
+
+        let mut config = HostLaunchConfig::new(sidecar.clone(), "web", "db", "actor", "board");
+        config.endpoint = endpoint;
+        config.startup_timeout = Duration::from_secs(8);
+        config = config.with_probe_timeout(Duration::from_millis(100));
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_for_thread = Arc::clone(&cancel);
+        let launch =
+            thread::spawn(move || connect_or_spawn_with_cancel(&config, &cancel_for_thread));
+        let marker_deadline = Instant::now() + Duration::from_secs(1);
+        while !leader_marker.exists() && Instant::now() < marker_deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(leader_marker.exists(), "cancel sidecar did not start");
+        let started_at = Instant::now();
+        cancel.store(true, Ordering::Release);
+        let error = launch
+            .join()
+            .expect("cancel launch thread")
+            .expect_err("cancelled startup must fail closed");
+        assert!(matches!(error, HostStartupError::Cancelled));
+        assert!(
+            started_at.elapsed() < Duration::from_millis(500),
+            "cancelled startup blocked for {:?}",
+            started_at.elapsed()
+        );
+        let read_pid = |path: &std::path::Path| {
+            let deadline = Instant::now() + Duration::from_secs(1);
+            loop {
+                if let Ok(value) = std::fs::read_to_string(path)
+                    && let Ok(pid) = value.parse::<i32>()
+                {
+                    return pid;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "cancel pid marker was not written"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+        };
+        let leader_pid = read_pid(&leader_marker);
+        let descendant_pid = read_pid(&descendant_marker);
+        let reap_deadline = Instant::now() + Duration::from_secs(2);
+        while (unsafe { libc::kill(leader_pid, 0) } == 0
+            || unsafe { libc::kill(descendant_pid, 0) } == 0)
+            && Instant::now() < reap_deadline
+        {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            unsafe { libc::kill(leader_pid, 0) } != 0,
+            "cancelled leader remains alive"
+        );
+        assert!(
+            unsafe { libc::kill(descendant_pid, 0) } != 0,
+            "cancelled descendant remains alive"
+        );
+        let _ = std::fs::remove_file(leader_marker);
+        let _ = std::fs::remove_file(descendant_marker);
+        let _ = std::fs::remove_file(sidecar);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nonblocking_exit_cleanup_retries_until_descendant_group_is_gone() {
+        let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
+        let descendant_marker = std::env::temp_dir().join(format!(
+            "kanban-desktop-exit-descendant-{}-{id}",
+            std::process::id(),
+        ));
+        let sidecar = std::env::temp_dir().join(format!(
+            "kanban-desktop-exit-sidecar-{}-{id}",
+            std::process::id(),
+        ));
+        let _ = std::fs::remove_file(&descendant_marker);
+        let script = format!(
+            "#!/bin/sh\nsleep 30 &\nprintf '%s' $! > {}\nwait\n",
+            descendant_marker.display()
+        );
+        std::fs::write(&sidecar, script).expect("exit sidecar fixture");
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&sidecar)
+                .expect("exit sidecar metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&sidecar, permissions).expect("exit sidecar executable");
+        }
+        let mut command = Command::new(&sidecar);
+        command.stderr(Stdio::piped());
+        configure_owned_process_group(&mut command);
+        let process = command.spawn().expect("exit sidecar process");
+        let marker_deadline = Instant::now() + Duration::from_secs(1);
+        while !descendant_marker.exists() && Instant::now() < marker_deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(descendant_marker.exists(), "exit descendant did not start");
+        let mut handle = HostHandle {
+            ownership: HostOwnership::Owned,
+            child: Some(test_owned_child(process)),
+        };
+        let started_at = Instant::now();
+        let result = loop {
+            match handle.shutdown_nonblocking() {
+                Ok(result) => break result,
+                Err(error) => {
+                    assert!(
+                        started_at.elapsed() < Duration::from_secs(2),
+                        "nonblocking exit cleanup did not converge: {error}"
+                    );
+                    thread::sleep(Duration::from_millis(10));
+                }
+            }
+        };
+        assert!(matches!(
+            result,
+            ShutdownResult::Forced | ShutdownResult::AlreadyExited
+        ));
+        let descendant_pid = std::fs::read_to_string(&descendant_marker)
+            .expect("exit descendant pid")
+            .parse::<i32>()
+            .expect("exit descendant pid integer");
+        let reap_deadline = Instant::now() + Duration::from_secs(1);
+        while unsafe { libc::kill(descendant_pid, 0) } == 0 && Instant::now() < reap_deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            unsafe { libc::kill(descendant_pid, 0) } != 0,
+            "exit descendant remains alive"
+        );
+        let _ = std::fs::remove_file(descendant_marker);
+        let _ = std::fs::remove_file(sidecar);
+    }
+
     #[test]
     fn external_host_shutdown_is_a_noop() {
         let mut handle = HostHandle {
-            endpoint: default_endpoint(),
             ownership: HostOwnership::External,
             child: None,
         };
@@ -2166,7 +2550,6 @@ mod tests {
     fn owned_host_shutdown_gracefully_stops_child() {
         let process = test_sleep_child(false);
         let mut handle = HostHandle {
-            endpoint: default_endpoint(),
             ownership: HostOwnership::Owned,
             child: Some(test_owned_child(process)),
         };
@@ -2182,7 +2565,6 @@ mod tests {
     fn owned_host_shutdown_forces_child_after_graceful_timeout() {
         let process = test_sleep_child(true);
         let mut handle = HostHandle {
-            endpoint: default_endpoint(),
             ownership: HostOwnership::Owned,
             child: Some(test_owned_child(process)),
         };
@@ -2220,7 +2602,6 @@ mod tests {
     fn owned_host_drop_handoffs_unconfirmed_child_to_reaper() {
         let process = test_sleep_child(true);
         let handle = HostHandle {
-            endpoint: default_endpoint(),
             ownership: HostOwnership::Owned,
             child: Some(test_owned_child(process)),
         };
@@ -2267,6 +2648,37 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn reaper_pending_count_stays_until_process_group_is_confirmed_gone() {
+        let process = test_sleep_child(true);
+        let mut child = test_owned_child(process);
+        let pid = child.process().id() as libc::pid_t;
+        let before = reaper_pending_count();
+        let detached = child.detach_for_reaper().expect("reaper ownership");
+        handoff_to_reaper(detached, "pending count regression");
+        assert!(
+            reaper_pending_count() > before,
+            "handoff must remain visible to exit cleanup"
+        );
+        let service = reaper_service("pending count regression").expect("reaper service");
+        flush_pending_reapers(service, "pending count regression");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while (unsafe { libc::kill(pid, 0) } == 0 || reaper_pending_count() > before)
+            && Instant::now() < deadline
+        {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            unsafe { libc::kill(pid, 0) } != 0,
+            "reaper did not reap child"
+        );
+        assert!(
+            reaper_pending_count() <= before,
+            "reaper pending count did not clear after confirmed cleanup"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn closed_reaper_restart_failure_still_schedules_retry_pump() {
         let process = test_sleep_child(true);
         let mut child = test_owned_child(process);
@@ -2298,7 +2710,6 @@ mod tests {
     fn external_host_shutdown_never_kills_process() {
         let process = test_sleep_child(false);
         let mut handle = HostHandle {
-            endpoint: default_endpoint(),
             ownership: HostOwnership::External,
             child: Some(test_owned_child(process)),
         };

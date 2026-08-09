@@ -178,10 +178,11 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
 }
 
 fn quit_app(app: &tauri::AppHandle) {
-    if let Some(host) = app.try_state::<DesktopHost>()
-        && let Err(error) = host.shutdown()
-    {
-        eprintln!("kanban owned host graceful shutdown 失败：{error}");
+    if let Some(host) = app.try_state::<DesktopHost>() {
+        if host.request_exit(app.clone(), 0) {
+            app.exit(0);
+        }
+    } else {
+        app.exit(0);
     }
-    app.exit(0);
 }

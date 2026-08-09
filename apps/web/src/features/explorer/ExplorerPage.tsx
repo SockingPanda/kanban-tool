@@ -4,6 +4,9 @@ import { BoardView } from "../board/BoardView"
 import type { BoardViewModel } from "../board/types"
 import {
   loadTaskInspector,
+  loadTaskInspectorEvents,
+  loadTaskInspectorNeighborhood,
+  loadTaskInspectorRuns,
   loadExplorerBoardIdentity,
   loadTaskListPage,
   parseTaskListQuery,
@@ -255,6 +258,14 @@ function dependencyView(task: NonNullable<TaskInspectorReadModel["dependencies"]
   return { id: task.id, ref: task.ref, title: task.title, status: task.status }
 }
 
+function inspectorRunView(run: TaskInspectorReadModel["runs"][number]): TaskInspectorViewModel["runs"][number] {
+  return { id: run.id, status: run.status, workerProfile: run.worker_profile, claimOwner: run.claim_owner, startedAt: run.started_at, finishedAt: run.finished_at, exitCode: run.exit_code, error: run.error, hasLog: run.has_log }
+}
+
+function inspectorEventView(event: TaskInspectorReadModel["events"][number]): TaskInspectorViewModel["events"][number] {
+  return { id: event.id, kind: event.kind, actor: event.actor, createdAt: event.created_at }
+}
+
 function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewModel {
   const task = model.task
   return {
@@ -287,13 +298,13 @@ function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewMod
     parents: model.dependencies.parents.map(dependencyView),
     children: model.dependencies.children.map(dependencyView),
     comments: model.comments.map((comment) => ({ id: comment.id, author: comment.author, kind: comment.kind, body: comment.body, createdAt: comment.created_at })),
-    runs: model.runs.map((run) => ({ id: run.id, status: run.status, workerProfile: run.worker_profile, claimOwner: run.claim_owner, startedAt: run.started_at, finishedAt: run.finished_at, exitCode: run.exit_code, error: run.error, hasLog: run.has_log })),
-    events: model.events.map((event) => ({ id: event.id, kind: event.kind, actor: event.actor, createdAt: event.created_at })),
-    neighborhood: {
+    runs: model.runs.map(inspectorRunView),
+    events: model.events.map(inspectorEventView),
+    neighborhood: model.neighborhood ? {
       centerTaskId: model.neighborhood.center_task_id,
       nodes: model.neighborhood.nodes.map((node) => ({ id: node.task.id, ref: node.task.ref, title: node.task.title, role: node.role })),
       edges: model.neighborhood.edges.map((edge) => ({ id: edge.id, sourceTaskId: edge.source_task_id, targetTaskId: edge.target_task_id, kind: edge.kind })),
-    },
+    } : undefined,
     runtime: model.runtime,
   }
 }
@@ -335,7 +346,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }))
   const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }))
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
-  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
+  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
 
   const navigate = useCallback((target: string, options?: { readonly replace?: boolean }) => {
     if (onNavigate) void onNavigate(target, options)
@@ -374,6 +385,20 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     else nextParams.delete("kind")
     navigate(routeTarget(route.boardSlug, "events", nextParams, runtime.webBasePath))
   }
+
+  const loadInspectorRuns = useCallback(() => taskId
+    ? loadTaskInspectorRuns(runtime, route.boardSlug, taskId).then((runs) => runs.map((run) => inspectorRunView(run)))
+    : Promise.reject(new Error("Task Inspector 尚未选择任务")), [route.boardSlug, runtime, taskId])
+  const loadInspectorEvents = useCallback(() => taskId
+    ? loadTaskInspectorEvents(runtime, route.boardSlug, taskId).then((events) => events.map((event) => inspectorEventView(event)))
+    : Promise.reject(new Error("Task Inspector 尚未选择任务")), [route.boardSlug, runtime, taskId])
+  const loadInspectorNeighborhood = useCallback(() => taskId
+    ? loadTaskInspectorNeighborhood(runtime, route.boardSlug, taskId).then((neighborhood) => ({
+      centerTaskId: neighborhood.center_task_id,
+      nodes: neighborhood.nodes.map((node) => ({ id: node.task.id, ref: node.task.ref, title: node.task.title, role: node.role })),
+      edges: neighborhood.edges.map((edge) => ({ id: edge.id, sourceTaskId: edge.source_task_id, targetTaskId: edge.target_task_id, kind: edge.kind })),
+    }))
+    : Promise.reject(new Error("Task Inspector 尚未选择任务")), [route.boardSlug, runtime, taskId])
 
   const clearedTaskIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -449,7 +474,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
           ) : null}
         </main>
         {showInspector ? (
-          inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} locale={locale} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
+          inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} locale={locale} onLoadRuns={loadInspectorRuns} onLoadEvents={loadInspectorEvents} onLoadNeighborhood={loadInspectorNeighborhood} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
         ) : null}
       </div>
     </section>

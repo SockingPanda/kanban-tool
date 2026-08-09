@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode, type SyntheticEvent } from "react"
 
 import type { Locale } from "../../lib/preferences"
 import styles from "./TaskInspector.module.css"
@@ -90,6 +90,9 @@ export interface TaskInspectorProps {
   readonly model: TaskInspectorViewModel
   readonly onSelectTask: (taskId: string) => void
   readonly locale?: Locale
+  readonly onLoadRuns?: () => Promise<TaskInspectorViewModel["runs"]>
+  readonly onLoadEvents?: () => Promise<TaskInspectorViewModel["events"]>
+  readonly onLoadNeighborhood?: () => Promise<NonNullable<TaskInspectorViewModel["neighborhood"]>>
 }
 
 type InspectorCopy = {
@@ -144,6 +147,8 @@ type InspectorCopy = {
   readonly manual: string
   readonly system: string
   readonly log: string
+  readonly loading: string
+  readonly loadError: string
   readonly status: Readonly<Record<InspectorTaskStatus, string>>
   readonly planState: Readonly<Record<InspectorPlanState, string>>
   readonly stepStatus: Readonly<Record<"todo" | "done" | "skipped", string>>
@@ -175,6 +180,8 @@ const copies: Record<Locale, InspectorCopy> = {
     manual: "手动运行",
     system: "系统",
     log: "日志",
+    loading: "正在加载…",
+    loadError: "加载失败，请重试。",
     status: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
     stepStatus: { todo: "待办", done: "已完成", skipped: "已跳过" },
@@ -204,6 +211,8 @@ const copies: Record<Locale, InspectorCopy> = {
     manual: "Manual",
     system: "system",
     log: "log",
+    loading: "Loading…",
+    loadError: "Failed to load. Try again.",
     status: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
     stepStatus: { todo: "To do", done: "Done", skipped: "Skipped" },
@@ -283,10 +292,11 @@ function DependencyList({
 }
 
 function DescriptionDisclosure({ description, copy }: { readonly description: string | null; readonly copy: InspectorCopy }) {
+  const [open, setOpen] = useState(false)
   return (
-    <details className={styles.descriptionDisclosure}>
+    <details className={styles.descriptionDisclosure} onToggle={(event: SyntheticEvent<HTMLDetailsElement>) => setOpen(event.currentTarget.open)}>
       <summary>{copy.showDescription}</summary>
-      <p className={styles.description}>{description || copy.noDescription}</p>
+      {open ? <p className={styles.description}>{description || copy.noDescription}</p> : null}
     </details>
   )
 }
@@ -316,9 +326,51 @@ function Neighborhood({ model, copy, onSelectTask }: { readonly model: NonNullab
   )
 }
 
-export function TaskInspector({ model, onSelectTask, locale = "zh" }: TaskInspectorProps) {
+type InspectorSectionStatus = "idle" | "loading" | "ready" | "error"
+
+export function TaskInspector({ model, onSelectTask, locale = "zh", onLoadRuns, onLoadEvents, onLoadNeighborhood }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
+  const [runs, setRuns] = useState(model.runs)
+  const [events, setEvents] = useState(model.events)
+  const [neighborhood, setNeighborhood] = useState(model.neighborhood)
+  const [runsStatus, setRunsStatus] = useState<InspectorSectionStatus>(model.runs.length > 0 ? "ready" : "idle")
+  const [eventsStatus, setEventsStatus] = useState<InspectorSectionStatus>(model.events.length > 0 ? "ready" : "idle")
+  const [neighborhoodStatus, setNeighborhoodStatus] = useState<InspectorSectionStatus>(model.neighborhood ? "ready" : "idle")
+
+  useEffect(() => {
+    setRuns(model.runs)
+    setEvents(model.events)
+    setNeighborhood(model.neighborhood)
+    setRunsStatus(model.runs.length > 0 ? "ready" : "idle")
+    setEventsStatus(model.events.length > 0 ? "ready" : "idle")
+    setNeighborhoodStatus(model.neighborhood ? "ready" : "idle")
+  }, [model.task.id])
+
+  const loadRuns = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open || runsStatus !== "idle" || !onLoadRuns) return
+    setRunsStatus("loading")
+    void onLoadRuns().then((value) => {
+      setRuns(value)
+      setRunsStatus("ready")
+    }, () => setRunsStatus("error"))
+  }
+  const loadEvents = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open || eventsStatus !== "idle" || !onLoadEvents) return
+    setEventsStatus("loading")
+    void onLoadEvents().then((value) => {
+      setEvents(value)
+      setEventsStatus("ready")
+    }, () => setEventsStatus("error"))
+  }
+  const loadNeighborhood = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open || neighborhoodStatus !== "idle" || !onLoadNeighborhood) return
+    setNeighborhoodStatus("loading")
+    void onLoadNeighborhood().then((value) => {
+      setNeighborhood(value)
+      setNeighborhoodStatus("ready")
+    }, () => setNeighborhoodStatus("error"))
+  }
   return (
     <aside className={styles.inspector} data-testid="task-inspector" aria-label={copy.ariaLabel}>
       <header className={styles.header}>
@@ -396,11 +448,11 @@ export function TaskInspector({ model, onSelectTask, locale = "zh" }: TaskInspec
       </Section>
 
       <Section id="inspector-runs" title={copy.sections.runs}>
-        <details>
+        <details onToggle={loadRuns}>
           <summary>{copy.sections.runs}</summary>
-          {model.runs.length === 0 ? <Empty>{copy.noRuns}</Empty> : (
+          {runsStatus === "loading" ? <Empty>{copy.loading}</Empty> : runsStatus === "error" ? <Empty>{copy.loadError}</Empty> : runs.length === 0 ? <Empty>{copy.noRuns}</Empty> : (
           <ul className={styles.compactList}>
-            {model.runs.map((run) => (
+            {runs.map((run) => (
               <li key={run.id} className={styles.row}>
                 <div><strong translate="no">{run.id}</strong><span className={styles.muted}> · {copy.runStatus[run.status]}</span><p>{run.workerProfile || copy.manual} · {run.claimOwner}</p>{run.error ? <p className={styles.error}>{run.error}</p> : null}</div>
                 <span className={styles.muted}>{run.hasLog ? copy.log : ""}</span>
@@ -412,11 +464,11 @@ export function TaskInspector({ model, onSelectTask, locale = "zh" }: TaskInspec
       </Section>
 
       <Section id="inspector-events" title={copy.sections.events}>
-        <details>
+        <details onToggle={loadEvents}>
           <summary>{copy.sections.events}</summary>
-          {model.events.length === 0 ? <Empty>{copy.noEvents}</Empty> : (
+          {eventsStatus === "loading" ? <Empty>{copy.loading}</Empty> : eventsStatus === "error" ? <Empty>{copy.loadError}</Empty> : events.length === 0 ? <Empty>{copy.noEvents}</Empty> : (
           <ol className={styles.compactList}>
-            {model.events.map((event) => (
+            {events.map((event) => (
               <li key={event.id} className={styles.row}>
                 <div><strong translate="no">{event.kind}</strong><p className={styles.muted}>{event.actor || copy.system}</p></div>
                 <time dateTime={String(event.createdAt)}>{event.createdAt}</time>
@@ -427,14 +479,12 @@ export function TaskInspector({ model, onSelectTask, locale = "zh" }: TaskInspec
         </details>
       </Section>
 
-      {model.neighborhood ? (
-        <Section id="inspector-neighborhood" title={copy.sections.neighborhood}>
-          <details>
-            <summary>{copy.sections.neighborhood}</summary>
-            <Neighborhood model={model.neighborhood} copy={copy} onSelectTask={onSelectTask} />
-          </details>
-        </Section>
-      ) : null}
+      <Section id="inspector-neighborhood" title={copy.sections.neighborhood}>
+        <details onToggle={loadNeighborhood}>
+          <summary>{copy.sections.neighborhood}</summary>
+          {neighborhoodStatus === "loading" ? <Empty>{copy.loading}</Empty> : neighborhoodStatus === "error" ? <Empty>{copy.loadError}</Empty> : neighborhood ? <Neighborhood model={neighborhood} copy={copy} onSelectTask={onSelectTask} /> : <Empty>{copy.noNeighborhood}</Empty>}
+        </details>
+      </Section>
 
       <Section id="inspector-runtime" title={copy.sections.runtime}>
         <Facts facts={[

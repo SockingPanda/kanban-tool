@@ -23,11 +23,11 @@ if ! jq -e '(.bundle.externalBin? // null) == null' "$TAURI_CONF" >/dev/null; th
 fi
 
 jq -e '
-  .build.frontendDist == "../dist"
+  .build.frontendDist == "../bootstrap"
   and (.bundle.resources | type == "object")
   and .bundle.resources["../../web/dist/"] == "web/"
 ' "$TAURI_CONF" >/dev/null || {
-  echo "error: Tauri package must retain frontendDist ../dist and map ../../web/dist/ to web/" >&2
+  echo "error: Tauri package must retain bootstrap frontendDist and map ../../web/dist/ to web/" >&2
   exit 1
 }
 

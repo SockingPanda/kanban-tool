@@ -38,13 +38,19 @@ impl GenerationFence {
     }
 
     pub(crate) fn fence(&mut self) {
+        if self.closed {
+            return;
+        }
         self.generation = self.generation.saturating_add(1);
         self.in_flight = None;
     }
 
     pub(crate) fn close(&mut self) {
-        self.closed = true;
+        if self.closed {
+            return;
+        }
         self.fence();
+        self.closed = true;
     }
 
     pub(crate) fn generation(&self) -> u64 {
@@ -82,6 +88,9 @@ pub(crate) enum DiagnosticKind {
     UnsupportedPlatform,
     HostUnavailable,
     BrowserLaunch,
+    Configuration,
+    Window,
+    Tray,
     Internal,
 }
 
@@ -147,5 +156,17 @@ mod tests {
         fence.close();
         assert!(!fence.finish(next, AttemptKind::StartLocal));
         assert!(fence.is_closed());
+    }
+
+    #[test]
+    fn closing_twice_is_a_stable_state_transition() {
+        let mut fence = GenerationFence::default();
+        fence.close();
+        let generation = fence.generation();
+        fence.close();
+        fence.fence();
+        assert_eq!(fence.generation(), generation);
+        assert!(fence.is_closed());
+        assert!(fence.in_flight().is_none());
     }
 }

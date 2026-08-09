@@ -2,6 +2,7 @@
   "use strict";
 
   const FIXED_APP_URL = "http://127.0.0.1:8721/app/";
+  const POLL_DELAYS_MS = [180, 300, 500, 800, 1200];
   const isChinese = /^zh(?:-|$)/i.test(navigator.language || "");
   const copy = isChinese
     ? {
@@ -84,6 +85,8 @@
     closed: false,
   };
   let pollTimer = null;
+  let pollDelayIndex = 0;
+  let lastSnapshotKey = "";
 
   document.documentElement.lang = isChinese ? "zh-CN" : "en";
   document.querySelectorAll("[data-copy]").forEach((node) => {
@@ -116,8 +119,26 @@
     return copy.phases[phase] || phase || copy.recovery;
   }
 
+  function snapshotKey(snapshot) {
+    return JSON.stringify({
+      phase: snapshot.phase,
+      endpoint: snapshot.endpoint,
+      appUrl: snapshot.appUrl,
+      diagnostic: snapshot.diagnostic,
+      canOpenBrowser: snapshot.canOpenBrowser,
+      generation: snapshot.generation,
+      inFlight: snapshot.inFlight,
+      closed: snapshot.closed,
+    });
+  }
+
   function render(snapshot) {
     if (!snapshot || typeof snapshot !== "object") return;
+    const nextKey = snapshotKey(snapshot);
+    if (nextKey !== lastSnapshotKey) {
+      pollDelayIndex = 0;
+      lastSnapshotKey = nextKey;
+    }
     latest = { ...latest, ...snapshot };
     const phase = latest.phase || "recovery";
     const ready = phase === "ready";
@@ -132,20 +153,29 @@
     elements.retry.disabled = Boolean(latest.inFlight || latest.closed);
     elements.start.disabled = Boolean(latest.inFlight || latest.closed);
     elements.open.disabled = !latest.canOpenBrowser;
-    if (latest.inFlight) schedulePoll();
+    if (latest.inFlight && !latest.closed) schedulePoll();
   }
 
   function schedulePoll() {
-    if (pollTimer !== null) return;
+    if (pollTimer !== null || latest.closed || !latest.inFlight) return;
+    const delay = POLL_DELAYS_MS[pollDelayIndex];
     pollTimer = window.setTimeout(async () => {
       pollTimer = null;
+      const previousKey = snapshotKey(latest);
       try {
-        render(await invoke("bootstrap_snapshot"));
+        const snapshot = await invoke("bootstrap_snapshot");
+        if (snapshotKey(snapshot) === previousKey) {
+          pollDelayIndex = Math.min(pollDelayIndex + 1, POLL_DELAYS_MS.length - 1);
+        } else {
+          pollDelayIndex = 0;
+        }
+        render(snapshot);
       } catch (error) {
         elements.feedback.textContent = errorText(error);
+        pollDelayIndex = Math.min(pollDelayIndex + 1, POLL_DELAYS_MS.length - 1);
       }
-      if (latest.inFlight) schedulePoll();
-    }, 180);
+      if (latest.inFlight && !latest.closed) schedulePoll();
+    }, delay);
   }
 
   async function runAction(command) {

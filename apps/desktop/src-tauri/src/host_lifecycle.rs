@@ -620,7 +620,6 @@ struct DrainHandle {
 struct OwnedChild {
     process: Option<Child>,
     process_group: Option<OwnedProcessGroup>,
-    leader_reaped: bool,
     group_signal_sent: bool,
     stderr: Arc<Mutex<VecDeque<u8>>>,
     drain: Option<DrainHandle>,
@@ -633,6 +632,9 @@ static REAPER_RETRY_PUMP_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[cfg(test)]
 static FORCE_REAPER_SPAWN_FAILURE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+#[cfg(test)]
+static FORCE_REAPER_SERVICE_SPAWN_FAILURE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 impl OwnedChild {
@@ -686,7 +688,6 @@ impl OwnedChild {
         self.process.take().map(|process| Self {
             process: Some(process),
             process_group: self.process_group,
-            leader_reaped: self.leader_reaped,
             group_signal_sent: self.group_signal_sent,
             stderr: Arc::clone(&self.stderr),
             drain: self.drain.take(),
@@ -992,7 +993,6 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupErr
     Ok(OwnedChild {
         process: Some(process),
         process_group,
-        leader_reaped: false,
         group_signal_sent: false,
         stderr: diagnostics,
         drain: Some(DrainHandle {
@@ -1008,7 +1008,6 @@ fn cleanup_spawn_failure(process: Child, diagnostics: Arc<Mutex<VecDeque<u8>>>, 
     let mut child = OwnedChild {
         process: Some(process),
         process_group,
-        leader_reaped: false,
         group_signal_sent: false,
         stderr: diagnostics,
         drain: None,
@@ -1299,7 +1298,6 @@ fn confirm_owned_group_cleanup(
 fn finish_reaped_child(child: &mut OwnedChild) -> bool {
     // leader 已经被 wait/reap 后仍持有原 Child/PGID ownership；若 group 仍在，只补发一次
     // SIGKILL，之后必须等待 ESRCH 才释放 ownership。
-    child.leader_reaped = true;
     let mut cleanup_error = None;
     let group_gone = confirm_owned_group_cleanup(child, &mut cleanup_error);
     if let Some(error) = cleanup_error {
@@ -1330,9 +1328,6 @@ impl<'a> OwnedProcessCleanup<'a> {
 impl ProcessCleanup for OwnedProcessCleanup<'_> {
     fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
         let status = self.child.process_mut().try_wait()?;
-        if status.is_some() {
-            self.child.leader_reaped = true;
-        }
         Ok(status)
     }
 
@@ -1348,7 +1343,13 @@ impl ProcessCleanup for OwnedProcessCleanup<'_> {
                 Err(error) if is_process_group_gone(&error) => {
                     self.group_signal_sent = true;
                     self.child.group_signal_sent = true;
-                    Ok(())
+                    // leader 可能仍存活但已自行脱离原 PGID；此时旧 group 的 ESRCH 不能
+                    // 代替 leader cleanup，Child 仍由本调用方持有，直接 kill 是安全兜底。
+                    match self.child.process_mut().kill() {
+                        Ok(()) => Ok(()),
+                        Err(kill_error) if is_process_group_gone(&kill_error) => Ok(()),
+                        Err(kill_error) => Err(kill_error),
+                    }
                 }
                 Err(group_error) => {
                     // leader kill 仅作最后兜底，group error 仍需保留，使 caller 不会误以为
@@ -1442,6 +1443,9 @@ fn schedule_reaper_retry(context: &str) {
                     flush_pending_reapers(service, &context_for_thread);
                     if reaper_queue_is_empty() {
                         REAPER_RETRY_PUMP_RUNNING.store(false, Ordering::Release);
+                        if !reaper_queue_is_empty() {
+                            schedule_reaper_retry(&context_for_thread);
+                        }
                         return;
                     }
                 }
@@ -1463,6 +1467,11 @@ fn schedule_reaper_retry(context: &str) {
 }
 
 fn reaper_service(context: &str) -> Option<mpsc::Sender<OwnedChild>> {
+    #[cfg(test)]
+    if FORCE_REAPER_SERVICE_SPAWN_FAILURE.load(Ordering::Acquire) {
+        eprintln!("kanban {context} 注入 reaper service spawn failure");
+        return None;
+    }
     let service = REAPER_SERVICE.get_or_init(|| Mutex::new(None));
     let mut service = service
         .lock()
@@ -1591,6 +1600,7 @@ fn flush_pending_reapers(mut service: mpsc::Sender<OwnedChild>, context: &str) {
                     return;
                 }
                 let Some(restarted) = reaper_service(context) else {
+                    schedule_reaper_retry(context);
                     return;
                 };
                 service = restarted;
@@ -2049,6 +2059,10 @@ mod tests {
             "kanban-desktop-startup-descendant-marker-{}-{id}",
             std::process::id(),
         ));
+        let go_marker = std::env::temp_dir().join(format!(
+            "kanban-desktop-startup-go-marker-{}-{id}",
+            std::process::id(),
+        ));
         let sidecar = std::env::temp_dir().join(format!(
             "kanban-desktop-startup-exit-sidecar-{}-{id}",
             std::process::id(),
@@ -2058,8 +2072,9 @@ mod tests {
             .local_addr()
             .expect("startup fixture address");
         let script = format!(
-            "#!/bin/sh\nprintf '%s' $$ > {}\nsleep 10 &\nprintf '%s' $! > {}\nwait\n",
+            "#!/bin/sh\nprintf '%s' $$ > {}\nwhile [ ! -f {} ]; do sleep 0.01; done\nsleep 10 &\nprintf '%s' $! > {}\nwait\n",
             leader_marker.display(),
+            go_marker.display(),
             descendant_marker.display()
         );
         std::fs::write(&sidecar, script).expect("startup sidecar fixture");
@@ -2074,9 +2089,22 @@ mod tests {
 
         let mut config = HostLaunchConfig::new(sidecar.clone(), "web", "db", "actor", "board");
         config.endpoint = endpoint;
-        config.startup_timeout = Duration::from_millis(100);
+        config.startup_timeout = Duration::from_millis(250);
         config = config.with_probe_timeout(Duration::from_millis(25));
-        let error = connect_or_spawn(&config).expect_err("timed out sidecar must fail startup");
+        let launch = thread::spawn(move || connect_or_spawn(&config));
+        let ready_deadline = Instant::now() + Duration::from_secs(1);
+        while !leader_marker.exists() && Instant::now() < ready_deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            leader_marker.exists(),
+            "sidecar readiness marker was not written"
+        );
+        std::fs::write(&go_marker, b"go").expect("sidecar readiness release");
+        let error = launch
+            .join()
+            .expect("startup launch thread")
+            .expect_err("timed out sidecar must fail startup");
         assert!(matches!(error, HostStartupError::StartupTimeout { .. }));
         let read_pid = |path: &std::path::Path| {
             let deadline = Instant::now() + Duration::from_secs(1);
@@ -2109,6 +2137,7 @@ mod tests {
         );
         let _ = std::fs::remove_file(leader_marker);
         let _ = std::fs::remove_file(descendant_marker);
+        let _ = std::fs::remove_file(go_marker);
         let _ = std::fs::remove_file(sidecar);
     }
 
@@ -2231,6 +2260,34 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn closed_reaper_restart_failure_still_schedules_retry_pump() {
+        let process = test_sleep_child(true);
+        let mut child = test_owned_child(process);
+        let pid = child.process().id() as libc::pid_t;
+        let detached = child.detach_for_reaper().expect("reaper ownership");
+
+        let (closed_sender, receiver) = mpsc::channel();
+        drop(receiver);
+        *REAPER_SERVICE
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(closed_sender.clone());
+        FORCE_REAPER_SERVICE_SPAWN_FAILURE.store(true, Ordering::Release);
+        handoff_to_reaper(detached, "closed reaper restart failure");
+        FORCE_REAPER_SERVICE_SPAWN_FAILURE.store(false, Ordering::Release);
+
+        let reap_deadline = Instant::now() + Duration::from_secs(2);
+        while unsafe { libc::kill(pid, 0) } == 0 && Instant::now() < reap_deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            unsafe { libc::kill(pid, 0) } != 0,
+            "retry pump did not drain child after closed sender restart failure"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn external_host_shutdown_never_kills_process() {
         let process = test_sleep_child(false);
         let mut handle = HostHandle {
@@ -2269,6 +2326,31 @@ mod tests {
             "blocking reaper must release child"
         );
         assert!(child.drain.is_none(), "reaper must join stderr drain");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_falls_back_to_leader_when_owned_group_disappeared() {
+        let process = test_sleep_child_detached_from_owned_group();
+        let mut child = test_owned_child(process);
+        let process_group = child.process_group.expect("owned process group");
+        assert_eq!(
+            unsafe { libc::kill(-process_group, 0) },
+            -1,
+            "detached fixture must leave its original process group"
+        );
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let cleanup = loop {
+            let cleanup = force_stop(&mut child);
+            if cleanup.ownership() == CleanupOwnership::Release || Instant::now() >= deadline {
+                break cleanup;
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(cleanup.ownership(), CleanupOwnership::Release);
+        child.finish_drain();
+        child.release_process();
+        assert!(child.process.is_none(), "leader fallback must reap child");
     }
 
     #[cfg(unix)]
@@ -2496,7 +2578,6 @@ mod tests {
         OwnedChild {
             process: Some(process),
             process_group,
-            leader_reaped: false,
             group_signal_sent: false,
             stderr: diagnostics,
             drain: Some(DrainHandle {
@@ -2530,6 +2611,30 @@ mod tests {
             });
         }
         command.spawn().expect("sleep fixture")
+    }
+
+    #[cfg(unix)]
+    fn test_sleep_child_detached_from_owned_group() -> Child {
+        let mut command = Command::new("sleep");
+        command
+            .arg("10")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+        configure_owned_process_group(&mut command);
+        unsafe {
+            command.pre_exec(|| {
+                let parent_group = libc::getpgid(libc::getppid());
+                if parent_group < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                if libc::setpgid(0, parent_group) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        command.spawn().expect("detached sleep fixture")
     }
 
     fn spawn_json_host<const N: usize>(responses: [Vec<u8>; N]) -> std::net::SocketAddr {

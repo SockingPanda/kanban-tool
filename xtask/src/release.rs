@@ -29,6 +29,8 @@ const DEFAULT_ARTIFACT_PATH: &str = "apps/web/dist";
 const DEFAULT_EVIDENCE_PATH: &str = "output/release";
 const DEFAULT_RECEIPT_PATH: &str = "output/release/release-proof-receipt.json";
 const DEFAULT_PACKAGE_EVIDENCE_PATH: &str = "output/release/desktop-package-evidence.json";
+const DEFAULT_PACKAGE_DIAGNOSTIC_EVIDENCE_PATH: &str =
+    "output/release/desktop-package-diagnostic-evidence.json";
 const DEFAULT_PACKAGE_RECEIPT_PATH: &str = "output/release/desktop-package-receipt.json";
 const BASE_REVISION: &str = "311ef2fdbf238bee8b66e715cab0001df7cd186d";
 
@@ -286,12 +288,17 @@ fn parse_package_options(arguments: &[String]) -> ToolResult<PackageOptions> {
 fn package_receipt(arguments: &[String]) -> ToolResult<()> {
     let options = parse_package_options(arguments)?;
     let root = lexical_root(&options.root)?;
+    let default_evidence_path = if options.diagnostic {
+        DEFAULT_PACKAGE_DIAGNOSTIC_EVIDENCE_PATH
+    } else {
+        DEFAULT_PACKAGE_EVIDENCE_PATH
+    };
     let evidence_path = resolve_root_relative(
         &root,
         &options
             .evidence
             .clone()
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_PACKAGE_EVIDENCE_PATH)),
+            .unwrap_or_else(|| PathBuf::from(default_evidence_path)),
     )?;
     reject_symlink_chain(&evidence_path)?;
     let evidence = read_regular_json(&evidence_path)?;

@@ -404,11 +404,21 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     return surface.claimTokens ?? this.fallbackClaimTokens
   }
 
-  private begin(operation: InspectorMutationOperation | "reload", taskId: string, intent: TaskInspectorMutationRetryIntent): ActiveOperation | null {
+  private begin(
+    operation: InspectorMutationOperation | "reload",
+    taskId: string,
+    intent?: TaskInspectorMutationRetryIntent,
+  ): ActiveOperation | null {
     const surface = this.surface
     if (surface === null || this.disposed || taskId !== surface.scope.taskId) return null
     const key = inspectorMutationKey(operation, taskId)
-    if (this.pending.has(key) || (isWriteOperation(operation) && this.writeTasks.has(taskId))) return null
+    const reloadKey = inspectorMutationKey("reload", taskId)
+    if (
+      this.pending.has(key)
+      || (operation === "reload" && this.writeTasks.has(taskId))
+      || (isWriteOperation(operation) && this.pending.has(reloadKey))
+      || (isWriteOperation(operation) && this.writeTasks.has(taskId))
+    ) return null
     const active: ActiveOperation = {
       generation: this.generation,
       scope: surface.scope,
@@ -557,10 +567,13 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
         return { outcome: committedNotReconciledOutcome, value }
       }
       if (this.currentFor(active.generation, active.scope)) {
+        const reloadKey = inspectorMutationKey("reload", taskId)
         this.errors = new Map(this.errors)
         this.errors.delete(key)
+        this.errors.delete(reloadKey)
         this.retries = new Map(this.retries)
         this.retries.delete(key)
+        this.retries.delete(reloadKey)
         this.finish(key, active)
         return { outcome: committedReconciledOutcome, value }
       }
@@ -601,15 +614,15 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
 
   private async runRead<T>(
     operation: InspectorMutationOperation,
-    intent: TaskInspectorMutationRetryIntent,
+    taskId: string,
     action: (surface: TaskInspectorMutationSurface, taskId: string, signal: AbortSignal) => Promise<T>,
   ): Promise<OperationResult<T>> {
-    const active = this.begin(operation, intent.taskId, intent)
+    const active = this.begin(operation, taskId)
     const surface = this.surface
     if (active === null || surface === null || !this.currentFor(active.generation, active.scope)) return { ok: false, value: null }
-    const key = inspectorMutationKey(operation, intent.taskId)
+    const key = inspectorMutationKey(operation, taskId)
     try {
-      const value = await action(surface, intent.taskId, active.abortController.signal)
+      const value = await action(surface, taskId, active.abortController.signal)
       if (!this.currentFor(active.generation, active.scope)) return { ok: false, value: null }
       this.errors = new Map(this.errors)
       this.errors.delete(key)
@@ -623,7 +636,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
         this.finish(key, active)
         return { ok: false, value: null }
       }
-      this.setFailure(key, active, operation, intent, error)
+      this.setFailure(key, active, operation, null, error)
       return { ok: false, value: null }
     }
   }
@@ -721,7 +734,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     const attachmentId = typeof input === "string" ? normalizedText(input) : normalizedText(input.attachmentId)
     const surface = this.surface
     if (!attachmentId || surface?.attachmentDownload === undefined) return null
-    const result = await this.runRead("downloadAttachment", { operation: "downloadAttachment", taskId: surface.scope.taskId, attachmentId }, (current, taskId, signal) => current.attachmentDownload!.downloadAttachment(taskId, attachmentId, { signal }))
+    const result = await this.runRead("downloadAttachment", surface.scope.taskId, (current, taskId, signal) => current.attachmentDownload!.downloadAttachment(taskId, attachmentId, { signal }))
     return result.ok ? result.value : null
   }
 
@@ -736,7 +749,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     if (surface?.suggestTaskLabels === undefined) return null
     const result = await this.runRead(
       "suggestLabels",
-      { operation: "suggestLabels", taskId: surface.scope.taskId, query },
+      surface.scope.taskId,
       (current, taskId, signal) => current.suggestTaskLabels!(taskId, query, { signal }),
     )
     return result.ok ? result.value : null
@@ -785,9 +798,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
       case "applySuggestedLabel": return this.applySuggestedLabel(candidate.input)
       case "addComment": return this.addComment(candidate.input)
       case "uploadAttachment": return this.uploadAttachment(candidate.input)
-      case "downloadAttachment": return (await this.downloadAttachment(candidate.attachmentId)) === null ? notCommittedOutcome : notCommittedReconciledOutcome
       case "deleteAttachment": return this.deleteAttachment(candidate.attachmentId)
-      case "suggestLabels": return (await this.suggestLabels(candidate.query)) === null ? notCommittedOutcome : notCommittedReconciledOutcome
     }
   }
 }

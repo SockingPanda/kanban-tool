@@ -23,7 +23,7 @@ const handlers = {
   downloadAttachment: vi.fn(async () => null),
   deleteAttachment: vi.fn(async () => ({ committed: true, reconciled: true })),
   suggestLabels: vi.fn(async () => null),
-  retry: vi.fn(async () => true),
+  retry: vi.fn(async () => ({ committed: false, reconciled: true })),
 }
 
 function props(overrides: Partial<TaskInspectorRelationsPanelProps> = {}): TaskInspectorRelationsPanelProps {
@@ -158,7 +158,24 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain('role="alert"')
   })
 
-  test("renders exact operation and reload retry keys without replaying drafts", () => {
+  test("disables all relation writes while reload is pending", () => {
+    const snapshot = props().snapshot
+    const markup = renderToStaticMarkup(
+      <TaskInspectorRelationsPanel
+        {...props({ snapshot: { ...snapshot, pending: new Set(["reload:t_current"]) } })}
+      />,
+    )
+
+    expect(markup).toMatch(/<button type="submit" disabled="">添加评论<\/button>/)
+    expect(markup).toMatch(/<button type="submit" disabled="">添加父依赖<\/button>/)
+    expect(markup).toMatch(/disabled=""[^>]*aria-label="移除父依赖：Parent"/)
+    expect(markup).toMatch(/data-testid="task-inspector-create-step"[^>]*disabled=""/)
+    expect(markup).toMatch(/data-testid="task-inspector-link-step"[^>]*disabled=""/)
+    expect(markup).toMatch(/data-testid="task-inspector-mark-plan-not-required"[^>]*disabled=""/)
+    expect(markup).toContain('role="status" aria-live="polite">正在重试…</p>')
+  })
+
+  test("keeps exact retry intents visible while preserving diverged drafts", () => {
     const snapshot = props().snapshot
     const addCommentKey = "addComment:t_current"
     const reloadKey = "reload:t_current"
@@ -184,6 +201,7 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain('data-retry-key="reload:t_current"')
     expect(markup).toContain("comment failed")
     expect(markup).toContain("stale")
+    expect(markup).not.toMatch(/type="submit" disabled=""[^>]*>添加评论<\/button>/)
   })
 
   test("keeps comments paginated locally and sort changes independent from URL state", () => {
@@ -246,6 +264,26 @@ describe("TaskInspectorRelationsPanel input seams", () => {
     expect(__test.shouldClearDraft({ committed: false, reconciled: true })).toBe(false)
     expect(__test.shouldClearDraft({ committed: true, reconciled: false })).toBe(true)
     expect(__test.shouldClearDraft({ committed: true, reconciled: true })).toBe(true)
+    expect(__test.shouldClearDraft({ committed: true, reconciled: true }, false)).toBe(false)
+    expect(__test.shouldClearRetryDraft({ committed: false, reconciled: false }, true)).toBe(false)
+    expect(__test.shouldClearRetryDraft({ committed: true, reconciled: false }, true)).toBe(true)
+    expect(__test.shouldClearRetryDraft({ committed: true, reconciled: false }, false)).toBe(false)
+    expect(__test.shouldClearRetryDraft({ committed: true, reconciled: true }, false)).toBe(false)
+  })
+
+  test("matches retry intents only while the current draft and scope epoch remain equal", () => {
+    const resolver = (selector: string) => selector === "default#2" ? "t_2" : null
+    expect(__test.commentDraftMatchesRetry("note", "retry me", { body: "retry me", kind: "note" })).toBe(true)
+    expect(__test.commentDraftMatchesRetry("note", "edited", { body: "retry me", kind: "note" })).toBe(false)
+    expect(__test.dependencyDraftMatchesRetry("default#2", "t_2", resolver)).toBe(true)
+    expect(__test.dependencyDraftMatchesRetry("default#3", "t_2", resolver)).toBe(false)
+    expect(__test.stepDraftMatchesRetry("Link", "Body", true, "default#2", { title: "Link", body: "Body", required: true, linked_task_ref: "t_2" }, resolver)).toBe(true)
+    expect(__test.stepDraftMatchesRetry("Changed", "Body", true, "default#2", { title: "Link", body: "Body", required: true, linked_task_ref: "t_2" }, resolver)).toBe(false)
+    expect(__test.planDraftMatchesRetry("why", "why")).toBe(true)
+    expect(__test.planDraftMatchesRetry("changed", "why")).toBe(false)
+    expect(__test.scopeEpochMatches({ identity: "runtime\u0000t1", generation: 1, taskId: "t1" }, { identity: "runtime\u0000t1", generation: 2, taskId: "t1" })).toBe(false)
+    expect(__test.scopeEpochMatches({ identity: "runtime\u0000t1", generation: 1, taskId: "t1" }, { identity: "runtime\u0000t1", generation: 1, taskId: "t2" })).toBe(false)
+    expect(__test.scopeEpochMatches({ identity: "runtime\u0000t1", generation: 1, taskId: "t1" }, { identity: "runtime\u0000t1", generation: 1, taskId: "t1" })).toBe(true)
   })
 
   test("resolves direct ids and same-board refs before a mutation, with no call for unresolved input", () => {

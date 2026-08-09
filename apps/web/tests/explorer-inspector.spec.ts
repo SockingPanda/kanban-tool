@@ -29,7 +29,7 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await expect(page).toHaveURL(new RegExp(`/board\\?task=${taskId}$`))
     await expect(page.getByTestId("task-inspector")).toBeVisible()
     await page.screenshot({ path: test.info().outputPath("task-inspector-board.png"), fullPage: true })
-    await page.getByRole("button", { name: "关闭 Inspector" }).click()
+    await page.getByRole("button", { name: "关闭任务检查器" }).click()
     await expect(page).toHaveURL(/\/board$/)
     await expect(boardOpener).toBeFocused()
 
@@ -39,7 +39,7 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await listOpener.click()
     await expect(page).toHaveURL(new RegExp(`/list\\?task=${taskId}$`))
     await expect(page.getByTestId("task-inspector")).toBeVisible()
-    await page.getByRole("button", { name: "关闭 Inspector" }).click()
+    await page.getByRole("button", { name: "关闭任务检查器" }).click()
     await expect(page).toHaveURL(/\/list$/)
     await expect(listOpener).toBeFocused()
 
@@ -49,7 +49,7 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await mapOpener.click()
     await expect(page).toHaveURL(new RegExp(`/map\\?.*task=${taskId}`))
     await expect(page.getByTestId("task-inspector")).toBeVisible()
-    await page.getByRole("button", { name: "关闭 Inspector" }).click()
+    await page.getByRole("button", { name: "关闭任务检查器" }).click()
     await expect(page).toHaveURL(/\/map$/)
     await expect(mapOpener).toBeFocused()
 
@@ -59,7 +59,7 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await eventOpener.click()
     await expect(page).toHaveURL(new RegExp(`/events\\?task=${taskId}$`))
     await expect(page.getByTestId("task-inspector")).toBeVisible()
-    await page.getByRole("button", { name: "关闭 Inspector" }).click()
+    await page.getByRole("button", { name: "关闭任务检查器" }).click()
     await expect(page).toHaveURL(/\/events$/)
     await expect(eventOpener).toBeFocused()
 

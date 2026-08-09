@@ -146,7 +146,15 @@ function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOpt
       return { kind: "home", pathname: routePath(target, options) }
     case "board":
       if (!parseCanonicalBoardSlug(target.boardSlug)) return invalidBoardRoute(routePath({ kind: "home" }, options), target.boardSlug)
-      return { kind: "board", boardSlug: target.boardSlug, pathname: routePath(target, options) }
+      // `AppRoute` is a valid navigation target too. Preserve its explorer
+      // view/query when an object target comes from a copied deep link.
+      return {
+        kind: "board",
+        boardSlug: target.boardSlug,
+        pathname: routePath(target, options),
+        ...(target.view ? { view: target.view } : {}),
+        ...(target.query ? { query: target.query } : {}),
+      }
     case "settings":
       return { kind: "settings", pathname: routePath(target, options) }
     case "not-found":

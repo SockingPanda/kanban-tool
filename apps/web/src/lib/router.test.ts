@@ -137,6 +137,16 @@ describe("History API navigation", () => {
     expect(history.replaceState).not.toHaveBeenCalled()
   })
 
+  test("preserves explorer view and query for an object deep-link target", async () => {
+    const history = { pushState: vi.fn(), replaceState: vi.fn() }
+    const target = parseAppRoute("/app/boards/team-one/events?task=t_1&kind=task.updated")
+
+    const route = await navigateApp(target, { history })
+
+    expect(route).toMatchObject({ kind: "board", boardSlug: "team-one", view: "events", query: "task=t_1&kind=task.updated" })
+    expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/boards/team-one/events?task=t_1&kind=task.updated")
+  })
+
   test("renders an invalid explicit board route as an error without history", async () => {
     const history = { pushState: vi.fn(), replaceState: vi.fn() }
     const route = await navigateApp("/app/boards/team%20one/board", { history })

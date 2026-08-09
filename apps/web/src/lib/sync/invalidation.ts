@@ -158,6 +158,15 @@ export function classifyEvent(event: ValidatedBusinessEvent): InvalidationPlan {
         boardTarget("tasks", event),
       )
       break
+    case "label.ontology.observation.recorded":
+    case "label.ontology.action.created":
+    case "label.ontology.signal.reviewed":
+      targets.push(boardTarget("label-ontology", event))
+      if (event.scope.signalId !== null && event.scope.signalId !== undefined) {
+        targets.push({ root: "label-ontology-signal", signalId: event.scope.signalId })
+      }
+      if (event.taskId !== null) addTaskDetail(targets, event)
+      break
     case "signal.recorded":
     case "signal.reviewed":
       targets.push(boardTarget("signals", event))

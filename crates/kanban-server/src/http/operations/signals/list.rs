@@ -16,6 +16,7 @@ pub(crate) async fn list_signals(
 ) -> Result<Json<kanban_protocol::ListSignalsResponse>, ApiError> {
     let Query(query) =
         query.map_err(|error| KanbanError::InvalidInput(format!("signal query 无效：{error}")))?;
+    validate_limit(query.limit)?;
     let signals = state
         .application()
         .list_signals(&board, signal_options(&query)?)
@@ -39,8 +40,8 @@ pub(crate) async fn review_signals(
 ) -> Result<Json<kanban_protocol::ReviewSignalsResponse>, ApiError> {
     let Query(mut query) =
         query.map_err(|error| KanbanError::InvalidInput(format!("signal query 无效：{error}")))?;
-    query.include_all = false;
-    if query.status.is_empty() {
+    validate_limit(query.limit)?;
+    if !query.include_all && query.status.is_empty() {
         query.status = vec!["open".to_owned(), "confirmed".to_owned()];
     }
     let signals = state
@@ -71,6 +72,15 @@ fn signal_options(query: &SignalQuery) -> Result<ApplicationSignalListOptions, A
         include_all: query.include_all,
         limit: query.limit,
     })
+}
+
+fn validate_limit(limit: usize) -> Result<(), ApiError> {
+    if !(1..=100).contains(&limit) {
+        return Err(ApiError(KanbanError::InvalidInput(
+            "signal list limit must be between 1 and 100".to_owned(),
+        )));
+    }
+    Ok(())
 }
 
 pub(super) fn router() -> Router<AppState> {

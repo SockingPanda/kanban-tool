@@ -17,7 +17,8 @@
     "limit": {
       "default": 100,
       "format": "uint",
-      "minimum": 0,
+      "maximum": 100,
+      "minimum": 1,
       "type": "integer"
     },
     "status": {

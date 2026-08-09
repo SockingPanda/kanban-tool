@@ -92,6 +92,51 @@ describe("App route parser", () => {
       taskId: "t_1",
     })
   })
+
+  test("parses canonical Signals and Ontology board routes with URL filters", () => {
+    expect(parseAppRoute("/app/boards/default/signals?status=resolved&kind=agent_cli_friction,agent_timeout&task=default%231&signal=sig_1"))
+      .toEqual({
+        kind: "board",
+        boardSlug: "default",
+        pathname: "/app/boards/default/signals",
+        view: "signals",
+        filters: {
+          status: "resolved",
+          kinds: ["agent_cli_friction", "agent_timeout"],
+          task: "default#1",
+          signal: "sig_1",
+        },
+      })
+    expect(parseAppRoute("/app/boards/default/ontology?include_all=true&group_by=candidate_atom&signal=los_1&atom=hash_1")).toEqual({
+      kind: "board",
+      boardSlug: "default",
+      pathname: "/app/boards/default/ontology",
+      view: "ontology",
+      filters: { includeAll: true, groupBy: "candidate_atom", signal: "los_1", atom: "hash_1" },
+    })
+    expect(parseAppRoute("/app/boards/default/ontology?group_by=cluster")).toEqual({
+      kind: "board",
+      boardSlug: "default",
+      pathname: "/app/boards/default/ontology",
+      view: "ontology",
+      filters: { includeAll: false, groupBy: "label" },
+    })
+  })
+
+  test("serializes feature routes without losing canonical board identity", () => {
+    expect(routePath({
+      kind: "board",
+      boardSlug: assertCanonicalBoardSlug("team-one"),
+      view: "signals",
+      filters: { status: "open", kinds: ["agent/timeout"], task: "team-one#7", signal: "sig_1" },
+    })).toBe("/app/boards/team-one/signals?status=open&kind=agent%2Ftimeout&task=team-one%237&signal=sig_1")
+    expect(routePath({
+      kind: "board",
+      boardSlug: assertCanonicalBoardSlug("team-one"),
+      view: "ontology",
+      filters: { includeAll: true, groupBy: "proposed_label", signal: "los_1", atom: "hash_1" },
+    })).toBe("/app/boards/team-one/ontology?include_all=true&group_by=proposed_label&signal=los_1&atom=hash_1")
+  })
 })
 
 describe("History API navigation", () => {

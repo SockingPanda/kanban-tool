@@ -296,9 +296,9 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
 }
 
 fn validate_list_options(options: &SignalListOptions) -> Result<()> {
-    if options.limit == 0 || options.limit > 1000 {
+    if options.limit == 0 || options.limit > 100 {
         return Err(KanbanError::InvalidInput(
-            "signal list limit must be between 1 and 1000".to_owned(),
+            "signal list limit must be between 1 and 100".to_owned(),
         ));
     }
     if options.kinds.iter().any(|kind| kind.trim().is_empty()) {

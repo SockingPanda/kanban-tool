@@ -641,6 +641,77 @@ mod tests {
         )
     }
 
+    async fn bootstrap_event_ledger(store: &TursoStore) -> Vec<(String, serde_json::Value)> {
+        let connection = store.connection().await.expect("connection");
+        let mut rows = connection
+            .query(
+                "SELECT kind,payload_json FROM task_events WHERE kind IN ('label.ontology.action.created','label.semantics.updated','task.label.added') ORDER BY id ASC",
+                (),
+            )
+            .await
+            .expect("bootstrap event ledger");
+        let mut events = Vec::new();
+        while let Some(row) = rows.next().await.expect("bootstrap event row") {
+            let kind =
+                crate::shared::text_value(row.get_value(0).expect("event kind"), "event.kind")
+                    .expect("event kind text");
+            let payload = crate::shared::text_value(
+                row.get_value(1).expect("event payload"),
+                "event.payload",
+            )
+            .expect("event payload text");
+            events.push((
+                kind,
+                serde_json::from_str(&payload).expect("event payload JSON"),
+            ));
+        }
+        events
+    }
+
+    fn assert_bootstrap_event_ledger(events: &[(String, serde_json::Value)]) {
+        assert_eq!(
+            events
+                .iter()
+                .map(|(kind, _)| kind.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "label.ontology.action.created",
+                "label.semantics.updated",
+                "task.label.added",
+            ]
+        );
+        let action_id = events[0]
+            .1
+            .get("action_id")
+            .and_then(serde_json::Value::as_str)
+            .expect("action event id");
+        assert_eq!(
+            events[0].1.get("action_type"),
+            Some(&serde_json::Value::String("bootstrap_label".to_owned()))
+        );
+        assert_eq!(
+            events[0].1.get("signal_ids"),
+            Some(&serde_json::Value::Array(Vec::new()))
+        );
+        assert_eq!(
+            events[1]
+                .1
+                .get("action_id")
+                .and_then(serde_json::Value::as_str),
+            Some(action_id)
+        );
+        assert_eq!(
+            events[2].1.get("label"),
+            Some(&serde_json::Value::String("database".to_owned()))
+        );
+        let label_id = events[2]
+            .1
+            .get("label_id")
+            .and_then(serde_json::Value::as_str)
+            .expect("task label event id");
+        assert!(label_id.starts_with("l_"));
+    }
+
     #[tokio::test]
     async fn bootstrap_verification_is_staged_before_canonical_write() {
         let (_directory, store) = {
@@ -693,8 +764,10 @@ mod tests {
         assert_eq!(after.3, before.3 + 1);
         assert_eq!(after.4, before.4 + 1);
         assert_eq!(after.5, before.5 + (after.2 - before.2));
-        assert_eq!(after.6, before.6 + 2);
+        assert_eq!(after.6, before.6 + 3);
         assert_eq!(after.7, Some(1));
+        let events = bootstrap_event_ledger(&store).await;
+        assert_bootstrap_event_ledger(&events);
         let action = store
             .connection()
             .await
@@ -769,7 +842,9 @@ mod tests {
         assert_eq!(after.3, before.3 + 1);
         assert_eq!(after.4, before.4 + 1);
         assert_eq!(after.5, before.5 + (after.2 - before.2));
-        assert_eq!(after.6, before.6 + 2);
+        assert_eq!(after.6, before.6 + 3);
+        let events = bootstrap_event_ledger(&store).await;
+        assert_bootstrap_event_ledger(&events);
     }
 
     #[tokio::test]

@@ -15,6 +15,7 @@ import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router
 import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
 import { usePreferences } from "./lib/use-preferences"
 import { createTranslator, type MessageKey } from "./lib/i18n"
+import { BrowserConnectivityProvider } from "./lib/browser-connectivity-provider"
 import { ExplorerPage } from "./features/explorer/ExplorerPage"
 import styles from "./shell.module.css"
 
@@ -55,6 +56,10 @@ function navPath(runtime: WebRuntimeConfig, boardSlug?: CanonicalBoardSlug): str
   return boardSlug
     ? routePath({ kind: "board", boardSlug }, { basePath: runtime.webBasePath })
     : routePath({ kind: "home" }, { basePath: runtime.webBasePath })
+}
+
+function featureNavPath(runtime: WebRuntimeConfig, boardSlug: CanonicalBoardSlug, view: "signals" | "ontology"): string {
+  return routePath({ kind: "board", boardSlug, view }, { basePath: runtime.webBasePath })
 }
 
 function StaticIcon({ children }: { children: ReactNode }) {
@@ -162,13 +167,35 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
               icon={<BoardIcon />}
               selectedIcon={<BoardIcon />}
               href={boardPath}
-              isSelected={route.kind === "board"}
+              isSelected={route.kind === "board" && route.view !== "signals" && route.view !== "ontology"}
               isDisabled={!canonicalBoardSlug && route.kind !== "board"}
               onClick={handleNavigate(boardPath)}
               data-testid="nav-board"
             />
           </SideNavSection>
           <SideNavSection title={t("navigation")}>
+            {canonicalBoardSlug ? (
+              <>
+                <SideNavItem
+                  label={t("signals")}
+                  icon={<BoardIcon />}
+                  selectedIcon={<BoardIcon />}
+                  href={featureNavPath(runtime, canonicalBoardSlug, "signals")}
+                  isSelected={route.kind === "board" && route.view === "signals"}
+                  onClick={handleNavigate(featureNavPath(runtime, canonicalBoardSlug, "signals"))}
+                  data-testid="nav-signals"
+                />
+                <SideNavItem
+                  label={t("ontology")}
+                  icon={<BoardIcon />}
+                  selectedIcon={<BoardIcon />}
+                  href={featureNavPath(runtime, canonicalBoardSlug, "ontology")}
+                  isSelected={route.kind === "board" && route.view === "ontology"}
+                  onClick={handleNavigate(featureNavPath(runtime, canonicalBoardSlug, "ontology"))}
+                  data-testid="nav-ontology"
+                />
+              </>
+            ) : null}
             <SideNavItem
               label={t("settings")}
               icon={<SettingsIcon />}
@@ -186,11 +213,33 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
             label={t("board")}
             icon={<BoardIcon />}
             href={boardPath}
-            isSelected={route.kind === "board"}
+            isSelected={route.kind === "board" && route.view !== "signals" && route.view !== "ontology"}
             isDisabled={!canonicalBoardSlug && route.kind !== "board"}
             onClick={handleNavigate(boardPath)}
             testId="nav-board"
           />
+          {canonicalBoardSlug ? (
+            <>
+              <CompactNavItem
+                label={t("signals")}
+                icon={<BoardIcon />}
+                href={featureNavPath(runtime, canonicalBoardSlug, "signals")}
+                isSelected={route.kind === "board" && route.view === "signals"}
+                isDisabled={false}
+                onClick={handleNavigate(featureNavPath(runtime, canonicalBoardSlug, "signals"))}
+                testId="nav-signals"
+              />
+              <CompactNavItem
+                label={t("ontology")}
+                icon={<BoardIcon />}
+                href={featureNavPath(runtime, canonicalBoardSlug, "ontology")}
+                isSelected={route.kind === "board" && route.view === "ontology"}
+                isDisabled={false}
+                onClick={handleNavigate(featureNavPath(runtime, canonicalBoardSlug, "ontology"))}
+                testId="nav-ontology"
+              />
+            </>
+          ) : null}
           <CompactNavItem
             label={t("settings")}
             icon={<SettingsIcon />}
@@ -313,10 +362,13 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   }, [])
 
   const ownsLiveBoardRoute = route.kind === "home"
+  const ownsFeatureRoute = route.kind === "board" && (route.view === "signals" || route.view === "ontology")
   // BoardLive owns loading, empty, stale and offline presentation. Keep the
   // child mounted before generic boundaries; for board routes it remains a
   // hidden session owner and Explorer owns the visible route content below.
-  if (ownsLiveBoardRoute && children) return <>{children}</>
+  if ((ownsLiveBoardRoute || ownsFeatureRoute) && children) {
+    return <BrowserConnectivityProvider online={isOnline}>{children}</BrowserConnectivityProvider>
+  }
 
   if (effectiveBoundary === "loading") {
     return (

@@ -417,9 +417,9 @@ fn validate_create_signal_input(input: &CreateSignalInput) -> Result<(), StoreEr
 }
 
 fn validate_list_options(options: &SignalListOptions) -> Result<(), StoreError> {
-    if options.limit == 0 || options.limit > 1000 {
+    if options.limit == 0 || options.limit > 100 {
         return Err(StoreError::InvalidInput(
-            "signal list limit must be between 1 and 1000".to_owned(),
+            "signal list limit must be between 1 and 100".to_owned(),
         ));
     }
     if options.kinds.iter().any(|kind| kind.trim().is_empty()) {

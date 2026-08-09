@@ -40,6 +40,29 @@ describe("same-origin Web HTTP transport", () => {
     )
   })
 
+  test("posts JSON through the same origin and returns the typed response body", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => sameOriginResponse(JSON.stringify({ data: { ok: true } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }, "https://kanban.test/api/v1/boards/b_1/label-ontology/actions"))
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(transport.request({ method: "POST", path: "/api/v1/boards/b_1/label-ontology/actions", body: { reason: "keep" } })).resolves.toMatchObject({
+      payload: { data: { ok: true } },
+    })
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://kanban.test/__kb_api__/api/v1/boards/b_1/label-ontology/actions",
+      expect.objectContaining({
+        body: JSON.stringify({ reason: "keep" }),
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    )
+  })
+
   test("rejects absolute and scheme-relative paths before fetch", async () => {
     const fetcher = vi.fn<typeof fetch>()
     const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })

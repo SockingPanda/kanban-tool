@@ -54,7 +54,6 @@ export interface BoardSessionTestDependencies {
 }
 
 const sessions = new Map<string, BoardSession>()
-/** Feature readers observe the canonical session; they never open another stream. */
 const sessionTelemetryObservers = new Map<string, Set<(entry: SyncTelemetryEntry) => void>>()
 
 export function runtimeIdentityKey(runtime: WebRuntimeConfig): string {
@@ -116,7 +115,6 @@ export function resetBoardSessionsForTests(): void {
   sessions.clear()
   sessionTelemetryObservers.clear()
 }
-
 /** Subscribe to the already-validated SSE/recovery telemetry of one session. */
 export function subscribeBoardSessionTelemetry(
   runtime: WebRuntimeConfig,
@@ -137,7 +135,7 @@ export function subscribeBoardSessionTelemetry(
     const current = sessionTelemetryObservers.get(key)
     if (current === undefined) return
     current.delete(listener)
-    if (current.size === 0 && sessions.get(key) === undefined) sessionTelemetryObservers.delete(key)
+    if (current.size === 0) sessionTelemetryObservers.delete(key)
   }
 }
 
@@ -241,6 +239,8 @@ export function acquireBoardSession(
     session.controller.stop()
     session.query.invalidate()
     if (sessions.get(key) === session) sessions.delete(key)
+    const observers = sessionTelemetryObservers.get(key)
+    if (observers?.size === 0) sessionTelemetryObservers.delete(key)
   }
   return {
     release,

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 
 import type { BoardReadModel, BoardReadQuery } from "../../lib/api/board-read-model"
-import { asCanonicalBoardId, type StreamContractAdapter } from "../../lib/sync"
+import { asCanonicalBoardId, type StreamContractAdapter, type SyncTelemetryEntry } from "../../lib/sync"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import type { BoardViewModel } from "./types"
 import {
@@ -10,6 +10,7 @@ import {
   resourceIdentityKey,
   resetBoardSessionsForTests,
   runtimeIdentityKey,
+  subscribeBoardSessionTelemetry,
   type BoardReadResource,
 } from "./board-session-registry"
 
@@ -101,6 +102,41 @@ describe("Board canonical session registry", () => {
     expect(activeBoardSessionCount()).toBe(0)
     expect(stop).toHaveBeenCalledTimes(1)
     expect(query.invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  test("preserves a mounted telemetry observer across release/reacquire and drops it after unsubscribe", () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const createController = vi.fn((options: ConstructorParameters<typeof import("../../lib/sync").WebSyncController>[0]) => ({
+      start: vi.fn(),
+      stop: vi.fn(),
+      retry: vi.fn(),
+      options,
+    }))
+    const observer = vi.fn()
+    const unsubscribe = subscribeBoardSessionTelemetry(runtime, asCanonicalBoardId("b_default"), observer)
+    const first = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
+    const firstRecord = createController.mock.calls[0]?.[0]?.telemetry?.record
+    const entry = { type: "event", cursor: 1, details: {} } as SyncTelemetryEntry
+    firstRecord?.(entry)
+    expect(observer).toHaveBeenCalledTimes(1)
+
+    first.release()
+    const second = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
+    const secondRecord = createController.mock.calls[1]?.[0]?.telemetry?.record
+    secondRecord?.({ ...entry, cursor: 2 })
+    expect(observer).toHaveBeenCalledTimes(2)
+
+    unsubscribe()
+    second.release()
+    const third = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
+    const thirdRecord = createController.mock.calls[2]?.[0]?.telemetry?.record
+    thirdRecord?.({ ...entry, cursor: 3 })
+    expect(observer).toHaveBeenCalledTimes(2)
+    third.release()
   })
 
   test("refreshes the existing canonical query and publishes without creating another stream", async () => {

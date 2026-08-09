@@ -21,6 +21,11 @@ test.describe("Astryx Settings", () => {
   })
 
   test("persists appearance, language and actor preferences in the Web namespace", async ({ page }) => {
+    let streamRequests = 0
+    await page.route("**/api/v1/stream/events**", async (route) => {
+      streamRequests += 1
+      await route.abort()
+    })
     await page.goto("/app/settings", { waitUntil: "networkidle" })
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
@@ -39,6 +44,7 @@ test.describe("Astryx Settings", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.getByTestId("identity-actor-saved")).toBeVisible()
     await expect(page.evaluate(() => localStorage.getItem("kb:web:actor"))).resolves.toBe("")
+    expect(streamRequests).toBe(0)
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))
       .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
@@ -148,7 +154,11 @@ test.describe("Astryx Settings", () => {
     await expect(page.getByTestId("connection-reconnect")).toBeEnabled()
     await page.getByTestId("connection-reconnect").click()
     await expect(page.getByTestId("connection-feedback")).toContainText("仍在连接")
-    await expect.poll(() => streamRequests).toBeGreaterThanOrEqual(1)
-    expect(streamRequests).toBeLessThanOrEqual(2)
+    await expect.poll(() => streamRequests).toBe(1)
+
+    await page.getByTestId("nav-board").click()
+    await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
+    await expect(page.getByTestId("board-view")).toHaveAttribute("data-state", "ready")
+    expect(streamRequests).toBe(1)
   })
 })

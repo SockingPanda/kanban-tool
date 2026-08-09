@@ -4,7 +4,7 @@ import { Layout } from "@astryxdesign/core/Layout"
 import { LayoutContent } from "@astryxdesign/core/Layout"
 import { SideNav } from "@astryxdesign/core/SideNav"
 import { SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav"
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
+import { Fragment, useEffect, useState, type MouseEvent, type ReactNode } from "react"
 
 import type { CanonicalBoardSlug } from "./lib/board-slug"
 import type { WebRuntimeConfig } from "./lib/runtime"
@@ -247,7 +247,7 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
   )
 }
 
-function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onReconnect, onRetry }: ProductShellProps) {
+function RouteContent({ runtime, route, canonicalBoardSlug, hasRouteChild, boundary, error, onNavigate, onReconnect, onRetry }: Omit<ProductShellProps, "children"> & { hasRouteChild: boolean }) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -267,7 +267,7 @@ function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, 
   // A route-owned child (currently BoardLive) owns its own loading, empty,
   // stale and offline states. Branch before generic boundaries so a route
   // transition cannot briefly replace it with the shell loading/error panel.
-  if ((route.kind === "home" || route.kind === "board") && children) return <>{children}</>
+  if ((route.kind === "home" || route.kind === "board") && hasRouteChild) return null
 
   if (effectiveBoundary === "loading") {
     return (
@@ -327,15 +327,10 @@ function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, 
     )
   }
   if (route.kind === "settings") {
-    return (
-      <>
-        <SettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} />
-        {children}
-      </>
-    )
+    return <SettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} />
   }
   if (route.kind === "health") return <HealthPage runtime={runtime} />
-  if (children) return <>{children}</>
+  if (hasRouteChild) return null
 
   return (
     <section className={styles.page} aria-labelledby="board-placeholder-heading" data-testid="board-placeholder">
@@ -376,9 +371,8 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry}>
-                  {children}
-                </RouteContent>
+                <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} hasRouteChild={children !== undefined && children !== null} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry} />
+                {children ? <Fragment key="route-session-child">{children}</Fragment> : null}
               </div>
             </LayoutContent>
           }

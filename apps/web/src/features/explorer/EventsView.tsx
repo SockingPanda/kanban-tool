@@ -9,6 +9,7 @@ import {
   type ExplorerEvent,
 } from "../../lib/api/events-read-model"
 import type { Locale } from "../../lib/preferences"
+import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
 
@@ -160,7 +161,7 @@ function EventRow({ event, copy, locale, onSelectTask }: { readonly event: Explo
       <td>{machineToken(event.kind, copy.unknown)}</td>
       <td>
         {event.task_id && onSelectTask ? (
-          <button type="button" className={styles.tokenButton} onClick={() => onSelectTask(event.task_id as string)}>
+          <button type="button" className={styles.tokenButton} data-task-opener={taskOpenerKey(event.task_id as string)} onClick={() => onSelectTask(event.task_id as string)}>
             {machineToken(event.task_id, copy.unknown)}
           </button>
         ) : machineToken(event.task_id, copy.unknown)}

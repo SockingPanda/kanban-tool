@@ -7,6 +7,7 @@ import {
   type ExplorerTaskMapReadModel,
 } from "../../lib/api/explorer-read-model"
 import type { Locale } from "../../lib/preferences"
+import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
 import {
@@ -41,6 +42,7 @@ export interface TaskMapViewProps {
   readonly identityLoading?: boolean
   readonly identityError?: ExplorerReadError | Error | null
   readonly onRetryIdentity?: () => void
+  readonly invalidationRevision?: number
   readonly taskId: string | null
   readonly onSelectTask: (taskId: string) => void
   readonly urlState?: TaskMapUrlState
@@ -149,7 +151,7 @@ type MapCopy = {
 
 const copies: Record<Locale, MapCopy> = {
   zh: {
-    kicker: "TASK MAP",
+    kicker: "任务关系图",
     title: "任务关系图",
     nodes: "节点",
     edges: "边",
@@ -191,7 +193,7 @@ const copies: Record<Locale, MapCopy> = {
     nodeRole: "节点角色",
     context: "上下文",
     inspectTask: "检查任务",
-    openInspector: "打开 Inspector",
+    openInspector: "打开任务检查器",
     required: "必需",
   },
   en: {
@@ -254,6 +256,7 @@ function useTaskMapRead(
   boardIdentity: ExplorerBoardIdentity | null,
   includeDoneContext: boolean,
   hideIsolated: boolean,
+  invalidationRevision: number,
 ): TaskMapReadState & { readonly retry: () => void } {
   const loadRef = useRef<((signal: AbortSignal) => Promise<ExplorerTaskMapReadModel>) | null>(null)
   loadRef.current = boardIdentity
@@ -271,7 +274,7 @@ function useTaskMapRead(
   const [generation, setGeneration] = useState(0)
   const key = `${board}|${boardIdentity?.id ?? "identity-pending"}|${includeDoneContext ? "done" : "active"}|${hideIsolated ? "connected" : "all"}`
   const identityToken = `${board}|${boardIdentity ? taskMapIdentityKey(boardIdentity) : "identity-pending"}`
-  const requestKey = `${key}|${generation}`
+  const requestKey = `${key}|${generation}|${invalidationRevision}`
   const [state, setState] = useState<TaskMapReadInternalState>(() => ({
     data: null,
     loading: false,
@@ -314,7 +317,7 @@ function useTaskMapRead(
       active = false
       controller.abort()
     }
-  }, [boardIdentity, generation, identityToken, key, requestKey])
+  }, [boardIdentity, generation, identityToken, invalidationRevision, key, requestKey])
 
   const sameIdentity = state.identityToken === identityToken
   const currentRequest = sameIdentity && state.requestKey === requestKey
@@ -422,7 +425,7 @@ function TaskMapInspector({
         <div><dt>{copy.requiredSteps}</dt><dd>{task.completed_required_step_count} / {task.required_step_count}</dd></div>
         <div><dt>{copy.nodeRole}</dt><dd translate="no">{node.role}</dd></div>
       </dl>
-      <button type="button" className={styles.openButton} onClick={() => onSelectTask(task.id)}>{copy.openInspector}</button>
+      <button type="button" className={styles.openButton} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>{copy.openInspector}</button>
     </aside>
   )
 }
@@ -499,7 +502,7 @@ export function TaskMapPresentation({
                     const selected = selectedNode?.task.id === node.task.id
                     return (
                       <article className={selected ? `${styles.node} ${styles.selectedNode}` : styles.node} key={node.task.id} data-testid="task-map-node" data-task-id={node.task.id}>
-                        <button type="button" className={styles.nodeButton} aria-pressed={selected} aria-label={`${copy.inspectTask} ${node.task.ref} ${node.task.title}`} onClick={() => inspect(node.task.id)}>
+                        <button type="button" className={styles.nodeButton} data-task-opener={taskOpenerKey(node.task.id)} aria-pressed={selected} aria-label={`${copy.inspectTask} ${node.task.ref} ${node.task.title}`} onClick={() => inspect(node.task.id)}>
                           <span className={styles.nodeTopline}><span translate="no">{node.task.ref}</span><span translate={node.context_only ? undefined : "no"}>{node.context_only ? copy.context : node.role}</span></span>
                           <strong>{node.task.title}</strong>
                           <span className={styles.nodeFacts} translate="no">{node.task.status} · P{node.task.priority}</span>
@@ -533,6 +536,7 @@ export function TaskMapView({
   identityLoading = false,
   identityError = null,
   onRetryIdentity,
+  invalidationRevision = 0,
   taskId,
   onSelectTask,
   urlState = defaultTaskMapUrlState,
@@ -540,12 +544,11 @@ export function TaskMapView({
 }: TaskMapViewProps) {
   const { locale } = usePreferences()
   const routeIdentity = boardIdentity && boardIdentity.slug === board ? boardIdentity : null
-  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated)
+  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated, invalidationRevision)
   const fencedData = fenceTaskMapReadModel(board, routeIdentity, mapRead.data)
   const state = useMemo<TaskMapReadState>(() => {
-    if (identityError) return { data: null, loading: false, error: identityError }
-    if (!routeIdentity) return { data: null, loading: identityLoading, error: null }
-    return { data: fencedData, loading: mapRead.loading || (!fencedData && !mapRead.error), error: mapRead.error }
+    if (!routeIdentity) return { data: null, loading: identityLoading, error: identityError }
+    return { data: fencedData, loading: mapRead.loading || (!fencedData && !mapRead.error), error: identityError ?? mapRead.error }
   }, [fencedData, identityError, identityLoading, mapRead.error, mapRead.loading, routeIdentity])
   const selectedTaskId = urlState.taskId ?? taskId
   const updateUrlState = (next: Partial<TaskMapUrlState>) => onUrlStateChange?.({ ...urlState, ...next })

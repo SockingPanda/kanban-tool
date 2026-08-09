@@ -325,10 +325,10 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
       </section>
     )
   }
-  // Events owns a stale/offline presentation so its last usable snapshot can
-  // remain mounted while connectivity drops. Other board views keep the
-  // shell-level offline boundary (and therefore their existing live semantics).
-  if (effectiveBoundary === "offline" && !(route.kind === "board" && route.view === "events")) {
+  // Explorer owns stale/offline presentation for every board view so a last
+  // usable snapshot and the current route remain mounted while connectivity
+  // drops. The hidden BoardLive session still owns recovery and retry.
+  if (effectiveBoundary === "offline" && route.kind !== "board") {
     return (
       <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline">
         <p className={styles.eyebrow}>{t("routeBoundary")}</p>

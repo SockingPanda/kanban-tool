@@ -1,4 +1,5 @@
 import type { ExplorerReadError, TaskListPlanFilter, TaskListQueryState, TaskListSort, TaskListStatus } from "../../lib/api/explorer-read-model"
+import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { Locale } from "../../lib/preferences"
 import styles from "./TaskListView.module.css"
 
@@ -57,6 +58,7 @@ type ListCopy = {
   readonly blocked: string
   readonly previous: string
   readonly page: string
+  readonly pageSuffix: string
   readonly next: string
   readonly statusValues: Readonly<Record<TaskListStatus, string>>
   readonly planValues: Readonly<Record<TaskListPlanFilter, string>>
@@ -65,13 +67,13 @@ type ListCopy = {
 
 const copies: Record<Locale, ListCopy> = {
   zh: {
-    eyebrow: "TASK EXPLORER", title: "任务列表", loading: "正在加载任务列表…", refreshing: "正在刷新…", search: "搜索", searchPlaceholder: "标题、ref 或描述", filters: "任务列表筛选", status: "状态", allStatuses: "全部状态", sort: "排序", pageSize: "每页", includeArchived: "包含 archived", priority: "优先级", plan: "计划", reset: "重置", error: "任务列表加载失败", retry: "重试", empty: "没有匹配的任务。", table: "任务列表内容", headers: ["Ref", "标题", "状态", "优先级", "执行者", "计划", "步骤", "更新"], blocked: "阻塞", previous: "上一页", page: "Page", next: "下一页",
+    eyebrow: "任务浏览", title: "任务列表", loading: "正在加载任务列表…", refreshing: "正在刷新…", search: "搜索", searchPlaceholder: "标题、ref 或描述", filters: "任务列表筛选", status: "状态", allStatuses: "全部状态", sort: "排序", pageSize: "每页", includeArchived: "包含已归档", priority: "优先级", plan: "计划", reset: "重置", error: "任务列表加载失败", retry: "重试", empty: "没有匹配的任务。", table: "任务列表内容", headers: ["Ref", "标题", "状态", "优先级", "执行者", "计划", "步骤", "更新"], blocked: "阻塞", previous: "上一页", page: "第", pageSuffix: " 页", next: "下一页",
     statusValues: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planValues: { plan_needed: "需要计划", has_steps: "有步骤", incomplete_required_steps: "必需步骤未完成" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
   },
   en: {
-    eyebrow: "TASK EXPLORER", title: "Task list", loading: "Loading tasks…", refreshing: "Refreshing…", search: "Search", searchPlaceholder: "Title, ref, or description", filters: "Task list filters", status: "Status", allStatuses: "All statuses", sort: "Sort", pageSize: "Page size", includeArchived: "Include archived", priority: "Priority", plan: "Plan", reset: "Reset", error: "Task list failed to load", retry: "Retry", empty: "No matching tasks.", table: "Task list", headers: ["Ref", "Title", "Status", "Priority", "Assignee", "Plan", "Steps", "Updated"], blocked: "blocked", previous: "Previous", page: "Page", next: "Next",
+    eyebrow: "TASK EXPLORER", title: "Task list", loading: "Loading tasks…", refreshing: "Refreshing…", search: "Search", searchPlaceholder: "Title, ref, or description", filters: "Task list filters", status: "Status", allStatuses: "All statuses", sort: "Sort", pageSize: "Page size", includeArchived: "Include archived", priority: "Priority", plan: "Plan", reset: "Reset", error: "Task list failed to load", retry: "Retry", empty: "No matching tasks.", table: "Task list", headers: ["Ref", "Title", "Status", "Priority", "Assignee", "Plan", "Steps", "Updated"], blocked: "blocked", previous: "Previous", page: "Page", pageSuffix: "", next: "Next",
     statusValues: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planValues: { plan_needed: "Plan needed", has_steps: "Has steps", incomplete_required_steps: "Incomplete required steps" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
@@ -223,7 +225,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
               {rows.map((task) => (
                 <tr key={task.id} data-testid="task-row" data-task-id={task.id}>
                   <td className={styles.mono}>{task.ref}</td>
-                  <td><button type="button" className={styles.taskLink} onClick={() => onSelectTask(task.id)}>{task.title}</button></td>
+                  <td><button type="button" className={styles.taskLink} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>{task.title}</button></td>
                   <td><span className={styles.badge}>{copy.statusValues[task.status]}</span>{task.dependencyBlocked ? <span className={styles.muted}> {copy.blocked}</span> : null}</td>
                   <td>P{task.priority}</td>
                   <td>{task.assignee || "—"}</td>
@@ -239,7 +241,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
 
       <footer className={styles.pagination}>
         <button type="button" disabled={!canPrevious} onClick={() => updateQuery(state.query, onQueryChange, { page: currentPage - 1 })}>{copy.previous}</button>
-        <span>{copy.page} {currentPage} / {totalPages}</span>
+        <span>{copy.page} {currentPage}{copy.pageSuffix} / {totalPages}</span>
         <button type="button" disabled={!canNext} onClick={() => updateQuery(state.query, onQueryChange, { page: currentPage + 1 })}>{copy.next}</button>
       </footer>
     </section>

@@ -1,0 +1,158 @@
+@layer product {
+  .page {
+    display: grid;
+    gap: 1.5rem;
+    max-width: 72rem;
+    margin: 0 auto;
+  }
+
+  .headingRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .pageHeading {
+    display: grid;
+    gap: 0.6rem;
+    max-width: 52rem;
+  }
+
+  .pageHeading h1,
+  .runtime h2 {
+    margin: 0;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+  }
+
+  .pageHeading h1 {
+    font-size: clamp(2rem, 4vw, 3.6rem);
+  }
+
+  .runtime h2 {
+    font-size: 1.15rem;
+  }
+
+  .eyebrow {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .lede {
+    max-width: 58ch;
+    margin: 0;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+  }
+
+  .refresh,
+  .retry {
+    min-height: 2.5rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.45rem 0.8rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .refresh:hover,
+  .retry:hover {
+    background: var(--color-background-body);
+  }
+
+  .refresh:disabled {
+    cursor: progress;
+    opacity: 0.65;
+  }
+
+  .metrics,
+  .runtimeGrid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1px;
+    margin: 0;
+    background: var(--color-border);
+  }
+
+  .metric,
+  .runtimeFact {
+    display: grid;
+    align-content: start;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 1rem;
+    background: var(--color-background-body);
+  }
+
+  .metric dt,
+  .runtimeFact dt {
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+  }
+
+  .metric dd,
+  .runtimeFact dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+  }
+
+  .ready { color: var(--color-status-positive, #147a50) !important; }
+  .degraded { color: var(--color-status-negative, #ad3b31) !important; }
+  .neutral { color: var(--color-text-primary); }
+
+  .runtime {
+    display: grid;
+    gap: 0.9rem;
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: 1.25rem;
+  }
+
+  .runtimeGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .boundary,
+  .error {
+    display: grid;
+    gap: 0.6rem;
+    padding: 1.2rem;
+    border-inline-start: 0.2rem solid var(--color-accent);
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+  }
+
+  .error {
+    border-inline-start-color: var(--color-status-negative, #ad3b31);
+  }
+
+  .error strong {
+    color: var(--color-text-primary);
+  }
+
+  .retry {
+    justify-self: start;
+  }
+
+  @media (max-width: 64rem) {
+    .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .runtimeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 42rem) {
+    .headingRow { display: grid; }
+    .refresh { justify-self: start; }
+    .metrics,
+    .runtimeGrid { grid-template-columns: minmax(0, 1fr); }
+  }
+}

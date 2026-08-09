@@ -12,6 +12,8 @@ import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router
 import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
 import { usePreferences } from "./lib/use-preferences"
 import { createTranslator, type MessageKey } from "./lib/i18n"
+import { readHealth, type HealthReport } from "./lib/api/health-read-model"
+import { HealthPage } from "./features/health/HealthPage"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -57,6 +59,22 @@ function SettingsIcon() {
   return (
     <StaticIcon>
       <path d="m12 3 1.1 1.9 2.2.7 2-.9 1.8 1.8-.9 2 .7 2.2L21 12l-2.1 1.1-.7 2.2.9 2-1.8 1.8-2-.9-2.2.7L12 21l-1.1-2.1-2.2-.7-2 .9-1.8-1.8.9-2L5.1 13 3 12l2.1-1.1.7-2.2-.9-2 1.8-1.8 2 .9 2.2-.7L12 3Zm0 5.5A3.5 3.5 0 1 0 12 15a3.5 3.5 0 0 0 0-6.5Z" fill="currentColor" />
+    </StaticIcon>
+  )
+}
+
+function HealthIcon() {
+  return (
+    <StaticIcon>
+      <path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.51 8.51 0 0 0 12 3.5Zm0 2a6.5 6.5 0 1 1-6.5 6.5A6.51 6.51 0 0 1 12 5.5Zm-.9 2.2v3.4H7.7v1.8h3.4v3.4h1.8v-3.4h3.4v-1.8h-3.4V7.7Z" fill="currentColor" />
+    </StaticIcon>
+  )
+}
+
+function MaintenanceIcon() {
+  return (
+    <StaticIcon>
+      <path d="m14.8 4.1 1.1 1.1-5.4 5.4 2.9 2.9 5.4-5.4 1.1 1.1-1.1 4-3.4 3.4-4-1.1-5.1 5.1a1.6 1.6 0 0 1-2.3-2.3l5.1-5.1-1.1-4 3.4-3.4 3.4-1.7Zm-2.5 2-1.8.9-2 2 .6 2.1 1.4 1.4 2.1.6 2-2 .9-1.8-1.5-1.5-1.7.3Z" fill="currentColor" />
     </StaticIcon>
   )
 }
@@ -115,7 +133,15 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
       .catch(() => undefined)
   }
   const settingsPath = routePath({ kind: "settings" }, { basePath: runtime.webBasePath })
-  const boardPath = navPath(runtime, canonicalBoardSlug ?? (route.kind === "board" ? route.boardSlug : undefined))
+  const routeBoardSlug = route.kind === "board" || route.kind === "health" || route.kind === "maintenance" ? route.boardSlug : undefined
+  const activeBoardSlug = canonicalBoardSlug ?? routeBoardSlug
+  const boardPath = navPath(runtime, activeBoardSlug)
+  const healthPath = activeBoardSlug
+    ? routePath({ kind: "health", boardSlug: activeBoardSlug }, { basePath: runtime.webBasePath })
+    : boardPath
+  const maintenancePath = activeBoardSlug
+    ? routePath({ kind: "maintenance", boardSlug: activeBoardSlug }, { basePath: runtime.webBasePath })
+    : boardPath
 
   return (
     <SideNav
@@ -143,12 +169,32 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
               selectedIcon={<BoardIcon />}
               href={boardPath}
               isSelected={route.kind === "board"}
-              isDisabled={!canonicalBoardSlug && route.kind !== "board"}
+              isDisabled={!activeBoardSlug}
               onClick={handleNavigate(boardPath)}
               data-testid="nav-board"
             />
           </SideNavSection>
           <SideNavSection title={t("navigation")}>
+            <SideNavItem
+              label={t("health")}
+              icon={<HealthIcon />}
+              selectedIcon={<HealthIcon />}
+              href={healthPath}
+              isSelected={route.kind === "health"}
+              isDisabled={!activeBoardSlug}
+              onClick={handleNavigate(healthPath)}
+              data-testid="nav-health"
+            />
+            <SideNavItem
+              label={t("maintenance")}
+              icon={<MaintenanceIcon />}
+              selectedIcon={<MaintenanceIcon />}
+              href={maintenancePath}
+              isSelected={route.kind === "maintenance"}
+              isDisabled={!activeBoardSlug}
+              onClick={handleNavigate(maintenancePath)}
+              data-testid="nav-maintenance"
+            />
             <SideNavItem
               label={t("settings")}
               icon={<SettingsIcon />}
@@ -167,9 +213,27 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
             icon={<BoardIcon />}
             href={boardPath}
             isSelected={route.kind === "board"}
-            isDisabled={!canonicalBoardSlug && route.kind !== "board"}
+            isDisabled={!activeBoardSlug}
             onClick={handleNavigate(boardPath)}
             testId="nav-board"
+          />
+          <CompactNavItem
+            label={t("health")}
+            icon={<HealthIcon />}
+            href={healthPath}
+            isSelected={route.kind === "health"}
+            isDisabled={!activeBoardSlug}
+            onClick={handleNavigate(healthPath)}
+            testId="nav-health"
+          />
+          <CompactNavItem
+            label={t("maintenance")}
+            icon={<MaintenanceIcon />}
+            href={maintenancePath}
+            isSelected={route.kind === "maintenance"}
+            isDisabled={!activeBoardSlug}
+            onClick={handleNavigate(maintenancePath)}
+            testId="nav-maintenance"
           />
           <CompactNavItem
             label={t("settings")}
@@ -209,6 +273,28 @@ function RuntimeFacts({ runtime, t }: { runtime: WebRuntimeConfig; t: (key: Mess
 function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
+  const [health, setHealth] = useState<HealthReport | null>(null)
+  const [healthError, setHealthError] = useState<unknown>(null)
+  const [healthLoading, setHealthLoading] = useState(true)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setHealthLoading(true)
+    void readHealth({ runtime, signal: controller.signal })
+      .then((report) => {
+        setHealth(report)
+        setHealthError(null)
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
+        setHealthError(error)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setHealthLoading(false)
+      })
+    return () => controller.abort()
+  }, [runtime])
+
   return (
     <section className={styles.page} aria-labelledby="settings-heading" data-testid="settings-page">
       <div className={styles.pageHeading}>
@@ -270,6 +356,26 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
       <div className={styles.runtimeSection}>
         <h2>{t("runtime")}</h2>
         <RuntimeFacts runtime={runtime} t={t} />
+        <dl className={styles.runtimeFacts} data-testid="settings-health">
+          <div>
+            <dt>{t("healthDb")}</dt>
+            <dd translate="no">{healthLoading ? t("loading") : health?.db ?? t("reported")}</dd>
+          </div>
+          <div>
+            <dt>{t("dbPath")}</dt>
+            <dd translate="no">{healthLoading ? t("loading") : health?.db_path?.trim() || t("reported")}</dd>
+          </div>
+          <div>
+            <dt>{t("dbFingerprint")}</dt>
+            <dd translate="no">{healthLoading ? t("loading") : health?.db_fingerprint?.trim() || t("reported")}</dd>
+          </div>
+          {healthError ? (
+            <div role="alert" data-testid="settings-health-error">
+              <dt>{t("healthUnavailable")}</dt>
+              <dd>{healthError instanceof Error ? healthError.message : String(healthError)}</dd>
+            </div>
+          ) : null}
+        </dl>
       </div>
     </section>
   )
@@ -350,6 +456,7 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
     )
   }
   if (route.kind === "settings") return <SettingsPage runtime={runtime} />
+  if (route.kind === "health") return <HealthPage runtime={runtime} />
   if (children) return <>{children}</>
 
   return (

@@ -158,6 +158,7 @@ describe("explorer task list URL state", () => {
     })).toBe("/api/v1/boards/default/task-map?active_only=true&context_depth=1&include_done_context=true&include_archived_context=false&hide_isolated=false&limit_nodes=240")
     expect(buildTaskInspectorRequests("default", "t_1")).toEqual({
       task: "/api/v1/tasks/t_1",
+      labels: "/api/v1/tasks/t_1/labels",
       neighborhood: "/api/v1/tasks/t_1/neighborhood?depth=1&include_archived_context=false&limit_nodes=40",
       dependencies: "/api/v1/tasks/t_1/dependencies",
       steps: "/api/v1/tasks/t_1/steps",
@@ -166,6 +167,57 @@ describe("explorer task list URL state", () => {
       attachments: "/api/v1/tasks/t_1/attachments",
       events: "/api/v1/events?board=default&task_id=t_1&after=0&limit=50",
     })
+  })
+
+  test("hydrates inspector labels from the canonical task-labels read", async () => {
+    const paths: string[] = []
+    const labels = [{ id: "l_release", board_id: "b_default", name: "Stage09 release", color: "#4F46E5", created_at: 1, updated_at: 1 }]
+    const dependencyTask = { id: "t_1", board_id: "b_default", board_slug: "default", ref: "default#1", title: "t_1", status: "ready" as const }
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [{ id: "b_default", slug: "default", name: "Default", description: null, created_at: 1, updated_at: 1, archived_at: null }] }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1") return { payload: { data: mapTask("t_1") }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1/labels") return { payload: { data: labels }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1/dependencies") return { payload: { data: { task: dependencyTask, parents: [], children: [], edges: [] } }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1/steps") return { payload: { data: { task_id: "t_1", steps: [], execution_plan: { board_id: "b_default", task_id: "t_1", state: "unplanned", reason: null, updated_by: "test", updated_at: 1 } } }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1/comments") return { payload: { data: [] }, bytes: 1 }
+        throw new Error(`unexpected inspector path: ${path}`)
+      },
+    }
+
+    const result = await loadTaskInspector(runtime, "default", "t_1", {
+      transport,
+      includeNeighborhood: false,
+      includeRuns: false,
+      includeEvents: false,
+      includeAttachments: false,
+    })
+
+    expect(result.task.labels).toEqual(labels)
+    expect(paths).toContain("/api/v1/tasks/t_1/labels")
+  })
+
+  test("rejects inspector labels that cross the canonical board scope", async () => {
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [{ id: "b_default", slug: "default", name: "Default", description: null, created_at: 1, updated_at: 1, archived_at: null }] }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1") return { payload: { data: mapTask("t_1") }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1/labels") return { payload: { data: [{ id: "l_other", board_id: "b_other", name: "foreign", color: null, created_at: 1, updated_at: 1 }] }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1/dependencies") return { payload: { data: { task: { id: "t_1", board_id: "b_default", board_slug: "default", ref: "default#1", title: "t_1", status: "ready" }, parents: [], children: [], edges: [] } }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1/steps") return { payload: { data: { task_id: "t_1", steps: [], execution_plan: { board_id: "b_default", task_id: "t_1", state: "unplanned", reason: null, updated_by: "test", updated_at: 1 } } }, bytes: 1 }
+        if (path === "/api/v1/tasks/t_1/comments") return { payload: { data: [] }, bytes: 1 }
+        throw new Error(`unexpected inspector path: ${path}`)
+      },
+    }
+
+    await expect(loadTaskInspector(runtime, "default", "t_1", {
+      transport,
+      includeNeighborhood: false,
+      includeRuns: false,
+      includeEvents: false,
+      includeAttachments: false,
+    })).rejects.toMatchObject({ name: "ExplorerReadError", kind: "anomaly" })
   })
 
   test("rejects non-canonical task deep links before building requests", () => {

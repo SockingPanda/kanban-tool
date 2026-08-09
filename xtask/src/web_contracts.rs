@@ -1472,7 +1472,7 @@ mod tests {
                 .any(|endpoint| endpoint.operation_id == "api.update-step")
         );
         assert!(
-            !resolved
+            resolved
                 .endpoints
                 .iter()
                 .any(|endpoint| endpoint.operation_id == "api.list-task-labels")

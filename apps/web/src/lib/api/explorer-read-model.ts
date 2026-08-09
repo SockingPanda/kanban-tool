@@ -30,6 +30,8 @@ import { parseApiGetRunLogPath } from "./generated/contracts/api-get-run-log-pat
 import { parseApiGetRunLogResponse, type ApiGetRunLogResponseContract } from "./generated/contracts/api-get-run-log-response"
 import { parseApiListCommentsPath } from "./generated/contracts/api-list-comments-path"
 import { parseApiListCommentsResponse, type ApiListCommentsResponseContract } from "./generated/contracts/api-list-comments-response"
+import { parseApiListTaskLabelsPath } from "./generated/contracts/api-list-task-labels-path"
+import { parseApiListTaskLabelsResponse, type ApiListTaskLabelsResponseContract } from "./generated/contracts/api-list-task-labels-response"
 import { parseApiListAttachmentsPath } from "./generated/contracts/api-list-attachments-path"
 import { parseApiListAttachmentsResponse, type ApiListAttachmentsResponseContract } from "./generated/contracts/api-list-attachments-response"
 import { parseApiListEventsQuery } from "./generated/contracts/api-list-events-query"
@@ -967,7 +969,7 @@ export async function loadTaskRuns(
 
 export interface TaskInspectorReadModel {
   readonly board: ExplorerBoardIdentity
-  readonly task: ApiGetTaskResponseContract["data"]
+  readonly task: TaskInspectorTask
   readonly neighborhood: ApiTaskNeighborhoodResponseContract["data"] | null
   readonly dependencies: ApiListDependenciesResponseContract["data"]
   readonly steps: ApiListStepsResponseContract["data"]
@@ -987,8 +989,13 @@ export interface TaskInspectorReadOptions extends ExplorerReadOptions {
   readonly includeAttachments?: boolean
 }
 
+type TaskInspectorTask = Omit<ApiGetTaskResponseContract["data"], "labels"> & {
+  readonly labels: ApiListTaskLabelsResponseContract["data"]
+}
+
 export interface TaskInspectorRequests {
   readonly task: string
+  readonly labels: string
   readonly neighborhood: string
   readonly dependencies: string
   readonly steps: string
@@ -1021,6 +1028,7 @@ export function buildTaskInspectorRequests(board: string, taskId: string): TaskI
     if (neighborhoodQuery.limit_nodes !== undefined) neighborhoodParams.set("limit_nodes", String(neighborhoodQuery.limit_nodes))
     return {
       task: `/api/v1/tasks/${encodedSegment(task)}`,
+      labels: `/api/v1/tasks/${encodedSegment(parseApiListTaskLabelsPath({ task_id: task }).task_id)}/labels`,
       neighborhood: `/api/v1/tasks/${encodedSegment(neighborhoodPath)}/neighborhood?${neighborhoodParams.toString()}`,
       dependencies: `/api/v1/tasks/${encodedSegment(parseApiListDependenciesPath({ task_id: task }).task_id)}/dependencies`,
       steps: `/api/v1/tasks/${encodedSegment(parseApiListStepsPath({ task_id: task }).task_id)}/steps`,
@@ -1046,6 +1054,19 @@ function validateInspectorTask(
   if (task.id !== expectedId) throw new ExplorerReadError("anomaly", "任务 Inspector 响应 id 与请求不一致。")
   if (task.board_id !== board.id || task.board_slug !== board.slug) {
     throw new ExplorerReadError("anomaly", `任务 ${task.id} 不属于当前 canonical board。`, { reason: "task-not-found" })
+  }
+}
+
+function validateInspectorLabels(
+  labels: ApiListTaskLabelsResponseContract["data"],
+  board: ExplorerBoardIdentity,
+): void {
+  const ids = new Set<string>()
+  for (const label of labels) {
+    if (label.board_id !== board.id || label.id.trim().length === 0 || label.name.trim().length === 0 || ids.has(label.id)) {
+      throw new ExplorerReadError("anomaly", "任务标签响应越过当前 board scope 或包含重复/空 label。")
+    }
+    ids.add(label.id)
   }
 }
 
@@ -1086,10 +1107,11 @@ function validateNeighborhoodScope(
 }
 
 function validateInspectorScope(
-  model: Pick<TaskInspectorReadModel, "neighborhood" | "dependencies" | "steps" | "runs" | "comments" | "attachments" | "events">,
+  model: Pick<TaskInspectorReadModel, "neighborhood" | "dependencies" | "steps" | "runs" | "comments" | "attachments" | "events" | "task">,
   board: ExplorerBoardIdentity,
   taskId: string,
 ): void {
+  validateInspectorLabels(model.task.labels, board)
   if (model.neighborhood !== null) validateNeighborhoodScope(model.neighborhood, board, taskId)
   if (model.dependencies.task.id !== taskId) throw new ExplorerReadError("anomaly", "任务依赖响应 task id 不一致。")
   if (model.steps.task_id !== taskId) throw new ExplorerReadError("anomaly", "任务步骤响应 task id 不一致。")
@@ -1150,6 +1172,7 @@ export async function loadTaskInspector(
       throw error
     }
     validateInspectorTask(taskResponse.data, board, taskId)
+    const labelsPromise = getPayload(transport, requests.labels, linked.signal, budget).then((payload) => parseContract("api.list-task-labels.response", parseApiListTaskLabelsResponse, payload).data)
     const neighborhoodPromise: Promise<ApiTaskNeighborhoodResponseContract["data"] | null> = options.includeNeighborhood === false
       ? Promise.resolve(null)
       : getPayload(transport, requests.neighborhood, linked.signal, budget).then((payload) => parseContract("api.task-neighborhood.response", parseApiTaskNeighborhoodResponse, payload).data)
@@ -1162,7 +1185,8 @@ export async function loadTaskInspector(
     const attachmentsPromise: Promise<ApiListAttachmentsResponseContract["data"]> = options.includeAttachments === false
       ? Promise.resolve([])
       : getPayload(transport, requests.attachments, linked.signal, budget).then((payload) => parseContract("api.list-attachments.response", parseApiListAttachmentsResponse, payload).data)
-    const [neighborhood, dependencies, steps, runs, comments, attachments, events] = await Promise.all([
+    const [labels, neighborhood, dependencies, steps, runs, comments, attachments, events] = await Promise.all([
+      labelsPromise,
       neighborhoodPromise,
       getPayload(transport, requests.dependencies, linked.signal, budget).then((payload) => parseContract("api.list-dependencies.response", parseApiListDependenciesResponse, payload).data),
       getPayload(transport, requests.steps, linked.signal, budget).then((payload) => parseContract("api.list-steps.response", parseApiListStepsResponse, payload).data),
@@ -1172,10 +1196,11 @@ export async function loadTaskInspector(
       eventsPromise,
     ])
     const detail = { neighborhood, dependencies, steps, runs, comments, attachments, events }
-    validateInspectorScope(detail, board, taskId)
+    const task = { ...taskResponse.data, labels }
+    validateInspectorScope({ ...detail, task }, board, taskId)
     return Object.freeze({
       board,
-      task: Object.freeze({ ...taskResponse.data }),
+      task: Object.freeze(task),
       neighborhood,
       dependencies,
       steps,

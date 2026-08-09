@@ -27,6 +27,7 @@ export function TaskInspectorEditForm({
   pending,
   error,
   onRetry,
+  retryBlocksSubmit,
   copy,
   onChange,
   onSave,
@@ -37,6 +38,7 @@ export function TaskInspectorEditForm({
   readonly pending: boolean
   readonly error: string | null
   readonly onRetry: (() => void) | null
+  readonly retryBlocksSubmit: boolean
   readonly copy: InspectorCopy
   readonly onChange: (draft: InspectorEditDraft) => void
   readonly onSave: (event: FormEvent<HTMLFormElement>) => void
@@ -74,7 +76,7 @@ export function TaskInspectorEditForm({
           <input type="datetime-local" name="task-due-at" autoComplete="off" value={draft.dueAt} onChange={(event) => onChange({ ...draft, dueAt: event.target.value })} />
         </label>
         <div className={styles.editorActions}>
-          <button type="submit" disabled={pending || draft.title.trim().length === 0} aria-busy={pending || undefined}>
+          <button type="submit" disabled={pending || retryBlocksSubmit || draft.title.trim().length === 0} aria-busy={pending || undefined}>
             {pending ? copy.saving : copy.save}
           </button>
           <button type="button" className={styles.secondaryButton} disabled={pending} onClick={onCancel}>{copy.cancel}</button>
@@ -93,6 +95,7 @@ export function TaskInspectorActionPanel({
   error,
   onAction,
   onRetry,
+  retryAction,
 }: {
   readonly task: TaskInspectorViewModel["task"]
   readonly claimToken: string | null
@@ -102,6 +105,7 @@ export function TaskInspectorActionPanel({
   readonly error: TaskInspectorMutationError | null
   readonly onAction: (view: InspectorActionView, trigger: HTMLButtonElement) => void
   readonly onRetry: (() => void) | null
+  readonly retryAction: InspectorActionId | null
 }) {
   const views = inspectorActionViews(task, claimToken, copy)
   return (
@@ -109,7 +113,7 @@ export function TaskInspectorActionPanel({
       <div className={styles.actionGrid} role="group" aria-label={copy.actions}>
         {views.map((view) => {
           const label = actionLabel(view.action, locale)
-          const disabled = pending || !view.enabled
+          const disabled = pending || !view.enabled || view.action === retryAction
           const reasonId = `inspector-action-reason-${view.action}`
           return (
             <div key={view.action} className={styles.actionItem}>
@@ -153,6 +157,7 @@ export function TaskInspectorActionDialog({
   copy,
   error,
   onRetry,
+  retryBlocksSubmit,
   onDescriptionChange,
   onReasonChange,
   onConfirmationChange,
@@ -164,6 +169,7 @@ export function TaskInspectorActionDialog({
   readonly copy: InspectorCopy
   readonly error: string | null
   readonly onRetry: (() => void) | null
+  readonly retryBlocksSubmit: boolean
   readonly onDescriptionChange: (value: string) => void
   readonly onReasonChange: (value: string) => void
   readonly onConfirmationChange: (value: boolean) => void
@@ -196,7 +202,7 @@ export function TaskInspectorActionDialog({
           {invalid ? <p className={styles.error} role="status">{dialog.kind === "description" ? copy.descriptionRequired : dialog.kind === "reason" && dialog.requiresConfirmation && dialog.reason.trim().length > 0 && !dialog.confirmed ? copy.confirmationRequired : copy.reasonRequired}</p> : null}
           <div className={styles.dialogActions}>
             <button type="button" className={styles.secondaryButton} onClick={onCancel}>{copy.cancel}</button>
-            <button ref={dialogConfirmRef} type="submit" disabled={invalid}>{submitLabel}</button>
+            <button ref={dialogConfirmRef} type="submit" disabled={invalid || retryBlocksSubmit}>{submitLabel}</button>
           </div>
         </form>
       </div>

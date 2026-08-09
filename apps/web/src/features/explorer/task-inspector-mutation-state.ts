@@ -169,7 +169,7 @@ export interface TaskInspectorMutationHandlers {
   downloadAttachment(input: InspectorDownloadAttachmentInput | string): Promise<DownloadedAttachment | null>
   deleteAttachment(input: InspectorDeleteAttachmentInput | string): Promise<InspectorMutationOutcome>
   suggestLabels(query?: InspectorSuggestTaskLabelsQuery): Promise<ApiSuggestTaskLabelsResponseContract | null>
-  retry(key?: string): Promise<boolean>
+  retry(key?: string): Promise<InspectorMutationOutcome>
 }
 
 export interface TaskInspectorMutationError {

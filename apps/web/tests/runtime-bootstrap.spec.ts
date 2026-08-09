@@ -27,7 +27,7 @@ test.describe("同源 Web runtime bootstrap", () => {
       })
     })
 
-    const navigation = page.goto("/app/", { waitUntil: "commit" })
+    const navigation = page.goto("/app/", { waitUntil: "domcontentloaded" })
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1b1b1b")

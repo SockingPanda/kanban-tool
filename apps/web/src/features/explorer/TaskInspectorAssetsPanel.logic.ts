@@ -104,3 +104,35 @@ export function exactAttachmentBytes(content: Uint8Array): ArrayBuffer {
 export function shouldClearAssetDraft(outcome: InspectorMutationOutcome | null): boolean {
   return outcome?.committed === true
 }
+
+/** Retry drafts are the original in-memory File object; same metadata is not enough. */
+export function isAttachmentRetryDraftCurrent(current: File | null, attempted: File | null): boolean {
+  return current !== null && attempted !== null && current === attempted
+}
+
+export interface InspectorAssetsScopeIdentity {
+  readonly taskId: string
+  readonly epoch: number
+  readonly generation: number
+}
+
+/** Advance the local fence when task or controller generation changes. */
+export function advanceInspectorAssetsScope(
+  previous: InspectorAssetsScopeIdentity,
+  taskId: string,
+  generation: number,
+): InspectorAssetsScopeIdentity {
+  if (previous.taskId === taskId && previous.generation === generation) return previous
+  return {
+    taskId,
+    epoch: previous.taskId === taskId ? previous.epoch : previous.epoch + 1,
+    generation,
+  }
+}
+
+export function isInspectorAssetsScopeCurrent(
+  current: InspectorAssetsScopeIdentity,
+  captured: InspectorAssetsScopeIdentity,
+): boolean {
+  return current.taskId === captured.taskId && current.epoch === captured.epoch && current.generation === captured.generation
+}

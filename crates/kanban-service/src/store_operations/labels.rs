@@ -321,6 +321,7 @@ impl TursoStore {
                 validation_json: "{}",
                 now: input.now,
                 created_by: &input.actor,
+                actor_type: "user",
                 agent_type: None,
             },
         )

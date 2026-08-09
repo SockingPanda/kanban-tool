@@ -5,9 +5,11 @@ mod tests {
     use std::thread::JoinHandle;
 
     use crate::domain::LabelAtomRecord;
+    use crate::shared::{optional_text_value, text_value};
     use crate::store_operations::{
-        CreateTaskInput, LabelSuggestionOptions, OntologyActorInput, OntologyApplyAtomInput,
-        OntologyRevertInput, UpsertLabelSemanticsInput,
+        CreateTaskInput, LabelSuggestionOptions, OntologyActionInput, OntologyActorInput,
+        OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologySignalInput,
+        UpsertLabelSemanticsInput,
     };
     use crate::test_support::*;
     use crate::vector::{VectorConfig, VectorEmbeddingInput, stable_id};
@@ -468,5 +470,263 @@ mod tests {
                 .iter()
                 .all(|atom| atom.text != "new behavior")
         );
+    }
+
+    #[tokio::test]
+    async fn ontology_mutations_emit_typed_events_and_use_explicit_actor_type() {
+        let (_directory, store, _path) = store("ontology-events").await;
+        store.initialize().await.expect("initialize");
+        let task = store
+            .create_task(
+                "default",
+                task_input("t_ontology_events", "Ontology event task", None),
+            )
+            .await
+            .expect("task");
+        let observation = store
+            .record_label_ontology_observation(
+                "default",
+                OntologyObservationInput {
+                    actor: user(),
+                    task_ref: task.task_ref.clone(),
+                    agent_candidates_json: "[]".to_owned(),
+                    suggestion_snapshot_json: "{}".to_owned(),
+                    final_decision_json: "{}".to_owned(),
+                    suggest_coverage: None,
+                    suggest_coverage_cosine: None,
+                    suggest_residual_norm: None,
+                    suggest_needs_new_label: false,
+                    suggest_degraded: false,
+                    diagnostics_json: "[]".to_owned(),
+                    capture_fingerprint: Some("ontology-events-capture".to_owned()),
+                    signals: vec![OntologySignalInput {
+                        kind: "vocabulary_gap".to_owned(),
+                        target_label_ref: None,
+                        related_labels_json: "[]".to_owned(),
+                        proposed_action: "observe".to_owned(),
+                        candidate_atom_polarity: None,
+                        candidate_atom_kind: None,
+                        candidate_text: None,
+                        proposed_label_name: None,
+                        proposal_json: "{}".to_owned(),
+                        agent_selected: false,
+                        suggest_state: None,
+                        suggest_score: None,
+                        suggest_rank: None,
+                        final_selected: false,
+                        rationale: "event test".to_owned(),
+                        confidence: None,
+                        signal_key: Some("event-signal".to_owned()),
+                    }],
+                },
+            )
+            .await
+            .expect("observation");
+        let signal_id = observation.signals[0].id.clone();
+        let action = store
+            .create_label_ontology_action(
+                "default",
+                OntologyActionInput {
+                    actor: OntologyActorInput {
+                        name: "agent-user".to_owned(),
+                        actor_type: "user".to_owned(),
+                        agent_type: Some("luna".to_owned()),
+                    },
+                    action_type: "confirm".to_owned(),
+                    signal_ids: vec![signal_id.clone()],
+                    reason: "confirm event".to_owned(),
+                    superseded_by_signal_id: None,
+                    parent_action_id: None,
+                    target_label_ref: None,
+                    result_label_ref: None,
+                    result_atom_id: None,
+                    result_atom_content_hash: None,
+                    result_proposal_id: None,
+                    canonical_before_hash: None,
+                    canonical_after_hash: None,
+                    change_json: "{}".to_owned(),
+                    validation_status: None,
+                    validation_json: "{}".to_owned(),
+                },
+            )
+            .await
+            .expect("action");
+        assert_eq!(action.created_by_type, "user");
+        assert_eq!(action.agent_type.as_deref(), Some("luna"));
+        let connection = store.connection().await.expect("connection");
+        let mut rows = connection
+            .query(
+                "SELECT kind,task_id,payload_json FROM task_events WHERE board_id='b_default' AND kind LIKE 'label.ontology.%' ORDER BY id",
+                (),
+            )
+            .await
+            .expect("events");
+        let mut events = Vec::new();
+        while let Some(row) = rows.next().await.expect("event row") {
+            events.push((
+                text_value(row.get_value(0).expect("kind"), "event.kind").expect("kind text"),
+                optional_text_value(row.get_value(1).expect("task id"), "event.task_id")
+                    .expect("task id text"),
+                text_value(row.get_value(2).expect("payload"), "event.payload")
+                    .expect("payload text"),
+            ));
+        }
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].0, "label.ontology.observation.recorded");
+        assert_eq!(events[0].1.as_deref(), Some(task.id.as_str()));
+        assert_eq!(events[1].0, "label.ontology.action.created");
+        assert_eq!(events[2].0, "label.ontology.signal.reviewed");
+        assert!(events.iter().all(|event| !event.2.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn ontology_review_aggregates_beyond_surface_page_and_counts_task_refs() {
+        let (_directory, store, _path) = store("ontology-review-pagination").await;
+        store.initialize().await.expect("initialize");
+        let task = store
+            .create_task(
+                "default",
+                task_input("t_ontology_review", "Review task", None),
+            )
+            .await
+            .expect("task");
+        let connection = store.connection().await.expect("connection");
+        for index in 0..101 {
+            let observation_id = format!("lor_review_{index}");
+            let signal_id = format!("los_review_{index}");
+            connection
+                .execute(
+                    "INSERT INTO label_ontology_observations(id,board_id,task_id,task_ref_snapshot,task_snapshot_json,capture_fingerprint,created_by,created_by_type,created_at) VALUES (:observation,'b_default',:task,:task_ref,'{}',:fingerprint,'tester','user',:created)",
+                    turso::named_params! {
+                        ":observation": observation_id.as_str(),
+                        ":task": task.id.as_str(),
+                        ":task_ref": format!("default#{index}").as_str(),
+                        ":fingerprint": format!("review-{index}").as_str(),
+                        ":created": index as i64 + 1,
+                    },
+                )
+                .await
+                .expect("observation row");
+            connection
+                .execute(
+                    "INSERT INTO label_ontology_signals(id,board_id,observation_id,kind,status,proposed_action,rationale,signal_key,created_at,updated_at) VALUES (:signal,'b_default',:observation,'vocabulary_gap','open','observe','review','review-key',:created,:created)",
+                    turso::named_params! {
+                        ":signal": signal_id.as_str(),
+                        ":observation": observation_id.as_str(),
+                        ":created": index as i64 + 1,
+                    },
+                )
+                .await
+                .expect("signal row");
+        }
+        let groups = store
+            .review_label_ontology("default", "label", false, 1)
+            .await
+            .expect("review groups");
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].signal_count, 101);
+        assert_eq!(groups[0].task_count, 101);
+        assert_eq!(groups[0].sample_task_refs.len(), 20);
+    }
+
+    #[tokio::test]
+    async fn ontology_lifecycle_rejects_terminal_reversal_and_atom_scope_mismatch() {
+        let (_directory, store, _path) = store("ontology-lifecycle-guards").await;
+        store.initialize().await.expect("initialize");
+        let task = store
+            .create_task(
+                "default",
+                task_input("t_ontology_lifecycle", "Lifecycle task", None),
+            )
+            .await
+            .expect("task");
+        let observation = store
+            .record_label_ontology_observation(
+                "default",
+                OntologyObservationInput {
+                    actor: user(),
+                    task_ref: task.task_ref.clone(),
+                    agent_candidates_json: "[]".to_owned(),
+                    suggestion_snapshot_json: "{}".to_owned(),
+                    final_decision_json: "{}".to_owned(),
+                    suggest_coverage: None,
+                    suggest_coverage_cosine: None,
+                    suggest_residual_norm: None,
+                    suggest_needs_new_label: false,
+                    suggest_degraded: false,
+                    diagnostics_json: "[]".to_owned(),
+                    capture_fingerprint: Some("ontology-lifecycle-capture".to_owned()),
+                    signals: vec![OntologySignalInput {
+                        kind: "vocabulary_gap".to_owned(),
+                        target_label_ref: None,
+                        related_labels_json: "[]".to_owned(),
+                        proposed_action: "observe".to_owned(),
+                        candidate_atom_polarity: None,
+                        candidate_atom_kind: None,
+                        candidate_text: None,
+                        proposed_label_name: None,
+                        proposal_json: "{}".to_owned(),
+                        agent_selected: false,
+                        suggest_state: None,
+                        suggest_score: None,
+                        suggest_rank: None,
+                        final_selected: false,
+                        rationale: "lifecycle test".to_owned(),
+                        confidence: None,
+                        signal_key: Some("lifecycle-signal".to_owned()),
+                    }],
+                },
+            )
+            .await
+            .expect("observation");
+        let signal_id = observation.signals[0].id.clone();
+        let action = |action_type: &str| OntologyActionInput {
+            actor: user(),
+            action_type: action_type.to_owned(),
+            signal_ids: vec![signal_id.clone()],
+            reason: "lifecycle action".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: "{}".to_owned(),
+            validation_status: None,
+            validation_json: "{}".to_owned(),
+        };
+        store
+            .create_label_ontology_action("default", action("confirm"))
+            .await
+            .expect("confirm");
+        store
+            .create_label_ontology_action("default", action("resolve_no_change"))
+            .await
+            .expect("resolve");
+        let error = store
+            .create_label_ontology_action("default", action("reject"))
+            .await
+            .expect_err("terminal reversal");
+        assert!(matches!(
+            error,
+            crate::error::StoreError::InvalidTransition(_)
+        ));
+        let atom_error = store
+            .create_label_ontology_action(
+                "default",
+                OntologyActionInput {
+                    result_atom_id: Some("la_missing".to_owned()),
+                    ..action("update_semantics")
+                },
+            )
+            .await
+            .expect_err("missing atom");
+        assert!(matches!(
+            atom_error,
+            crate::error::StoreError::InvalidInput(_)
+        ));
     }
 }

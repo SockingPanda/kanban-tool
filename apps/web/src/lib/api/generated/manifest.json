@@ -4527,7 +4527,7 @@
   "sourceHashes": {
     "protocolEndpoints": "sha256:7031b329eb0e9ffb4b7a7391bbdfcd57668daa16dd66b5eed1f4e71938b3c98a",
     "protocolOperations": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5",
-    "protocolSchemas": "sha256:26020fb98c216e148ede5f73b06ff67fe22020c6e3d06d0e54057e2f1ab8355e",
+    "protocolSchemas": "sha256:623c32eb57f7342eac1044b4268004cb116bb04180806d3a03f8f8ac95b286ed",
     "selection": "sha256:a767a0d80a64ff8eb1844be0dca2c6ae1a91cc5f900b1f2c2a80f11787f78c04"
   }
 }

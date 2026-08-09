@@ -1651,7 +1651,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-events-response.v1.invalid.json",
       "path": "api/list-events-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-events-response.v1.valid.json",
-      "sha256": "sha256:9ece9933de32d242327d442fb066a4a4910db52885dd5c9c48281811ca66b2f5",
+      "sha256": "sha256:789831b19089ea34c4edb56f88f14fdba350cec0f52a4419a6cae6f4ad7faf51",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1681,7 +1681,7 @@
       "invalid_fixture": "schemas/fixtures/sse/stream-event-data.v1.invalid.json",
       "path": "sse/stream-event-data.v1.schema.json",
       "schema_fixture": "schemas/fixtures/sse/stream-event-data.v1.valid.json",
-      "sha256": "sha256:d206a56f7b845aff3b6ffd4add18222ca151c486101b9a1f4e065c4f437cdd25",
+      "sha256": "sha256:1e37043ab93382ec66b1d00e87c7814a134f17d28d4129087af4c72bf2d52470",
       "strictness": "deny_unknown_fields"
     },
     {

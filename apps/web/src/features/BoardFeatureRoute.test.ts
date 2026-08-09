@@ -7,6 +7,9 @@ describe("Board feature session invalidation", () => {
     expect(telemetryInvalidatesFeature("signals", "event-applied", "signal.recorded")).toBe(true)
     expect(telemetryInvalidatesFeature("signals", "event-applied", "task.updated")).toBe(false)
     expect(telemetryInvalidatesFeature("ontology", "event-applied", "task.label_proposal.accepted")).toBe(true)
+    expect(telemetryInvalidatesFeature("ontology", "event-applied", "label.ontology.action.created")).toBe(true)
+    expect(telemetryInvalidatesFeature("ontology", "event-applied", "label.ontology.observation.recorded")).toBe(true)
+    expect(telemetryInvalidatesFeature("ontology", "event-applied", "label.ontology.signal.reviewed")).toBe(true)
     expect(telemetryInvalidatesFeature("ontology", "event-applied", "signal.recorded")).toBe(false)
   })
 

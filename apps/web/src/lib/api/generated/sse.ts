@@ -6,7 +6,7 @@ import { parseSseEventHeartbeat, sseEventHeartbeatValidator } from "./contracts/
 
 export const sseHeartbeatEventName = "kb-heartbeat" as const;
 export const sseEventEnvelopeFieldOrder = ["id","event_id","board_id","task_id","run_id","kind","actor","payload","created_at"] as const;
-export const taskScopedSseEventKinds = ["dependency.added","dependency.removed","task.archived","task.blocked","task.claimed","task.comment.created","task.completed","task.created","task.execution_plan.not_required","task.execution_plan.planned","task.execution_plan.unplanned","task.export_sanitized","task.heartbeat","task.label.added","task.label.removed","task.label_proposal.accepted","task.label_proposal.proposed","task.label_proposal.rejected","task.promoted","task.reclaimed","task.recomputed","task.released","task.reopened","task.retry_policy.updated","task.specified","task.step.created","task.step.done","task.step.removed","task.step.reopened","task.step.skipped","task.step.updated","task.submitted_for_review","task.unblocked","task.updated"] as const;
+export const taskScopedSseEventKinds = ["dependency.added","dependency.removed","label.ontology.observation.recorded","task.archived","task.blocked","task.claimed","task.comment.created","task.completed","task.created","task.execution_plan.not_required","task.execution_plan.planned","task.execution_plan.unplanned","task.export_sanitized","task.heartbeat","task.label.added","task.label.removed","task.label_proposal.accepted","task.label_proposal.proposed","task.label_proposal.rejected","task.promoted","task.reclaimed","task.recomputed","task.released","task.reopened","task.retry_policy.updated","task.specified","task.step.created","task.step.done","task.step.removed","task.step.reopened","task.step.skipped","task.step.updated","task.submitted_for_review","task.unblocked","task.updated"] as const;
 
 export type SseEventEnvelopeField = (typeof sseEventEnvelopeFieldOrder)[number];
 export type TaskScopedSseEventKind = (typeof taskScopedSseEventKinds)[number];
@@ -24,6 +24,9 @@ export const knownSseEventKinds = [
   "dependency.removed",
   "label.created",
   "label.deleted",
+  "label.ontology.action.created",
+  "label.ontology.observation.recorded",
+  "label.ontology.signal.reviewed",
   "signal.recorded",
   "signal.reviewed",
   "task.archived",

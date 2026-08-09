@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type ComponentProps, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type FormEvent } from "react"
 
 import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
@@ -21,10 +21,19 @@ import type { OntologyRouteFilters } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
 import { reconcileSelection, useReadState, type ReadPhase, type ReadState } from "../read-state"
 import { localizedErrorMessage } from "../safe-error"
+import {
+  createOntologyLifecycleAttempt,
+  executeOntologyLifecycleAttempt,
+  sameOntologyLifecycleIdentity,
+  type LifecycleAction,
+  type OntologyLifecycleAttempt,
+  type OntologyLifecycleIdentity,
+} from "./ontology-lifecycle"
+import { ONTOLOGY_SIGNAL_SCOPE_LIMIT, scopeReviewGroupsToKnownSignals } from "./ontology-review-scope"
 
 import styles from "./OntologyScreen.module.css"
 
-export type LifecycleAction = "confirm" | "reject" | "resolve_no_change"
+export type { LifecycleAction } from "./ontology-lifecycle"
 
 export interface OntologyScreenProps {
   readonly api: SignalsOntologyReadApi | null
@@ -124,19 +133,39 @@ export function OntologyScreen({
   const { locale } = usePreferences()
   const { effectiveFilters, update: updateFilters } = useFilterState(filters, onFiltersChange)
   const [localSelectedSignalId, setLocalSelectedSignalId] = useState<string | null>(selectedSignalIdProp ?? null)
+  const selectedSignalId = selectedSignalIdProp === undefined ? localSelectedSignalId : selectedSignalIdProp
   const [atomDraft, setAtomDraft] = useState("")
   const [atomRef, setAtomRef] = useState(filters.atom ?? "")
   const [actionReason, setActionReason] = useState("")
-  const [actionPending, setActionPending] = useState(false)
-  const [actionError, setActionError] = useState<unknown | null>(null)
-  const [lastLifecycleAction, setLastLifecycleAction] = useState<LifecycleAction | null>(null)
+  const lifecycleIdentity = useMemo<OntologyLifecycleIdentity>(() => ({ api, signalId: selectedSignalId }), [api, selectedSignalId])
+  const lifecycleMountedRef = useRef(false)
+  const [lifecycleState, setLifecycleState] = useState<{
+    readonly identity: OntologyLifecycleIdentity
+    readonly attempt: OntologyLifecycleAttempt | null
+    readonly pending: boolean
+    readonly error: unknown | null
+    readonly succeeded: boolean
+  }>(() => ({ identity: lifecycleIdentity, attempt: null, pending: false, error: null, succeeded: false }))
   const [listRefreshToken, setListRefreshToken] = useState(0)
   const [detailRefreshToken, setDetailRefreshToken] = useState(0)
   const [atomRefreshToken, setAtomRefreshToken] = useState(0)
-  const selectedSignalId = selectedSignalIdProp === undefined ? localSelectedSignalId : selectedSignalIdProp
   useEffect(() => {
     if (selectedSignalIdProp !== undefined) setLocalSelectedSignalId(selectedSignalIdProp)
   }, [selectedSignalIdProp])
+  useEffect(() => {
+    lifecycleMountedRef.current = true
+    return () => {
+      lifecycleMountedRef.current = false
+    }
+  }, [])
+  useEffect(() => {
+    setLifecycleState((previous) => sameOntologyLifecycleIdentity(previous.identity, lifecycleIdentity)
+      ? previous
+      : { ...previous, identity: lifecycleIdentity, pending: false, error: null, succeeded: false })
+  }, [lifecycleIdentity])
+  useEffect(() => {
+    setActionReason("")
+  }, [selectedSignalId])
   useEffect(() => {
     setAtomRef(filters.atom ?? "")
     setAtomDraft(filters.atom ?? "")
@@ -156,6 +185,10 @@ export function OntologyScreen({
     return (signal: AbortSignal) => api.reviewLabelOntology({ groupBy, includeAll, limit: 100 }, signal)
   }, [api, groupBy, includeAll])
   const groups = useReadState(Boolean(api), reviewRequest, `ontology-review:${api?.cacheKey ?? "none"}:${filterKey}:${listRefreshToken}:${invalidationRevision}`, emptyGroups())
+  const scopedGroups = useMemo(
+    () => scopeReviewGroupsToKnownSignals(groups.data, signals.data, signals.phase === "success" && signals.data.length < ONTOLOGY_SIGNAL_SCOPE_LIMIT),
+    [groups.data, signals.data, signals.phase],
+  )
 
   const detailRequest = useMemo(() => {
     if (!api || !selectedSignalId) return null
@@ -185,6 +218,17 @@ export function OntologyScreen({
   }, [api, atomRef])
   const atom = useReadState(Boolean(api && atomRef), atomRequest, `ontology-atom:${api?.cacheKey ?? "none"}:${atomRef}:${atomRefreshToken}:${invalidationRevision}`, emptyAtom())
 
+  useEffect(() => {
+    if (!lifecycleState.succeeded || !sameOntologyLifecycleIdentity(lifecycleState.identity, lifecycleIdentity)) return
+    setActionReason("")
+    setListRefreshToken((value) => value + 1)
+    setDetailRefreshToken((value) => value + 1)
+    setAtomRefreshToken((value) => value + 1)
+    setLifecycleState((previous) => previous.succeeded && sameOntologyLifecycleIdentity(previous.identity, lifecycleIdentity)
+      ? { ...previous, succeeded: false }
+      : previous)
+  }, [lifecycleIdentity, lifecycleState.identity, lifecycleState.succeeded])
+
   const selectSignal = (signalId: string | null) => {
     setLocalSelectedSignalId(signalId)
     onSelectSignalProp?.(signalId)
@@ -204,22 +248,30 @@ export function OntologyScreen({
     setAtomRef(next)
     updateFilters({ ...effectiveFilters, atom: next })
   }
-  const runLifecycleAction = async (action: LifecycleAction) => {
-    if (!selectedSignalId || !actionReason.trim() || !onLifecycleAction) return
-    setLastLifecycleAction(action)
-    setActionError(null)
-    setActionPending(true)
-    try {
-      await onLifecycleAction(action, selectedSignalId, actionReason.trim())
-      setActionReason("")
-      setListRefreshToken((value) => value + 1)
-      setDetailRefreshToken((value) => value + 1)
-      setAtomRefreshToken((value) => value + 1)
-    } catch (error) {
-      setActionError(error)
-    } finally {
-      setActionPending(false)
-    }
+  const runLifecycleAttempt = async (attempt: OntologyLifecycleAttempt) => {
+    if (!onLifecycleAction) return
+    setLifecycleState((previous) => ({
+      ...previous,
+      identity: attempt.identity,
+      attempt,
+      pending: true,
+      error: null,
+      succeeded: false,
+    }))
+    const result = await executeOntologyLifecycleAttempt(attempt, onLifecycleAction, () => lifecycleMountedRef.current)
+    if (result.kind === "stale" || !lifecycleMountedRef.current) return
+    setLifecycleState((previous) => {
+      if (!sameOntologyLifecycleIdentity(previous.identity, attempt.identity) || previous.attempt !== attempt) return previous
+      return result.kind === "success"
+        ? { ...previous, pending: false, error: null, succeeded: true }
+        : { ...previous, pending: false, error: result.error, succeeded: false }
+    })
+  }
+  const runLifecycleAction = (action: LifecycleAction) => {
+    const signalId = selectedSignalId?.trim()
+    const reason = actionReason.trim()
+    if (!signalId || !reason || !onLifecycleAction) return
+    void runLifecycleAttempt(createOntologyLifecycleAttempt(action, signalId, reason, lifecycleIdentity))
   }
   const refreshRows = () => setListRefreshToken((value) => value + 1)
   const refreshDetail = () => setDetailRefreshToken((value) => value + 1)
@@ -230,8 +282,11 @@ export function OntologyScreen({
     refreshAtom()
   }
   const retryLifecycleAction = () => {
-    if (lastLifecycleAction !== null) void runLifecycleAction(lastLifecycleAction)
+    if (lifecycleState.attempt !== null) void runLifecycleAttempt(lifecycleState.attempt)
   }
+  const lifecycleVisible = sameOntologyLifecycleIdentity(lifecycleState.identity, lifecycleIdentity)
+  const actionPending = lifecycleVisible && lifecycleState.pending
+  const actionError = lifecycleVisible ? lifecycleState.error : null
   const detailData = detail.error === null && detail.data?.signal.id === selectedSignalId ? detail.data : null
 
   return (
@@ -241,7 +296,7 @@ export function OntologyScreen({
       locale={locale}
       filters={effectiveFilters}
       signals={{ ...signals, data: visibleSignals }}
-      groups={groups}
+      groups={{ ...groups, data: scopedGroups }}
       detail={{ phase: detail.phase, data: detailData, error: detail.error }}
       atom={atom}
       selectedSignalId={selectedSignalId}

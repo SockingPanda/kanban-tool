@@ -19,6 +19,8 @@ import {
   OntologySignalDetailView,
   type LifecycleAction,
 } from "./OntologyScreen"
+import { createOntologyLifecycleAttempt, executeOntologyLifecycleAttempt, sameOntologyLifecycleIdentity } from "./ontology-lifecycle"
+import { scopeReviewGroupsToKnownSignals } from "./ontology-review-scope"
 
 const signalFixture = (overrides: Partial<LabelOntologySignalRecord> = {}): LabelOntologySignalRecord => ({
   id: "los_1",
@@ -251,6 +253,12 @@ describe("Ontology screen presentation", () => {
     expect(html).not.toMatch(/precision|recall|error rate/i)
   })
 
+  test("bounds review-group scope checks to a complete current-board signal page", () => {
+    const groups = [reviewGroupFixture(), reviewGroupFixture({ key: "foreign", signal_ids: ["los_other"] })]
+    expect(scopeReviewGroupsToKnownSignals(groups, [signalFixture()], true).map((group) => group.key)).toEqual(["lab_cli"])
+    expect(scopeReviewGroupsToKnownSignals(groups, [signalFixture()], false)).toHaveLength(2)
+  })
+
   test("does not expose an unsupported cluster grouping tab", () => {
     const html = renderToStaticMarkup(
       <OntologyScreenView
@@ -317,6 +325,37 @@ describe("Ontology screen presentation", () => {
       onExplainAtom: () => undefined,
     })
     expect(findButtonByText(tree, "Confirm signal")?.props.isDisabled).toBe(true)
+  })
+
+  test("freezes A retry after switching to B and fences the stale async response", async () => {
+    const identityA = { api: null, signalId: "los_a" } as const
+    const identityB = { api: null, signalId: "los_b" } as const
+    const attemptA = createOntologyLifecycleAttempt("confirm", "los_a", "keep A", identityA)
+    const attemptB = createOntologyLifecycleAttempt("reject", "los_b", "reject B", identityB)
+    const calls: Array<{ action: LifecycleAction; signalId: string; reason: string }> = []
+    let rejectA!: (error: unknown) => void
+    const pendingA = new Promise<void>((_resolve, reject) => {
+      rejectA = reject
+    })
+    let currentIdentity: typeof identityA | typeof identityB = identityA
+    const invoke = vi.fn((action: LifecycleAction, signalId: string, reason: string) => {
+      calls.push({ action, signalId, reason })
+      return calls.length === 1 ? pendingA : Promise.resolve()
+    })
+
+    const first = executeOntologyLifecycleAttempt(attemptA, invoke, () => sameOntologyLifecycleIdentity(currentIdentity, attemptA.identity))
+    currentIdentity = identityB // A fails after the user has selected B.
+    rejectA(new Error("A failed"))
+    await expect(first).resolves.toMatchObject({ kind: "stale" })
+    await expect(executeOntologyLifecycleAttempt(attemptA, invoke, () => sameOntologyLifecycleIdentity(currentIdentity, attemptA.identity))).resolves.toMatchObject({ kind: "stale" })
+    expect(calls).toEqual([
+      { action: "confirm", signalId: "los_a", reason: "keep A" },
+      { action: "confirm", signalId: "los_a", reason: "keep A" },
+    ])
+    expect(attemptA.signalId).toBe("los_a")
+    expect(attemptA.reason).toBe("keep A")
+    expect(sameOntologyLifecycleIdentity(identityB, attemptA.identity)).toBe(false)
+    expect(sameOntologyLifecycleIdentity(identityB, attemptB.identity)).toBe(true)
   })
 
   test("separates a missing signal detail from an empty selection", () => {

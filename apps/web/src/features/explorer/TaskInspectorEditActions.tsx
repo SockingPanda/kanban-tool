@@ -164,7 +164,7 @@ export function TaskInspectorActionDialog({
     const target = dialogInputRef.current ?? dialogConfirmRef.current
     target?.focus()
   }, [])
-  const title = dialog.kind === "description" ? copy.actionDescriptionTitle : dialog.kind === "reason" ? copy.actionReasonTitle : actionLabel(dialog.action, locale)
+  const title = dialog.kind === "description" ? copy.actionDescriptionTitle : dialog.kind === "reason" ? copy.actionReasonTitle : copy.actionConfirmTitle
   const submitLabel = actionLabel(dialog.action, locale)
   const invalid = dialog.kind === "description" ? dialog.description.trim().length === 0 : dialog.kind === "reason" ? dialog.reason.trim().length === 0 : false
   return (

@@ -478,7 +478,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const editTriggerRef = useRef<HTMLButtonElement | null>(null)
   const mountedMutationRef = useRef(true)
-  const retryActionRef = useRef<(() => void) | null>(null)
+  const retryActionRef = useRef<{ saveTask: (() => void) | null; transition: (() => void) | null }>({ saveTask: null, transition: null })
   const [editing, setEditing] = useState(false)
   const [editDraft, setEditDraft] = useState(() => inspectorEditDraft(task))
   const [localPending, setLocalPending] = useState<ReadonlySet<string>>(() => new Set())
@@ -525,7 +525,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     mountedMutationRef.current = true
     return () => {
       mountedMutationRef.current = false
-      retryActionRef.current = null
+      retryActionRef.current = { saveTask: null, transition: null }
     }
   }, [])
 
@@ -536,17 +536,20 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     setActionDialog(null)
     setLocalError(null)
     setLocalPending(new Set())
-    retryActionRef.current = null
+    retryActionRef.current = { saveTask: null, transition: null }
   }, [requestIdentity, task.id])
 
   const runMutation = useCallback(async (operation: "saveTask" | "transition", run: () => Promise<void>, retry: () => void): Promise<boolean> => {
     const key = inspectorMutationKey(operation, task.id)
     setLocalError(null)
     setLocalPending((current) => new Set(current).add(key))
-    retryActionRef.current = retry
+    retryActionRef.current[operation] = retry
     try {
       await run()
-      if (mountedMutationRef.current) setLocalError(null)
+      if (mountedMutationRef.current) {
+        setLocalError(null)
+        retryActionRef.current[operation] = null
+      }
       return true
     } catch {
       if (mountedMutationRef.current) {
@@ -566,7 +569,8 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     if (!mutationHandlers || draft.title.trim().length === 0) return false
     const input = buildInspectorSaveTaskInput(task, draft)
     const run = () => mutationHandlers.saveTask(input)
-    return runMutation("saveTask", run, () => { void runMutation("saveTask", run, () => undefined) })
+    const retry = () => { void runMutation("saveTask", run, retry) }
+    return runMutation("saveTask", run, retry)
   }, [editDraft, mutationHandlers, runMutation, task])
 
   const closeEditor = useCallback(() => {
@@ -588,7 +592,8 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     const command = buildInspectorTransitionCommand(task, view.action, context, claimToken)
     if (command === null) return
     const run = () => mutationHandlers.transition(command)
-    void runMutation("transition", run, () => { void runMutation("transition", run, () => undefined) })
+    const retry = () => { void runMutation("transition", run, retry) }
+    void runMutation("transition", run, retry)
   }, [claimToken, mutationHandlers, runMutation, task])
 
   const closeActionDialog = useCallback(() => {
@@ -653,13 +658,19 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     if (!retryIntent) return
     if (retryIntent.operation === "transition") {
       const run = () => mutationHandlers.transition(retryIntent.command)
-      void runMutation("transition", run, () => { void runMutation("transition", run, () => undefined) })
+      const retry = () => { void runMutation("transition", run, retry) }
+      void runMutation("transition", run, retry)
     } else if (retryIntent.operation === "saveTask") {
       const run = () => mutationHandlers.saveTask(retryIntent.input)
-      void runMutation("saveTask", run, () => { void runMutation("saveTask", run, () => undefined) })
+      const retry = () => { void runMutation("saveTask", run, retry) }
+      void runMutation("saveTask", run, retry)
     }
   }, [mutationHandlers, runMutation, scopedSnapshot, task.id, transitionError])
-  const retry = transitionError || saveError ? retryActionRef.current ?? retryFromSnapshot : null
+  const retry = transitionError
+    ? retryActionRef.current.transition ?? retryFromSnapshot
+    : saveError
+      ? retryActionRef.current.saveTask ?? retryFromSnapshot
+      : null
 
   useEffect(() => {
     const identityChanged = requestIdentityRef.current !== requestIdentity

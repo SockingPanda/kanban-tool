@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react"
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react"
 
 import type { Locale } from "../../lib/preferences"
 import type { TaskInspectorMutationSnapshot } from "./task-inspector-mutation-state"
@@ -10,6 +10,7 @@ import {
   advanceInspectorAssetsScope,
   isInspectorAssetsScopeCurrent,
   isAttachmentRetryDraftCurrent,
+  isLabelRetryDraftCurrent,
   requestSuggestedLabels,
   shouldClearAssetDraft,
   type InspectorAssetAttachment,
@@ -79,6 +80,7 @@ type AssetsCopy = {
   readonly deleteAttachment: (name: string) => string
   readonly downloading: string
   readonly deleting: string
+  readonly downloadError: string
   readonly mutationError: string
   readonly reloadStale: string
   readonly retry: string
@@ -127,6 +129,7 @@ const copies: Record<Locale, AssetsCopy> = {
     deleteAttachment: (name) => `删除附件 ${name}`,
     downloading: "正在下载…",
     deleting: "正在删除…",
+    downloadError: "下载附件失败，请重试。",
     mutationError: "操作失败",
     reloadStale: "写入已提交，但刷新失败；当前数据可能过期。",
     retry: "重试原提交",
@@ -173,6 +176,7 @@ const copies: Record<Locale, AssetsCopy> = {
     deleteAttachment: (name) => `Delete attachment ${name}`,
     downloading: "Downloading…",
     deleting: "Deleting…",
+    downloadError: "Attachment download failed; try again.",
     mutationError: "Operation failed",
     reloadStale: "The write committed, but refresh failed; data may be stale.",
     retry: "Retry original submission",
@@ -185,10 +189,10 @@ function normalizedLabelName(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message
   if (typeof error === "string" && error.trim()) return error
-  return "操作失败，请重试。"
+  return fallback
 }
 
 function actionKey(operation: string, taskId: string): string {
@@ -305,30 +309,44 @@ export function TaskInspectorAssetsPanel({
   const pending = snapshot.pending
   const errors = snapshot.errors
   const scopeIdentityRef = useRef<InspectorAssetsScopeIdentity>({ taskId, epoch: 0, generation: snapshot.generation })
-  scopeIdentityRef.current = advanceInspectorAssetsScope(scopeIdentityRef.current, taskId, snapshot.generation)
-  const isCurrentScope = useCallback((captured: InspectorAssetsScopeIdentity): boolean => isInspectorAssetsScopeCurrent(scopeIdentityRef.current, captured), [])
-  const previousScopeRef = useRef({ taskId, generation: snapshot.generation })
+  const mountedRef = useRef(false)
   const localBusyRef = useRef(new Set<string>())
   const [localBusy, setLocalBusy] = useState<ReadonlySet<string>>(new Set())
   const [localErrors, setLocalErrors] = useState<ReadonlyMap<string, string>>(new Map())
   const [labelInput, setLabelInput] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const labelInputRef = useRef(labelInput)
-  labelInputRef.current = labelInput
+  const labelInputValueRef = useRef(labelInput)
+  const labelInputElementRef = useRef<HTMLInputElement | null>(null)
   const selectedFileRef = useRef<File | null>(selectedFile)
-  selectedFileRef.current = selectedFile
+  const fileInputElementRef = useRef<HTMLInputElement | null>(null)
   const attemptedUploadFileRef = useRef<File | null>(null)
   const [fileInputKey, setFileInputKey] = useState(0)
   const [suggestionBusy, setSuggestionBusy] = useState(false)
   const [suggestionLocalError, setSuggestionLocalError] = useState<string | null>(null)
-  const [suggestionLocalResult, setSuggestionLocalResult] = useState<InspectorLabelSuggestionResult | null>(null)
+  const [suggestionLocalRequested, setSuggestionLocalRequested] = useState(false)
+  const [suggestionLocalResult, setSuggestionLocalResult] = useState<InspectorLabelSuggestionResult | null | undefined>(undefined)
   const retryBusyRef = useRef(new Set<string>())
   const [retryBusy, setRetryBusy] = useState<ReadonlySet<string>>(new Set())
 
-  useEffect(() => {
-    const previous = previousScopeRef.current
-    if (previous.taskId === taskId && previous.generation === snapshot.generation) return
-    previousScopeRef.current = { taskId, generation: snapshot.generation }
+  // scope、mounted state 和 draft ref 只在 layout effect 中随 commit 更新。
+  // React 放弃的 render 不得使 live promise 失效或替换上一次提交的 draft。
+  useLayoutEffect(() => {
+    const localBusy = localBusyRef.current
+    const retryBusy = retryBusyRef.current
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      localBusy.clear()
+      retryBusy.clear()
+      attemptedUploadFileRef.current = null
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const previous = scopeIdentityRef.current
+    const next = advanceInspectorAssetsScope(previous, taskId, snapshot.generation)
+    if (next === previous) return
+    scopeIdentityRef.current = next
     localBusyRef.current.clear()
     setLocalBusy(new Set())
     setLocalErrors(new Map())
@@ -338,10 +356,23 @@ export function TaskInspectorAssetsPanel({
     setFileInputKey((current) => current + 1)
     setSuggestionBusy(false)
     setSuggestionLocalError(null)
-    setSuggestionLocalResult(null)
+    setSuggestionLocalRequested(false)
+    setSuggestionLocalResult(undefined)
     retryBusyRef.current.clear()
     setRetryBusy(new Set())
   }, [snapshot.generation, taskId])
+
+  useLayoutEffect(() => {
+    labelInputValueRef.current = labelInput
+  }, [labelInput])
+
+  useLayoutEffect(() => {
+    selectedFileRef.current = selectedFile
+  }, [selectedFile])
+
+  const isCurrentScope = useCallback((captured: InspectorAssetsScopeIdentity): boolean => {
+    return mountedRef.current && isInspectorAssetsScopeCurrent(scopeIdentityRef.current, captured)
+  }, [])
 
   const isPending = useCallback((operation: string): boolean => {
     const key = actionKey(operation, taskId)
@@ -372,7 +403,7 @@ export function TaskInspectorAssetsPanel({
       const result = await action()
       return isCurrentScope(identity) ? result : null
     } catch (error) {
-      if (isCurrentScope(identity)) setLocalErrors((current) => new Map(current).set(key, errorMessage(error)))
+      if (isCurrentScope(identity)) setLocalErrors((current) => new Map(current).set(key, errorMessage(error, copy.error)))
       return null
     } finally {
       if (isCurrentScope(identity)) {
@@ -380,7 +411,7 @@ export function TaskInspectorAssetsPanel({
         setLocalBusy(new Set(localBusyRef.current))
       }
     }
-  }, [isCurrentScope, pending])
+  }, [copy.error, isCurrentScope, pending])
 
   const actions = useMemo(() => createInspectorAssetsActions(handlers), [handlers])
   const writePending = useMemo(
@@ -392,7 +423,7 @@ export function TaskInspectorAssetsPanel({
     const name = labelInput.trim()
     if (!name || existingLabelNames.has(normalizedLabelName(name))) return
     const outcome = await runAction("addLabel", () => actions.addLabel(name))
-    if (shouldClearAssetDraft(outcome) && labelInputRef.current.trim() === name) setLabelInput("")
+    if (shouldClearAssetDraft(outcome) && isLabelRetryDraftCurrent(labelInputValueRef.current, name)) setLabelInput("")
   }, [actions, existingLabelNames, labelInput, runAction])
   const onLabelSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -402,10 +433,12 @@ export function TaskInspectorAssetsPanel({
     void runAction("removeLabel", () => actions.removeLabel(labelId))
   }, [actions, runAction])
 
-  const currentSuggestions = suggestionResult?.task_id === taskId
-    ? suggestionResult
-    : suggestionLocalResult?.task_id === taskId
+  const currentSuggestions = suggestionLocalResult !== undefined
+    ? suggestionLocalResult?.task_id === taskId
       ? suggestionLocalResult
+      : null
+    : suggestionResult?.task_id === taskId
+      ? suggestionResult
       : null
   const selectedSuggestions = useMemo(() => currentSuggestions?.selected_labels ?? [], [currentSuggestions])
   const candidateSuggestions = useMemo(() => currentSuggestions?.candidates ?? [], [currentSuggestions])
@@ -422,6 +455,7 @@ export function TaskInspectorAssetsPanel({
   const requestSuggestions = useCallback(() => {
     if (suggestionPending) return
     const identity = scopeIdentityRef.current
+    setSuggestionLocalRequested(true)
     setSuggestionLocalError(null)
     setSuggestionBusy(true)
     void requestSuggestedLabels(handlers.suggestLabels)
@@ -430,12 +464,12 @@ export function TaskInspectorAssetsPanel({
         setSuggestionLocalResult(response?.data ?? null)
       })
       .catch((error: unknown) => {
-        if (isCurrentScope(identity)) setSuggestionLocalError(errorMessage(error))
+        if (isCurrentScope(identity)) setSuggestionLocalError(errorMessage(error, copy.error))
       })
       .finally(() => {
         if (isCurrentScope(identity)) setSuggestionBusy(false)
       })
-  }, [handlers, isCurrentScope, suggestionPending])
+  }, [copy.error, handlers, isCurrentScope, suggestionPending])
 
   const uploadFile = useCallback(() => {
     if (!selectedFile) return
@@ -453,7 +487,9 @@ export function TaskInspectorAssetsPanel({
   const downloadAttachment = useCallback((attachment: InspectorAssetAttachment) => {
     void runAction("downloadAttachment", async () => {
       const downloaded = await actions.downloadAttachment(attachment.id)
-      if (!downloaded || typeof document === "undefined" || typeof URL.createObjectURL !== "function") return
+      if (!downloaded || typeof document === "undefined" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
+        throw new Error(copy.downloadError)
+      }
       const blob = new Blob([exactAttachmentBytes(downloaded.content)], { type: downloaded.content_type ?? attachment.content_type ?? "application/octet-stream" })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement("a")
@@ -463,7 +499,7 @@ export function TaskInspectorAssetsPanel({
       anchor.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 0)
     })
-  }, [actions, runAction])
+  }, [actions, copy.downloadError, runAction])
 
   const deleteAttachment = useCallback((attachmentId: string) => {
     void runAction("deleteAttachment", () => actions.deleteAttachment(attachmentId))
@@ -480,7 +516,7 @@ export function TaskInspectorAssetsPanel({
       .then(() => handlers.retry(key))
       .then(async (outcome) => {
         if (!isCurrentScope(identity) || !shouldClearAssetDraft(outcome)) return
-        if (operation === "addLabel" && intent?.operation === "addLabel" && typeof intent.input.name === "string" && intent.input.name.trim() === labelInputRef.current.trim()) setLabelInput("")
+        if (operation === "addLabel" && intent?.operation === "addLabel" && typeof intent.input.name === "string" && isLabelRetryDraftCurrent(labelInputValueRef.current, intent.input.name)) setLabelInput("")
         const currentFile = selectedFileRef.current
         if (operation === "uploadAttachment" && intent?.operation === "uploadAttachment" && isAttachmentRetryDraftCurrent(currentFile, attemptedUploadFileRef.current) && isCurrentScope(identity)) {
           setSelectedFile(null)
@@ -497,9 +533,17 @@ export function TaskInspectorAssetsPanel({
   }, [handlers, isCurrentScope, pending, snapshot.retries, writePending])
 
   const labelsError = errorFor(["addLabel", "removeLabel", "applySuggestedLabel"])
+  const addLabelError = errorFor(["addLabel"])
   const suggestionsError = suggestionLocalError ?? suggestionError ?? errorFor(["suggestLabels"])
   const attachmentsError = attachmentError ?? errorFor(["uploadAttachment", "downloadAttachment", "deleteAttachment"])
-  const showSuggestions = suggestionRequested || Boolean(currentSuggestions) || suggestionPending || Boolean(suggestionsError)
+  const uploadError = errorFor(["uploadAttachment"])
+  const addLabelSnapshotError = errors.get(actionKey("addLabel", taskId))?.message ?? null
+  const uploadSnapshotError = errors.get(actionKey("uploadAttachment", taskId))?.message ?? null
+  const addLabelFocusError = addLabelError ?? addLabelSnapshotError
+  const uploadFocusError = uploadError ?? uploadSnapshotError ?? attachmentError
+  const labelErrorId = `${panelId}-label-error`
+  const attachmentErrorId = `${panelId}-attachment-error`
+  const showSuggestions = suggestionRequested || suggestionLocalRequested || Boolean(currentSuggestions) || suggestionPending || Boolean(suggestionsError)
   const duplicateIdsText = [...duplicateSuggestionIds].join(", ")
   const uploadPending = isPending("uploadAttachment")
   const snapshotErrors = useMemo(
@@ -513,7 +557,7 @@ export function TaskInspectorAssetsPanel({
   const addLabelRetryIntent = snapshot.retries.get(actionKey("addLabel", taskId))
   const addLabelRetryLocked = addLabelRetryIntent?.operation === "addLabel"
     && typeof addLabelRetryIntent.input.name === "string"
-    && addLabelRetryIntent.input.name.trim() === labelInput.trim()
+    && isLabelRetryDraftCurrent(labelInput, addLabelRetryIntent.input.name)
   const uploadRetryIntent = snapshot.retries.get(actionKey("uploadAttachment", taskId))
   const uploadRetryLocked = uploadRetryIntent?.operation === "uploadAttachment"
     && selectedFile !== null
@@ -521,10 +565,17 @@ export function TaskInspectorAssetsPanel({
   const panelBusy = suggestionPending || writePending || isPending("downloadAttachment") || attachmentLoading
   const retrying = retryBusy.size > 0 || isPending("reload")
 
+  useLayoutEffect(() => {
+    if (addLabelFocusError) labelInputElementRef.current?.focus()
+  }, [addLabelFocusError])
+
+  useLayoutEffect(() => {
+    if (uploadFocusError) fileInputElementRef.current?.focus()
+  }, [uploadFocusError])
+
   return (
     <section className={styles.panel} data-testid="inspector-assets" aria-labelledby={`${panelId}-heading`} aria-busy={panelBusy}>
       <header className={styles.heading}>
-        <p className={styles.kicker}>{copy.title}</p>
         <h2 id={`${panelId}-heading`}>{copy.title}</h2>
         <p className={styles.taskId} translate="no">{taskId}</p>
       </header>
@@ -533,7 +584,7 @@ export function TaskInspectorAssetsPanel({
         <div className={styles.mutationErrors} data-testid="inspector-mutation-errors">
           {snapshotErrors.map(([key, error]) => (
             <div key={key} className={styles.mutationError} data-testid="inspector-mutation-error" data-operation-key={key} role="alert">
-              <p><strong>{error.operation === "reload" ? copy.reloadStale : copy.mutationError}:</strong> {error.message}</p>
+              <p id={key === actionKey("addLabel", taskId) ? labelErrorId : key === actionKey("uploadAttachment", taskId) ? attachmentErrorId : undefined}><strong>{error.operation === "reload" ? copy.reloadStale : copy.mutationError}:</strong> {error.message}</p>
               {canRetrySnapshotError(key, error.operation) ? <button type="button" className={styles.smallButton} data-testid="inspector-retry" data-retry-key={key} disabled={retryBusy.has(key) || pending.has(key) || writePending} onClick={() => retryMutation(key)}>{retryBusy.has(key) ? "…" : copy.retry}</button> : null}
             </div>
           ))}
@@ -551,13 +602,13 @@ export function TaskInspectorAssetsPanel({
         <form className={styles.labelForm} onSubmit={onLabelSubmit}>
           <label htmlFor={labelInputId}>{copy.labelName}</label>
           <div className={styles.inputRow}>
-            <input id={labelInputId} name="label-name" autoComplete="off" value={labelInput} placeholder={copy.labelPlaceholder} disabled={writePending || addLabelRetryLocked} onChange={(event) => setLabelInput(event.currentTarget.value)} />
+            <input id={labelInputId} name="label-name" autoComplete="off" value={labelInput} placeholder={copy.labelPlaceholder} disabled={writePending} aria-describedby={labelsError || addLabelSnapshotError ? labelErrorId : undefined} ref={labelInputElementRef} onChange={(event) => setLabelInput(event.currentTarget.value)} />
             <button type="submit" className={styles.actionButton} data-testid="label-add" disabled={!labelInput.trim() || existingLabelNames.has(normalizedLabelName(labelInput)) || writePending || addLabelRetryLocked}>{isPending("addLabel") ? "…" : copy.addLabel}</button>
           </div>
         </form>
-        {labelsError ? <p className={styles.error} role="alert">{labelsError}</p> : null}
+        {labelsError ? <p id={labelErrorId} className={styles.error} role="alert">{labelsError}</p> : null}
         <div className={styles.suggestionActions}>
-          <button type="button" className={styles.actionButton} data-testid="label-suggestion-request" disabled={suggestionPending} onClick={requestSuggestions}>{suggestionPending ? copy.suggesting : suggestionRequested || currentSuggestions ? copy.refreshSuggestions : copy.suggestLabels}</button>
+          <button type="button" className={styles.actionButton} data-testid="label-suggestion-request" disabled={suggestionPending} onClick={requestSuggestions}>{suggestionPending ? copy.suggesting : suggestionRequested || suggestionLocalRequested || currentSuggestions ? copy.refreshSuggestions : copy.suggestLabels}</button>
         </div>
         {showSuggestions ? (
           <div className={styles.suggestionPanel} data-testid="label-suggestions">
@@ -574,7 +625,7 @@ export function TaskInspectorAssetsPanel({
             {duplicateSuggestionIds.size > 0 ? <p className={styles.error} data-testid="label-suggestion-duplicates" role="alert">{copy.duplicateSuggestion(duplicateIdsText)}</p> : null}
             {selectedSuggestions.length > 0 ? <div className={styles.suggestionGroup}><h4>{copy.selected}</h4><ul className={styles.suggestionList}>{selectedSuggestions.map((entry) => <SuggestionRow key={`selected-${entry.label_id}-${entry.label_name}`} entry={entry} copy={copy} applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))} disabled={writePending || entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name))} onApply={applySuggestion} />)}</ul></div> : null}
             {candidateSuggestions.length > 0 ? <div className={styles.suggestionGroup}><h4>{copy.candidates}</h4><ul className={styles.suggestionList}>{candidateSuggestions.map((entry) => <SuggestionRow key={`candidate-${entry.label_id}-${entry.label_name}`} entry={entry} copy={copy} applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))} disabled={writePending || entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name))} onApply={applySuggestion} />)}</ul></div> : null}
-            {!suggestionPending && !suggestionsError && currentSuggestions && selectedSuggestions.length === 0 && candidateSuggestions.length === 0 ? <p className={styles.empty} role="status">{copy.noSuggestions}</p> : null}
+            {!suggestionPending && !suggestionsError && (suggestionRequested || suggestionLocalRequested) && (!currentSuggestions || (selectedSuggestions.length === 0 && candidateSuggestions.length === 0)) ? <p className={styles.empty} role="status">{copy.noSuggestions}</p> : null}
           </div>
         ) : null}
       </section>
@@ -583,11 +634,11 @@ export function TaskInspectorAssetsPanel({
         <h3 id={`${panelId}-attachments-heading`}>{copy.attachments}</h3>
         <div className={styles.uploadBox}>
           <label htmlFor={attachmentFileId}>{copy.chooseFile}</label>
-          <input id={attachmentFileId} data-testid="attachment-file" key={fileInputKey} type="file" aria-label={copy.chooseFile} disabled={writePending} onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] ?? null)} />
+          <input id={attachmentFileId} name="attachment-file" data-testid="attachment-file" key={fileInputKey} type="file" aria-label={copy.chooseFile} aria-describedby={attachmentsError || uploadSnapshotError ? attachmentErrorId : undefined} ref={fileInputElementRef} disabled={writePending} onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] ?? null)} />
           <button type="button" className={styles.actionButton} data-testid="attachment-upload" disabled={!selectedFile || writePending || uploadRetryLocked} onClick={uploadFile}>{uploadPending ? copy.uploading : copy.upload}</button>
         </div>
         {attachmentLoading ? <p className={styles.state} data-testid="attachments-loading" role="status" aria-live="polite">{copy.loadingAttachments}</p> : null}
-        {attachmentsError ? <p className={styles.error} data-testid="attachments-error" role="alert"><strong>{copy.attachmentError}:</strong> {attachmentsError}</p> : null}
+        {attachmentsError ? <p id={attachmentErrorId} className={styles.error} data-testid="attachments-error" role="alert"><strong>{copy.attachmentError}:</strong> {attachmentsError}</p> : null}
         {attachments.length > 0 ? <ul className={styles.attachmentList}>{attachments.map((attachment) => <li key={attachment.id} className={styles.attachmentItem} data-testid="attachment-row"><div className={styles.attachmentMain}><strong className={styles.attachmentName} title={attachment.filename} translate="no">{attachment.filename}</strong><AttachmentMetadata attachment={attachment} copy={copy} locale={locale} /></div><div className={styles.attachmentActions}><button type="button" className={styles.smallButton} data-testid="attachment-download" disabled={isPending("downloadAttachment")} aria-label={copy.download(attachment.filename)} onClick={() => downloadAttachment(attachment)}>{isPending("downloadAttachment") ? copy.downloading : copy.download(attachment.filename)}</button><button type="button" className={styles.dangerButton} data-testid="attachment-delete" disabled={writePending} aria-label={copy.deleteAttachment(attachment.filename)} onClick={() => deleteAttachment(attachment.id)}>{isPending("deleteAttachment") ? copy.deleting : copy.deleteAttachment(attachment.filename)}</button></div></li>)}</ul> : <p className={styles.empty} data-testid="attachments-empty" role="status">{copy.noAttachments}</p>}
       </section>
     </section>

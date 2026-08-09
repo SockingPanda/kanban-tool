@@ -15,6 +15,7 @@ import {
   exactAttachmentBytes,
   advanceInspectorAssetsScope,
   isAttachmentRetryDraftCurrent,
+  isLabelRetryDraftCurrent,
   isInspectorAssetsScopeCurrent,
   requestSuggestedLabels,
   shouldClearAssetDraft,
@@ -233,6 +234,27 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(suggestLabels).toHaveBeenCalledWith({ limit: 5 })
   })
 
+  test("keeps a null suggestion response as an explicit empty state", async () => {
+    const suggestLabels: SuggestLabelsHandler = vi.fn(async () => null)
+
+    await expect(requestSuggestedLabels(suggestLabels)).resolves.toBeNull()
+    const markup = renderToStaticMarkup(
+      <TaskInspectorAssetsPanel
+        taskId="t_1"
+        labels={[]}
+        attachments={[]}
+        suggestionResult={null}
+        suggestionRequested
+        handlers={handlers({ suggestLabels })}
+        snapshot={snapshot()}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="label-suggestions"')
+    expect(markup).toContain("暂无标签建议")
+    expect(markup).toContain("刷新建议")
+  })
+
   test("clears label and file drafts only after a committed write", () => {
     expect(shouldClearAssetDraft({ committed: false, reconciled: false })).toBe(false)
     expect(shouldClearAssetDraft({ committed: false, reconciled: true })).toBe(false)
@@ -247,6 +269,11 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(isAttachmentRetryDraftCurrent(attempted, attempted)).toBe(true)
     expect(isAttachmentRetryDraftCurrent(sameMetadata, attempted)).toBe(false)
     expect(isAttachmentRetryDraftCurrent(null, attempted)).toBe(false)
+  })
+
+  test("locks only an unchanged label retry draft", () => {
+    expect(isLabelRetryDraftCurrent(" backend ", "backend")).toBe(true)
+    expect(isLabelRetryDraftCurrent("frontend", "backend")).toBe(false)
   })
 
   test("fences stale promises across t1 to t2 to t1 scope epochs", () => {
@@ -301,6 +328,33 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(markup).not.toContain('data-retry-key="downloadAttachment:t_1"')
     await retry("reload:t_1")
     expect(retry).toHaveBeenCalledWith("reload:t_1")
+  })
+
+  test("associates asset errors with the editable label and file controls", () => {
+    const markup = renderToStaticMarkup(
+      <TaskInspectorAssetsPanel
+        taskId="t_1"
+        labels={[]}
+        attachments={[attachment("a_1")]}
+        suggestionResult={null}
+        suggestionRequested={false}
+        handlers={handlers()}
+        attachmentError="读取附件失败"
+        snapshot={snapshot({
+          errors: new Map([[
+            "addLabel:t_1",
+            { operation: "addLabel", taskId: "t_1", kind: "error", message: "标签写入失败", status: 500, code: null, recoverable: true },
+          ]]),
+        })}
+      />,
+    )
+
+    expect(markup).toContain('name="attachment-file"')
+    expect(markup).toMatch(/aria-describedby="[^"]+-label-error"/)
+    expect(markup).toMatch(/aria-describedby="[^"]+-attachment-error"/)
+    expect(markup).toMatch(/id="[^"]+-label-error"/)
+    expect(markup).toMatch(/id="[^"]+-attachment-error"/)
+    expect((markup.match(/标签写入失败/g) ?? []).length).toBe(1)
   })
 
   test("keeps snapshot pending/error state scoped to the current task", () => {

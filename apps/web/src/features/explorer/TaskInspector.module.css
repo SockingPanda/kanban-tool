@@ -17,6 +17,209 @@
     border-block-end: 1px solid var(--color-border);
   }
 
+  .editButton,
+  .actionButton,
+  .dangerButton,
+  .secondaryButton,
+  .editorActions button,
+  .dialogActions button,
+  .mutationError button {
+    min-height: 2.25rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.4rem 0.7rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .editButton {
+    width: fit-content;
+  }
+
+  .editButton:hover,
+  .actionButton:hover,
+  .secondaryButton:hover,
+  .editorActions button:hover,
+  .dialogActions button:hover,
+  .mutationError button:hover {
+    background: var(--color-background-body);
+  }
+
+  .editButton:focus-visible,
+  .actionButton:focus-visible,
+  .dangerButton:focus-visible,
+  .secondaryButton:focus-visible,
+  .editorActions button:focus-visible,
+  .dialogActions button:focus-visible,
+  .mutationError button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--color-focus, #2563eb);
+    outline-offset: 2px;
+  }
+
+  .editButton:disabled,
+  .actionButton:disabled,
+  .dangerButton:disabled,
+  .secondaryButton:disabled,
+  .editorActions button:disabled,
+  .dialogActions button:disabled,
+  .mutationError button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .dangerButton {
+    border-color: var(--color-status-error, #b42318);
+    color: var(--color-status-error, #b42318);
+  }
+
+  .secondaryButton {
+    background: transparent;
+  }
+
+  .editor {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .editor label,
+  .dialog label {
+    display: grid;
+    gap: 0.28rem;
+    min-width: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .editor input,
+  .editor textarea,
+  .editor select,
+  .dialog textarea {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.45rem 0.55rem;
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    font: inherit;
+    font-size: 0.84rem;
+  }
+
+  .editor textarea,
+  .dialog textarea {
+    resize: vertical;
+  }
+
+  .editorActions,
+  .dialogActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .unsaved {
+    margin: 0;
+    color: var(--color-status-warning, #a15c00);
+    font-size: 0.78rem;
+  }
+
+  .actionGrid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .actionButton,
+  .dangerButton {
+    flex: 1 1 8rem;
+    min-width: 7rem;
+  }
+
+  .pendingLabel {
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
+  }
+
+  .mutationError {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-block-start: 0.6rem;
+    border-inline-start: 0.18rem solid var(--color-status-error, #b42318);
+    padding: 0.45rem 0.55rem;
+    color: var(--color-status-error, #b42318);
+    font-size: 0.8rem;
+  }
+
+  .mutationError button {
+    min-height: 1.9rem;
+    padding-block: 0.25rem;
+  }
+
+  .dialogBackdrop {
+    position: fixed;
+    z-index: 10;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgb(0 0 0 / 0.45);
+    overscroll-behavior: contain;
+  }
+
+  .dialog {
+    width: min(32rem, 100%);
+    max-height: min(90vh, 42rem);
+    overflow: auto;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 1rem;
+    background: var(--color-background-surface);
+    box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.25);
+  }
+
+  .dialog h2,
+  .dialog p {
+    margin-block: 0;
+  }
+
+  .dialog h2 {
+    font-size: 1rem;
+  }
+
+  .dialog p {
+    margin-block-start: 0.35rem;
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
+  }
+
+  .dialog form {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .dialogActions {
+    justify-content: flex-end;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dialogBackdrop,
+    .dialog {
+      animation: none;
+      transition: none;
+    }
+  }
+
   .eyebrow,
   .ref,
   .identity,

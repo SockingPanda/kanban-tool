@@ -1,9 +1,24 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode, type SyntheticEvent } from "react"
 
 import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import styles from "./TaskInspector.module.css"
+import {
+  buildInspectorSaveTaskInput,
+  buildInspectorTransitionCommand,
+  inspectorActionViews,
+  inspectorEditDraft,
+  type InspectorEditDraft,
+  type InspectorActionView,
+} from "./TaskInspector.edit-actions"
+import {
+  TaskInspectorActionDialog,
+  TaskInspectorActionPanel,
+  TaskInspectorEditForm,
+  type InspectorActionDialogState,
+} from "./TaskInspectorEditActions"
 import { createInspectorAsyncFence, type InspectorAsyncFence } from "./TaskInspector.lazy"
+import { inspectorMutationKey, type TaskInspectorMutationError, type TaskInspectorMutationHandlers, type TaskInspectorMutationSnapshot } from "./task-inspector-mutation-state"
 
 export type InspectorTaskStatus = "triage" | "todo" | "scheduled" | "ready" | "running" | "blocked" | "review" | "done" | "archived"
 export type InspectorPlanState = "unplanned" | "planned" | "not_required"
@@ -14,6 +29,10 @@ export interface TaskInspectorViewModel {
     readonly ref: string
     readonly title: string
     readonly status: InspectorTaskStatus
+    /** UI-only optimistic concurrency inputs; canonical values come from the read mapper. */
+    readonly lockVersion?: number
+    readonly scheduledAt?: number | null
+    readonly dueAt?: number | null
     readonly priority: number
     readonly description: string | null
     readonly statusReason: string | null
@@ -102,9 +121,15 @@ export interface TaskInspectorProps {
   readonly onLoadRuns?: (signal: AbortSignal) => Promise<TaskInspectorViewModel["runs"]>
   readonly onLoadEvents?: (signal: AbortSignal) => Promise<TaskInspectorViewModel["events"]>
   readonly onLoadNeighborhood?: (signal: AbortSignal) => Promise<NonNullable<TaskInspectorViewModel["neighborhood"]>>
+  /** Mutation handlers supplied by the shared Explorer mutation controller. */
+  readonly mutationHandlers?: TaskInspectorMutationHandlers
+  /** Scoped pending/error/retry snapshot from the shared mutation controller. */
+  readonly mutationSnapshot?: TaskInspectorMutationSnapshot
+  /** Claim token is held by the shared claim-token store and never rendered. */
+  readonly claimToken?: string | null
 }
 
-type InspectorCopy = {
+export type InspectorCopy = {
   readonly ariaLabel: string
   readonly eyebrow: string
   readonly dependencyBlocked: string
@@ -164,6 +189,39 @@ type InspectorCopy = {
   readonly refreshOffline: string
   readonly refreshPending: string
   readonly offline: string
+  readonly edit: string
+  readonly save: string
+  readonly saving: string
+  readonly cancel: string
+  readonly unsavedChanges: string
+  readonly editTitle: string
+  readonly editDescription: string
+  readonly editAssignee: string
+  readonly editPriority: string
+  readonly editScheduledAt: string
+  readonly editDueAt: string
+  readonly actions: string
+  readonly actionPending: string
+  readonly actionRunning: string
+  readonly actionConfirmTitle: string
+  readonly actionConfirmDescription: string
+  readonly actionDescriptionTitle: string
+  readonly actionDescriptionHint: string
+  readonly actionReasonTitle: string
+  readonly actionReasonHint: string
+  readonly reasonRequired: string
+  readonly descriptionRequired: string
+  readonly retryAction: string
+  readonly mutationError: string
+  readonly actionReasons: {
+    readonly description: string
+    readonly dependencies: string
+    readonly plan: string
+    readonly promote: string
+    readonly claim: string
+    readonly requiredSteps: string
+    readonly status: string
+  }
   readonly status: Readonly<Record<InspectorTaskStatus, string>>
   readonly planState: Readonly<Record<InspectorPlanState, string>>
   readonly stepStatus: Readonly<Record<"todo" | "done" | "skipped", string>>
@@ -203,6 +261,31 @@ const copies: Record<Locale, InspectorCopy> = {
     refreshOffline: "当前离线，保留最近一次任务数据。",
     refreshPending: "数据已更新，展开后自动刷新。",
     offline: "当前离线，保留旧数据；联网后重试。",
+    edit: "编辑任务",
+    save: "保存",
+    saving: "正在保存…",
+    cancel: "取消",
+    unsavedChanges: "有未保存的更改",
+    editTitle: "任务标题",
+    editDescription: "任务描述",
+    editAssignee: "执行者",
+    editPriority: "优先级",
+    editScheduledAt: "计划时间",
+    editDueAt: "截止时间",
+    actions: "可用操作",
+    actionPending: "正在执行…",
+    actionRunning: "正在执行",
+    actionConfirmTitle: "确认操作",
+    actionConfirmDescription: "此操作会改变任务状态。确认继续吗？",
+    actionDescriptionTitle: "指定任务",
+    actionDescriptionHint: "指定需要非空描述。",
+    actionReasonTitle: "阻塞任务",
+    actionReasonHint: "请说明任务为什么无法继续。",
+    reasonRequired: "请填写原因。",
+    descriptionRequired: "请填写描述。",
+    retryAction: "重试操作",
+    mutationError: "操作失败，请检查提示后重试。",
+    actionReasons: { description: "需要任务描述", dependencies: "依赖仍未满足", plan: "请先完成执行计划", promote: "规格、排期或就绪条件未满足", claim: "需要当前认领令牌", requiredSteps: "必需步骤尚未完成", status: "当前状态不允许此操作" },
     status: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
     stepStatus: { todo: "待办", done: "已完成", skipped: "已跳过" },
@@ -240,6 +323,31 @@ const copies: Record<Locale, InspectorCopy> = {
     refreshOffline: "You are offline; the last usable task data is retained.",
     refreshPending: "New data is available; this section will refresh when opened.",
     offline: "You are offline; the old value is retained. Retry when connected.",
+    edit: "Edit task",
+    save: "Save",
+    saving: "Saving…",
+    cancel: "Cancel",
+    unsavedChanges: "Unsaved changes",
+    editTitle: "Task title",
+    editDescription: "Task description",
+    editAssignee: "Assignee",
+    editPriority: "Priority",
+    editScheduledAt: "Scheduled at",
+    editDueAt: "Due at",
+    actions: "Available actions",
+    actionPending: "Working…",
+    actionRunning: "Working",
+    actionConfirmTitle: "Confirm action",
+    actionConfirmDescription: "This action changes the task state. Continue?",
+    actionDescriptionTitle: "Specify task",
+    actionDescriptionHint: "Specify requires a non-empty description.",
+    actionReasonTitle: "Block task",
+    actionReasonHint: "Explain why work cannot continue.",
+    reasonRequired: "Enter a reason.",
+    descriptionRequired: "Enter a description.",
+    retryAction: "Retry action",
+    mutationError: "Action failed. Review the message and try again.",
+    actionReasons: { description: "Task description is required", dependencies: "Dependencies are still blocked", plan: "Complete the execution plan first", promote: "Specification, schedule, or readiness is incomplete", claim: "A current claim token is required", requiredSteps: "Required steps are incomplete", status: "The current status does not allow this action" },
     status: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
     stepStatus: { todo: "To do", done: "Done", skipped: "Skipped" },
@@ -363,11 +471,21 @@ function Neighborhood({ model, copy, onSelectTask }: { readonly model: NonNullab
 
 type InspectorSectionStatus = "idle" | "loading" | "ready" | "stale" | "offline" | "error"
 
-export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood }: TaskInspectorProps) {
+export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, claimToken = null }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
   const requestIdentity = identity ?? task.id
   const headingRef = useRef<HTMLHeadingElement | null>(null)
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const mountedMutationRef = useRef(true)
+  const retryActionRef = useRef<(() => void) | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editDraft, setEditDraft] = useState(() => inspectorEditDraft(task))
+  const [localPending, setLocalPending] = useState<ReadonlySet<string>>(() => new Set())
+  const [localError, setLocalError] = useState<TaskInspectorMutationError | null>(null)
+  const [actionDialog, setActionDialog] = useState<InspectorActionDialogState | null>(null)
+  const taskRef = useRef(task)
+  taskRef.current = task
   const runsDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const eventsDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const neighborhoodDetailsRef = useRef<HTMLDetailsElement | null>(null)
@@ -390,6 +508,158 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const [eventsStatus, setEventsStatus] = useState<InspectorSectionStatus>(model.events.length > 0 ? "ready" : "idle")
   const [neighborhoodStatus, setNeighborhoodStatus] = useState<InspectorSectionStatus>(model.neighborhood ? "ready" : "idle")
   const markedRefreshRevisionRef = useRef<number | null>(null)
+
+  const scopedSnapshot = mutationSnapshot?.scope.taskId === task.id && (identity === undefined || mutationSnapshot.scope.identity === identity)
+    ? mutationSnapshot
+    : undefined
+  const mutationPending = useCallback((operation: "saveTask" | "transition") => {
+    const key = inspectorMutationKey(operation, task.id)
+    return localPending.has(key) || Boolean(scopedSnapshot?.pending.has(key))
+  }, [localPending, scopedSnapshot, task.id])
+  const snapshotError = useCallback((operation: "saveTask" | "transition") => {
+    const key = inspectorMutationKey(operation, task.id)
+    return scopedSnapshot?.errors.get(key) ?? null
+  }, [scopedSnapshot, task.id])
+
+  useEffect(() => {
+    mountedMutationRef.current = true
+    return () => {
+      mountedMutationRef.current = false
+      retryActionRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const currentTask = taskRef.current
+    setEditing(false)
+    setEditDraft(inspectorEditDraft(currentTask))
+    setActionDialog(null)
+    setLocalError(null)
+    setLocalPending(new Set())
+    retryActionRef.current = null
+  }, [requestIdentity, task.id])
+
+  const runMutation = useCallback(async (operation: "saveTask" | "transition", run: () => Promise<void>, retry: () => void): Promise<boolean> => {
+    const key = inspectorMutationKey(operation, task.id)
+    setLocalError(null)
+    setLocalPending((current) => new Set(current).add(key))
+    retryActionRef.current = retry
+    try {
+      await run()
+      if (mountedMutationRef.current) setLocalError(null)
+      return true
+    } catch {
+      if (mountedMutationRef.current) {
+        setLocalError({ operation, taskId: task.id, kind: "error", message: copy.mutationError, status: null, code: null, recoverable: true })
+      }
+      return false
+    } finally {
+      if (mountedMutationRef.current) setLocalPending((current) => {
+        const next = new Set(current)
+        next.delete(key)
+        return next
+      })
+    }
+  }, [copy.mutationError, task.id])
+
+  const saveTask = useCallback(async (draft: InspectorEditDraft = editDraft): Promise<boolean> => {
+    if (!mutationHandlers || draft.title.trim().length === 0) return false
+    const input = buildInspectorSaveTaskInput(task, draft)
+    const run = () => mutationHandlers.saveTask(input)
+    return runMutation("saveTask", run, () => { void runMutation("saveTask", run, () => undefined) })
+  }, [editDraft, mutationHandlers, runMutation, task])
+
+  const closeEditor = useCallback(() => {
+    setEditing(false)
+    setEditDraft(inspectorEditDraft(task))
+    setLocalError(null)
+    queueMicrotask(() => editTriggerRef.current?.focus())
+  }, [task])
+
+  const submitEditor = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    void saveTask().then((saved) => {
+      if (saved) closeEditor()
+    })
+  }, [closeEditor, saveTask])
+
+  const executeTransition = useCallback((view: InspectorActionView, context: { readonly description?: string; readonly reason?: string; readonly confirmed?: boolean }) => {
+    if (!mutationHandlers) return
+    const command = buildInspectorTransitionCommand(task, view.action, context, claimToken)
+    if (command === null) return
+    const run = () => mutationHandlers.transition(command)
+    void runMutation("transition", run, () => { void runMutation("transition", run, () => undefined) })
+  }, [claimToken, mutationHandlers, runMutation, task])
+
+  const closeActionDialog = useCallback(() => {
+    const trigger = actionDialog?.trigger ?? null
+    setActionDialog(null)
+    queueMicrotask(() => trigger?.focus())
+  }, [actionDialog])
+
+  const openActionDialog = useCallback((view: InspectorActionView, trigger: HTMLButtonElement) => {
+    if (!mutationHandlers) return
+    if (view.action === "specify") {
+      setActionDialog({ kind: "description", action: "specify", description: task.description ?? "", trigger })
+      return
+    }
+    if (view.action === "block") {
+      setActionDialog({ kind: "reason", action: "block", reason: "", trigger })
+      return
+    }
+    if (view.requiresConfirmation) {
+      setActionDialog({ kind: "confirm", action: view.action, trigger })
+      return
+    }
+    executeTransition(view, {})
+  }, [executeTransition, mutationHandlers, task.description])
+
+  const submitActionDialog = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!actionDialog) return
+    const view = inspectorActionViews(task, claimToken, copy).find((candidate) => candidate.action === actionDialog.action)
+    if (!view) return
+    if (actionDialog.kind === "description") {
+      if (actionDialog.description.trim().length === 0) return
+      executeTransition(view, { description: actionDialog.description })
+    } else if (actionDialog.kind === "reason") {
+      if (actionDialog.reason.trim().length === 0) return
+      executeTransition(view, { reason: actionDialog.reason })
+    } else {
+      executeTransition(view, { confirmed: true })
+    }
+    closeActionDialog()
+  }, [actionDialog, claimToken, closeActionDialog, copy, executeTransition, task])
+
+  useEffect(() => {
+    if (!actionDialog) return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        closeActionDialog()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [actionDialog, closeActionDialog])
+
+  const mutationSavePending = mutationPending("saveTask")
+  const mutationTransitionPending = mutationPending("transition")
+  const saveError = snapshotError("saveTask") ?? (localError?.operation === "saveTask" ? localError : null)
+  const transitionError = snapshotError("transition") ?? (localError?.operation === "transition" ? localError : null)
+  const retryFromSnapshot = useCallback(() => {
+    if (!mutationHandlers || !scopedSnapshot) return
+    const retryIntent = scopedSnapshot.retries.get(inspectorMutationKey(transitionError ? "transition" : "saveTask", task.id))
+    if (!retryIntent) return
+    if (retryIntent.operation === "transition") {
+      const run = () => mutationHandlers.transition(retryIntent.command)
+      void runMutation("transition", run, () => { void runMutation("transition", run, () => undefined) })
+    } else if (retryIntent.operation === "saveTask") {
+      const run = () => mutationHandlers.saveTask(retryIntent.input)
+      void runMutation("saveTask", run, () => { void runMutation("saveTask", run, () => undefined) })
+    }
+  }, [mutationHandlers, runMutation, scopedSnapshot, task.id, transitionError])
+  const retry = transitionError || saveError ? retryActionRef.current ?? retryFromSnapshot : null
 
   useEffect(() => {
     const identityChanged = requestIdentityRef.current !== requestIdentity
@@ -524,12 +794,16 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         <p aria-live="polite" className={styles.announcement}>{copy.openAnnouncement}</p>
         <p className={styles.identity} translate="no">{task.id}</p>
         {refreshError ? <div role={refreshOffline ? "status" : "alert"}><strong>{refreshOffline ? copy.refreshOffline : copy.refreshError}</strong>{!refreshOffline ? <span> {refreshError}</span> : null}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
+        {mutationHandlers ? <button ref={editTriggerRef} type="button" className={styles.editButton} onClick={() => setEditing(true)} disabled={editing || mutationSavePending}>{copy.edit}</button> : null}
         <div className={styles.badges}>
           <span className={styles.badge}>{copy.status[task.status]}</span>
           <span className={styles.badge}>P{task.priority}</span>
           {task.dependencyBlocked ? <span className={styles.badge}>{copy.dependencyBlocked}</span> : null}
         </div>
       </header>
+
+      {editing && mutationHandlers ? <TaskInspectorEditForm draft={editDraft} dirty={JSON.stringify(editDraft) !== JSON.stringify(inspectorEditDraft(task))} pending={mutationSavePending} error={saveError?.message ?? null} copy={copy} onChange={setEditDraft} onSave={submitEditor} onCancel={closeEditor} /> : null}
+      {mutationHandlers ? <TaskInspectorActionPanel task={task} claimToken={claimToken} locale={locale} copy={copy} pending={mutationTransitionPending} error={transitionError} onAction={openActionDialog} onRetry={retry} /> : null}
 
       <Section id="inspector-metadata" title={copy.sections.metadata}>
         <DescriptionDisclosure description={task.description} copy={copy} />
@@ -641,6 +915,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
           [copy.facts.build, model.runtime.webBuildId],
         ]} />
       </Section>
+      {actionDialog ? <TaskInspectorActionDialog dialog={actionDialog} locale={locale} copy={copy} onDescriptionChange={(description) => setActionDialog((current) => current?.kind === "description" ? { ...current, description } : current)} onReasonChange={(reason) => setActionDialog((current) => current?.kind === "reason" ? { ...current, reason } : current)} onCancel={closeActionDialog} onSubmit={submitActionDialog} /> : null}
     </aside>
   )
 }

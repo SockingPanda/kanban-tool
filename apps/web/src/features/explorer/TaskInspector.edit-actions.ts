@@ -7,7 +7,7 @@ import {
   transitionOptionsForStatus,
   type BoardTaskTransitionOption as PolicyTransitionOption,
 } from "../board/task-mutation-state"
-import type { InspectorSaveTaskInput, InspectorTransitionCommand } from "./task-inspector-mutation-state"
+import type { InspectorMutationOutcome, InspectorSaveTaskInput, InspectorTransitionCommand } from "./task-inspector-mutation-state"
 import type { TaskInspectorViewModel } from "./TaskInspector"
 
 export const inspectorActionIds = ["specify", "promote", "claim", "heartbeat", "complete", "submit-review", "block", "unblock", "archive"] as const
@@ -16,6 +16,10 @@ export type InspectorActionId = (typeof inspectorActionIds)[number]
 export const inspectorActionLabels: Readonly<Record<Locale, readonly string[]>> = {
   zh: ["指定", "晋级", "认领", "发送心跳", "完成", "提交审核", "阻塞", "解除阻塞", "归档"],
   en: ["Specify", "Promote", "Claim", "Heartbeat", "Complete", "Submit Review", "Block", "Unblock", "Archive"],
+}
+
+export function inspectorMutationCommitted(outcome: InspectorMutationOutcome | null): boolean {
+  return outcome?.committed === true
 }
 
 export interface InspectorEditDraft {

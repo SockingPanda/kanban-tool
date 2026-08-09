@@ -110,21 +110,25 @@ export function TaskInspectorActionPanel({
         {views.map((view) => {
           const label = actionLabel(view.action, locale)
           const disabled = pending || !view.enabled
+          const reasonId = `inspector-action-reason-${view.action}`
           return (
-            <button
-              key={view.action}
-              type="button"
-              className={view.action === "archive" || view.action === "block" ? styles.dangerButton : styles.actionButton}
-              data-action={view.action}
-              disabled={disabled}
-              title={view.disabledReason ?? undefined}
-              aria-disabled={disabled || undefined}
-              aria-busy={pending || undefined}
-              onClick={(event) => onAction(view, event.currentTarget)}
-            >
-              <span>{label}</span>
-              {pending ? <span className={styles.pendingLabel}> · {copy.actionPending}</span> : null}
-            </button>
+            <div key={view.action} className={styles.actionItem}>
+              <button
+                type="button"
+                className={view.action === "archive" || view.action === "block" ? styles.dangerButton : styles.actionButton}
+                data-action={view.action}
+                disabled={disabled}
+                title={view.disabledReason ?? undefined}
+                aria-describedby={disabled && view.disabledReason ? reasonId : undefined}
+                aria-disabled={disabled || undefined}
+                aria-busy={pending || undefined}
+                onClick={(event) => onAction(view, event.currentTarget)}
+              >
+                <span>{label}</span>
+                {pending ? <span className={styles.pendingLabel}> · {copy.actionPending}</span> : null}
+              </button>
+              {disabled && view.disabledReason ? <span id={reasonId} className={styles.disabledReason}>{view.disabledReason}</span> : null}
+            </div>
           )
         })}
       </div>
@@ -147,6 +151,8 @@ export function TaskInspectorActionDialog({
   dialog,
   locale,
   copy,
+  error,
+  onRetry,
   onDescriptionChange,
   onReasonChange,
   onConfirmationChange,
@@ -156,6 +162,8 @@ export function TaskInspectorActionDialog({
   readonly dialog: InspectorActionDialogState
   readonly locale: Locale
   readonly copy: InspectorCopy
+  readonly error: string | null
+  readonly onRetry: (() => void) | null
   readonly onDescriptionChange: (value: string) => void
   readonly onReasonChange: (value: string) => void
   readonly onConfirmationChange: (value: boolean) => void
@@ -181,6 +189,7 @@ export function TaskInspectorActionDialog({
         <form onSubmit={onSubmit}>
           <h2 id="inspector-action-dialog-title">{title}</h2>
           <p id="inspector-action-dialog-description">{dialog.kind === "description" ? copy.actionDescriptionHint : dialog.kind === "reason" ? copy.actionReasonHint : copy.actionConfirmDescription}</p>
+          {error ? <div className={styles.mutationError} role="alert" aria-live="polite"><span>{error}</span>{onRetry ? <button type="button" onClick={onRetry}>{copy.retryAction}</button> : null}</div> : null}
           {dialog.kind === "description" ? <label><span>{copy.editDescription}</span><textarea ref={dialogInputRef} name="action-description" value={dialog.description} onChange={(event) => onDescriptionChange(event.target.value)} rows={5} required /></label> : null}
           {dialog.kind === "reason" ? <label><span>{copy.actionReasonTitle}</span><textarea ref={dialogInputRef} name="action-reason" value={dialog.reason} onChange={(event) => onReasonChange(event.target.value)} rows={4} required /></label> : null}
           {dialog.kind === "reason" && dialog.requiresConfirmation ? <label className={styles.confirmation}><input type="checkbox" name="action-force-confirmation" checked={dialog.confirmed} onChange={(event) => onConfirmationChange(event.target.checked)} required /><span>{copy.actionForceConfirmation}</span></label> : null}

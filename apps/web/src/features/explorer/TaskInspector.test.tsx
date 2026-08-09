@@ -9,12 +9,13 @@ import {
   buildInspectorTransitionCommand,
   buildInspectorSaveTaskInput,
   inspectorEditDraft,
+  inspectorMutationCommitted,
   inspectorActionIds,
   inspectorActionLabels,
   type InspectorEditDraft,
 } from "./TaskInspector.edit-actions"
 import { createInspectorAsyncFence } from "./TaskInspector.lazy"
-import type { TaskInspectorMutationHandlers } from "./task-inspector-mutation-state"
+import { inspectorMutationKey, type TaskInspectorMutationHandlers } from "./task-inspector-mutation-state"
 
 const model: TaskInspectorViewModel = {
   task: {
@@ -65,6 +66,8 @@ describe("TaskInspector", () => {
     for (const label of [inspectorActionLabels.en[3], inspectorActionLabels.en[4], inspectorActionLabels.en[5], inspectorActionLabels.en[6], inspectorActionLabels.en[8]]) {
       expect(markup).toContain(label)
     }
+    expect(markup).toContain("Required steps are incomplete")
+    expect(markup).toContain("aria-describedby=\"inspector-action-reason-complete\"")
     expect(markup).not.toContain("Release")
     expect(markup).not.toContain("Reopen")
   })
@@ -108,6 +111,15 @@ describe("TaskInspector", () => {
       input: { force: true, reason: "needs changes" },
     })
     expect(buildInspectorTransitionCommand(model.task, "heartbeat", {}, null)).toBeNull()
+  })
+
+  test("only committed outcomes close mutation surfaces and retry keys stay exact", () => {
+    expect(inspectorMutationCommitted({ committed: false, reconciled: false })).toBe(false)
+    expect(inspectorMutationCommitted({ committed: true, reconciled: false })).toBe(true)
+    expect(inspectorMutationCommitted({ committed: true, reconciled: true })).toBe(true)
+    expect(inspectorMutationKey("saveTask", model.task.id)).toBe("saveTask:t_fixture")
+    expect(inspectorMutationKey("transition", model.task.id)).toBe("transition:t_fixture")
+    expect(inspectorMutationKey("reload", model.task.id)).toBe("reload:t_fixture")
   })
 
   test("renders every read-only inspector section and claim/runtime facts", () => {

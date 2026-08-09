@@ -146,7 +146,7 @@ describe("TaskInspector", () => {
     expect(inspectorRetryIntentMatches(transitionIntent, "transition", null)).toBe(false)
   })
 
-  test("matches dialog drafts independently from a canonical policy view", () => {
+  test("keeps a diverged retry dialog draft when canonical policy view disappears", () => {
     const dialog = { kind: "description" as const, action: "specify" as const, description: " Add details ", trigger: null }
     const submitted = inspectorActionDialogUserIntent(dialog)
 
@@ -159,6 +159,8 @@ describe("TaskInspector", () => {
     const blockCommand = buildInspectorTransitionCommand(model.task, "block", { reason: "Needs review", confirmed: true }, null)
     expect(blockCommand).not.toBeNull()
     expect(inspectorActionDialogMatchesTransitionIntent({ kind: "reason", action: "block", reason: " Needs review ", confirmed: true }, blockCommand!)).toBe(true)
+    // retry committed 后，即使规范 status 已从 policy view 移除 block，
+    // 仍打开且已编辑的 draft 也不能被关闭。
     expect(inspectorActionDialogMatchesTransitionIntent({ kind: "reason", action: "block", reason: "Changed", confirmed: true }, blockCommand!)).toBe(false)
   })
 

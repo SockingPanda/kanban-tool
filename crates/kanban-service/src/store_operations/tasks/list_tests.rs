@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::test_support::*;
-    use crate::{AddTaskLabelsInput, CreateLabelInput};
+    use crate::{AddTaskLabelsInput, CreateBoardInput, CreateLabelInput};
 
     #[tokio::test]
     async fn list_tasks_excludes_archived_by_default_and_supports_status_priority_and_assignee_filters()
@@ -106,6 +106,14 @@ mod tests {
             .expect("label filtered task list");
         assert_eq!(label_filtered.total, 1);
         assert_eq!(label_filtered.tasks[0].id, first.id);
+        assert_eq!(
+            label_filtered.tasks[0]
+                .labels
+                .iter()
+                .map(|label| (label.id.as_str(), label.name.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("l_filter_bug", "bug")]
+        );
 
         let with_archived = store
             .list_tasks(
@@ -432,6 +440,195 @@ mod tests {
             .await
             .expect_err("limit above maximum must fail");
         assert!(matches!(error, StoreError::InvalidInput(message) if message.contains("limit")));
+    }
+
+    #[tokio::test]
+    async fn list_tasks_hydrates_page_labels_in_stable_order_and_keeps_board_isolation() {
+        let (_directory, store, _path) = store("list-label-hydration").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_board(CreateBoardInput {
+                id: "b_other".to_owned(),
+                slug: "other".to_owned(),
+                name: "Other".to_owned(),
+                description: None,
+                actor: "tester".to_owned(),
+                event_id: "e_board_other".to_owned(),
+                created_at: 1,
+            })
+            .await
+            .expect("other board");
+
+        let first = store
+            .create_task(
+                "default",
+                create_input("t_labels_first", Some("labels-first"), "First"),
+            )
+            .await
+            .expect("first task");
+        let second = store
+            .create_task(
+                "default",
+                create_input("t_labels_second", Some("labels-second"), "Second"),
+            )
+            .await
+            .expect("second task");
+        let other = store
+            .create_task(
+                "other",
+                create_input("t_labels_other", Some("labels-other"), "Other task"),
+            )
+            .await
+            .expect("other task");
+
+        for (id, name) in [("l_labels_zeta", "zeta"), ("l_labels_alpha", "alpha")] {
+            store
+                .create_board_label(
+                    "default",
+                    CreateLabelInput {
+                        id: id.to_owned(),
+                        name: name.to_owned(),
+                        color: None,
+                        created_at: 10,
+                    },
+                )
+                .await
+                .expect("default label");
+        }
+        store
+            .create_board_label(
+                "default",
+                CreateLabelInput {
+                    id: "l_labels_beta".to_owned(),
+                    name: "beta".to_owned(),
+                    color: None,
+                    created_at: 10,
+                },
+            )
+            .await
+            .expect("second default label");
+        store
+            .create_board_label(
+                "other",
+                CreateLabelInput {
+                    id: "l_labels_other_bug".to_owned(),
+                    name: "bug".to_owned(),
+                    color: None,
+                    created_at: 10,
+                },
+            )
+            .await
+            .expect("other label");
+
+        store
+            .add_task_labels(
+                &first.id,
+                AddTaskLabelsInput {
+                    names: vec!["zeta".to_owned(), "alpha".to_owned()],
+                    label_ids: vec!["l_labels_zeta".to_owned(), "l_labels_alpha".to_owned()],
+                    event_ids: vec!["e_labels_zeta".to_owned(), "e_labels_alpha".to_owned()],
+                    create_missing: false,
+                    actor: "tester".to_owned(),
+                    now: 20,
+                },
+            )
+            .await
+            .expect("first labels");
+        store
+            .add_task_labels(
+                &second.id,
+                AddTaskLabelsInput {
+                    names: vec!["beta".to_owned()],
+                    label_ids: vec!["l_labels_beta".to_owned()],
+                    event_ids: vec!["e_labels_beta".to_owned()],
+                    create_missing: false,
+                    actor: "tester".to_owned(),
+                    now: 20,
+                },
+            )
+            .await
+            .expect("second labels");
+        store
+            .add_task_labels(
+                &other.id,
+                AddTaskLabelsInput {
+                    names: vec!["bug".to_owned()],
+                    label_ids: vec!["l_labels_other_bug".to_owned()],
+                    event_ids: vec!["e_labels_other_bug".to_owned()],
+                    create_missing: false,
+                    actor: "tester".to_owned(),
+                    now: 20,
+                },
+            )
+            .await
+            .expect("other labels");
+
+        let page = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    limit: 1,
+                    offset: 1,
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("paged labels");
+        assert_eq!(page.total, 2);
+        assert_eq!(page.tasks.len(), 1);
+        assert_eq!(page.tasks[0].id, second.id);
+        assert_eq!(
+            page.tasks[0]
+                .labels
+                .iter()
+                .map(|label| (label.id.as_str(), label.name.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("l_labels_beta", "beta")]
+        );
+
+        let all = store
+            .list_tasks("default", TaskListOptions::default())
+            .await
+            .expect("all default labels");
+        assert_eq!(
+            all.tasks
+                .iter()
+                .find(|task| task.id == first.id)
+                .expect("first in page")
+                .labels
+                .iter()
+                .map(|label| (label.id.as_str(), label.name.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("l_labels_alpha", "alpha"), ("l_labels_zeta", "zeta"),]
+        );
+        assert!(all.tasks.iter().all(|task| {
+            task.labels
+                .iter()
+                .all(|label| label.board_id == "b_default")
+        }));
+
+        let other_page = store
+            .list_tasks("other", TaskListOptions::default())
+            .await
+            .expect("other labels");
+        assert_eq!(other_page.total, 1);
+        assert_eq!(other_page.tasks[0].id, other.id);
+        assert_eq!(other_page.tasks[0].labels[0].board_id, "b_other");
+        assert_eq!(other_page.tasks[0].labels[0].name, "bug");
+
+        let empty_page = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    limit: 0,
+                    offset: 2,
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("empty labels page");
+        assert_eq!(empty_page.total, 2);
+        assert!(empty_page.tasks.is_empty());
     }
 
     #[tokio::test]

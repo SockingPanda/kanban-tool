@@ -19,7 +19,7 @@ import {
   validateBoardViewModel,
 } from "./types"
 import {
-  transitionOptionsForStatus,
+  transitionOptionsForTask,
   type BoardTaskMutationSurface,
 } from "./task-mutation-state"
 import {
@@ -80,7 +80,7 @@ function BoardHeader({
   readonly board?: BoardViewModel["board"]
   readonly titleId: string
   readonly copy: BoardMessages
-  readonly onCreate?: () => void
+  readonly onCreate?: (trigger?: HTMLElement | null) => void
 }) {
   return (
     <header className={styles.header}>
@@ -100,7 +100,7 @@ function BoardHeader({
           </p>
         ) : null}
       </div>
-      {onCreate ? <Button label={copy.createTask} variant="primary" onClick={onCreate} data-testid="task-create" /> : null}
+      {onCreate ? <Button label={copy.createTask} variant="primary" onClick={(event) => onCreate(event.currentTarget)} data-testid="task-create" /> : null}
     </header>
   )
 }
@@ -190,7 +190,7 @@ function TaskCard({
     : copy.dependencyClear
   const pending = controller?.isPending(`transition:${task.id}`) === true
     || controller?.isPending(`edit:${task.id}`) === true
-  const transitionOptions = controller ? transitionOptionsForStatus(task.status) : []
+  const transitionOptions = controller ? transitionOptionsForTask(task, controller.claimTokenForTask(task.id)) : []
 
   return (
     <Card
@@ -254,7 +254,7 @@ function TaskCard({
             variant="secondary"
             size="sm"
             isDisabled={pending}
-            onClick={() => controller.openEdit(task)}
+            onClick={(event) => controller.openEdit(task, event.currentTarget)}
             data-testid={`task-edit-${task.id}`}
           />
           {transitionOptions.map((option) => (
@@ -264,7 +264,7 @@ function TaskCard({
               variant="secondary"
               size="sm"
               isDisabled={pending}
-              onClick={() => controller.openTransition(task, option)}
+              onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
               data-testid={`task-transition-${option.action}-${task.id}`}
             />
           ))}

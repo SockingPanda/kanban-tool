@@ -15,8 +15,10 @@ const model: BoardViewModel = {
   tasksByStatus: {
     todo: [{
       id: "t_1",
+      seq: 1,
       ref: "default#1",
       title: "Draft",
+      description: null,
       status: "todo",
       position: 1,
       lockVersion: 3,

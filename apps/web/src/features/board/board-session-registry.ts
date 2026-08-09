@@ -35,6 +35,7 @@ interface BoardSession {
   readonly resources: Set<BoardReadResource>
   readonly listeners: Set<(model: BoardReadModel) => void>
   readonly telemetryListeners: Set<(entry: SyncTelemetryEntry) => void>
+  refreshPromise: Promise<void> | null
   refs: number
   disposed: boolean
 }
@@ -178,6 +179,7 @@ export function acquireBoardSession(
       controller,
       listeners,
       telemetryListeners,
+      refreshPromise: null,
       refs: 0,
       disposed: false,
     }
@@ -217,11 +219,22 @@ export function acquireBoardSession(
     retry: () => {
       if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
     },
-    refresh: async () => {
-      if (released || session === undefined || session.disposed || sessions.get(key) !== session) return
-      const nextModel = await session.query.reload()
-      if (released || session.disposed || sessions.get(key) !== session) return
-      for (const listener of session.listeners) listener(nextModel)
+    refresh: () => {
+      if (released || session === undefined || session.disposed || sessions.get(key) !== session) return Promise.resolve()
+      if (session.refreshPromise !== null) return session.refreshPromise
+      const current = session
+      const refreshPromise = (async () => {
+        const nextModel = await current.query.reload()
+        if (released || current.disposed || sessions.get(key) !== current) return
+        for (const listener of current.listeners) listener(nextModel)
+      })()
+      current.refreshPromise = refreshPromise
+      void refreshPromise.then(() => {
+        if (current.refreshPromise === refreshPromise) current.refreshPromise = null
+      }, () => {
+        if (current.refreshPromise === refreshPromise) current.refreshPromise = null
+      })
+      return refreshPromise
     },
     generation: session.generation,
   }

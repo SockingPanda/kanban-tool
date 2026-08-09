@@ -4,7 +4,10 @@ import type { BoardViewModel } from "./types"
 import {
   isMutationConflict,
   moveTaskOptimistically,
+  rollbackTaskOptimistically,
+  transitionCommandForTask,
   transitionForTarget,
+  transitionForTaskTarget,
   transitionOptionsForStatus,
   updateTaskOptimistically,
 } from "./task-mutation-state"
@@ -19,8 +22,10 @@ const model: BoardViewModel = {
   tasksByStatus: {
     todo: [{
       id: "t_1",
+      seq: 1,
       ref: "default#1",
       title: "Draft",
+      description: null,
       status: "todo",
       position: 1,
       priority: 2,
@@ -44,7 +49,7 @@ describe("board task mutation state", () => {
     expect(transitionForTarget("todo", "ready")).toMatchObject({ action: "promote", targetStatus: "ready" })
     expect(transitionForTarget("todo", "running")).toBeNull()
     expect(transitionOptionsForStatus("archived")).toEqual([])
-    expect(transitionOptionsForStatus("running").map((option) => option.targetStatus)).toEqual(["review", "done", "blocked"])
+    expect(transitionOptionsForStatus("running").map((option) => option.targetStatus)).toEqual(["review", "done", "blocked", "archived"])
   })
 
   test("moves a task optimistically without mutating the canonical snapshot", () => {
@@ -84,5 +89,45 @@ describe("board task mutation state", () => {
   test("keyboard direction resolves only a legal adjacent status edge", () => {
     expect(keyboardTransitionForDirection(model.columns, "todo", "next")).toMatchObject({ action: "promote", targetStatus: "ready" })
     expect(keyboardTransitionForDirection(model.columns, "todo", "previous")).toBeNull()
+  })
+
+  test("builds exact typed lifecycle payloads and force/token policy", () => {
+    const task = model.tasksByStatus.todo?.[0]
+    if (!task) throw new Error("fixture task missing")
+    const promote = transitionCommandForTask(task, transitionForTaskTarget(task, "ready")!)
+    expect(promote).toEqual({ action: "promote", input: {} })
+    const claim = transitionCommandForTask({ ...task, status: "ready" }, transitionForTaskTarget({ ...task, status: "ready" }, "running")!)
+    expect(claim).toEqual({ action: "claim", input: { ttl_ms: 300_000, worker_profile: "manual" } })
+    const specify = transitionCommandForTask({ ...task, status: "triage" }, transitionForTaskTarget({ ...task, status: "triage" }, "todo")!, { description: "  details " })
+    expect(specify).toEqual({ action: "specify", input: { description: "details" } })
+    const running = { ...task, status: "running" as const }
+    const forced = transitionCommandForTask(running, transitionForTaskTarget(running, "done")!, { confirmed: true })
+    expect(forced).toEqual({ action: "complete", input: { force: true } })
+    const blocked = transitionCommandForTask(running, transitionForTaskTarget(running, "blocked")!, { reason: "  waiting ", confirmed: true })
+    expect(blocked).toEqual({ action: "block", input: { force: true, reason: "waiting" } })
+    const tokenized = transitionCommandForTask(running, transitionForTaskTarget(running, "done", "claim-token")!, { claimToken: "claim-token" })
+    expect(tokenized).toEqual({ action: "complete", input: { claim_token: "claim-token" } })
+  })
+
+  test("does not pretend unblock has a canonical target and rolls back only one task", () => {
+    const firstTask = model.tasksByStatus.todo?.[0]
+    if (!firstTask) throw new Error("todo fixture missing")
+    const blockedModel: BoardViewModel = {
+      ...model,
+      tasksByStatus: {
+        blocked: [{ ...firstTask, status: "blocked" }],
+        todo: [],
+        ready: [],
+      },
+    }
+    const blockedTask = blockedModel.tasksByStatus.blocked?.[0]
+    if (!blockedTask) throw new Error("blocked fixture missing")
+    expect(moveTaskOptimistically(blockedModel, blockedTask.id, "ready")).toBe(blockedModel)
+    const second = { ...firstTask, id: "t_2", title: "Second" }
+    const concurrentBase = { ...model, tasksByStatus: { ...model.tasksByStatus, todo: [firstTask, second] } }
+    const concurrent = updateTaskOptimistically(moveTaskOptimistically(concurrentBase, "t_1", "ready"), "t_2", "new")
+    const rolledBack = rollbackTaskOptimistically(concurrent, concurrentBase, "t_1")
+    expect(rolledBack.tasksByStatus.todo?.map((task) => task.id)).toEqual(["t_1", "t_2"])
+    expect(rolledBack.tasksByStatus.todo?.[1]?.title).toBe("new")
   })
 })

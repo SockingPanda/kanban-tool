@@ -121,6 +121,26 @@ describe("Board canonical session registry", () => {
     handle.release()
   })
 
+  test("coalesces concurrent refresh calls so mutations cannot abort one another", async () => {
+    let resolveReload: (value: BoardReadModel) => void = () => undefined
+    const reload = vi.fn(() => new Promise<BoardReadModel>((resolve) => { resolveReload = resolve }))
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload,
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const handle = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), {
+      createController: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() })),
+    })
+    const first = handle.refresh()
+    const second = handle.refresh()
+    expect(second).toBe(first)
+    expect(reload).toHaveBeenCalledTimes(1)
+    resolveReload(readModel)
+    await Promise.all([first, second])
+    handle.release()
+  })
+
   test("does not leak a session across runtime/build identity changes", () => {
     const query = {
       load: vi.fn(async () => readModel),

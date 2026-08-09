@@ -283,25 +283,23 @@
     color: var(--color-text-primary);
   }
 
-  .dialogBackdrop {
-    position: fixed;
-    z-index: 10;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    padding: 1rem;
-    background: var(--color-background-body);
-  }
-
   .dialog {
     display: grid;
     gap: 1rem;
     width: min(32rem, 100%);
+    max-height: min(90dvh, 42rem);
+    margin: auto;
+    overflow: auto;
+    overscroll-behavior: contain;
     border: 1px solid var(--color-border-emphasized);
     padding: 1.25rem;
     background: var(--color-background-surface);
     color: var(--color-text-primary);
     box-shadow: 0 1rem 3rem var(--color-border);
+  }
+
+  .dialog::backdrop {
+    background: color-mix(in srgb, var(--color-background-body) 78%, transparent);
   }
 
   .dialogHeader,
@@ -330,7 +328,8 @@
     font-weight: 650;
   }
 
-  .dialogField input {
+  .dialogField input,
+  .dialogField textarea {
     min-height: 2.5rem;
     border: 1px solid var(--color-border-emphasized);
     border-radius: var(--radius-element);
@@ -340,9 +339,23 @@
     font: inherit;
   }
 
-  .dialogField input:focus-visible {
+  .dialogField textarea {
+    min-height: 6rem;
+    resize: vertical;
+  }
+
+  .dialogField input:focus-visible,
+  .dialogField textarea:focus-visible {
     outline: 0.15rem solid var(--color-accent);
     outline-offset: 0.15rem;
+  }
+
+  .dialogCheckField {
+    display: flex;
+    gap: 0.55rem;
+    align-items: flex-start;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
   }
 
   .dialogActions {

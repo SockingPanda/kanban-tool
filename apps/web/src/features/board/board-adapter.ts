@@ -62,8 +62,10 @@ function projectTask(task: BoardTask, groupedStatus: BoardTaskStatus): BoardTask
   }
   return Object.freeze({
     id: task.id,
+    seq: task.seq,
     ref: task.ref,
     title: task.title,
+    description: task.description,
     status,
     position: task.position,
     lockVersion: task.lock_version,

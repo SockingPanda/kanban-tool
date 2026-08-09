@@ -17,8 +17,10 @@ const model: BoardViewModel = {
     ready: [
       {
         id: "t-later",
+        seq: 2,
         ref: "KB-2",
         title: "后面的任务",
+        description: null,
         status: "ready",
         position: 20,
         lockVersion: 4,
@@ -35,8 +37,10 @@ const model: BoardViewModel = {
       },
       {
         id: "t-first",
+        seq: 1,
         ref: "KB-1",
         title: "先显示的任务",
+        description: null,
         status: "ready",
         position: 10,
         lockVersion: 5,

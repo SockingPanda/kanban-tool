@@ -30,8 +30,10 @@ type WireBoardTask = ApiListTasksByStatusResponseContract["data"]["statuses"][nu
 export type BoardTask = Readonly<Pick<
   WireBoardTask,
   | "id"
+  | "seq"
   | "ref"
   | "title"
+  | "description"
   | "status"
   | "priority"
   | "position"
@@ -482,8 +484,10 @@ function parseTasksWindow(
 function projectTask(task: WireBoardTask): BoardTask {
   return Object.freeze({
     id: task.id,
+    seq: task.seq,
     ref: task.ref,
     title: task.title,
+    description: task.description,
     status: task.status,
     assignee: task.assignee,
     priority: task.priority,

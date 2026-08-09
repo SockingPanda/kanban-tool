@@ -43,8 +43,10 @@ export interface BoardTaskReadinessViewModel {
 
 export interface BoardTaskViewModel {
   readonly id: string
+  readonly seq: number
   readonly ref: string
   readonly title: string
+  readonly description: string | null
   readonly status: BoardTaskStatus
   readonly position: number
   readonly lockVersion: number
@@ -197,10 +199,21 @@ export interface BoardMessages {
   readonly cancel: string
   readonly mutationPending: string
   readonly mutationError: string
+  readonly mutationUnauthorized: string
+  readonly mutationNotFound: string
+  readonly mutationUnavailable: string
   readonly conflictDescription: string
+  readonly reconcileStale: string
+  readonly retryReload: string
   readonly retryMutation: string
   readonly close: string
   readonly dropTargetLabel: (column: string) => string
+  readonly dropRejected: string
+  readonly dropSameColumn: string
+  readonly dropIllegal: (source: string, target: string) => string
+  readonly taskDescriptionLabel: string
+  readonly taskDescriptionPlaceholder: string
+  readonly forceConfirmationLabel: string
 }
 
 export type BoardMessagesOverrides = Omit<Partial<BoardMessages>, "planState"> & {
@@ -279,10 +292,21 @@ export const defaultBoardMessages: BoardMessages = {
   cancel: "取消",
   mutationPending: "正在保存…",
   mutationError: "任务操作失败",
+  mutationUnauthorized: "当前操作未获授权。",
+  mutationNotFound: "任务不存在或已被移除。",
+  mutationUnavailable: "服务暂时不可用，请稍后重试。",
   conflictDescription: "任务已被其他操作更新。已重新读取 canonical 状态，请确认输入后重试。",
+  reconcileStale: "操作已经提交，但 canonical 看板暂时无法重新读取；当前显示保留为待确认状态。",
+  retryReload: "重新读取看板",
   retryMutation: "重新尝试",
   close: "关闭",
   dropTargetLabel: (column) => `放置到${column}`,
+  dropRejected: "未识别的拖动来源，未移动任务。",
+  dropSameColumn: "任务已在此列，未移动。",
+  dropIllegal: (source, target) => `不能从 ${source} 移动到 ${target}。`,
+  taskDescriptionLabel: "任务说明",
+  taskDescriptionPlaceholder: "补充任务说明…",
+  forceConfirmationLabel: "我确认要在没有当前 claim 的情况下强制执行此操作。",
 }
 
 export const englishBoardMessages: BoardMessages = {
@@ -357,10 +381,21 @@ export const englishBoardMessages: BoardMessages = {
   cancel: "Cancel",
   mutationPending: "Saving…",
   mutationError: "Task action failed",
+  mutationUnauthorized: "You are not authorized to perform this action.",
+  mutationNotFound: "The task no longer exists.",
+  mutationUnavailable: "The service is temporarily unavailable. Try again later.",
   conflictDescription: "This task changed elsewhere. Canonical state was reloaded; review your input and try again.",
+  reconcileStale: "The action was submitted, but canonical board data could not be reloaded. The optimistic state is marked pending confirmation.",
+  retryReload: "Reload board",
   retryMutation: "Try again",
   close: "Close",
   dropTargetLabel: (column) => `Drop in ${column}`,
+  dropRejected: "The drag source was not recognized; the task was not moved.",
+  dropSameColumn: "The task is already in this column.",
+  dropIllegal: (source, target) => `Cannot move from ${source} to ${target}.`,
+  taskDescriptionLabel: "Task description",
+  taskDescriptionPlaceholder: "Add task details…",
+  forceConfirmationLabel: "I confirm this forced action without the current claim.",
 }
 
 export function boardMessagesForLocale(locale: "zh" | "en"): BoardMessages {

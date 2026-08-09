@@ -39,8 +39,10 @@ const readModel: BoardReadModel = {
     ready: [
       {
         id: "t_ready",
+        seq: 1,
         ref: "default#1",
         title: "Ship board",
+        description: null,
         status: "ready",
         priority: 3,
         position: 10,
@@ -72,8 +74,10 @@ describe("BoardReadModel adapter", () => {
         ready: [
           {
             id: "t_ready",
+            seq: 1,
             ref: "default#1",
             title: "Ship board",
+            description: null,
             status: "ready",
             position: 10,
             priority: 3,

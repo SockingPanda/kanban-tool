@@ -82,6 +82,8 @@ test.describe("Inspector integration seam", () => {
     await labelInput.fill("reload-gated")
     await page.getByTestId("label-add").click()
     await expect(page.getByTestId("task-inspector")).toContainText("stale")
+    await expect(page.getByTestId("task-inspector-reload-feedback")).toHaveCount(1)
+    await expect(page.getByTestId("task-inspector-relations")).not.toContainText("stale")
     await expect(page.getByTestId("inspector-labels")).not.toContainText("reload-gated")
 
     fixture.failNextInspectorReads(0)

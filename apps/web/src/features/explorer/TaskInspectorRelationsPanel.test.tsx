@@ -172,7 +172,7 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toMatch(/data-testid="task-inspector-create-step"[^>]*disabled=""/)
     expect(markup).toMatch(/data-testid="task-inspector-link-step"[^>]*disabled=""/)
     expect(markup).toMatch(/data-testid="task-inspector-mark-plan-not-required"[^>]*disabled=""/)
-    expect(markup).toContain('role="status" aria-live="polite">正在重试…</p>')
+    expect(markup).not.toContain('data-retry-key="reload:t_current"')
   })
 
   test("keeps exact retry intents visible while preserving diverged drafts", () => {
@@ -198,9 +198,9 @@ describe("TaskInspectorRelationsPanel", () => {
     )
 
     expect(markup).toContain('data-retry-key="addComment:t_current"')
-    expect(markup).toContain('data-retry-key="reload:t_current"')
+    expect(markup).not.toContain('data-retry-key="reload:t_current"')
     expect(markup).toContain("comment failed")
-    expect(markup).toContain("stale")
+    expect(markup).not.toContain("stale")
     expect(markup).not.toMatch(/type="submit" disabled=""[^>]*>添加评论<\/button>/)
   })
 

@@ -231,6 +231,21 @@ describe("TaskInspector", () => {
     expect(markup).toMatch(/class="[^"]*editButton[^"]*"[^>]*disabled/)
   })
 
+  test("owns reload feedback exactly once in the Inspector header", () => {
+    const key = inspectorMutationKey("reload", model.task.id)
+    const snapshot: TaskInspectorMutationSnapshot = {
+      scope: { identity: "runtime", boardId: "default", taskId: model.task.id },
+      generation: 1,
+      pending: new Set(),
+      errors: new Map([[key, { operation: "reload", taskId: model.task.id, kind: "stale", message: "stale", status: null, code: null, recoverable: true }]]),
+      retries: new Map([[key, { operation: "reload", taskId: model.task.id }]]),
+    }
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" mutationHandlers={{} as TaskInspectorMutationHandlers} mutationSnapshot={snapshot} />)
+
+    expect((markup.match(/data-testid="task-inspector-reload-feedback"/g) ?? []).length).toBe(1)
+    expect((markup.match(/data-retry-key="reload:t_fixture"/g) ?? []).length).toBe(0)
+  })
+
   test("renders metadata, claim, lazy runtime sections and read-only relation fallback", () => {
     const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" />)
 

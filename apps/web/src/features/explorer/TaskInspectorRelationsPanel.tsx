@@ -922,17 +922,8 @@ export function TaskInspectorRelationsPanel({
 }: TaskInspectorRelationsPanelProps) {
   const localeCopy = copy[locale]
   const safePageSize = Number.isSafeInteger(commentPageSize) && commentPageSize > 0 ? commentPageSize : 10
-  const writePending = writePendingFor(snapshot, taskId)
-  const reloadKey = inspectorMutationKey("reload", taskId)
-  const reloadPending = pendingFor(snapshot, "reload", taskId)
-  const reloadError = errorFor(snapshot, "reload", taskId)
   return (
     <div className={styles.relations} data-testid="task-inspector-relations">
-      <Feedback
-        error={reloadError}
-        pendingLabel={reloadPending ? localeCopy.retrying : undefined}
-        retry={{ key: reloadKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying }}
-      />
       <CommentsPanel taskId={taskId} comments={comments} handlers={handlers} snapshot={snapshot} localeCopy={localeCopy} locale={locale} pageSize={safePageSize} />
       <DependenciesPanel taskId={taskId} dependencies={dependencies} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} resolveSelector={resolveSelector} localeCopy={localeCopy} />
       <StepsPanel taskId={taskId} stepsInput={steps} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} resolveSelector={resolveSelector} localeCopy={localeCopy} />

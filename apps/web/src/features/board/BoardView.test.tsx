@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest"
 
 import { BoardView } from "./BoardView"
 import { validateBoardViewModel } from "./types"
+import { englishBoardMessages } from "./types"
 import type { BoardTaskViewModel, BoardViewModel } from "./types"
 
 const model: BoardViewModel = {
@@ -99,7 +100,8 @@ describe("BoardView", () => {
 
     expect(markup).toContain('data-state="error"')
     expect(markup).toContain('data-anomaly="board-model"')
-    expect(markup).toContain("任务状态 review 没有对应的服务端列")
+    expect(markup).toContain("服务端返回的看板数据暂时无法显示，请重试。")
+    expect(markup).not.toContain("任务状态 review 没有对应的服务端列")
     expect(markup).not.toContain('data-status="review"')
   })
 
@@ -135,6 +137,30 @@ describe("BoardView", () => {
       if (state.kind === "error" || state.kind === "offline") expect(markup).toContain("重试")
     }
     expect(retry).not.toHaveBeenCalled()
+  })
+
+  test("无看板空态不伪造 identity，并可完整切换英文文案", () => {
+    const markup = renderToStaticMarkup(
+      <BoardView
+        state={{ kind: "empty", detail: englishBoardMessages.noBoardsDescription }}
+        messages={englishBoardMessages}
+      />,
+    )
+
+    expect(markup).toContain("No boards available")
+    expect(markup).toContain("The server returned no available boards")
+    expect(markup).not.toContain("看板")
+  })
+
+  test("ready board keeps rendering while sync status is stale or recovering", () => {
+    const stale = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} syncStatus="stale" />)
+    const recovering = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} syncStatus="recovering" />)
+
+    expect(stale).toContain('data-testid="board-sync-banner"')
+    expect(stale).toContain('data-sync-state="stale"')
+    expect(stale).toContain("产品路线图")
+    expect(recovering).toContain('data-sync-state="recovering"')
+    expect(recovering).toContain("产品路线图")
   })
 
   test("可见列没有任务时显示真实空列状态", () => {

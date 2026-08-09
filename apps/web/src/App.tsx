@@ -3,6 +3,7 @@ import { Theme } from "@astryxdesign/core/theme"
 import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 
 import { ProductShell } from "./ProductShell"
+import { BoardLive } from "./features/board/BoardLive"
 import { usePreferences } from "./lib/use-preferences"
 import { PreferencesProvider } from "./lib/preferences-provider"
 import { useAppRouter } from "./lib/router"
@@ -16,6 +17,7 @@ function RuntimeThemedShell() {
     basePath: runtime.webBasePath,
     defaultBoard: runtime.defaultBoard,
   })
+  const boardRoute = router.route.kind === "home" || router.route.kind === "board" ? router.route : null
 
   return (
     <InternationalizationProvider locale={preferences.locale} messages={astryxMessages} overrides={astryxOverrides}>
@@ -23,11 +25,14 @@ function RuntimeThemedShell() {
         <ProductShell
           runtime={runtime}
           route={router.route}
+          canonicalBoardSlug={router.route.kind === "board" ? router.route.boardSlug : undefined}
           boundary={router.error ? "error" : undefined}
           error={router.error instanceof Error ? router.error.message : undefined}
           onNavigate={router.navigate}
           onRetry={() => window.location.reload()}
-        />
+        >
+          {boardRoute ? <BoardLive runtime={runtime} route={boardRoute} onNavigate={router.navigate} /> : null}
+        </ProductShell>
       </Theme>
     </InternationalizationProvider>
   )

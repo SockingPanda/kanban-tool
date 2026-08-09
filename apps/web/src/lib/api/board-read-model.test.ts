@@ -373,4 +373,16 @@ describe("board read model", () => {
       reason: "board-not-found",
     } satisfies Partial<BoardReadError>)
   })
+
+  test("exposes an explicit no-boards error without inventing a board identity", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ data: [] }))
+
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+      name: "BoardReadError",
+      kind: "empty",
+      reason: "no-boards",
+      selector: "default",
+    } satisfies Partial<BoardReadError>)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
 })

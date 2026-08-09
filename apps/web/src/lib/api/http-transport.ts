@@ -270,6 +270,16 @@ function attachmentRouteURL(base: URL, path: string): string {
   return requestURL(base, path, { opaqueAttachmentPath: true })
 }
 
+/** Resolve an API path with the same validated origin/prefix rules as HTTP GET. */
+export function resolveHttpRequestURL(
+  runtime: WebRuntimeConfig,
+  path: string,
+  options: Pick<HttpTransportOptions, "documentBaseURI"> = {},
+): string {
+  const base = sameOriginBase(runtime, options.documentBaseURI ?? documentBaseURI())
+  return requestURL(base, path)
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError"
 }

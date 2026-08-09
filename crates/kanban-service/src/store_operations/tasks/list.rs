@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use crate::store_operations::label_from_row;
 use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
 
 use super::list_support::*;
@@ -125,6 +128,49 @@ impl TursoStore {
         while let Some(row) = rows.next().await? {
             tasks.push(task_from_row(row)?);
         }
+        if !tasks.is_empty() {
+            let task_ids = tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>();
+            let mut labels_by_task =
+                list_task_labels_for_page(&connection, &board_id, &task_ids).await?;
+            for task in &mut tasks {
+                task.labels = labels_by_task.remove(&task.id).unwrap_or_default();
+            }
+        }
         Ok(TaskListPage { tasks, total })
     }
+}
+
+async fn list_task_labels_for_page(
+    connection: &turso::Connection,
+    board_id: &str,
+    task_ids: &[String],
+) -> Result<HashMap<String, Vec<LabelRecord>>, StoreError> {
+    let placeholders = task_ids
+        .iter()
+        .enumerate()
+        .map(|(index, _)| format!(":task_id_{index}"))
+        .collect::<Vec<_>>();
+    let mut params = vec![(":board_id".to_owned(), Value::Text(board_id.to_owned()))];
+    params.extend(
+        task_ids
+            .iter()
+            .enumerate()
+            .map(|(index, task_id)| (format!(":task_id_{index}"), Value::Text(task_id.to_owned()))),
+    );
+    let mut rows = connection
+        .query(
+            &format!(
+                "SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at, tl.task_id FROM task_labels AS tl JOIN labels AS l ON l.id = tl.label_id AND l.board_id = tl.board_id WHERE tl.board_id = :board_id AND tl.task_id IN ({}) ORDER BY tl.task_id ASC, l.name ASC, l.id ASC",
+                placeholders.join(", ")
+            ),
+            params,
+        )
+        .await?;
+    let mut labels_by_task = HashMap::<String, Vec<LabelRecord>>::new();
+    while let Some(row) = rows.next().await? {
+        let label = label_from_row(&row)?;
+        let task_id = text_value(row.get_value(6)?, "task_labels.task_id")?;
+        labels_by_task.entry(task_id).or_default().push(label);
+    }
+    Ok(labels_by_task)
 }

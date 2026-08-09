@@ -1,0 +1,227 @@
+@layer product {
+  .inspector {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+    padding: 1rem;
+    border-inline-start: 1px solid var(--color-border);
+    background: var(--color-background-surface);
+    overflow: auto;
+  }
+
+  .header {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+    padding-block-end: 0.75rem;
+    border-block-end: 1px solid var(--color-border);
+  }
+
+  .eyebrow,
+  .ref,
+  .identity,
+  .muted,
+  .empty {
+    margin: 0;
+    color: var(--color-text-secondary);
+  }
+
+  .eyebrow {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .announcement {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+    padding: 0;
+  }
+
+  .ref,
+  .identity,
+  .codeBlock,
+  time,
+  dd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+  }
+
+  .header h1,
+  .header h2 {
+    margin: 0;
+    min-width: 0;
+    font-size: 1.35rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding-block-start: 0.3rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 1.45rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.12rem 0.45rem;
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .section {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+    padding-block-end: 0.9rem;
+    border-block-end: 1px solid var(--color-border);
+  }
+
+  .section h2,
+  .dependencyGroup h3 {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+
+  .dependencyGroup {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .facts {
+    display: grid;
+    gap: 0.4rem;
+    margin: 0;
+  }
+
+  .facts > div {
+    display: grid;
+    grid-template-columns: minmax(6rem, auto) minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: baseline;
+    min-width: 0;
+  }
+
+  dt {
+    color: var(--color-text-secondary);
+    font-size: 0.76rem;
+  }
+
+  dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-text-primary);
+  }
+
+  .description,
+  .row p {
+    margin: 0.2rem 0 0;
+    color: var(--color-text-secondary);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .descriptionDisclosure,
+  .neighborhood {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  summary {
+    cursor: pointer;
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+
+  .neighborhoodFacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+  }
+
+  .codeBlock {
+    max-height: 9rem;
+    margin: 0;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    padding: 0.55rem;
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .compactList {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+    border-inline-start: 0.18rem solid var(--color-border-emphasized);
+    padding: 0.4rem 0.5rem;
+    background: var(--color-background-body);
+  }
+
+  .row > div {
+    min-width: 0;
+  }
+
+  .linkButton {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.45rem;
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    padding: 0.4rem 0.5rem;
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .linkButton:hover {
+    background: var(--color-background-surface);
+  }
+
+  .linkButton span:nth-child(2) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .error {
+    color: var(--color-status-error, #b42318) !important;
+  }
+
+  @media (max-width: 56rem) {
+    .inspector {
+      border-block-start: 1px solid var(--color-border);
+      border-inline-start: 0;
+    }
+  }
+}

@@ -17,6 +17,7 @@ import {
   transitionForTaskTarget,
   transitionForTarget,
   updateTaskOptimistically,
+  type BoardTaskMutationCommitted,
   type BoardTaskMutationSurface,
   type BoardTaskTransitionOption,
 } from "./task-mutation-state"
@@ -169,6 +170,15 @@ function mutationMessage(error: unknown, copy: BoardMessages, fallback: string):
   }
   // Never put transport/Error.message in the DOM: only stable product copy is exposed.
   return fallback
+}
+
+/** Mutation commits are observable even when the subsequent canonical read is stale. */
+function notifyMutationCommitted(surface: BoardTaskMutationSurface, event: BoardTaskMutationCommitted): void {
+  try {
+    surface.onMutationCommitted?.(event)
+  } catch {
+    // An observer must not turn a committed server write into a local retry.
+  }
 }
 
 export function useBoardTaskMutationController(
@@ -353,6 +363,7 @@ export function useBoardTaskMutationController(
       return
     }
     if (isCurrentMutation(generation)) {
+      notifyMutationCommitted(surface, { kind: "create", taskId: attempt.taskId })
       const reloaded = await reconcileAfterMutation()
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
@@ -390,6 +401,11 @@ export function useBoardTaskMutationController(
           if (isClaimTokenConflict(error)) claimTokensRef.current.delete(taskId)
           const reloaded = await reconcileAfterMutation()
           if (!isCurrentMutation(generation)) return
+          if (pendingRef.current.size <= 1) optimisticDirtyRef.current = false
+          // Clear the synchronous mutation fence before exposing the retry
+          // control; React may commit the notice before the remaining state
+          // updates in this async branch.
+          setPending(`edit:${taskId}`, false)
           setRetryIntent(reloaded ? { kind: "edit", taskId, title } : { kind: "reload" })
           setNotice({ kind: reloaded ? "conflict" : "stale", message: reloaded ? copy.conflictDescription : copy.reconcileStale })
         } else {
@@ -397,12 +413,15 @@ export function useBoardTaskMutationController(
           setRetryIntent({ kind: "edit", taskId, title })
           if (!retrying) closeDialogState()
         }
-        if (pendingRef.current.size <= 1) optimisticDirtyRef.current = false
-        setPending(`edit:${taskId}`, false)
+        if (!isMutationConflict(error)) {
+          if (pendingRef.current.size <= 1) optimisticDirtyRef.current = false
+          setPending(`edit:${taskId}`, false)
+        }
       }
       return
     }
     if (isCurrentMutation(generation)) {
+      notifyMutationCommitted(surface, { kind: "edit", taskId })
       const reloaded = await reconcileAfterMutation()
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
@@ -499,6 +518,7 @@ export function useBoardTaskMutationController(
       return
     }
     if (isCurrentMutation(generation)) {
+      notifyMutationCommitted(surface, { kind: "transition", taskId })
       const reloaded = await reconcileAfterMutation()
       if (!isCurrentMutation(generation)) return
       if (reloaded) {

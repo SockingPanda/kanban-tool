@@ -54,6 +54,8 @@ export interface BoardSessionTestDependencies {
 }
 
 const sessions = new Map<string, BoardSession>()
+/** Feature readers observe the canonical session; they never open another stream. */
+const sessionTelemetryObservers = new Map<string, Set<(entry: SyncTelemetryEntry) => void>>()
 
 export function runtimeIdentityKey(runtime: WebRuntimeConfig): string {
   return `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}`
@@ -112,6 +114,31 @@ export function resetBoardSessionsForTests(): void {
     session.query.invalidate()
   }
   sessions.clear()
+  sessionTelemetryObservers.clear()
+}
+
+/** Subscribe to the already-validated SSE/recovery telemetry of one session. */
+export function subscribeBoardSessionTelemetry(
+  runtime: WebRuntimeConfig,
+  canonicalBoardId: CanonicalBoardId,
+  listener: (entry: SyncTelemetryEntry) => void,
+): () => void {
+  const key = sessionKey(runtime, canonicalBoardId)
+  let observers = sessionTelemetryObservers.get(key)
+  if (observers === undefined) {
+    observers = new Set()
+    sessionTelemetryObservers.set(key, observers)
+  }
+  observers.add(listener)
+  let active = true
+  return () => {
+    if (!active) return
+    active = false
+    const current = sessionTelemetryObservers.get(key)
+    if (current === undefined) return
+    current.delete(listener)
+    if (current.size === 0 && sessions.get(key) === undefined) sessionTelemetryObservers.delete(key)
+  }
 }
 
 if (import.meta.hot) {
@@ -165,6 +192,7 @@ export function acquireBoardSession(
       telemetry: {
         record: (entry: SyncTelemetryEntry) => {
           for (const listener of telemetryListeners) listener(entry)
+          for (const observer of sessionTelemetryObservers.get(key) ?? []) observer(entry)
         },
       },
     } satisfies ConstructorParameters<typeof WebSyncController>[0]

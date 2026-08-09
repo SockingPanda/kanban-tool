@@ -5,6 +5,7 @@ import { Card } from "@astryxdesign/core/Card"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Text } from "@astryxdesign/core/Text"
 
+import { taskOpenerKey } from "../../lib/explorer-focus"
 import styles from "./BoardView.module.css"
 import { MutationDialog, MutationNotice } from "./BoardTaskMutations"
 import {
@@ -33,11 +34,14 @@ export interface BoardViewProps {
   readonly state: BoardViewState
   readonly messages?: BoardMessagesOverrides
   readonly onRetry?: () => void
+  readonly onSelectTask?: (taskId: string) => void
   /** Sync state is rendered as an independent banner and never replaces a ready board. */
   readonly syncStatus?: BoardSyncStatus
   readonly id?: string
   readonly className?: string
   readonly taskMutations?: BoardTaskMutationSurface
+  /** Explorer nests the live board under its page heading. */
+  readonly headingLevel?: 1 | 2 | 3
 }
 
 function mergeMessages(overrides?: BoardMessagesOverrides): BoardMessages {
@@ -79,12 +83,14 @@ function BoardHeader({
   copy,
   onCreate,
   isMutationPending,
+  headingLevel,
 }: {
   readonly board?: BoardViewModel["board"]
   readonly titleId: string
   readonly copy: BoardMessages
   readonly onCreate?: (trigger?: HTMLElement | null) => void
   readonly isMutationPending?: boolean
+  readonly headingLevel: 1 | 2 | 3
 }) {
   return (
     <header className={styles.header}>
@@ -92,7 +98,7 @@ function BoardHeader({
         <Text as="p" type="supporting" className={styles.eyebrow}>
           {copy.boardEyebrow}
         </Text>
-        <Heading level={1} id={titleId}>
+        <Heading level={headingLevel} id={titleId}>
           {board?.name ?? copy.boardTitle}
         </Heading>
         {board ? (
@@ -127,6 +133,8 @@ function SyncBanner({ status, copy, onRetry }: { readonly status: BoardSyncStatu
         ? copy.syncRecovering
         : status === "circuit-open"
           ? copy.syncCircuitOpen
+          : status === "offline"
+            ? copy.offlineTitle
           : copy.syncStale
   const isHealthy = status === "live"
   return (
@@ -184,10 +192,12 @@ function TaskCard({
   task,
   copy,
   controller,
+  onSelectTask,
 }: {
   readonly task: BoardTaskViewModel
   readonly copy: BoardMessages
   readonly controller?: BoardTaskMutationController
+  readonly onSelectTask?: (taskId: string) => void
 }) {
   const dependencyText = task.readiness.dependencyBlocked
     ? `${copy.dependencyBlocked}（${task.readiness.unfinishedParentCount}）`
@@ -226,7 +236,11 @@ function TaskCard({
         <Badge variant={priorityVariant(task.priority)} label={copy.priorityLabel(task.priority)} />
       </div>
       <Heading level={3} className={styles.taskTitle}>
-        {task.title}
+        {onSelectTask ? (
+          <button type="button" className={styles.taskTitleButton} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>
+            {task.title}
+          </button>
+        ) : task.title}
       </Heading>
       <dl className={styles.taskDetails}>
         <div className={styles.taskDetailsRow}>
@@ -291,11 +305,13 @@ function BoardColumns({
   copy,
   rootId,
   controller,
+  onSelectTask,
 }: {
   readonly model: BoardViewModel
   readonly copy: BoardMessages
   readonly rootId: string
   readonly controller?: BoardTaskMutationController
+  readonly onSelectTask?: (taskId: string) => void
 }) {
   const columns = orderedVisibleColumns(model.columns)
 
@@ -348,13 +364,13 @@ function BoardColumns({
                     <li className={styles.emptyColumn} role="status" aria-live="polite">
                       <p>{copy.emptyColumn}</p>
                     </li>
-                  ) : (
-                    tasks.map((task) => (
-                      <li className={styles.taskListItem} key={task.id}>
-                        <TaskCard task={task} copy={copy} controller={controller} />
-                      </li>
-                    ))
-                  )}
+                ) : (
+                  tasks.map((task) => (
+                    <li className={styles.taskListItem} key={task.id}>
+                        <TaskCard task={task} copy={copy} controller={controller} onSelectTask={onSelectTask} />
+                    </li>
+                  ))
+                )}
                 </ul>
               </section>
             )
@@ -365,7 +381,7 @@ function BoardColumns({
   )
 }
 
-export function BoardView({ state, messages: messageOverrides, onRetry, syncStatus, id = "astryx-board", className, taskMutations }: BoardViewProps) {
+export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, syncStatus, id = "astryx-board", className, headingLevel = 1, taskMutations }: BoardViewProps) {
   const copy = mergeMessages(messageOverrides)
   const baseModel = state.kind === "ready" ? state.model : null
   const mutationColumns = baseModel !== null && Array.isArray(baseModel.columns) ? baseModel.columns : []
@@ -393,14 +409,14 @@ export function BoardView({ state, messages: messageOverrides, onRetry, syncStat
       <a className={styles.skipLink} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
-      <BoardHeader board={board} titleId={titleId} copy={copy} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />
+      <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />
       {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
       {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
       {controller?.isMutationPending ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</p> : null}
       {controller ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</p> : null}
       <div id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (
-          <BoardColumns model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} />
+          <BoardColumns model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} onSelectTask={onSelectTask} />
         ) : (
           <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
         )}

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 
-import { installRuntimeFixture } from "./runtime-fixture"
+import { installPersistentSse, installRuntimeFixture } from "./runtime-fixture"
 
 type TaskStatus = "todo" | "ready" | "running" | "blocked"
 
@@ -81,6 +81,7 @@ async function wireBoard(page: Page, options: {
   readonly secondTask?: { readonly taskId: string; readonly title?: string; readonly status?: TaskStatus }
 } = {}) {
   await installRuntimeFixture(page)
+  await installPersistentSse(page)
   const boardId = options.boardId ?? "b_default"
   const boardSlug = options.boardSlug ?? "default"
   const boardSpecs = [
@@ -88,7 +89,6 @@ async function wireBoard(page: Page, options: {
     ...(options.secondaryBoard === undefined ? [] : [options.secondaryBoard]),
   ]
   let status: TaskStatus = options.initialStatus ?? "todo"
-  await page.route("**/api/v1/stream/events**", (route) => route.fulfill({ status: 200, contentType: "text/event-stream", body: "" }))
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -281,6 +281,10 @@ test.describe("board task mutation DOM behavior", () => {
     const createStartedPromise = new Promise<void>((resolve) => { createStarted = resolve })
     const stepBodies: Array<Record<string, unknown>> = []
     await page.route("**/api/v1/boards/default/tasks", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback()
+        return
+      }
       createStarted?.()
       await new Promise<void>((resolve) => { releaseCreate = resolve })
       const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
@@ -317,7 +321,7 @@ test.describe("board task mutation DOM behavior", () => {
     await edit.click()
     await page.getByTestId("task-title-input").fill("Concurrent edit")
     await page.getByRole("button", { name: "保存" }).click()
-    await expect(page.getByTestId("mutation-notice")).toContainText(/任务已被其他操作更新|canonical 看板暂时无法重新读取/)
+    await expect(page.getByTestId("mutation-notice")).toHaveAttribute("data-notice-kind", "conflict")
     await expect(page.getByTestId("mutation-notice")).not.toContainText("SECRET")
     await expect(page.getByTestId("task-title-input")).toHaveValue("Concurrent edit")
     await expect(page.getByTestId("mutation-retry")).toBeVisible()
@@ -331,6 +335,10 @@ test.describe("board task mutation DOM behavior", () => {
     await wireBoard(page)
     const bodies: Array<Record<string, unknown>> = []
     await page.route("**/api/v1/boards/default/tasks", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback()
+        return
+      }
       bodies.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>)
       await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "internal", message: "SECRET create detail" } }) })
     })
@@ -346,11 +354,43 @@ test.describe("board task mutation DOM behavior", () => {
     expect(bodies[1]?.idempotency_key).toBe(bodies[0]?.idempotency_key)
   })
 
+  test("navigates to the created task in the canonical board route", async ({ page }) => {
+    await wireBoard(page)
+    let createdTaskId: string | null = null
+    await page.route("**/api/v1/boards/default/tasks", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback()
+        return
+      }
+      const body = JSON.parse(route.request().postData() ?? "{}") as { readonly task_id?: unknown }
+      createdTaskId = typeof body.task_id === "string" ? body.task_id : null
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: task("todo", "Created task", "b_default", "default", createdTaskId ?? "t_created") }),
+      })
+    })
+
+    await page.getByTestId("task-create").click()
+    await page.getByTestId("task-title-input").fill("Created task")
+    await page.getByRole("button", { name: "创建" }).click()
+
+    await expect.poll(() => createdTaskId).toMatch(/^t_/)
+    await expect.poll(() => {
+      const url = new URL(page.url())
+      return `${url.pathname}?${url.searchParams.toString()}`
+    }).toBe(`/app/boards/default/board?task=${createdTaskId}`)
+  })
+
   test("retains a created task id when its first required step fails and retries only the step", async ({ page }) => {
     await wireBoard(page)
     const createBodies: Array<Record<string, unknown>> = []
     const stepBodies: Array<Record<string, unknown>> = []
     await page.route("**/api/v1/boards/default/tasks", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback()
+        return
+      }
       const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
       createBodies.push(body)
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", String(body.title ?? "Created task")) }) })

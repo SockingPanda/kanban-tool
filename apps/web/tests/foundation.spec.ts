@@ -1,6 +1,6 @@
 import { expect, test, type Response } from "@playwright/test"
 
-import { installRuntimeFixture } from "./runtime-fixture"
+import { installExplorerFixture } from "./explorer-fixture"
 
 const strictCspDirectives = [
   "default-src 'self'",
@@ -24,18 +24,18 @@ function expectStrictCsp(response: Pick<Response, "headers"> | null) {
 
 test.describe("Astryx product shell", () => {
   test.beforeEach(async ({ page }) => {
-    await installRuntimeFixture(page)
+    await installExplorerFixture(page)
   })
 
   test("renders a strict-CSP shell with one keyboard-reachable main landmark", async ({ page }) => {
-    const response = await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
+    const response = await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     expectStrictCsp(response)
 
     await expect(page).toHaveTitle("Astryx Kanban · Workspace")
     await expect(page.getByTestId("product-shell")).toBeVisible()
-    await expect(page.getByTestId("board-placeholder")).toBeVisible()
+    await expect(page.getByTestId("board-view")).toBeVisible()
     await expect(page.getByRole("navigation", { name: "侧栏导航" })).toBeVisible()
-    await expect(page.getByRole("main")).toHaveCount(1)
+    await expect(page.locator("main:visible")).toHaveCount(1)
 
     const skipLink = page.getByRole("link", { name: "跳转到主要内容" })
     await skipLink.focus()
@@ -46,8 +46,9 @@ test.describe("Astryx product shell", () => {
   })
 
   test("persists theme, locale, and sidebar preferences in kb:web keys", async ({ page }) => {
-    await page.goto("/app/settings", { waitUntil: "networkidle" })
+    await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
 
+    await expect(page.getByTestId("settings-page")).toBeVisible()
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
     await page.getByTestId("theme-preference").selectOption("dark")
@@ -62,7 +63,8 @@ test.describe("Astryx product shell", () => {
   })
 
   test("navigates between board and settings without a router dependency", async ({ page }) => {
-    await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("board-view")).toBeVisible()
     await page.getByTestId("nav-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
     await expect(page.getByTestId("nav-board")).toBeDisabled()
@@ -73,7 +75,8 @@ test.describe("Astryx product shell", () => {
   test("surfaces a rejected navigation without an unhandled page error", async ({ page }) => {
     const pageErrors: Error[] = []
     page.on("pageerror", (error) => pageErrors.push(error))
-    await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("board-view")).toBeVisible()
     await page.evaluate(() => {
       history.pushState = () => {
         throw new Error("navigation rejected")
@@ -86,7 +89,8 @@ test.describe("Astryx product shell", () => {
   })
 
   test("keeps board and settings entries available in collapsed desktop navigation", async ({ page }) => {
-    await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("board-view")).toBeVisible()
     await page.getByRole("button", { name: "收起侧栏" }).click()
     await expect(page.getByRole("button", { name: "展开侧栏" })).toBeVisible()
     await expect(page.getByTestId("nav-board")).toBeVisible()
@@ -99,8 +103,9 @@ test.describe("Astryx product shell", () => {
   })
 
   test("keeps strict CSP on assets and the SPA fallback", async ({ page }) => {
-    const response = await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
+    const response = await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     expectStrictCsp(response)
+    await expect(page.getByTestId("board-view")).toBeVisible()
     const assetUrls = await page.locator("script[src], link[rel=stylesheet][href]").evaluateAll((elements) =>
       elements.map((element) => (element as HTMLScriptElement | HTMLLinkElement).src || (element as HTMLLinkElement).href),
     )
@@ -114,13 +119,13 @@ test.describe("Astryx product shell", () => {
   })
 
   test("renders an explicit 404 boundary for an unknown route", async ({ page }) => {
-    await page.goto("/app/unknown", { waitUntil: "networkidle" })
+    await page.goto("/app/unknown", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("shell-not-found")).toBeVisible()
     await expect(page.getByRole("heading", { name: "页面不存在" })).toBeVisible()
   })
 
   test("renders an explicit invalid-slug boundary without rewriting the address", async ({ page }) => {
-    await page.goto("/app/boards/Bad%20Board/board", { waitUntil: "networkidle" })
+    await page.goto("/app/boards/Bad%20Board/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("shell-route-error")).toBeVisible()
     await expect(page).toHaveURL(/\/app\/boards\/Bad%20Board\/board$/)
   })

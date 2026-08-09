@@ -113,5 +113,14 @@ query root 与 observed-scope 规则执行；ledger 中的 `task.*`、`dependenc
 - 视觉基线与性能预算；
 - exact matched host/web/deb/manifest rollback，DB unchanged。
 
+Stage 04 的 Explorer/Inspector 浏览器证据路径固定为：
+
+- `apps/web/tests/explorer-inspector.spec.ts`：Board/List/Map/Events 打开与关闭 Inspector、URL 深链与
+  reload 恢复、键盘可达、loading/empty/error/offline 边界、SSE 驱动 Events 刷新及单连接断言；
+- `apps/web/tests/explorer-fixture.ts`：仅在 Playwright browser context 内替换 HTTP/SSE 边界，响应形状仍遵循
+  generated contract；不伪造生产不存在的错误码；
+- Chromium 项目执行全量 spec，Firefox 项目执行同一关键路径；截图统一写入 `output/playwright/`，不把
+  `networkidle` 或固定 sleep 作为等待条件。
+
 本文件只记录可复用的当前能力与迁移边界；实现进度、单次失败、review finding 和一次性 workaround 留在
 Kanban stage task 或 runbook，不把本 ledger 变成日志。

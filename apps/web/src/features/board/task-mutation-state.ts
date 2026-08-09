@@ -24,9 +24,17 @@ export interface BoardTaskTransitionOption {
 
 export type BoardTaskMutationClient = Pick<TaskMutationClient, "createTask" | "createStep" | "updateTask" | "transitionTask">
 
+export interface BoardTaskMutationCommitted {
+  readonly kind: "create" | "edit" | "transition"
+  readonly taskId: string
+  readonly boardSlug?: string
+}
+
 export interface BoardTaskMutationSurface {
   readonly client: BoardTaskMutationClient
   readonly onCanonicalReload?: () => Promise<void> | void
+  /** Called once after the server mutation writes commit, before reconcile. */
+  readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void
 }
 
 const TRANSITIONS: Readonly<Record<BoardTaskStatus, readonly BoardTaskTransitionOption[]>> = {

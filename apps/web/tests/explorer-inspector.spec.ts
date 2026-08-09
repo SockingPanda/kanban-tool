@@ -23,7 +23,9 @@ test.describe("Astryx Explorer browser acceptance", () => {
     // The board is a horizontally scrollable column surface; use its
     // keyboard-reachable column anchor before activating the off-screen card.
     await page.getByRole("link", { name: "Ready", exact: true }).click()
-    await boardOpener.click()
+    await boardOpener.focus()
+    await expect(boardOpener).toBeFocused()
+    await page.keyboard.press("Enter")
     await expect(page).toHaveURL(new RegExp(`/board\\?task=${taskId}$`))
     await expect(page.getByTestId("task-inspector")).toBeVisible()
     await page.screenshot({ path: test.info().outputPath("task-inspector-board.png"), fullPage: true })

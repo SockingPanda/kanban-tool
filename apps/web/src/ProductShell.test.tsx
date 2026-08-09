@@ -34,6 +34,16 @@ function render(route: ReturnType<typeof parseAppRoute>) {
   )
 }
 
+function renderWithLiveChild(route: ReturnType<typeof parseAppRoute>) {
+  return renderToStaticMarkup(
+    <PreferencesProvider>
+      <ProductShell runtime={runtime} route={route}>
+        <div data-testid="live-board-child">live session</div>
+      </ProductShell>
+    </PreferencesProvider>,
+  )
+}
+
 describe("ProductShell route offline boundary", () => {
   test("keeps Events mounted so its own offline snapshot can render", () => {
     setOffline()
@@ -50,5 +60,15 @@ describe("ProductShell route offline boundary", () => {
 
     expect(markup).toContain('data-testid="shell-offline"')
     expect(markup).not.toContain('data-testid="explorer-page"')
+  })
+
+  test("keeps the live child hidden while the default board exposes Explorer tabs", () => {
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true } })
+    const markup = renderWithLiveChild(parseAppRoute("http://kanban.test/app/boards/default"))
+
+    expect(markup).toContain('data-testid="explorer-page"')
+    expect(markup).toContain('aria-label="看板浏览视图"')
+    expect(markup).toContain('data-testid="board-live-session"')
+    expect(markup).toContain('data-testid="live-board-child"')
   })
 })

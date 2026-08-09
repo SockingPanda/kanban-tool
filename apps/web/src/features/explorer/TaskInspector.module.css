@@ -41,7 +41,8 @@
     font-size: 0.78rem;
   }
 
-  .header h1 {
+  .header h1,
+  .header h2 {
     margin: 0;
     min-width: 0;
     font-size: 1.35rem;
@@ -120,6 +121,26 @@
     color: var(--color-text-secondary);
     line-height: 1.45;
     overflow-wrap: anywhere;
+  }
+
+  .descriptionDisclosure,
+  .neighborhood {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  summary {
+    cursor: pointer;
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+
+  .neighborhoodFacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
   }
 
   .codeBlock {

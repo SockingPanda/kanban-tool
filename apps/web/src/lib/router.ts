@@ -116,11 +116,13 @@ export function parseAppRoute(
   if (pathname.startsWith(boardPrefix)) {
     const tail = pathname.slice(boardPrefix.length)
     const separator = tail.lastIndexOf("/")
-    const view = separator > 0 ? tail.slice(separator + 1) : ""
+    // `/boards/:slug` is the canonical default Board view. Normalize it to
+    // the same board route as the explicit `/board` suffix.
+    const view = separator > 0 ? tail.slice(separator + 1) : "board"
     if (!(["board", "list", "map", "runs", "events"] as const).includes(view as BoardRouteView)) {
       return { kind: "not-found", pathname }
     }
-    const slug = tail.slice(0, separator)
+    const slug = separator > 0 ? tail.slice(0, separator) : tail
     const boardSlug = decodeBoardSlug(slug, pathname)
     if (typeof boardSlug === "string") {
       const route = { kind: "board" as const, boardSlug, pathname: routePath({ kind: "board", boardSlug, view: view as BoardRouteView }, options) }

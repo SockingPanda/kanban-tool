@@ -19,7 +19,10 @@ const explorerInvalidationTelemetry = new Set([
   "poll-boundary-complete",
   "protocol-anomaly",
   "isolation-anomaly",
+  "poll-protocol-anomaly",
 ])
+
+const EVENT_APPLIED_DEBOUNCE_MS = 200
 
 function RuntimeThemedShell() {
   const runtime = useWebRuntime()
@@ -29,8 +32,9 @@ function RuntimeThemedShell() {
     defaultBoard: runtime.defaultBoard,
   })
   const boardRoute = router.route.kind === "home" || router.route.kind === "board" ? router.route : null
+  // The canonical BoardLive remains mounted for every board route as the
+  // single session/SSE owner, while Explorer owns the visible board view.
   const liveBoardVisible = boardRoute?.kind === "home"
-    || (boardRoute?.kind === "board" && (boardRoute.view === undefined || boardRoute.view === "board"))
   const sessionKey = boardRoute === null
     ? "none"
     : `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${boardRoute.kind === "board" ? boardRoute.boardSlug : ""}`
@@ -40,22 +44,42 @@ function RuntimeThemedShell() {
     key: sessionKey,
     revision: 0,
   }))
+  const eventAppliedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, revision: 0 })
-  }, [sessionKey])
-
-  const onSessionTelemetry = useCallback((entry: SyncTelemetryEntry) => {
-    if (!explorerInvalidationTelemetry.has(entry.type)) return
+  const bumpExplorerRevision = useCallback(() => {
     setSessionState((current) => {
       const key = sessionKeyRef.current
       if (current.key !== key) return current
-      return {
-        key,
-        revision: current.revision + 1,
-      }
+      return { key, revision: current.revision + 1 }
     })
   }, [])
+
+  useEffect(() => {
+    if (eventAppliedTimerRef.current !== null) {
+      clearTimeout(eventAppliedTimerRef.current)
+      eventAppliedTimerRef.current = null
+    }
+    setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, revision: 0 })
+  }, [sessionKey])
+
+  useEffect(() => () => {
+    if (eventAppliedTimerRef.current !== null) clearTimeout(eventAppliedTimerRef.current)
+  }, [])
+
+  const onSessionTelemetry = useCallback((entry: SyncTelemetryEntry) => {
+    if (!explorerInvalidationTelemetry.has(entry.type)) return
+    if (entry.type === "event-applied") {
+      if (eventAppliedTimerRef.current !== null) return
+      eventAppliedTimerRef.current = setTimeout(() => {
+        eventAppliedTimerRef.current = null
+        bumpExplorerRevision()
+      }, EVENT_APPLIED_DEBOUNCE_MS)
+      return
+    }
+    // Recovery/poll completion and protocol anomalies are conservative
+    // refresh boundaries; they are intentionally not tied to each event.
+    bumpExplorerRevision()
+  }, [bumpExplorerRevision])
 
   return (
     <InternationalizationProvider locale={preferences.locale} messages={astryxMessages} overrides={astryxOverrides}>

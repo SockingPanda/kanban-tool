@@ -27,6 +27,8 @@ export interface BoardViewProps {
   readonly syncStatus?: BoardSyncStatus
   readonly id?: string
   readonly className?: string
+  /** Explorer nests the live board under its page heading. */
+  readonly headingLevel?: 1 | 2 | 3
 }
 
 function mergeMessages(overrides?: BoardMessagesOverrides): BoardMessages {
@@ -66,10 +68,12 @@ function BoardHeader({
   board,
   titleId,
   copy,
+  headingLevel,
 }: {
   readonly board?: BoardViewModel["board"]
   readonly titleId: string
   readonly copy: BoardMessages
+  readonly headingLevel: 1 | 2 | 3
 }) {
   return (
     <header className={styles.header}>
@@ -77,7 +81,7 @@ function BoardHeader({
         <Text as="p" type="supporting" className={styles.eyebrow}>
           {copy.boardEyebrow}
         </Text>
-        <Heading level={1} id={titleId}>
+        <Heading level={headingLevel} id={titleId}>
           {board?.name ?? copy.boardTitle}
         </Heading>
         {board ? (
@@ -286,7 +290,7 @@ function BoardColumns({ model, copy, rootId, onSelectTask }: { readonly model: B
   )
 }
 
-export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, syncStatus, id = "astryx-board", className }: BoardViewProps) {
+export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, syncStatus, id = "astryx-board", className, headingLevel = 1 }: BoardViewProps) {
   const copy = mergeMessages(messageOverrides)
   const titleId = `${id}-title`
   const validation = state.kind === "ready" ? validateBoardViewModel(state.model) : { valid: true as const }
@@ -310,7 +314,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       <a className={styles.skipLink} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
-      <BoardHeader board={board} titleId={titleId} copy={copy} />
+      <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} />
       {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
       <div id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" ? (

@@ -12,6 +12,7 @@ import {
   type TaskListQueryState,
 } from "../../lib/api/explorer-read-model"
 import type { CanonicalBoardSlug } from "../../lib/board-slug"
+import type { Locale } from "../../lib/preferences"
 import type { BoardReadModel } from "../../lib/api/board-read-model"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
@@ -73,6 +74,55 @@ export interface ExplorerPageProps {
 }
 
 const MAX_EVENT_KIND_FILTER_LENGTH = 128
+
+type ExplorerCopy = {
+  readonly eyebrow: string
+  readonly tabsLabel: string
+  readonly closeInspector: string
+  readonly boardLoading: string
+  readonly boardError: string
+  readonly retry: string
+  readonly inspectorLoading: string
+  readonly inspectorError: string
+  readonly board: string
+  readonly list: string
+  readonly map: string
+  readonly runs: string
+  readonly events: string
+}
+
+const explorerCopies: Record<Locale, ExplorerCopy> = {
+  zh: {
+    eyebrow: "ASTRYX EXPLORER",
+    tabsLabel: "看板浏览视图",
+    closeInspector: "关闭 Inspector",
+    boardLoading: "正在加载看板…",
+    boardError: "看板加载失败",
+    retry: "重试",
+    inspectorLoading: "正在加载 Task Inspector…",
+    inspectorError: "Task Inspector 加载失败",
+    board: "看板",
+    list: "列表",
+    map: "关系图",
+    runs: "运行记录",
+    events: "事件",
+  },
+  en: {
+    eyebrow: "ASTRYX EXPLORER",
+    tabsLabel: "Board explorer views",
+    closeInspector: "Close Inspector",
+    boardLoading: "Loading board…",
+    boardError: "Board failed to load",
+    retry: "Retry",
+    inspectorLoading: "Loading Task Inspector…",
+    inspectorError: "Task Inspector failed to load",
+    board: "Board",
+    list: "List",
+    map: "Map",
+    runs: "Runs",
+    events: "Events",
+  },
+}
 
 function normalizeEventKindFilter(value: string | null | undefined): string {
   return (value ?? "").trim().slice(0, MAX_EVENT_KIND_FILTER_LENGTH)
@@ -239,21 +289,26 @@ function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewMod
     comments: model.comments.map((comment) => ({ id: comment.id, author: comment.author, kind: comment.kind, body: comment.body, createdAt: comment.created_at })),
     runs: model.runs.map((run) => ({ id: run.id, status: run.status, workerProfile: run.worker_profile, claimOwner: run.claim_owner, startedAt: run.started_at, finishedAt: run.finished_at, exitCode: run.exit_code, error: run.error, hasLog: run.has_log })),
     events: model.events.map((event) => ({ id: event.id, kind: event.kind, actor: event.actor, createdAt: event.created_at })),
+    neighborhood: {
+      centerTaskId: model.neighborhood.center_task_id,
+      nodes: model.neighborhood.nodes.map((node) => ({ id: node.task.id, ref: node.task.ref, title: node.task.title, role: node.role })),
+      edges: model.neighborhood.edges.map((edge) => ({ id: edge.id, sourceTaskId: edge.source_task_id, targetTaskId: edge.target_task_id, kind: edge.kind })),
+    },
     runtime: model.runtime,
   }
 }
 
-function InspectorBoundary({ loading, error, onRetry }: { readonly loading: boolean; readonly error: Error | null; readonly onRetry: () => void }) {
-  if (loading) return <aside className={styles.inspectorBoundary} data-testid="task-inspector-loading" role="status">正在加载 Task Inspector…</aside>
-  if (error) return <aside className={styles.inspectorBoundary} data-testid="task-inspector-error" role="alert"><strong>Task Inspector 加载失败</strong><p>{error.message}</p><button type="button" onClick={onRetry}>重试</button></aside>
+function InspectorBoundary({ loading, error, onRetry, copy }: { readonly loading: boolean; readonly error: Error | null; readonly onRetry: () => void; readonly copy: ExplorerCopy }) {
+  if (loading) return <aside className={styles.inspectorBoundary} data-testid="task-inspector-loading" role="status"><h2>{copy.inspectorLoading}</h2></aside>
+  if (error) return <aside className={styles.inspectorBoundary} data-testid="task-inspector-error" role="alert"><h2>{copy.inspectorError}</h2><p>{error.message}</p><button type="button" onClick={onRetry}>{copy.retry}</button></aside>
   return null
 }
 
-function ExplorerTabs({ route, basePath, taskId, onNavigate }: { readonly route: Extract<AppRoute, { kind: "board" }>; readonly basePath: string; readonly taskId: string | null; readonly onNavigate?: ExplorerPageProps["onNavigate"] }) {
+function ExplorerTabs({ route, basePath, taskId, onNavigate, copy }: { readonly route: Extract<AppRoute, { kind: "board" }>; readonly basePath: string; readonly taskId: string | null; readonly onNavigate?: ExplorerPageProps["onNavigate"]; readonly copy: ExplorerCopy }) {
   const params = queryParams(route)
-  const views: readonly [BoardRouteView, string][] = [["board", "Board"], ["list", "List"], ["map", "Map"], ["runs", "Runs"], ["events", "Events"]]
+  const views: readonly [BoardRouteView, string][] = [["board", copy.board], ["list", copy.list], ["map", copy.map], ["runs", copy.runs], ["events", copy.events]]
   return (
-    <nav className={styles.tabs} aria-label="Board explorer views">
+    <nav className={styles.tabs} aria-label={copy.tabsLabel}>
       {views.map(([view, label]) => {
         const next = new URLSearchParams(params)
         if (taskId) next.set("task", taskId)
@@ -266,6 +321,7 @@ function ExplorerTabs({ route, basePath, taskId, onNavigate }: { readonly route:
 
 export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, eventsBatch }: ExplorerPageProps) {
   const { locale } = usePreferences()
+  const copy = explorerCopies[locale]
   const view = route.view ?? "board"
   const params = queryParams(route)
   const rawTaskId = params.get("task")?.trim() || null
@@ -335,18 +391,18 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     <section className={styles.explorer} data-testid="explorer-page">
       <header className={styles.explorerHeader}>
         <div>
-          <p className={styles.eyebrow}>ASTRYX EXPLORER</p>
+          <p className={styles.eyebrow}>{copy.eyebrow}</p>
           <h1>{route.boardSlug}</h1>
         </div>
-        {taskId ? <button type="button" className={styles.closeInspector} onClick={closeInspector}>关闭 Inspector</button> : null}
+        {taskId ? <button type="button" className={styles.closeInspector} onClick={closeInspector}>{copy.closeInspector}</button> : null}
       </header>
-      <ExplorerTabs route={route} basePath={runtime.webBasePath} taskId={taskId} onNavigate={onNavigate} />
+      <ExplorerTabs route={route} basePath={runtime.webBasePath} taskId={taskId} onNavigate={onNavigate} copy={copy} />
       <div className={showInspector ? styles.contentWithInspector : styles.content}>
         <main className={styles.primaryContent}>
           {view === "board" ? (
-            boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status">正在加载看板…</div>
-              : boardRead.error ? <div className={styles.boundary} data-testid="board-error" role="alert"><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>重试</button></div>
-                : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} onRetry={boardRead.retry} onSelectTask={selectTask} /> : null
+            boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
+              : boardRead.error ? <div className={styles.boundary} data-testid="board-error" role="alert"><h2>{copy.boardError}</h2><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>{copy.retry}</button></div>
+              : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} /> : null
           ) : null}
           {view === "list" ? (
             <TaskListView
@@ -393,7 +449,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
           ) : null}
         </main>
         {showInspector ? (
-          inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} />
+          inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} locale={locale} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
         ) : null}
       </div>
     </section>

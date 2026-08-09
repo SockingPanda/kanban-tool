@@ -47,6 +47,14 @@ describe("App route parser", () => {
     })
   })
 
+  test("treats a board slug without a view suffix as the default board view", () => {
+    expect(parseAppRoute("/app/boards/alpha")).toEqual({
+      kind: "board",
+      boardSlug: "alpha",
+      pathname: "/app/boards/alpha/board",
+    })
+  })
+
   test("parses explorer views and preserves URL query state", () => {
     expect(parseAppRoute("http://kanban.test/app/boards/default/list?status=ready&sort=-updated_at&page=2&q=needle")).toMatchObject({
       kind: "board",

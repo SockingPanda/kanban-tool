@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { InternationalizationProvider } from "@astryxdesign/core/i18n"
 import { Theme } from "@astryxdesign/core/theme"
 import { neutralTheme } from "@astryxdesign/theme-neutral/built"
@@ -13,12 +13,13 @@ import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvali
 import { parseBoardEvent, type BoardEventsBatch, type ExplorerEvent } from "./lib/api/explorer-read-model"
 import type { SyncTelemetryEntry } from "./lib/sync"
 import type { CanonicalBoardId } from "./lib/sync/contracts"
-import { parseCanonicalBoardSlug } from "./lib/board-slug"
+import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "./lib/board-slug"
 import { usePreferences } from "./lib/use-preferences"
 import { PreferencesProvider } from "./lib/preferences-provider"
 import { routePath, useAppRouter } from "./lib/router"
 import { useWebRuntime } from "./lib/runtime-context"
 import { astryxMessages, astryxOverrides } from "./lib/i18n"
+import { boardSessionRevision, hasActiveBoardSession, reconnectActiveBoardSession, subscribeBoardSessions } from "./features/board/board-session-registry"
 
 const explorerInvalidationTelemetry = new Set([
   "connection-live",
@@ -46,6 +47,7 @@ const EVENT_APPLIED_DEBOUNCE_MS = 200
 function RuntimeThemedShell() {
   const runtime = useWebRuntime()
   const preferences = usePreferences()
+  useSyncExternalStore(subscribeBoardSessions, boardSessionRevision, boardSessionRevision)
   const router = useAppRouter({
     basePath: runtime.webBasePath,
     defaultBoard: runtime.defaultBoard,
@@ -53,10 +55,24 @@ function RuntimeThemedShell() {
   const navigate = router.navigate
   const routeRef = useRef(router.route)
   routeRef.current = router.route
-  const boardRoute = router.route.kind === "home" || router.route.kind === "board" ? router.route : null
+  const lastBoardSlugRef = useRef<CanonicalBoardSlug | null>(null)
+  const routeBoardSlug = router.route.kind === "board" || router.route.kind === "health" || router.route.kind === "maintenance"
+    ? router.route.boardSlug
+    : null
+  if (routeBoardSlug !== null) lastBoardSlugRef.current = routeBoardSlug
+  const retainedBoardSlug = routeBoardSlug ?? lastBoardSlugRef.current
+  const retainedSessionSlug = retainedBoardSlug !== null && hasActiveBoardSession(runtime, retainedBoardSlug)
+    ? retainedBoardSlug
+    : null
+  const retainedSessionAvailable = retainedSessionSlug !== null
+  const boardRoute = router.route.kind === "home" || router.route.kind === "board"
+    ? router.route
+    : retainedSessionSlug !== null
+      ? { kind: "board" as const, boardSlug: retainedSessionSlug, pathname: routePath({ kind: "board", boardSlug: retainedSessionSlug }, { basePath: runtime.webBasePath }) }
+      : null
   // The canonical BoardLive remains mounted for every board route as the
   // single session/SSE owner, while Explorer owns the visible board view.
-  const liveBoardVisible = boardRoute?.kind === "home"
+  const liveBoardVisible = router.route.kind === "home"
   const sessionKey = boardRoute === null
     ? "none"
     : `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${boardRoute.kind === "board" ? boardRoute.boardSlug : ""}`
@@ -278,10 +294,11 @@ function RuntimeThemedShell() {
         <ProductShell
           runtime={runtime}
           route={router.route}
-          canonicalBoardSlug={router.route.kind === "board" ? router.route.boardSlug : undefined}
+          canonicalBoardSlug={retainedBoardSlug ?? undefined}
           boundary={router.error ? "error" : undefined}
           error={router.error instanceof Error ? router.error.message : undefined}
           onNavigate={router.navigate}
+          onReconnect={retainedSessionAvailable ? () => reconnectActiveBoardSession(runtime, retainedSessionSlug) : undefined}
           onRetry={() => window.location.reload()}
           invalidationRevision={sessionState.key === sessionKey ? sessionState.boardRevision : 0}
           boardRevision={sessionState.key === sessionKey ? sessionState.boardRevision : 0}

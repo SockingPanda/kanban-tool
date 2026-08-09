@@ -147,6 +147,24 @@ describe("task mutation operations", () => {
     })
   })
 
+  test("uses a validated Web actor override in both body and header, with runtime fallback", async () => {
+    const request = vi.fn<HttpTransport["request"]>(async () => ({ payload: { data: task("t_created", "triage") }, bytes: 1 }))
+    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request }, actor: " browser-reviewer " })
+    await client.createTask({ title: "Actor override" })
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.objectContaining({ actor: "browser-reviewer" }),
+      headers: { "Content-Type": "application/json", "X-KB-Actor": "browser-reviewer" },
+    }))
+
+    const fallbackRequest = vi.fn<HttpTransport["request"]>(async () => ({ payload: { data: task("t_fallback", "triage") }, bytes: 1 }))
+    const fallback = createTaskMutationClient(runtime, activeBoard, { transport: { request: fallbackRequest }, actor: "bad\nactor" })
+    await fallback.createTask({ title: "Runtime actor" })
+    expect(fallbackRequest).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.objectContaining({ actor: "web-user" }),
+      headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
+    }))
+  })
+
   test("binds task creation to the active canonical board selector", async () => {
     const request = vi.fn<HttpTransport["request"]>(async () => ({
       payload: { data: task("t_created", "triage") },

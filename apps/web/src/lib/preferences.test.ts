@@ -3,6 +3,8 @@ import { describe, expect, test } from "vitest"
 import {
   DEFAULT_PREFERENCES,
   PREFERENCE_STORAGE_KEYS,
+  parseActorPreference,
+  parseDensityPreference,
   parseLocalePreference,
   parseThemePreference,
   readStoredPreferences,
@@ -25,6 +27,8 @@ describe("Web preferences", () => {
       [PREFERENCE_STORAGE_KEYS.theme]: "dark",
       [PREFERENCE_STORAGE_KEYS.locale]: "fr",
       [PREFERENCE_STORAGE_KEYS.sidebar]: "collapsed",
+      [PREFERENCE_STORAGE_KEYS.density]: "compact",
+      [PREFERENCE_STORAGE_KEYS.actor]: "web-user",
       unrelated: "must-not-be-read",
     })
 
@@ -32,12 +36,20 @@ describe("Web preferences", () => {
       theme: "dark",
       locale: DEFAULT_PREFERENCES.locale,
       sidebarExpanded: false,
+      density: "compact",
+      actor: "web-user",
     })
   })
 
   test("writes all persisted preferences under kb:web keys", () => {
     const source = storage()
-    const value: WebPreferences = { theme: "dark", locale: "en", sidebarExpanded: false }
+    const value: WebPreferences = {
+      theme: "dark",
+      locale: "en",
+      sidebarExpanded: false,
+      density: "compact",
+      actor: "web-user",
+    }
 
     writeStoredPreferences(source, value)
 
@@ -45,14 +57,25 @@ describe("Web preferences", () => {
       [PREFERENCE_STORAGE_KEYS.theme, "dark"],
       [PREFERENCE_STORAGE_KEYS.locale, "en"],
       [PREFERENCE_STORAGE_KEYS.sidebar, "collapsed"],
+      [PREFERENCE_STORAGE_KEYS.density, "compact"],
+      [PREFERENCE_STORAGE_KEYS.actor, "web-user"],
     ])
   })
 
   test("parses only supported theme and locale values", () => {
     expect(parseThemePreference("dark")).toBe("dark")
-    expect(parseThemePreference("system")).toBeNull()
+    expect(parseThemePreference("system")).toBe("system")
     expect(parseLocalePreference("en")).toBe("en")
     expect(parseLocalePreference("fr")).toBeNull()
+    expect(parseDensityPreference("compact")).toBe("compact")
+    expect(parseDensityPreference("spacious")).toBeNull()
+  })
+
+  test("accepts bounded actor identities and rejects control or empty values", () => {
+    expect(parseActorPreference(" web-user ")).toBe("web-user")
+    expect(parseActorPreference(" ")).toBeNull()
+    expect(parseActorPreference("web\nuser")).toBeNull()
+    expect(parseActorPreference("a".repeat(129))).toBeNull()
   })
 
   test("survives hostile storage reads", () => {

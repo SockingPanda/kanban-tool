@@ -12,11 +12,14 @@ import type { BoardTaskCanonicalReloadHandler, BoardTaskMutationSurface } from "
 import type { BoardSyncStatus } from "./features/board/types"
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router"
-import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
 import { usePreferences } from "./lib/use-preferences"
-import { createTranslator, type MessageKey } from "./lib/i18n"
+import { createTranslator } from "./lib/i18n"
 import { BrowserConnectivityProvider } from "./lib/browser-connectivity-provider"
 import { ExplorerPage } from "./features/explorer/ExplorerPage"
+import { HealthPage } from "./features/health/HealthPage"
+import { MaintenancePage } from "./features/maintenance/MaintenancePage"
+import { SettingsPage as OperatorSettingsPage } from "./features/settings/SettingsPage"
+import { type BoardReconnectResult } from "./features/board/board-session-registry"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -29,6 +32,7 @@ export type ProductShellProps = {
   boundary?: ShellBoundary
   error?: ReactNode
   onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
+  onReconnect?: () => BoardReconnectResult | boolean | void | Promise<BoardReconnectResult | boolean | void>
   onRetry?: () => void
   /** 现有 persistent SSE integration 的可选只读 seam。 */
   invalidationRevision?: number
@@ -42,10 +46,6 @@ export type ProductShellProps = {
   taskMutations?: BoardTaskMutationSurface
   /** Register the currently visible Inspector reads for awaited canonical reloads. */
   onVisibleCanonicalReloadChange?: (reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => void
-}
-
-function safeText(value: string): string {
-  return value.trim() || "—"
 }
 
 function appRoutePathname(route: AppRoute): string {
@@ -74,6 +74,22 @@ function BoardIcon() {
   return (
     <StaticIcon>
       <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Zm3 1.5v10h3V7H7Zm5 0v10h5V7h-5Z" fill="currentColor" />
+    </StaticIcon>
+  )
+}
+
+function HealthIcon() {
+  return (
+    <StaticIcon>
+      <path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.51 8.51 0 0 0 12 3.5Zm0 2a6.5 6.5 0 1 1-6.5 6.5A6.51 6.51 0 0 1 12 5.5Zm-.9 2.2v3.4H7.7v1.8h3.4v3.4h1.8v-3.4h3.4v-1.8h-3.4V7.7Z" fill="currentColor" />
+    </StaticIcon>
+  )
+}
+
+function MaintenanceIcon() {
+  return (
+    <StaticIcon>
+      <path d="m14.8 4.1 1.1 1.1-5.4 5.4 2.9 2.9 5.4-5.4 1.1 1.1-1.1 4-3.4 3.4-4-1.1-5.1 5.1a1.6 1.6 0 0 1-2.3-2.3l5.1-5.1-1.1-4 3.4-3.4 3.4-1.7Zm-2.5 2-1.8.9-2 2 .6 2.1 1.4 1.4 2.1.6 2-2 .9-1.8-1.5-1.5-1.7.3Z" fill="currentColor" />
     </StaticIcon>
   )
 }
@@ -140,7 +156,15 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
       .catch(() => undefined)
   }
   const settingsPath = routePath({ kind: "settings" }, { basePath: runtime.webBasePath })
-  const boardPath = navPath(runtime, canonicalBoardSlug ?? (route.kind === "board" ? route.boardSlug : undefined))
+  const routeBoardSlug = route.kind === "board" || route.kind === "health" || route.kind === "maintenance" ? route.boardSlug : undefined
+  const activeBoardSlug = canonicalBoardSlug ?? routeBoardSlug
+  const boardPath = navPath(runtime, activeBoardSlug)
+  const healthPath = activeBoardSlug
+    ? routePath({ kind: "health", boardSlug: activeBoardSlug }, { basePath: runtime.webBasePath })
+    : boardPath
+  const maintenancePath = activeBoardSlug
+    ? routePath({ kind: "maintenance", boardSlug: activeBoardSlug }, { basePath: runtime.webBasePath })
+    : boardPath
 
   return (
     <SideNav
@@ -168,31 +192,49 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
               selectedIcon={<BoardIcon />}
               href={boardPath}
               isSelected={route.kind === "board" && route.view !== "signals" && route.view !== "ontology"}
-              isDisabled={!canonicalBoardSlug && route.kind !== "board"}
+              isDisabled={!activeBoardSlug}
               onClick={handleNavigate(boardPath)}
               data-testid="nav-board"
             />
           </SideNavSection>
           <SideNavSection title={t("navigation")}>
-            {canonicalBoardSlug ? (
+            {activeBoardSlug ? (
               <>
                 <SideNavItem
                   label={t("signals")}
                   icon={<BoardIcon />}
                   selectedIcon={<BoardIcon />}
-                  href={featureNavPath(runtime, canonicalBoardSlug, "signals")}
+                  href={featureNavPath(runtime, activeBoardSlug, "signals")}
                   isSelected={route.kind === "board" && route.view === "signals"}
-                  onClick={handleNavigate(featureNavPath(runtime, canonicalBoardSlug, "signals"))}
+                  onClick={handleNavigate(featureNavPath(runtime, activeBoardSlug, "signals"))}
                   data-testid="nav-signals"
                 />
                 <SideNavItem
                   label={t("ontology")}
                   icon={<BoardIcon />}
                   selectedIcon={<BoardIcon />}
-                  href={featureNavPath(runtime, canonicalBoardSlug, "ontology")}
+                  href={featureNavPath(runtime, activeBoardSlug, "ontology")}
                   isSelected={route.kind === "board" && route.view === "ontology"}
-                  onClick={handleNavigate(featureNavPath(runtime, canonicalBoardSlug, "ontology"))}
+                  onClick={handleNavigate(featureNavPath(runtime, activeBoardSlug, "ontology"))}
                   data-testid="nav-ontology"
+                />
+                <SideNavItem
+                  label={t("health")}
+                  icon={<HealthIcon />}
+                  selectedIcon={<HealthIcon />}
+                  href={healthPath}
+                  isSelected={route.kind === "health"}
+                  onClick={handleNavigate(healthPath)}
+                  data-testid="nav-health"
+                />
+                <SideNavItem
+                  label={t("maintenance")}
+                  icon={<MaintenanceIcon />}
+                  selectedIcon={<MaintenanceIcon />}
+                  href={maintenancePath}
+                  isSelected={route.kind === "maintenance"}
+                  onClick={handleNavigate(maintenancePath)}
+                  data-testid="nav-maintenance"
                 />
               </>
             ) : null}
@@ -214,29 +256,47 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
             icon={<BoardIcon />}
             href={boardPath}
             isSelected={route.kind === "board" && route.view !== "signals" && route.view !== "ontology"}
-            isDisabled={!canonicalBoardSlug && route.kind !== "board"}
+            isDisabled={!activeBoardSlug}
             onClick={handleNavigate(boardPath)}
             testId="nav-board"
           />
-          {canonicalBoardSlug ? (
+          {activeBoardSlug ? (
             <>
               <CompactNavItem
                 label={t("signals")}
                 icon={<BoardIcon />}
-                href={featureNavPath(runtime, canonicalBoardSlug, "signals")}
+                href={featureNavPath(runtime, activeBoardSlug, "signals")}
                 isSelected={route.kind === "board" && route.view === "signals"}
                 isDisabled={false}
-                onClick={handleNavigate(featureNavPath(runtime, canonicalBoardSlug, "signals"))}
+                onClick={handleNavigate(featureNavPath(runtime, activeBoardSlug, "signals"))}
                 testId="nav-signals"
               />
               <CompactNavItem
                 label={t("ontology")}
                 icon={<BoardIcon />}
-                href={featureNavPath(runtime, canonicalBoardSlug, "ontology")}
+                href={featureNavPath(runtime, activeBoardSlug, "ontology")}
                 isSelected={route.kind === "board" && route.view === "ontology"}
                 isDisabled={false}
-                onClick={handleNavigate(featureNavPath(runtime, canonicalBoardSlug, "ontology"))}
+                onClick={handleNavigate(featureNavPath(runtime, activeBoardSlug, "ontology"))}
                 testId="nav-ontology"
+              />
+              <CompactNavItem
+                label={t("health")}
+                icon={<HealthIcon />}
+                href={healthPath}
+                isSelected={route.kind === "health"}
+                isDisabled={false}
+                onClick={handleNavigate(healthPath)}
+                testId="nav-health"
+              />
+              <CompactNavItem
+                label={t("maintenance")}
+                icon={<MaintenanceIcon />}
+                href={maintenancePath}
+                isSelected={route.kind === "maintenance"}
+                isDisabled={false}
+                onClick={handleNavigate(maintenancePath)}
+                testId="nav-maintenance"
               />
             </>
           ) : null}
@@ -255,96 +315,8 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
   )
 }
 
-function RuntimeFacts({ runtime, t }: { runtime: WebRuntimeConfig; t: (key: MessageKey) => string }) {
-  const facts = [
-    [t("actor"), runtime.actor],
-    [t("api"), runtime.apiBaseUrl || "/"],
-    [t("server"), runtime.serverVersion],
-    [t("protocol"), runtime.protocolVersion],
-    [t("build"), runtime.webBuildId],
-  ] as const
-  return (
-    <dl className={styles.runtimeFacts} data-testid="runtime-facts">
-      {facts.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd translate="no">{safeText(value)}</dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
 
-function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
-  const preferences = usePreferences()
-  const t = createTranslator(preferences.locale)
-  return (
-    <section className={styles.page} aria-labelledby="settings-heading" data-testid="settings-page">
-      <div className={styles.pageHeading}>
-        <p className={styles.eyebrow}>{t("productKicker")}</p>
-        <h1 id="settings-heading">{t("settingsHeading")}</h1>
-        <p className={styles.lede}>{t("settingsDescription")}</p>
-      </div>
-      <div className={styles.settingsGrid}>
-        <div className={styles.settingsSection}>
-          <h2>{t("theme")}</h2>
-          <label className={styles.field} htmlFor="theme-preference">
-            <span>{t("theme")}</span>
-            <select
-              id="theme-preference"
-              name="theme"
-              autoComplete="off"
-              value={preferences.theme}
-              onChange={(event) => {
-                const theme = parseThemePreference(event.currentTarget.value)
-                if (theme) preferences.setTheme(theme)
-              }}
-              data-testid="theme-preference"
-            >
-              <option value="light">{t("lightTheme")}</option>
-              <option value="dark">{t("darkTheme")}</option>
-            </select>
-          </label>
-        </div>
-        <div className={styles.settingsSection}>
-          <h2>{t("language")}</h2>
-          <label className={styles.field} htmlFor="locale-preference">
-            <span>{t("language")}</span>
-            <select
-              id="locale-preference"
-              name="locale"
-              autoComplete="language"
-              value={preferences.locale}
-              onChange={(event) => {
-                const locale = parseLocalePreference(event.currentTarget.value)
-                if (locale) preferences.setLocale(locale)
-              }}
-              data-testid="locale-preference"
-            >
-              <option value="zh">{t("chinese")}</option>
-              <option value="en">{t("english")}</option>
-            </select>
-          </label>
-        </div>
-        <div className={styles.settingsSection}>
-          <h2>{t("workspace")}</h2>
-          <p className={styles.muted}>
-            {t("defaultBoard")}: <code className={styles.codeValue} translate="no">{safeText(runtime.defaultBoard)}</code>
-          </p>
-          <p className={styles.muted}>
-            {preferences.sidebarExpanded ? t("sidebarExpanded") : t("sidebarCollapsed")}
-          </p>
-        </div>
-      </div>
-      <div className={styles.runtimeSection}>
-        <h2>{t("runtime")}</h2>
-        <RuntimeFacts runtime={runtime} t={t} />
-      </div>
-    </section>
-  )
-}
-
-function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
+function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onReconnect, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -391,7 +363,9 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   // Explorer owns stale/offline presentation for every board view so a last
   // usable snapshot and the current route remain mounted while connectivity
   // drops. The hidden BoardLive session still owns recovery and retry.
-  if (effectiveBoundary === "offline" && route.kind !== "board") {
+  // Operator pages retain their own stale/error/retry state while offline; a
+  // generic shell boundary would unmount their last snapshot.
+  if (effectiveBoundary === "offline" && route.kind !== "board" && route.kind !== "health" && route.kind !== "maintenance" && route.kind !== "settings") {
     return (
       <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline">
         <p className={styles.eyebrow}>{t("routeBoundary")}</p>
@@ -430,7 +404,10 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
       </section>
     )
   }
-  if (route.kind === "settings") return <SettingsPage runtime={runtime} />
+  const hiddenSession = children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null
+  if (route.kind === "settings") return <>{hiddenSession}<OperatorSettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} /></>
+  if (route.kind === "health") return <>{hiddenSession}<HealthPage runtime={runtime} /></>
+  if (route.kind === "maintenance") return <>{hiddenSession}<MaintenancePage runtime={runtime} boardSlug={route.boardSlug} /></>
   if (route.kind === "board") return (
     <>
       {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
@@ -450,7 +427,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   )
 }
 
-export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
+export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onReconnect, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
 
@@ -477,7 +454,7 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange}>
+                <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange}>
                   {children}
                 </RouteContent>
               </div>

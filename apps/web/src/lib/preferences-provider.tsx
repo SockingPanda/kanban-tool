@@ -4,6 +4,7 @@ import {
   applyWebPreferencesToDocument,
   readStoredPreferences,
   writeStoredPreferences,
+  type DensityMode,
   type Locale,
   type ThemeMode,
   type WebPreferences,
@@ -32,8 +33,24 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     applyWebPreferencesToDocument(preferences, document)
   }, [preferences, storage])
 
+  useEffect(() => {
+    if (preferences.theme !== "system" || typeof window === "undefined" || typeof window.matchMedia !== "function") return
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+    const apply = () => {
+      if (typeof document !== "undefined") applyWebPreferencesToDocument(preferences, document)
+    }
+    if (typeof media.addEventListener === "function") media.addEventListener("change", apply)
+    else media.addListener?.(apply)
+    return () => {
+      if (typeof media.removeEventListener === "function") media.removeEventListener("change", apply)
+      else media.removeListener?.(apply)
+    }
+  }, [preferences])
+
   const setTheme = useCallback((theme: ThemeMode) => setPreferences((current) => ({ ...current, theme })), [])
   const setLocale = useCallback((locale: Locale) => setPreferences((current) => ({ ...current, locale })), [])
+  const setDensity = useCallback((density: DensityMode) => setPreferences((current) => ({ ...current, density })), [])
+  const setActor = useCallback((actor: string) => setPreferences((current) => ({ ...current, actor })), [])
   const setSidebarExpanded = useCallback(
     (sidebarExpanded: boolean) => setPreferences((current) => ({ ...current, sidebarExpanded })),
     [],
@@ -43,8 +60,8 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ ...preferences, setTheme, setLocale, setSidebarExpanded, toggleSidebar }),
-    [preferences, setLocale, setSidebarExpanded, setTheme, toggleSidebar],
+    () => ({ ...preferences, setTheme, setLocale, setDensity, setActor, setSidebarExpanded, toggleSidebar }),
+    [preferences, setActor, setDensity, setLocale, setSidebarExpanded, setTheme, toggleSidebar],
   )
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>
 }

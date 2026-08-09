@@ -1,5 +1,6 @@
 import type { WebRuntimeConfig } from "../runtime"
 import type { CanonicalBoardSlug } from "../board-slug"
+import { parseActorPreference } from "../preferences"
 import {
   createHttpTransport,
   type HttpTransport,
@@ -167,6 +168,8 @@ export type TaskTransitionResponse =
 
 export interface TaskMutationDependencies extends HttpTransportOptions {
   readonly transport?: Pick<HttpTransport, "request">
+  /** Optional Web actor override; empty values must be normalized by callers. */
+  readonly actor?: string
 }
 
 export interface TaskMutationClient {
@@ -300,7 +303,7 @@ function createClient(
   dependencies: TaskMutationDependencies,
 ): TaskMutationClient {
   const transport = dependencies.transport ?? createHttpTransport(runtime, dependencies)
-  const actor = runtime.actor
+  const actor = parseActorPreference(dependencies.actor) ?? runtime.actor
 
   const createTask = (input: CreateTaskIntent, options: MutationRequestOptions = {}) => {
     const body = parseApiCreateTaskRequest(mergeActor(actor, input))

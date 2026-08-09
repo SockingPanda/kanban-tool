@@ -305,7 +305,7 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   const taskMutations = useMemo<BoardTaskMutationSurface | undefined>(() => {
     if (mutationBoardSlug === null) return undefined
     try {
-      const client = createTaskMutationClient(runtime, mutationBoardSlug)
+      const client = createTaskMutationClient(runtime, mutationBoardSlug, { actor: preferences.actor || runtime.actor })
       return {
         client,
         claimTokens: claimTokenStoreRef.current,
@@ -331,7 +331,7 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
     } catch {
       return undefined
     }
-  }, [mutationBoardSlug, onCanonicalReload, onMutationCommitted, refreshCanonical, runtime])
+  }, [mutationBoardSlug, onCanonicalReload, onMutationCommitted, preferences.actor, refreshCanonical, runtime])
 
   useEffect(() => {
     onTaskMutationsChange?.(taskMutations)

@@ -45,21 +45,24 @@ test.describe("Astryx product shell", () => {
     await expect(page.locator("style")).toHaveCount(0)
   })
 
-  test("persists theme, locale, and sidebar preferences in kb:web keys", async ({ page }) => {
+  test("persists theme, density, locale, actor, and sidebar preferences in kb:web keys", async ({ page }) => {
     await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
-    await page.getByTestId("theme-preference").selectOption("dark")
-    await page.getByTestId("locale-preference").selectOption("en")
+    await page.getByTestId("appearance-theme").selectOption("dark")
+    await page.getByTestId("appearance-density").selectOption("compact")
+    await page.getByTestId("settings-locale").selectOption("en")
+    await page.getByTestId("identity-actor").fill("playwright")
+    await page.getByTestId("identity-actor-save").click()
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1b1b1b")
 
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))
-      .toEqual(["kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
+      .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
   })
 
   test("navigates between board and settings without a router dependency", async ({ page }) => {
@@ -67,9 +70,12 @@ test.describe("Astryx product shell", () => {
     await expect(page.getByTestId("board-view")).toBeVisible()
     await page.getByTestId("nav-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
-    await expect(page.getByTestId("nav-board")).toBeDisabled()
-    await page.goBack()
+    await expect(page.getByTestId("nav-board")).toBeEnabled()
+    await page.getByTestId("nav-board").click()
     await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
+    await expect(page.getByTestId("board-view")).toBeVisible()
+    await page.goBack()
+    await expect(page).toHaveURL(/\/app\/settings$/)
   })
 
   test("surfaces a rejected navigation without an unhandled page error", async ({ page }) => {

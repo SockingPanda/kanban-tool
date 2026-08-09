@@ -12,6 +12,7 @@ import {
   isAttachmentRetryDraftCurrent,
   isLabelRetryDraftCurrent,
   requestSuggestedLabels,
+  shouldShowInspectorSnapshotError,
   shouldClearAssetDraft,
   type InspectorAssetAttachment,
   type InspectorAssetLabel,
@@ -534,7 +535,8 @@ export function TaskInspectorAssetsPanel({
 
   const labelsError = errorFor(["addLabel", "removeLabel", "applySuggestedLabel"])
   const addLabelError = errorFor(["addLabel"])
-  const suggestionsError = suggestionLocalError ?? suggestionError ?? errorFor(["suggestLabels"])
+  const suggestSnapshotError = errors.get(actionKey("suggestLabels", taskId))?.message ?? null
+  const suggestionsError = suggestionLocalError ?? suggestionError ?? errorFor(["suggestLabels"]) ?? suggestSnapshotError
   const attachmentsError = attachmentError ?? errorFor(["uploadAttachment", "downloadAttachment", "deleteAttachment"])
   const uploadError = errorFor(["uploadAttachment"])
   const addLabelSnapshotError = errors.get(actionKey("addLabel", taskId))?.message ?? null
@@ -547,8 +549,8 @@ export function TaskInspectorAssetsPanel({
   const duplicateIdsText = [...duplicateSuggestionIds].join(", ")
   const uploadPending = isPending("uploadAttachment")
   const snapshotErrors = useMemo(
-    () => [...errors.entries()].filter(([key, error]) => error.taskId === taskId && key.endsWith(`:${taskId}`) && !pending.has(key) && !retryBusy.has(key)),
-    [errors, pending, retryBusy, taskId],
+    () => [...errors.entries()].filter(([key, error]) => shouldShowInspectorSnapshotError(key, error, taskId, pending, retryBusy, localErrors)),
+    [errors, localErrors, pending, retryBusy, taskId],
   )
   const canRetrySnapshotError = useCallback((key: string, operation: string): boolean => {
     if (!snapshot.retries.has(key) || operation === "suggestLabels" || operation === "downloadAttachment") return false

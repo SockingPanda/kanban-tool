@@ -4,6 +4,7 @@ import type { ApiSuggestTaskLabelsResponseContract } from "../../lib/api/generat
 import type {
   InspectorMutationOutcome,
   InspectorSuggestTaskLabelsQuery,
+  TaskInspectorMutationError,
   TaskInspectorMutationHandlers,
 } from "./task-inspector-mutation-state"
 
@@ -108,6 +109,23 @@ export function shouldClearAssetDraft(outcome: InspectorMutationOutcome | null):
 /** Label retries only clear a draft that still matches the original intent. */
 export function isLabelRetryDraftCurrent(current: string, attempted: string): boolean {
   return current.trim() === attempted.trim()
+}
+
+/** Keep snapshot alerts out of the panel when an inline owner already reports the same key. */
+export function shouldShowInspectorSnapshotError(
+  key: string,
+  error: Pick<TaskInspectorMutationError, "operation" | "taskId">,
+  taskId: string,
+  pending: ReadonlySet<string>,
+  retryBusy: ReadonlySet<string>,
+  localErrors: ReadonlyMap<string, string>,
+): boolean {
+  return error.taskId === taskId
+    && key.endsWith(`:${taskId}`)
+    && !pending.has(key)
+    && !retryBusy.has(key)
+    && !localErrors.has(key)
+    && error.operation !== "suggestLabels"
 }
 
 /** Retry drafts are the original in-memory File object; same metadata is not enough. */

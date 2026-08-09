@@ -69,6 +69,14 @@ struct PendingWorker {
 static PAUSE_BEFORE_WORKER_INSTALL: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
 static WORKER_INSTALL_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PAUSE_BEFORE_CANCEL_RECHECK: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static CANCEL_RECHECK_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PAUSE_AFTER_CLOSE_GATE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static CLOSE_GATE_PAUSED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(test)]
 fn pause_before_worker_install() {
@@ -80,6 +88,30 @@ fn pause_before_worker_install() {
         thread::yield_now();
     }
     WORKER_INSTALL_PAUSED.store(false, Ordering::Release);
+}
+
+#[cfg(test)]
+fn pause_before_cancel_recheck() {
+    if !PAUSE_BEFORE_CANCEL_RECHECK.load(Ordering::Acquire) {
+        return;
+    }
+    CANCEL_RECHECK_PAUSED.store(true, Ordering::Release);
+    while PAUSE_BEFORE_CANCEL_RECHECK.load(Ordering::Acquire) {
+        thread::yield_now();
+    }
+    CANCEL_RECHECK_PAUSED.store(false, Ordering::Release);
+}
+
+#[cfg(test)]
+fn pause_after_close_gate() {
+    if !PAUSE_AFTER_CLOSE_GATE.load(Ordering::Acquire) {
+        return;
+    }
+    CLOSE_GATE_PAUSED.store(true, Ordering::Release);
+    while PAUSE_AFTER_CLOSE_GATE.load(Ordering::Acquire) {
+        thread::yield_now();
+    }
+    CLOSE_GATE_PAUSED.store(false, Ordering::Release);
 }
 
 impl Drop for BootstrapWorker {
@@ -107,6 +139,9 @@ pub(crate) struct DesktopHost {
     /// Desktop 进程唯一拥有的 host；外部 host 只保留 non-owning handle。
     handle: Mutex<Option<HostHandle>>,
     runtime: Mutex<RuntimeState>,
+    /// 将 worker 注册/启动与 close/cancel 串行化；close 在生命周期线性化中胜出后，不能再
+    /// 注册或启动新的 pending worker。
+    registration_gate: Mutex<()>,
     worker: Mutex<Option<BootstrapWorker>>,
     pending_worker: Mutex<Option<PendingWorker>>,
     installing_worker: AtomicBool,
@@ -142,6 +177,7 @@ impl DesktopHost {
                 external_ready: false,
                 navigation_claimed: None,
             }),
+            registration_gate: Mutex::new(()),
             worker: Mutex::new(None),
             pending_worker: Mutex::new(None),
             installing_worker: AtomicBool::new(false),
@@ -260,6 +296,10 @@ impl DesktopHost {
     }
 
     pub(crate) fn cancel_in_flight(&self) {
+        let _registration_gate = self
+            .registration_gate
+            .lock()
+            .expect("桌面 bootstrap registration 锁已失效");
         let in_flight = self
             .runtime
             .lock()
@@ -268,19 +308,35 @@ impl DesktopHost {
             .in_flight()
             .is_some();
         if in_flight {
+            #[cfg(test)]
+            pause_before_cancel_recheck();
             let mut runtime = self.runtime.lock().expect("桌面 bootstrap 状态锁已失效");
-            runtime.fence.fence();
-            runtime.phase = BootstrapPhase::Recovery;
-            runtime.diagnostic = Some(BootstrapDiagnostic::new(
-                DiagnosticKind::Internal,
-                "桌面 bootstrap 已取消",
-            ));
-            runtime.navigation_claimed = None;
+            // Worker completion may win between the first and second runtime lock.  Re-check
+            // under the lock that performs the fence so a successful start stays Ready.
+            if runtime.fence.in_flight().is_some() {
+                runtime.fence.fence();
+                runtime.phase = BootstrapPhase::Recovery;
+                runtime.diagnostic = Some(BootstrapDiagnostic::new(
+                    DiagnosticKind::Internal,
+                    "桌面 bootstrap 已取消",
+                ));
+                runtime.navigation_claimed = None;
+            }
         }
         self.cancel_workers();
     }
 
     fn close(&self) {
+        let _registration_gate = self
+            .registration_gate
+            .lock()
+            .expect("桌面 bootstrap registration 锁已失效");
+        #[cfg(test)]
+        pause_after_close_gate();
+        self.close_locked();
+    }
+
+    fn close_locked(&self) {
         let mut runtime = self.runtime.lock().expect("桌面 bootstrap 状态锁已失效");
         runtime.fence.close();
         runtime.navigation_claimed = None;
@@ -459,7 +515,16 @@ impl DesktopHost {
         }
     }
 
+    #[cfg(test)]
     fn register_pending_worker(&self, cancel: Arc<AtomicBool>, generation: u64) -> bool {
+        let _registration_gate = self
+            .registration_gate
+            .lock()
+            .expect("桌面 bootstrap registration 锁已失效");
+        self.register_pending_worker_locked(cancel, generation)
+    }
+
+    fn register_pending_worker_locked(&self, cancel: Arc<AtomicBool>, generation: u64) -> bool {
         let runtime = self.runtime.lock().expect("桌面 bootstrap 状态锁已失效");
         if !runtime.fence.is_current(generation) || runtime.fence.is_closed() {
             return false;
@@ -475,7 +540,7 @@ impl DesktopHost {
         true
     }
 
-    fn unregister_pending_worker(&self, cancel: &Arc<AtomicBool>) {
+    fn unregister_pending_worker_locked(&self, cancel: &Arc<AtomicBool>) {
         let mut pending = self
             .pending_worker
             .lock()
@@ -619,7 +684,15 @@ pub(crate) fn start_background_attempt(
     };
 
     let cancel = Arc::new(AtomicBool::new(false));
-    if !state.register_pending_worker(Arc::clone(&cancel), generation) {
+    // Keep the registration gate through the actual thread spawn and worker-slot install.  A
+    // concurrent close/cancel therefore linearizes either before this whole section or after it;
+    // it cannot observe an open state and then leave a worker registered/spawned after close.
+    let registration_gate = state
+        .registration_gate
+        .lock()
+        .expect("桌面 bootstrap registration 锁已失效");
+    if !state.register_pending_worker_locked(Arc::clone(&cancel), generation) {
+        drop(registration_gate);
         state.cancel_in_flight();
         return state.snapshot();
     }
@@ -656,7 +729,7 @@ pub(crate) fn start_background_attempt(
     let join = match spawn_result {
         Ok(join) => join,
         Err(error) => {
-            state.unregister_pending_worker(&cancel);
+            state.unregister_pending_worker_locked(&cancel);
             let diagnostic = BootstrapDiagnostic::new(
                 DiagnosticKind::Internal,
                 format!("启动 bootstrap 后台线程失败: {error}"),
@@ -669,10 +742,12 @@ pub(crate) fn start_background_attempt(
                     state.finish_start(generation, Err(diagnostic));
                 }
             }
+            drop(registration_gate);
             return state.snapshot();
         }
     };
     state.install_worker(cancel, join, generation);
+    drop(registration_gate);
     state.snapshot()
 }
 
@@ -842,8 +917,9 @@ mod tests {
             AttemptKind, BootstrapDiagnostic, BootstrapPhase, DiagnosticKind,
         },
         super::host_lifecycle::{HostHandle, HostLaunchConfig},
-        BootstrapWorker, DesktopHost, FIXED_APP_URL, PAUSE_BEFORE_WORKER_INSTALL, ValidatedAppUrl,
-        WORKER_INSTALL_PAUSED,
+        BootstrapWorker, CANCEL_RECHECK_PAUSED, CLOSE_GATE_PAUSED, DesktopHost, FIXED_APP_URL,
+        PAUSE_AFTER_CLOSE_GATE, PAUSE_BEFORE_CANCEL_RECHECK, PAUSE_BEFORE_WORKER_INSTALL,
+        ValidatedAppUrl, WORKER_INSTALL_PAUSED,
     };
 
     fn test_host() -> DesktopHost {
@@ -931,6 +1007,40 @@ mod tests {
     }
 
     #[test]
+    fn cancel_rechecks_before_overwriting_a_successful_start() {
+        let host = std::sync::Arc::new(test_host());
+        let generation = host
+            .begin(AttemptKind::StartLocal)
+            .expect("bootstrap operation should start");
+        PAUSE_BEFORE_CANCEL_RECHECK.store(true, Ordering::Release);
+        CANCEL_RECHECK_PAUSED.store(false, Ordering::Release);
+        let host_for_finish = std::sync::Arc::clone(&host);
+        let finisher = std::thread::spawn(move || {
+            while !CANCEL_RECHECK_PAUSED.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+            assert!(host_for_finish.finish_start(generation, Ok(HostHandle::external_for_test()),));
+        });
+        let host_for_cancel = std::sync::Arc::clone(&host);
+        let cancel = std::thread::spawn(move || host_for_cancel.cancel_in_flight());
+        let pause_deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        while !CANCEL_RECHECK_PAUSED.load(Ordering::Acquire)
+            && std::time::Instant::now() < pause_deadline
+        {
+            std::thread::yield_now();
+        }
+        assert!(
+            CANCEL_RECHECK_PAUSED.load(Ordering::Acquire),
+            "cancel recheck failpoint was not reached"
+        );
+        finisher.join().expect("start finisher");
+        PAUSE_BEFORE_CANCEL_RECHECK.store(false, Ordering::Release);
+        cancel.join().expect("cancel worker");
+        assert_eq!(host.snapshot().phase, BootstrapPhase::Ready);
+        assert!(host.snapshot().diagnostic.is_none());
+    }
+
+    #[test]
     fn shutdown_fences_pending_worker_before_thread_installation() {
         let host = test_host();
         let generation = host
@@ -964,6 +1074,40 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         assert!(host.worker.lock().expect("worker lock").is_none());
+    }
+
+    #[test]
+    fn close_wins_before_pending_registration_can_store_or_spawn() {
+        let host = std::sync::Arc::new(test_host());
+        let generation = host
+            .begin(AttemptKind::StartLocal)
+            .expect("bootstrap operation should start");
+        let cancel = Arc::new(AtomicBool::new(false));
+        PAUSE_AFTER_CLOSE_GATE.store(true, Ordering::Release);
+        CLOSE_GATE_PAUSED.store(false, Ordering::Release);
+        let host_for_close = std::sync::Arc::clone(&host);
+        let closer = std::thread::spawn(move || host_for_close.close());
+        let pause_deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        while !CLOSE_GATE_PAUSED.load(Ordering::Acquire)
+            && std::time::Instant::now() < pause_deadline
+        {
+            std::thread::yield_now();
+        }
+        assert!(
+            CLOSE_GATE_PAUSED.load(Ordering::Acquire),
+            "close registration gate failpoint was not reached"
+        );
+        let host_for_register = std::sync::Arc::clone(&host);
+        let cancel_for_register = Arc::clone(&cancel);
+        let registered = std::thread::spawn(move || {
+            host_for_register.register_pending_worker(cancel_for_register, generation)
+        });
+        PAUSE_AFTER_CLOSE_GATE.store(false, Ordering::Release);
+        closer.join().expect("close worker");
+        assert!(!registered.join().expect("registration worker"));
+        assert!(host.snapshot().closed);
+        assert!(!cancel.load(Ordering::Acquire));
+        assert!(!host.worker_in_flight());
     }
 
     #[test]
@@ -1022,6 +1166,7 @@ mod tests {
 
     #[test]
     fn exit_cleanup_waits_for_reaper_ownership_confirmation() {
+        let _reaper_guard = super::super::host_lifecycle::reaper_test_guard();
         let host = test_host();
         super::super::host_lifecycle::hold_reaper_pending_for_test();
         let error = host

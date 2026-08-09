@@ -9,10 +9,14 @@ case "$profile" in
   release)
     SOURCE="$TARGET_DIR/release/kanban"
     DEST="$ROOT/apps/desktop/src-tauri/bin/kanban"
+    BUILD_HINT='cargo build --locked -p kanban-cli --release'
+    PROFILE_LABEL="release"
     ;;
   dev)
     SOURCE="$TARGET_DIR/debug/kanban"
-    DEST="$SOURCE"
+    DEST="$ROOT/apps/desktop/src-tauri/bin/kanban"
+    BUILD_HINT='cargo build --locked -p kanban-cli'
+    PROFILE_LABEL="debug"
     ;;
   *)
     echo "error: unsupported sidecar profile: $profile (expected release or dev)" >&2
@@ -21,7 +25,7 @@ case "$profile" in
 esac
 
 [[ -x "$SOURCE" ]] || {
-  echo "error: missing release CLI sidecar $SOURCE; run cargo build -p kanban-cli --release first" >&2
+  echo "error: missing $PROFILE_LABEL CLI sidecar $SOURCE; run $BUILD_HINT first" >&2
   exit 1
 }
 

@@ -721,6 +721,9 @@ static REAPER_RETRY_PUMP_RUNNING: AtomicBool = AtomicBool::new(false);
 static REAPER_PENDING_CHILDREN: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
+static REAPER_TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+
+#[cfg(test)]
 static FORCE_REAPER_SPAWN_FAILURE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 #[cfg(test)]
@@ -1613,6 +1616,14 @@ pub(crate) fn reaper_pending_count() -> usize {
 }
 
 #[cfg(test)]
+pub(crate) fn reaper_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    REAPER_TEST_GUARD
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
 pub(crate) fn hold_reaper_pending_for_test() {
     REAPER_PENDING_CHILDREN.fetch_add(1, Ordering::AcqRel);
 }
@@ -2263,6 +2274,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn startup_timeout_handoffs_owned_sidecar_to_reaper() {
+        let _reaper_guard = reaper_test_guard();
         let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
         let leader_marker = std::env::temp_dir().join(format!(
             "kanban-desktop-startup-exit-marker-{}-{id}",
@@ -2364,6 +2376,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn cancelled_startup_reaps_sidecar_descendants_before_returning_control() {
+        let _reaper_guard = reaper_test_guard();
         let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
         let leader_marker = std::env::temp_dir().join(format!(
             "kanban-desktop-cancel-leader-{}-{id}",
@@ -2563,6 +2576,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn owned_host_shutdown_forces_child_after_graceful_timeout() {
+        let _reaper_guard = reaper_test_guard();
         let process = test_sleep_child(true);
         let mut handle = HostHandle {
             ownership: HostOwnership::Owned,
@@ -2600,6 +2614,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn owned_host_drop_handoffs_unconfirmed_child_to_reaper() {
+        let _reaper_guard = reaper_test_guard();
         let process = test_sleep_child(true);
         let handle = HostHandle {
             ownership: HostOwnership::Owned,
@@ -2621,6 +2636,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn reaper_spawn_failure_retains_child_until_service_recovers() {
+        let _reaper_guard = reaper_test_guard();
         let process = test_sleep_child(true);
         let mut child = test_owned_child(process);
         let pid = child.process().id() as libc::pid_t;
@@ -2649,6 +2665,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn reaper_pending_count_stays_until_process_group_is_confirmed_gone() {
+        let _reaper_guard = reaper_test_guard();
         let process = test_sleep_child(true);
         let mut child = test_owned_child(process);
         let pid = child.process().id() as libc::pid_t;
@@ -2680,6 +2697,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn closed_reaper_restart_failure_still_schedules_retry_pump() {
+        let _reaper_guard = reaper_test_guard();
         let process = test_sleep_child(true);
         let mut child = test_owned_child(process);
         let pid = child.process().id() as libc::pid_t;

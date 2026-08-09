@@ -42,13 +42,18 @@ rg -n 'resolve_sidecar_path|resource_dir\.join\("kanban"\)' "$DESKTOP_CONFIG" >/
   exit 1
 }
 
-rg -n 'DEST=.*src-tauri/bin/kanban|release/kanban' "$SIDECAR_PREP_SCRIPT" >/dev/null || {
-  echo "error: sidecar preparation must copy release/kanban to src-tauri/bin/kanban" >&2
+rg -n 'DEST=.*src-tauri/bin/kanban|release/kanban|debug/kanban' "$SIDECAR_PREP_SCRIPT" >/dev/null || {
+  echo "error: sidecar preparation must copy release/debug kanban to src-tauri/bin/kanban" >&2
   exit 1
 }
 
 rg -n 'debug/kanban|prepare-desktop-sidecar\.sh dev' "$SIDECAR_PREP_SCRIPT" "$JUSTFILE" >/dev/null || {
   echo "error: Desktop dev prep must build and resolve the debug kanban sidecar" >&2
+  exit 1
+}
+
+rg -n 'missing \$PROFILE_LABEL CLI sidecar|BUILD_HINT=.*cargo build --locked -p kanban-cli' "$SIDECAR_PREP_SCRIPT" >/dev/null || {
+  echo "error: sidecar preparation must report a profile-specific build hint" >&2
   exit 1
 }
 
@@ -72,6 +77,16 @@ for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked
     exit 1
   fi
 done
+
+generic_tauri_override="TAURI_CONFIG='{\"bundle\":{\"resources\":[]}}'"
+if [[ "$(rg -F "$generic_tauri_override" "$JUSTFILE" | wc -l)" -lt 5 ]]; then
+  echo "error: generic workspace check/test/clippy/doc gates must disable package-only Tauri resources" >&2
+  exit 1
+fi
+if grep -Fq 'TAURI_CONFIG=' <<<"$desktop_check_block"; then
+  echo "error: desktop-check must exercise the real bundled resource paths" >&2
+  exit 1
+fi
 
 desktop_build_block="$(sed -n '/^desktop-build:/,/^desktop-package:/p' "$JUSTFILE")"
 for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked -p kanban-cli --release' 'scripts/prepare-desktop-sidecar.sh' 'tauri build'; do

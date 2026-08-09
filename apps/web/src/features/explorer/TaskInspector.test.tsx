@@ -87,6 +87,21 @@ describe("TaskInspector", () => {
     expect(markup).not.toContain("Last heartbeat")
   })
 
+  test("retains lazy values and exposes an offline notice", () => {
+    const markup = renderToStaticMarkup(
+      <TaskInspector
+        model={model}
+        onSelectTask={vi.fn()}
+        online={false}
+        refreshOffline
+        refreshError="offline"
+      />,
+    )
+
+    expect(markup).toContain("当前离线，保留最近一次任务数据。")
+    expect(markup).toContain("r_active")
+  })
+
   test("aborts and rejects a late lazy result after task/session identity changes", async () => {
     const fence = createInspectorAsyncFence()
     let resolveOld!: (value: string) => void

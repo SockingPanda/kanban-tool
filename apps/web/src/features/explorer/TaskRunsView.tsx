@@ -161,6 +161,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
     return <section className={styles.state} data-testid="runs-loading" role="status"><p>{copy.loading}</p></section>
   }
   if (!state.data || state.data.runs.length === 0) {
+    if (kind === "offline") return <section className={styles.state} data-testid="runs-offline" role="status"><p>{copy.offline}</p>{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</section>
     return <section className={styles.state} data-testid="runs-empty" role="status"><p>{copy.empty}</p></section>
   }
   return (

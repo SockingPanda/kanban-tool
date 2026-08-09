@@ -97,6 +97,7 @@ export interface TaskInspectorProps {
   readonly refreshRevision?: number
   readonly refreshError?: string | null
   readonly refreshOffline?: boolean
+  readonly online?: boolean
   readonly onRetry?: () => void
   readonly onLoadRuns?: (signal: AbortSignal) => Promise<TaskInspectorViewModel["runs"]>
   readonly onLoadEvents?: (signal: AbortSignal) => Promise<TaskInspectorViewModel["events"]>
@@ -162,6 +163,7 @@ type InspectorCopy = {
   readonly refreshError: string
   readonly refreshOffline: string
   readonly refreshPending: string
+  readonly offline: string
   readonly status: Readonly<Record<InspectorTaskStatus, string>>
   readonly planState: Readonly<Record<InspectorPlanState, string>>
   readonly stepStatus: Readonly<Record<"todo" | "done" | "skipped", string>>
@@ -200,6 +202,7 @@ const copies: Record<Locale, InspectorCopy> = {
     refreshError: "任务数据刷新失败。",
     refreshOffline: "当前离线，保留最近一次任务数据。",
     refreshPending: "数据已更新，展开后自动刷新。",
+    offline: "当前离线，保留旧数据；联网后重试。",
     status: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
     stepStatus: { todo: "待办", done: "已完成", skipped: "已跳过" },
@@ -236,6 +239,7 @@ const copies: Record<Locale, InspectorCopy> = {
     refreshError: "Task data refresh failed.",
     refreshOffline: "You are offline; the last usable task data is retained.",
     refreshPending: "New data is available; this section will refresh when opened.",
+    offline: "You are offline; the old value is retained. Retry when connected.",
     status: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
     stepStatus: { todo: "To do", done: "Done", skipped: "Skipped" },
@@ -281,6 +285,14 @@ function Facts({ facts }: { readonly facts: readonly [string, string][] }) {
 
 function Empty({ children }: { readonly children: ReactNode }) {
   return <p className={styles.empty} role="status">{children}</p>
+}
+
+function lazySectionNotice(status: InspectorSectionStatus, online: boolean, copy: InspectorCopy): string | null {
+  if (status === "loading") return copy.loading
+  if (status === "error") return copy.loadError
+  if (status === "offline") return copy.offline
+  if (status === "stale") return online ? copy.refreshPending : copy.offline
+  return null
 }
 
 function DependencyList({
@@ -349,9 +361,9 @@ function Neighborhood({ model, copy, onSelectTask }: { readonly model: NonNullab
   )
 }
 
-type InspectorSectionStatus = "idle" | "loading" | "ready" | "stale" | "error"
+type InspectorSectionStatus = "idle" | "loading" | "ready" | "stale" | "offline" | "error"
 
-export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood }: TaskInspectorProps) {
+export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
   const requestIdentity = identity ?? task.id
@@ -413,6 +425,10 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
 
   const startRunsLoad = useCallback((force = false) => {
     if ((!force && runsStatus !== "idle" && runsStatus !== "stale") || !onLoadRuns) return
+    if (!online) {
+      setRunsStatus(runs.length > 0 ? "stale" : "offline")
+      return
+    }
     const signal = runsFence.begin(requestIdentity)
     setRunsStatus("loading")
     void onLoadRuns(signal).then((value) => {
@@ -422,9 +438,13 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     }, () => {
       if (runsFence.isCurrent(requestIdentity, signal)) setRunsStatus("error")
     })
-  }, [onLoadRuns, requestIdentity, runsFence, runsStatus])
+  }, [onLoadRuns, online, requestIdentity, runs, runsFence, runsStatus])
   const startEventsLoad = useCallback((force = false) => {
     if ((!force && eventsStatus !== "idle" && eventsStatus !== "stale") || !onLoadEvents) return
+    if (!online) {
+      setEventsStatus(events.length > 0 ? "stale" : "offline")
+      return
+    }
     const signal = eventsFence.begin(requestIdentity)
     setEventsStatus("loading")
     void onLoadEvents(signal).then((value) => {
@@ -434,9 +454,13 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     }, () => {
       if (eventsFence.isCurrent(requestIdentity, signal)) setEventsStatus("error")
     })
-  }, [eventsFence, eventsStatus, onLoadEvents, requestIdentity])
+  }, [events, eventsFence, eventsStatus, onLoadEvents, online, requestIdentity])
   const startNeighborhoodLoad = useCallback((force = false) => {
     if ((!force && neighborhoodStatus !== "idle" && neighborhoodStatus !== "stale") || !onLoadNeighborhood) return
+    if (!online) {
+      setNeighborhoodStatus(neighborhood !== undefined ? "stale" : "offline")
+      return
+    }
     const signal = neighborhoodFence.begin(requestIdentity)
     setNeighborhoodStatus("loading")
     void onLoadNeighborhood(signal).then((value) => {
@@ -446,7 +470,13 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     }, () => {
       if (neighborhoodFence.isCurrent(requestIdentity, signal)) setNeighborhoodStatus("error")
     })
-  }, [neighborhoodFence, neighborhoodStatus, onLoadNeighborhood, requestIdentity])
+  }, [neighborhood, neighborhoodFence, neighborhoodStatus, onLoadNeighborhood, online, requestIdentity])
+  useEffect(() => {
+    if (online) return
+    setRunsStatus((status) => status === "ready" ? "stale" : status === "idle" && runs.length === 0 ? "offline" : status)
+    setEventsStatus((status) => status === "ready" ? "stale" : status === "idle" && events.length === 0 ? "offline" : status)
+    setNeighborhoodStatus((status) => status === "ready" ? "stale" : status === "idle" && neighborhood === undefined ? "offline" : status)
+  }, [events.length, neighborhood, online, runs.length])
   useEffect(() => {
     if (refreshRevision === 0 || markedRefreshRevisionRef.current === refreshRevision) return
     markedRefreshRevisionRef.current = refreshRevision
@@ -566,8 +596,8 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       <Section id="inspector-runs" title={copy.sections.runs}>
         <details ref={runsDetailsRef} onToggle={loadRuns}>
           <summary>{copy.sections.runs}</summary>
-          {runsStatus === "loading" ? <Empty>{copy.loading}</Empty> : runsStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startRunsLoad(true)}>{copy.retry}</button></> : runs.length === 0 ? <>{runsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noRuns}</Empty></> : (
-          <>{runsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<ul className={styles.compactList}>
+          {runs.length === 0 && (runsStatus === "loading" || runsStatus === "error" || runsStatus === "offline") ? <><Empty>{lazySectionNotice(runsStatus, online, copy)}</Empty><button type="button" onClick={() => startRunsLoad(true)}>{copy.retry}</button></> : runs.length === 0 ? <>{runsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noRuns}</Empty></> : (
+          <>{lazySectionNotice(runsStatus, online, copy) ? <p className={styles.muted} role={runsStatus === "error" ? "alert" : "status"}>{lazySectionNotice(runsStatus, online, copy)}</p> : null}{runsStatus === "error" || runsStatus === "offline" ? <button type="button" onClick={() => startRunsLoad(true)}>{copy.retry}</button> : null}<ul className={styles.compactList}>
             {runs.map((run) => (
               <li key={run.id} className={styles.row}>
                 <div><strong translate="no">{run.id}</strong><span className={styles.muted}> · {copy.runStatus[run.status]}</span><p>{run.workerProfile || copy.manual} · {run.claimOwner}</p>{run.error ? <p className={styles.error}>{run.error}</p> : null}</div>
@@ -582,8 +612,8 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       <Section id="inspector-events" title={copy.sections.events}>
         <details ref={eventsDetailsRef} onToggle={loadEvents}>
           <summary>{copy.sections.events}</summary>
-          {eventsStatus === "loading" ? <Empty>{copy.loading}</Empty> : eventsStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startEventsLoad(true)}>{copy.retry}</button></> : events.length === 0 ? <>{eventsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noEvents}</Empty></> : (
-          <><>{eventsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}</><ol className={styles.compactList}>
+          {events.length === 0 && (eventsStatus === "loading" || eventsStatus === "error" || eventsStatus === "offline") ? <><Empty>{lazySectionNotice(eventsStatus, online, copy)}</Empty><button type="button" onClick={() => startEventsLoad(true)}>{copy.retry}</button></> : events.length === 0 ? <>{eventsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noEvents}</Empty></> : (
+          <>{lazySectionNotice(eventsStatus, online, copy) ? <p className={styles.muted} role={eventsStatus === "error" ? "alert" : "status"}>{lazySectionNotice(eventsStatus, online, copy)}</p> : null}{eventsStatus === "error" || eventsStatus === "offline" ? <button type="button" onClick={() => startEventsLoad(true)}>{copy.retry}</button> : null}<ol className={styles.compactList}>
             {events.map((event) => (
               <li key={event.id} className={styles.row}>
                 <div><strong translate="no">{event.kind}</strong><p className={styles.muted}>{event.actor || copy.system}</p></div>
@@ -598,7 +628,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       <Section id="inspector-neighborhood" title={copy.sections.neighborhood}>
         <details ref={neighborhoodDetailsRef} onToggle={loadNeighborhood}>
           <summary>{copy.sections.neighborhood}</summary>
-          {neighborhoodStatus === "loading" ? <Empty>{copy.loading}</Empty> : neighborhoodStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startNeighborhoodLoad(true)}>{copy.retry}</button></> : neighborhood ? <>{neighborhoodStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Neighborhood model={neighborhood} copy={copy} onSelectTask={onSelectTask} /></> : <>{neighborhoodStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noNeighborhood}</Empty></>}
+          {!neighborhood && (neighborhoodStatus === "loading" || neighborhoodStatus === "error" || neighborhoodStatus === "offline") ? <><Empty>{lazySectionNotice(neighborhoodStatus, online, copy)}</Empty><button type="button" onClick={() => startNeighborhoodLoad(true)}>{copy.retry}</button></> : neighborhood ? <>{lazySectionNotice(neighborhoodStatus, online, copy) ? <p className={styles.muted} role={neighborhoodStatus === "error" ? "alert" : "status"}>{lazySectionNotice(neighborhoodStatus, online, copy)}</p> : null}{neighborhoodStatus === "error" || neighborhoodStatus === "offline" ? <button type="button" onClick={() => startNeighborhoodLoad(true)}>{copy.retry}</button> : null}<Neighborhood model={neighborhood} copy={copy} onSelectTask={onSelectTask} /></> : <>{neighborhoodStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noNeighborhood}</Empty></>}
         </details>
       </Section>
 

@@ -84,4 +84,20 @@ describe("EventsView", () => {
     expect(markup).toContain('data-task-opener="t_1"')
     expect(markup).toContain('data-testid="event-row"')
   })
+
+  test("does not render a retained task-A snapshot while task-B is loading", () => {
+    const markup = renderToStaticMarkup(
+      <EventsPresentation
+        locale="en"
+        taskId="t_2"
+        kindFilter=""
+        state={{ ...ready, data: { ...model, taskId: "t_1" }, loading: true, stale: true }}
+        online
+        onRefresh={vi.fn()}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="events-loading"')
+    expect(markup).not.toContain('data-testid="event-row"')
+  })
 })

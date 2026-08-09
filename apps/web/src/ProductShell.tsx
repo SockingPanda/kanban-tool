@@ -8,6 +8,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
 
 import type { CanonicalBoardSlug } from "./lib/board-slug"
 import type { BoardEventsBatch } from "./lib/api/explorer-read-model"
+import type { BoardSyncStatus } from "./features/board/types"
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router"
 import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
@@ -29,9 +30,13 @@ export type ProductShellProps = {
   onRetry?: () => void
   /** 现有 persistent SSE integration 的可选只读 seam。 */
   invalidationRevision?: number
+  boardRevision?: number
+  inspectorRevision?: number
+  runsRevision?: number
   /** 仅 recovery/gap/poll boundaries 触发 Events catch-up read。 */
   eventsRefreshRevision?: number
   eventsBatch?: BoardEventsBatch | null
+  syncStatus?: BoardSyncStatus
 }
 
 function safeText(value: string): string {
@@ -286,7 +291,7 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
   )
 }
 
-function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, eventsRefreshRevision = invalidationRevision, eventsBatch }: ProductShellProps) {
+function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -373,7 +378,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   if (route.kind === "board") return (
     <>
       {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
-      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} />
+      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} />
     </>
   )
 
@@ -389,7 +394,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   )
 }
 
-export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, eventsRefreshRevision = invalidationRevision, eventsBatch }: ProductShellProps) {
+export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
 
@@ -416,7 +421,7 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch}>
+                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus}>
                   {children}
                 </RouteContent>
               </div>

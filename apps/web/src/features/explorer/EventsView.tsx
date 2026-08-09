@@ -80,7 +80,7 @@ type EventsCopy = {
 const copies: Record<Locale, EventsCopy> = {
   zh: {
     title: "事件",
-    kicker: "BOARD EVENTS",
+    kicker: "看板事件",
     board: "看板",
     task: "任务",
     kind: "类型",
@@ -190,11 +190,12 @@ export function EventsPresentation({
   const copy = copies[locale]
   const error = state.error instanceof Error ? state.error : null
   const offline = !online || errorKind(error) === "offline"
+  const scopedData = state.data && (taskId === null || state.data.taskId === taskId || (state.stale && state.data.taskId === null)) ? state.data : null
 
-  if (!state.data && (state.loading || !state.error) && !offline) {
+  if (!scopedData && (state.loading || !state.error) && !offline) {
     return <section className={styles.state} data-testid="events-loading" role="status" aria-labelledby="events-loading-heading"><h2 id="events-loading-heading">{copy.title}</h2><p>{copy.loading}</p></section>
   }
-  if (!state.data && offline) {
+  if (!scopedData && offline) {
     return (
       <section className={styles.state} data-testid="events-offline" role="status">
         <h2>{copy.offline}</h2>
@@ -203,7 +204,7 @@ export function EventsPresentation({
       </section>
     )
   }
-  if (!state.data && error) {
+  if (!scopedData && error) {
     return (
       <section className={styles.state} data-testid="events-error" role="alert">
         <h2>{copy.error}</h2>
@@ -212,20 +213,20 @@ export function EventsPresentation({
       </section>
     )
   }
-  if (!state.data) return null
+  if (!scopedData) return null
 
   const visibleEvents = kindFilter.trim().length === 0
-    ? state.data.events
-    : state.data.events.filter((event) => event.kind.toLocaleLowerCase().includes(kindFilter.trim().toLocaleLowerCase()))
+    ? scopedData.events
+    : scopedData.events.filter((event) => event.kind.toLocaleLowerCase().includes(kindFilter.trim().toLocaleLowerCase()))
   const degraded = state.stale || Boolean(state.error) || offline
 
-  if (state.data.events.length === 0 && !state.error) {
+  if (scopedData.events.length === 0 && !state.error) {
     return (
       <section className={styles.events} data-testid="events-empty" aria-labelledby="events-heading">
         <header className={styles.heading}>
           <p className={styles.kicker}>{copy.kicker}</p>
           <h2 id="events-heading">{copy.title}</h2>
-          <p className={styles.boardContext}>{copy.board} · {machineToken(state.data.board.slug, copy.unknown)}</p>
+          <p className={styles.boardContext}>{copy.board} · {machineToken(scopedData.board.slug, copy.unknown)}</p>
           <button type="button" onClick={onRefresh}>{copy.refresh}</button>
         </header>
         <FilterBar copy={copy} value={kindFilter} onChange={onKindFilterChange} />
@@ -240,7 +241,7 @@ export function EventsPresentation({
         <div>
           <p className={styles.kicker}>{copy.kicker}</p>
           <h2 id="events-heading">{copy.title}</h2>
-          <p className={styles.boardContext}>{copy.board} · {machineToken(state.data.board.slug, copy.unknown)}</p>
+          <p className={styles.boardContext}>{copy.board} · {machineToken(scopedData.board.slug, copy.unknown)}</p>
           {taskId ? <p className={styles.boardContext}>{copy.task} · {machineToken(taskId, copy.unknown)}</p> : null}
         </div>
         <button type="button" data-testid="events-refresh" onClick={onRefresh} disabled={state.loading}>{copy.refresh}</button>
@@ -419,7 +420,7 @@ function useBoardEventsRead(
   useEffect(() => {
     if (!batch) return
     setState((current) => {
-      if (current.identityKey !== identityKey || !current.data || current.data.board.id !== batch.boardId) return current
+      if (current.identityKey !== identityKey || !current.data || current.data.board.id !== batch.boardId || (taskId !== null && current.data.taskId !== taskId)) return current
       try {
         if (!Number.isSafeInteger(batch.nextAfter) || batch.nextAfter < 0) {
           throw new ExplorerReadError("anomaly", "事件 batch 的 nextAfter 不是非负安全整数。")
@@ -470,13 +471,12 @@ function useBoardEventsRead(
     })
   }, [batch, identityKey, state.data?.meta.nextAfter, taskId])
 
-  const sameScope = state.scopeKey === scopeKey
   const visibleState: EventsReadState = state.identityKey !== identityKey
     ? {
-        data: sameScope ? state.data : null,
+        data: taskId === null ? state.data : null,
         loading: online,
         error: online ? null : new ExplorerReadError("offline", "当前离线，无法加载事件。"),
-        stale: sameScope && state.data !== null,
+        stale: taskId === null && state.data !== null,
       }
     : state.requestKey !== requestKey
       ? {

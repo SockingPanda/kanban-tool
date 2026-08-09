@@ -225,6 +225,18 @@ pub struct OntologyValidateInput {
     pub validation_json: String,
 }
 
+struct OntologySignalPageQuery<'a> {
+    board_id: &'a str,
+    statuses: &'a [String],
+    kinds: &'a [String],
+    task_id: Option<&'a str>,
+    target_label_id: Option<&'a str>,
+    proposed_label_name: Option<&'a str>,
+    include_all: bool,
+    limit: usize,
+    offset: usize,
+}
+
 impl TursoStore {
     async fn ontology_board_id(&self, board: &str) -> Result<String, StoreError> {
         let connection = self.connection().await?;
@@ -1732,32 +1744,35 @@ impl TursoStore {
             Some(value) => Some(self.ontology_label(&board_id, value).await?.0),
             None => None,
         };
-        self.list_label_ontology_signals_page(
-            &board_id,
+        self.list_label_ontology_signals_page(OntologySignalPageQuery {
+            board_id: &board_id,
             statuses,
             kinds,
-            task_id.as_deref(),
-            target_label_id.as_deref(),
+            task_id: task_id.as_deref(),
+            target_label_id: target_label_id.as_deref(),
             proposed_label_name,
             include_all,
             limit,
-            0,
-        )
+            offset: 0,
+        })
         .await
     }
 
     async fn list_label_ontology_signals_page(
         &self,
-        board_id: &str,
-        statuses: &[String],
-        kinds: &[String],
-        task_id: Option<&str>,
-        target_label_id: Option<&str>,
-        proposed_label_name: Option<&str>,
-        include_all: bool,
-        limit: usize,
-        offset: usize,
+        query: OntologySignalPageQuery<'_>,
     ) -> Result<Vec<LabelOntologySignalRecord>, StoreError> {
+        let OntologySignalPageQuery {
+            board_id,
+            statuses,
+            kinds,
+            task_id,
+            target_label_id,
+            proposed_label_name,
+            include_all,
+            limit,
+            offset,
+        } = query;
         validate_surface_limit(limit, "label ontology signal page")?;
         let connection = self.connection().await?;
         let mut sql = "SELECT id,observation_id,board_id,kind,status,target_label_id,target_label_name_snapshot,related_labels_json,proposed_action,candidate_atom_polarity,candidate_atom_kind,candidate_text,candidate_content_hash,proposed_label_name,proposed_label_name_normalized,proposal_json,agent_selected,suggest_state,suggest_score,suggest_rank,final_selected,rationale,confidence,signal_key,superseded_by_signal_id,status_reason,created_at,updated_at,reviewed_at,closed_at FROM label_ontology_signals WHERE board_id=:board".to_owned();
@@ -1876,17 +1891,17 @@ impl TursoStore {
         let mut offset = 0;
         loop {
             let page = self
-                .list_label_ontology_signals_page(
-                    &board_id,
-                    &[],
-                    &[],
-                    None,
-                    None,
-                    None,
+                .list_label_ontology_signals_page(OntologySignalPageQuery {
+                    board_id: &board_id,
+                    statuses: &[],
+                    kinds: &[],
+                    task_id: None,
+                    target_label_id: None,
+                    proposed_label_name: None,
                     include_all,
-                    MAX_SURFACE_LIMIT,
+                    limit: MAX_SURFACE_LIMIT,
                     offset,
-                )
+                })
                 .await?;
             let page_len = page.len();
             signals.extend(page);
@@ -2168,17 +2183,8 @@ impl TursoStore {
             },
         )
         .await?;
-        insert_ontology_signal_review_events(
-            &transaction,
-            &board_id,
-            &action_id,
-            &input.signal_ids,
-            &input.action_type,
-            &input.reason,
-            &input.actor.name,
-            now,
-        )
-        .await?;
+        insert_ontology_signal_review_events(&transaction, &board_id, &action_id, &input, now)
+            .await?;
         transaction.commit().await?;
         self.action_by_id(&board_id, &action_id).await
     }
@@ -3304,22 +3310,21 @@ async fn validate_result_atom(
             ))
         })?;
         let hash_atom_id = text_value(row.get_value(0)?, "label_atoms.id")?;
-        if let Some(atom_id) = atom_id {
-            if hash_atom_id != atom_id {
-                return Err(StoreError::InvalidInput(
-                    "result atom id and content hash identify different atoms".to_owned(),
-                ));
-            }
+        if let Some(atom_id) = atom_id
+            && hash_atom_id != atom_id
+        {
+            return Err(StoreError::InvalidInput(
+                "result atom id and content hash identify different atoms".to_owned(),
+            ));
         }
     }
     if let (Some(atom_id), Some(actual_hash), Some(requested_hash)) =
         (atom_id, by_id.as_deref(), content_hash)
+        && actual_hash != requested_hash
     {
-        if actual_hash != requested_hash {
-            return Err(StoreError::InvalidInput(format!(
-                "result atom content hash mismatch for {atom_id}"
-            )));
-        }
+        return Err(StoreError::InvalidInput(format!(
+            "result atom content hash mismatch for {atom_id}"
+        )));
     }
     Ok(())
 }
@@ -3584,20 +3589,17 @@ async fn insert_ontology_signal_review_events(
     transaction: &turso::transaction::Transaction<'_>,
     board_id: &str,
     action_id: &str,
-    signal_ids: &[String],
-    action_type: &str,
-    reason: &str,
-    actor: &str,
+    input: &OntologyActionInput,
     now: i64,
 ) -> Result<(), StoreError> {
-    let status = match action_type {
+    let status = match input.action_type.as_str() {
         "confirm" => "confirmed",
         "reject" => "rejected",
         "resolve_no_change" => "resolved",
         "supersede" => "superseded",
         _ => return Ok(()),
     };
-    for signal_id in signal_ids {
+    for signal_id in &input.signal_ids {
         let event_id = format!("e_label_ontology_signal_{signal_id}_{action_id}");
         transaction
             .execute(
@@ -3605,12 +3607,12 @@ async fn insert_ontology_signal_review_events(
                 turso::named_params! {
                     ":event": event_id.as_str(),
                     ":board": board_id,
-                    ":actor": actor,
+                    ":actor": input.actor.name.as_str(),
                     ":payload": json!({
                         "signal_id": signal_id,
                         "action_id": action_id,
                         "status": status,
-                        "reason": reason,
+                        "reason": input.reason,
                     })
                     .to_string()
                     .as_str(),

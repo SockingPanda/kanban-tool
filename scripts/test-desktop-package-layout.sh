@@ -34,7 +34,6 @@ fi
   web-assets check --root "$ROOT" --dir apps/web/dist >/dev/null
 
 dpkg-deb --extract "$deb_path" "$TMP_ROOT/extracted"
-
 mapfile -t sidecar_paths < <(
   find "$TMP_ROOT/extracted/usr" -type f -name 'kanban' -print
 )
@@ -67,4 +66,4 @@ diff -r --no-dereference \
   exit 1
 }
 
-echo "ok: $deb_path contains the Desktop app, bundled sidecar $sidecar_path, and exact Web artifact"
+echo "ok: $deb_path contains the Desktop app, bundled kanban sidecar, and exact Web artifact"

@@ -42,8 +42,10 @@ check-core:
         -p kanban-cli \
         -p kanban-mcp
 
+# 通用 Rust gate 只编译/测试，不复制 Desktop package 的 sidecar/Web 资源；真实打包由
+# `desktop-check` / `desktop-build` 负责。
 check-full:
-    scripts/cargo-build-lock.sh -- cargo check --workspace --tests
+    TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo check --workspace --tests
 
 test *args:
     just test-core "$@"
@@ -79,7 +81,7 @@ test-core *args:
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@"; fi
 
 test-full *args:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace "$@"; fi
+    if cargo nextest --version >/dev/null 2>&1; then TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo nextest run --workspace --no-fail-fast "$@"; else TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo test --workspace "$@"; fi
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
@@ -88,7 +90,7 @@ clippy-core *args:
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@" -- -D warnings
 
 clippy-full *args:
-    scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets "$@" -- -D warnings
+    TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets "$@" -- -D warnings
 
 rust-full:
     just fmt-full
@@ -106,8 +108,8 @@ tooling-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- tooling check
 
 docs-check:
-    scripts/cargo-build-lock.sh -- cargo doc --workspace --no-deps
-    scripts/cargo-build-lock.sh -- cargo test --doc --workspace
+    TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo doc --workspace --no-deps
+    TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo test --doc --workspace
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- docs check
 
 node-lock-check:
@@ -146,6 +148,12 @@ web-check:
     just web-test
     just web-build
     just web-artifact-check
+
+desktop-dev-prep:
+    just web-build
+    just web-artifact-check
+    scripts/cargo-build-lock.sh -- cargo build --locked -p kanban-cli
+    scripts/prepare-desktop-sidecar.sh dev
 
 desktop-check:
     just node-lock-check

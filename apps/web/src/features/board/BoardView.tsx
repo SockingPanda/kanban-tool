@@ -5,6 +5,7 @@ import { Card } from "@astryxdesign/core/Card"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Text } from "@astryxdesign/core/Text"
 
+import { taskOpenerKey } from "../../lib/explorer-focus"
 import styles from "./BoardView.module.css"
 import {
   defaultBoardMessages,
@@ -22,10 +23,13 @@ export interface BoardViewProps {
   readonly state: BoardViewState
   readonly messages?: BoardMessagesOverrides
   readonly onRetry?: () => void
+  readonly onSelectTask?: (taskId: string) => void
   /** Sync state is rendered as an independent banner and never replaces a ready board. */
   readonly syncStatus?: BoardSyncStatus
   readonly id?: string
   readonly className?: string
+  /** Explorer nests the live board under its page heading. */
+  readonly headingLevel?: 1 | 2 | 3
 }
 
 function mergeMessages(overrides?: BoardMessagesOverrides): BoardMessages {
@@ -65,10 +69,12 @@ function BoardHeader({
   board,
   titleId,
   copy,
+  headingLevel,
 }: {
   readonly board?: BoardViewModel["board"]
   readonly titleId: string
   readonly copy: BoardMessages
+  readonly headingLevel: 1 | 2 | 3
 }) {
   return (
     <header className={styles.header}>
@@ -76,7 +82,7 @@ function BoardHeader({
         <Text as="p" type="supporting" className={styles.eyebrow}>
           {copy.boardEyebrow}
         </Text>
-        <Heading level={1} id={titleId}>
+        <Heading level={headingLevel} id={titleId}>
           {board?.name ?? copy.boardTitle}
         </Heading>
         {board ? (
@@ -110,6 +116,8 @@ function SyncBanner({ status, copy, onRetry }: { readonly status: BoardSyncStatu
         ? copy.syncRecovering
         : status === "circuit-open"
           ? copy.syncCircuitOpen
+          : status === "offline"
+            ? copy.offlineTitle
           : copy.syncStale
   const isHealthy = status === "live"
   return (
@@ -163,7 +171,7 @@ function StateContent({ state, copy, onRetry }: { readonly state: BoardViewState
   return null
 }
 
-function TaskCard({ task, copy }: { readonly task: BoardTaskViewModel; readonly copy: BoardMessages }) {
+function TaskCard({ task, copy, onSelectTask }: { readonly task: BoardTaskViewModel; readonly copy: BoardMessages; readonly onSelectTask?: (taskId: string) => void }) {
   const dependencyText = task.readiness.dependencyBlocked
     ? `${copy.dependencyBlocked}（${task.readiness.unfinishedParentCount}）`
     : copy.dependencyClear
@@ -183,7 +191,11 @@ function TaskCard({ task, copy }: { readonly task: BoardTaskViewModel; readonly 
         <Badge variant={priorityVariant(task.priority)} label={copy.priorityLabel(task.priority)} />
       </div>
       <Heading level={3} className={styles.taskTitle}>
-        {task.title}
+        {onSelectTask ? (
+          <button type="button" className={styles.taskTitleButton} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>
+            {task.title}
+          </button>
+        ) : task.title}
       </Heading>
       <dl className={styles.taskDetails}>
         <div className={styles.taskDetailsRow}>
@@ -216,7 +228,7 @@ function TaskCard({ task, copy }: { readonly task: BoardTaskViewModel; readonly 
   )
 }
 
-function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel; readonly copy: BoardMessages; readonly rootId: string }) {
+function BoardColumns({ model, copy, rootId, onSelectTask }: { readonly model: BoardViewModel; readonly copy: BoardMessages; readonly rootId: string; readonly onSelectTask?: (taskId: string) => void }) {
   const columns = orderedVisibleColumns(model.columns)
 
   if (columns.length === 0) {
@@ -267,7 +279,7 @@ function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel;
                   ) : (
                     tasks.map((task) => (
                       <li className={styles.taskListItem} key={task.id}>
-                        <TaskCard task={task} copy={copy} />
+                        <TaskCard task={task} copy={copy} onSelectTask={onSelectTask} />
                       </li>
                     ))
                   )}
@@ -281,7 +293,7 @@ function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel;
   )
 }
 
-export function BoardView({ state, messages: messageOverrides, onRetry, syncStatus, id = "astryx-board", className }: BoardViewProps) {
+export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, syncStatus, id = "astryx-board", className, headingLevel = 1 }: BoardViewProps) {
   const copy = mergeMessages(messageOverrides)
   const titleId = `${id}-title`
   const validation = state.kind === "ready" ? validateBoardViewModel(state.model) : { valid: true as const }
@@ -305,11 +317,11 @@ export function BoardView({ state, messages: messageOverrides, onRetry, syncStat
       <a className={styles.skipLink} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
-      <BoardHeader board={board} titleId={titleId} copy={copy} />
+      <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} />
       {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
       <div id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" ? (
-          <BoardColumns model={renderedState.model} copy={copy} rootId={id} />
+          <BoardColumns model={renderedState.model} copy={copy} rootId={id} onSelectTask={onSelectTask} />
         ) : (
           <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
         )}

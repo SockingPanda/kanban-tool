@@ -1,0 +1,491 @@
+@layer product {
+  .map {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+    color: var(--color-text-primary);
+  }
+
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    min-width: 0;
+    border-block-end: 1px solid var(--color-border);
+    padding-block-end: 1rem;
+  }
+
+  .header h2 {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-size: clamp(1.45rem, 3vw, 2rem);
+    letter-spacing: -0.03em;
+  }
+
+  .eyebrow,
+  .muted,
+  .state p,
+  .inspector p {
+    margin: 0;
+    color: var(--color-text-secondary);
+  }
+
+  .eyebrow {
+    margin-block-end: 0.35rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .muted {
+    margin-block-start: 0.45rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.76rem;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    padding: 0.55rem;
+    background: var(--color-background-surface);
+  }
+
+  .filterGroup {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding-block-end: 0.15rem;
+  }
+
+  .filterButton,
+  .toggleButton,
+  .refreshButton,
+  .zoomGroup button,
+  .openButton,
+  .state button {
+    min-height: 2rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.3rem 0.55rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    font-size: 0.76rem;
+    cursor: pointer;
+  }
+
+  .filterButton:hover,
+  .toggleButton:hover,
+  .refreshButton:hover,
+  .zoomGroup button:hover,
+  .openButton:hover,
+  .state button:hover {
+    border-color: var(--color-accent);
+  }
+
+  .filterButton[aria-pressed="true"],
+  .toggleButton[aria-pressed="true"] {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-background-surface));
+  }
+
+  .filterButton:focus-visible,
+  .toggleButton:focus-visible,
+  .refreshButton:focus-visible,
+  .zoomGroup button:focus-visible,
+  .openButton:focus-visible,
+  .state button:focus-visible,
+  .nodeButton:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .filterButton:disabled,
+  .refreshButton:disabled,
+  .zoomGroup button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .zoomGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-inline-start: auto;
+  }
+
+  .zoomGroup output {
+    min-width: 3.2rem;
+    color: var(--color-text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .state {
+    display: grid;
+    gap: 0.55rem;
+    min-height: 12rem;
+    align-content: center;
+    justify-items: start;
+    border: 1px solid var(--color-border);
+    padding: 1.25rem;
+    background: var(--color-background-surface);
+  }
+
+  .state h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .inlineError,
+  .truncated {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    align-items: baseline;
+    border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+    padding: 0.65rem 0.8rem;
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .inlineError strong,
+  .truncated strong {
+    color: var(--color-text-primary);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem);
+    gap: 1rem;
+    min-width: 0;
+    align-items: start;
+  }
+
+  .graphPanel {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .graphScroll {
+    min-width: 0;
+    max-height: 42rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--color-border);
+    background: var(--color-background-body);
+    scrollbar-width: thin;
+  }
+
+  .graphScroll:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .graphCanvas {
+    display: grid;
+    gap: 1.1rem;
+    min-width: 48rem;
+    min-height: 26rem;
+    padding: 1rem;
+  }
+
+  .zoom65 {
+    transform: scale(0.65);
+    transform-origin: top left;
+  }
+
+  .zoom70 {
+    transform: scale(0.7);
+    transform-origin: top left;
+  }
+
+  .zoom75 {
+    transform: scale(0.75);
+    transform-origin: top left;
+  }
+
+  .zoom80 {
+    transform: scale(0.8);
+    transform-origin: top left;
+  }
+
+  .zoom85 {
+    transform: scale(0.85);
+    transform-origin: top left;
+  }
+
+  .zoom90 {
+    transform: scale(0.9);
+    transform-origin: top left;
+  }
+
+  .zoom95 {
+    transform: scale(0.95);
+    transform-origin: top left;
+  }
+
+  .zoom100 {
+    transform: scale(1);
+    transform-origin: top left;
+  }
+
+  .zoom105 {
+    transform: scale(1.05);
+    transform-origin: top left;
+  }
+
+  .zoom110 {
+    transform: scale(1.1);
+    transform-origin: top left;
+  }
+
+  .zoom115 {
+    transform: scale(1.15);
+    transform-origin: top left;
+  }
+
+  .zoom120 {
+    transform: scale(1.2);
+    transform-origin: top left;
+  }
+
+  .zoom125 {
+    transform: scale(1.25);
+    transform-origin: top left;
+  }
+
+  .zoom130 {
+    transform: scale(1.3);
+    transform-origin: top left;
+  }
+
+  .zoom135 {
+    transform: scale(1.35);
+    transform-origin: top left;
+  }
+
+  .zoom140 {
+    transform: scale(1.4);
+    transform-origin: top left;
+  }
+
+  .zoom145 {
+    transform: scale(1.45);
+    transform-origin: top left;
+  }
+
+  .zoom150 {
+    transform: scale(1.5);
+    transform-origin: top left;
+  }
+
+  .nodesGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 0.7rem;
+    align-content: start;
+  }
+
+  .node {
+    min-width: 0;
+    border: 1px solid var(--color-border-emphasized);
+    background: var(--color-background-surface);
+    content-visibility: auto;
+    contain-intrinsic-size: 7rem;
+  }
+
+  .selectedNode {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--color-accent) 25%, transparent);
+  }
+
+  .nodeButton {
+    display: grid;
+    gap: 0.45rem;
+    width: 100%;
+    min-height: 7rem;
+    border: 0;
+    padding: 0.7rem;
+    background: transparent;
+    color: var(--color-text-primary);
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .nodeButton:hover {
+    background: var(--color-background-body);
+  }
+
+  .nodeButton strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .nodeTopline,
+  .nodeFacts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.4rem;
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
+  }
+
+  .nodeTopline span:first-child,
+  .nodeFacts {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .edgeList {
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: 0.7rem;
+  }
+
+  .edgeList h3 {
+    margin: 0 0 0.45rem;
+    font-size: 0.85rem;
+  }
+
+  .edgeList p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .edgeList ul {
+    display: grid;
+    gap: 0.35rem;
+    max-height: 10rem;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    list-style: none;
+  }
+
+  .edgeList li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: baseline;
+    border-inline-start: 0.18rem solid var(--color-border-emphasized);
+    padding: 0.35rem 0.5rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
+  }
+
+  .edgeList li span:nth-child(2),
+  .edgeList li span:nth-child(4) {
+    color: var(--color-text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .edgeId {
+    color: var(--color-text-secondary) !important;
+  }
+
+  .inspector {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    padding: 0.9rem;
+    background: var(--color-background-surface);
+  }
+
+  .inspector h2,
+  .inspector h3 {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .inspector h2 {
+    font-size: 0.9rem;
+  }
+
+  .inspector h3 {
+    font-size: 1.05rem;
+  }
+
+  .nodeRef {
+    color: var(--color-text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.76rem;
+  }
+
+  .facts {
+    display: grid;
+    gap: 0.4rem;
+    margin: 0;
+  }
+
+  .facts > div {
+    display: grid;
+    grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+
+  .facts dt {
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+  }
+
+  .facts dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+  }
+
+  .hiddenSelection {
+    border-inline-start: 0.18rem solid var(--color-accent);
+    padding: 0.35rem 0.5rem;
+    color: var(--color-text-secondary);
+    font-size: 0.76rem;
+  }
+
+  .openButton {
+    width: 100%;
+  }
+
+  .visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 60rem) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+    }
+  }
+
+  @media (max-width: 52rem) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .graphCanvas {
+      min-width: 38rem;
+    }
+  }
+}

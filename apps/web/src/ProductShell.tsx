@@ -7,11 +7,14 @@ import { SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
 
 import type { CanonicalBoardSlug } from "./lib/board-slug"
+import type { BoardEventsBatch } from "./lib/api/explorer-read-model"
+import type { BoardSyncStatus } from "./features/board/types"
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router"
 import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
 import { usePreferences } from "./lib/use-preferences"
 import { createTranslator, type MessageKey } from "./lib/i18n"
+import { ExplorerPage } from "./features/explorer/ExplorerPage"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -25,10 +28,23 @@ export type ProductShellProps = {
   error?: ReactNode
   onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
   onRetry?: () => void
+  /** 现有 persistent SSE integration 的可选只读 seam。 */
+  invalidationRevision?: number
+  boardRevision?: number
+  inspectorRevision?: number
+  runsRevision?: number
+  /** 仅 recovery/gap/poll boundaries 触发 Events catch-up read。 */
+  eventsRefreshRevision?: number
+  eventsBatch?: BoardEventsBatch | null
+  syncStatus?: BoardSyncStatus
 }
 
 function safeText(value: string): string {
   return value.trim() || "—"
+}
+
+function appRoutePathname(route: AppRoute): string {
+  return route.pathname
 }
 
 function navPath(runtime: WebRuntimeConfig, boardSlug?: CanonicalBoardSlug): string {
@@ -275,7 +291,7 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
   )
 }
 
-function RouteContent({ runtime, route, children, boundary, error, onRetry }: Omit<ProductShellProps, "onNavigate">) {
+function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -292,10 +308,11 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
     }
   }, [])
 
-  // A route-owned child (currently BoardLive) owns its own loading, empty,
-  // stale and offline states. Branch before generic boundaries so a route
-  // transition cannot briefly replace it with the shell loading/error panel.
-  if ((route.kind === "home" || route.kind === "board") && children) return <>{children}</>
+  const ownsLiveBoardRoute = route.kind === "home"
+  // BoardLive owns loading, empty, stale and offline presentation. Keep the
+  // child mounted before generic boundaries; for board routes it remains a
+  // hidden session owner and Explorer owns the visible route content below.
+  if (ownsLiveBoardRoute && children) return <>{children}</>
 
   if (effectiveBoundary === "loading") {
     return (
@@ -315,7 +332,10 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
       </section>
     )
   }
-  if (effectiveBoundary === "offline") {
+  // Explorer owns stale/offline presentation for every board view so a last
+  // usable snapshot and the current route remain mounted while connectivity
+  // drops. The hidden BoardLive session still owns recovery and retry.
+  if (effectiveBoundary === "offline" && route.kind !== "board") {
     return (
       <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline">
         <p className={styles.eyebrow}>{t("routeBoundary")}</p>
@@ -355,6 +375,12 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
     )
   }
   if (route.kind === "settings") return <SettingsPage runtime={runtime} />
+  if (route.kind === "board") return (
+    <>
+      {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
+      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} />
+    </>
+  )
 
   return (
     <section className={styles.page} aria-labelledby="board-placeholder-heading" data-testid="board-placeholder">
@@ -363,12 +389,12 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
         <h1 id="board-placeholder-heading">{t("boardPlaceholder")}</h1>
         <p className={styles.lede}>{t("boardPlaceholderDescription")}</p>
       </div>
-      <p className={styles.routePath} translate="no">{route.pathname}</p>
+      <p className={styles.routePath} translate="no">{appRoutePathname(route)}</p>
     </section>
   )
 }
 
-export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry }: ProductShellProps) {
+export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
 
@@ -395,7 +421,7 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onRetry={onRetry}>
+                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus}>
                   {children}
                 </RouteContent>
               </div>

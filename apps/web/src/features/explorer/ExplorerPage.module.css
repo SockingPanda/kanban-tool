@@ -1,0 +1,154 @@
+@layer product {
+  .explorer {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+    color: var(--color-text-primary);
+  }
+
+  .explorerHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    min-width: 0;
+    border-block-end: 1px solid var(--color-border);
+    padding-block-end: 1rem;
+  }
+
+  .explorerHeader > div {
+    min-width: 0;
+  }
+
+  .explorerHeader h1 {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-size: clamp(1.6rem, 3vw, 2.35rem);
+    letter-spacing: -0.035em;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.35rem;
+    color: var(--color-text-secondary);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .closeInspector,
+  .boundary button,
+  .inspectorBoundary button {
+    min-height: 2.15rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.35rem 0.65rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  .closeInspector:hover,
+  .boundary button:hover,
+  .inspectorBoundary button:hover {
+    border-color: var(--color-accent);
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.75rem;
+    min-width: 0;
+    border-block-end: 1px solid var(--color-border);
+  }
+
+  .tabs a {
+    display: inline-flex;
+    min-height: 2.25rem;
+    align-items: center;
+    border-block-end: 2px solid transparent;
+    padding: 0.35rem 0.2rem;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+  }
+
+  .tabs a:hover,
+  .tabs a[aria-current="page"] {
+    border-block-end-color: var(--color-accent);
+    color: var(--color-text-primary);
+  }
+
+  .tabs a:focus-visible,
+  .closeInspector:focus-visible,
+  .boundary button:focus-visible,
+  .inspectorBoundary button:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .content,
+  .contentWithInspector {
+    display: grid;
+    min-width: 0;
+    gap: 1rem;
+  }
+
+  .contentWithInspector {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+    align-items: start;
+  }
+
+  .primaryContent {
+    display: grid;
+    min-width: 0;
+    gap: 1rem;
+  }
+
+  .boundary,
+  .inspectorBoundary {
+    display: grid;
+    gap: 0.55rem;
+    min-height: 10rem;
+    align-content: center;
+    justify-items: start;
+    border: 1px solid var(--color-border);
+    padding: 1rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+  }
+
+  .boundary h2,
+  .boundary p,
+  .inspectorBoundary p {
+    margin: 0;
+  }
+
+  .boundary h2 {
+    color: var(--color-text-primary);
+  }
+
+  .boundary span {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+  }
+
+  .inspectorBoundary {
+    min-height: 8rem;
+  }
+
+  .inspectorBoundary strong {
+    color: var(--color-text-primary);
+  }
+
+  @media (max-width: 68rem) {
+    .contentWithInspector {
+      grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+    }
+  }
+
+  @media (max-width: 56rem) {
+    .contentWithInspector {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

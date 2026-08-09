@@ -10,7 +10,7 @@ import {
 import { createHttpTransport } from "../../lib/api/http-transport"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
-import { createGeneratedStreamContractAdapter, asCanonicalBoardId } from "../../lib/sync"
+import { createGeneratedStreamContractAdapter, asCanonicalBoardId, type SyncTelemetryEntry } from "../../lib/sync"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { BoardView } from "./BoardView"
 import {
@@ -20,7 +20,7 @@ import {
   type BoardViewState,
 } from "./types"
 import { toBoardViewModel } from "./board-adapter"
-import { boardSyncStatusForTelemetry } from "./board-live-state"
+import { boardSyncStatusForTelemetry, subscribeBrowserConnectivity } from "./board-live-state"
 import {
   acquireBoardSession,
   bindBoardResourceIdentity,
@@ -37,6 +37,12 @@ export interface BoardLiveProps {
   readonly runtime: WebRuntimeConfig
   readonly route: BoardRoute
   readonly onNavigate: (target: AppNavigationTarget, options?: { replace?: boolean }) => void | Promise<unknown>
+  /** Keep the canonical session mounted while Explorer owns the visible route. */
+  readonly renderBoard?: boolean
+  /** Existing fenced telemetry seam for Explorer/Events invalidation. */
+  readonly onSessionTelemetry?: (entry: SyncTelemetryEntry) => void
+  /** Propagate browser connectivity changes to the App-level Explorer status. */
+  readonly onSyncStatusChange?: (status: BoardSyncStatus) => void
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string): BoardReadResource {
@@ -108,7 +114,7 @@ function retainResourceKey(resources: Map<string, BoardReadResource>, resource: 
   resources.set(resource.identityKey, resource)
 }
 
-export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
+export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSessionTelemetry, onSyncStatusChange }: BoardLiveProps) {
   const preferences = usePreferences()
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
@@ -131,6 +137,10 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
   const [retryVersion, setRetryVersion] = useState(0)
   const [state, setState] = useState<BoardViewState>({ kind: "loading" })
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
+  const reportSyncStatus = useCallback((status: BoardSyncStatus) => {
+    setSyncStatus(status)
+    onSyncStatusChange?.(status)
+  }, [onSyncStatusChange])
 
   // This render-time fence closes the A → B gap before effects have a chance to run.
   activeContextRef.current = contextKey
@@ -326,6 +336,7 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
           ) return
           const nextStatus = boardSyncStatusForTelemetry(entry.type)
           if (nextStatus !== null) setSyncStatus(nextStatus)
+          onSessionTelemetry?.(entry)
         },
       )
     } catch {
@@ -341,22 +352,17 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
         sessionRetryRef.current = null
       }
     }
-  }, [canonicalBoardId, contextKey, route.kind, routeBoardSlug, runtime, selector, visibleStateKind])
+  }, [canonicalBoardId, contextKey, onSessionTelemetry, route.kind, routeBoardSlug, runtime, selector, visibleStateKind])
 
   useEffect(() => {
-    if (visibleStateKind !== "ready") return
-    const onOffline = () => setSyncStatus("stale")
+    const onOffline = () => reportSyncStatus("offline")
     const onOnline = () => {
-      setSyncStatus("recovering")
+      reportSyncStatus("recovering")
       sessionRetryRef.current?.()
     }
-    window.addEventListener("offline", onOffline)
-    window.addEventListener("online", onOnline)
-    return () => {
-      window.removeEventListener("offline", onOffline)
-      window.removeEventListener("online", onOnline)
-    }
-  }, [contextKey, visibleStateKind])
+    if (typeof window !== "undefined" && !window.navigator.onLine) onOffline()
+    return subscribeBrowserConnectivity(window, onOffline, onOnline)
+  }, [contextKey, reportSyncStatus])
 
   const retry = useCallback(() => {
     setSyncStatus("recovering")
@@ -364,6 +370,8 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
     retryRequestedRef.current = true
     setRetryVersion((version) => version + 1)
   }, [])
+
+  if (!renderBoard) return null
 
   return (
     <BoardView

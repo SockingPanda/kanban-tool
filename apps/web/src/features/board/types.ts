@@ -136,7 +136,7 @@ export type BoardViewState =
   | { readonly kind: "offline"; readonly message?: string }
   | { readonly kind: "ready"; readonly model: BoardViewModel }
 
-export type BoardSyncStatus = "connecting" | "live" | "stale" | "recovering" | "circuit-open"
+export type BoardSyncStatus = "connecting" | "live" | "stale" | "recovering" | "circuit-open" | "offline"
 
 export interface BoardMessages {
   readonly boardEyebrow: string

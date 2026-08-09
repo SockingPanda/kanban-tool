@@ -87,6 +87,13 @@ describe("BoardView", () => {
     expect(markup).toContain("1 / 2")
   })
 
+  test("提供选择回调时将任务标题暴露为 Inspector opener", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} onSelectTask={vi.fn()} />)
+
+    expect(markup).toContain("<button")
+    expect(markup).toContain("先显示的任务")
+  })
+
   test("遇到没有 server column 的非空 status 时 fail closed", () => {
     const modelWithOrphan = {
       ...model,

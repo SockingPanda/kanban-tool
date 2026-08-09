@@ -7,6 +7,7 @@ describe("Board live telemetry presentation", () => {
     expect(boardSyncStatusForTelemetry("connection-live")).toBe("live")
     expect(boardSyncStatusForTelemetry("stalled")).toBe("stale")
     expect(boardSyncStatusForTelemetry("transport-failure")).toBe("stale")
+    expect(boardSyncStatusForTelemetry("detached-async-failure")).toBe("stale")
     expect(boardSyncStatusForTelemetry("protocol-anomaly")).toBe("stale")
     expect(boardSyncStatusForTelemetry("poll-failure")).toBe("stale")
     expect(boardSyncStatusForTelemetry("recovery-start")).toBe("recovering")

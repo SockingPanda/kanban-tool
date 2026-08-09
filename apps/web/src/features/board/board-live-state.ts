@@ -19,6 +19,7 @@ export function boardSyncStatusForTelemetry(type: string): BoardSyncStatus | nul
     case "recovery-failure":
     case "poll-failure":
     case "poll-protocol-anomaly":
+    case "detached-async-failure":
       return "stale"
     case "circuit-open":
       return "circuit-open"

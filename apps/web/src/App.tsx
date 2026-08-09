@@ -239,6 +239,7 @@ function RuntimeThemedShell() {
               onNavigate={router.navigate}
               renderBoard={liveBoardVisible}
               onSessionTelemetry={onSessionTelemetry}
+              onSyncStatusChange={setSyncStatus}
             />
           ) : null}
         </ProductShell>

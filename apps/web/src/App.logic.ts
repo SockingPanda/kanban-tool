@@ -1,7 +1,7 @@
 import { mergeBoardEvents, type ExplorerEvent } from "./lib/api/explorer-read-model"
-import { knownSseEventKinds } from "./lib/api/generated/sse"
-import { classifyEvent } from "./lib/sync/invalidation"
-import type { CanonicalBoardId, QueryRoot } from "./lib/sync/contracts"
+import { createGeneratedStreamContractAdapter } from "./lib/sync/generated-adapter"
+import { classifyEvent, fullRefetchPlan } from "./lib/sync/invalidation"
+import type { CanonicalBoardId, InvalidationPlan, QueryRoot, ValidatedBusinessEvent } from "./lib/sync/contracts"
 
 const explorerBoundaryTelemetry = new Set([
   "recovery-complete",
@@ -37,23 +37,9 @@ const inspectorRoots = new Set<QueryRoot>([
   "task-label-suggestions",
 ])
 const runRoots = new Set<QueryRoot>(["task-runs", "task-run-log"])
+const generatedStreamAdapter = createGeneratedStreamContractAdapter()
 
-/** Project an existing server invalidation plan onto mounted Explorer views. */
-export function explorerEventInvalidation(event: ExplorerEvent, boardId: CanonicalBoardId): ExplorerEventInvalidation {
-  const known = knownSseEventKinds.some((kind) => kind === event.kind)
-  const plan = classifyEvent({
-    id: event.id,
-    eventId: event.event_id,
-    boardId,
-    taskId: event.task_id,
-    runId: event.run_id,
-    kind: event.kind,
-    createdAt: event.created_at,
-    raw: event,
-    scope: { taskId: event.task_id },
-    canonicalFingerprint: event.event_id,
-    known,
-  })
+function projectExplorerInvalidation(plan: InvalidationPlan): ExplorerEventInvalidation {
   const roots = new Set(plan.targets.map((target) => target.root))
   return {
     board: plan.fullRefetch || [...boardRoots].some((root) => roots.has(root)),
@@ -61,6 +47,25 @@ export function explorerEventInvalidation(event: ExplorerEvent, boardId: Canonic
     runs: plan.fullRefetch || [...runRoots].some((root) => roots.has(root)),
     fullRefetch: plan.fullRefetch,
   }
+}
+
+function validatedEventForExplorer(event: ExplorerEvent, boardId: CanonicalBoardId): ValidatedBusinessEvent | null {
+  const envelope = generatedStreamAdapter.parsePollingEnvelope(event)
+  if (envelope.status !== "valid" || envelope.envelope.boardId !== boardId) return null
+  const business = generatedStreamAdapter.validateBusiness(envelope.envelope)
+  if (business.status === "invalid" || business.event.boardId !== boardId) return null
+  return business.event
+}
+
+/** Rebuild the canonical plan from the generated event payload before projecting it. */
+export function explorerEventInvalidationPlan(event: ExplorerEvent, boardId: CanonicalBoardId): InvalidationPlan {
+  const validated = validatedEventForExplorer(event, boardId)
+  return validated === null ? fullRefetchPlan(event.kind, "unknown", boardId) : classifyEvent(validated)
+}
+
+/** Project an existing server invalidation plan onto mounted Explorer views. */
+export function explorerEventInvalidation(event: ExplorerEvent, boardId: CanonicalBoardId): ExplorerEventInvalidation {
+  return projectExplorerInvalidation(explorerEventInvalidationPlan(event, boardId))
 }
 
 function stableEventValue(value: unknown): unknown {

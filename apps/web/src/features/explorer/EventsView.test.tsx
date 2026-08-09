@@ -34,7 +34,7 @@ describe("EventsView", () => {
     const empty = renderToStaticMarkup(<EventsPresentation locale="zh" taskId={null} kindFilter="" state={{ ...ready, data: { ...model, events: [], meta: { ...model.meta, count: 0, nextAfter: 0 } } }} online onRefresh={vi.fn()} />)
     const error = renderToStaticMarkup(<EventsPresentation locale="en" taskId={null} kindFilter="" state={{ data: null, loading: false, error: new Error("boom"), stale: false }} online onRefresh={vi.fn()} />)
     const offline = renderToStaticMarkup(<EventsPresentation locale="en" taskId={null} kindFilter="" state={{ data: null, loading: false, error: null, stale: false }} online={false} onRefresh={vi.fn()} />)
-    const stale = renderToStaticMarkup(<EventsPresentation locale="zh" taskId="t_1" kindFilter="" state={{ ...ready, stale: true, error: new Error("stale") }} online onRefresh={vi.fn()} />)
+    const stale = renderToStaticMarkup(<EventsPresentation locale="zh" taskId="t_1" kindFilter="" state={{ ...ready, data: { ...model, taskId: "t_1" }, stale: true, error: new Error("stale") }} online onRefresh={vi.fn()} />)
 
     expect(loading).toContain('data-testid="events-loading"')
     expect(empty).toContain('data-testid="events-empty"')
@@ -98,6 +98,22 @@ describe("EventsView", () => {
     )
 
     expect(markup).toContain('data-testid="events-loading"')
+    expect(markup).not.toContain('data-testid="event-row"')
+  })
+
+  test("does not present a stale board snapshot as task-filtered data", () => {
+    const markup = renderToStaticMarkup(
+      <EventsPresentation
+        locale="en"
+        taskId="t_2"
+        kindFilter=""
+        state={{ ...ready, stale: true, error: new Error("task read failed") }}
+        online
+        onRefresh={vi.fn()}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="events-error"')
     expect(markup).not.toContain('data-testid="event-row"')
   })
 })

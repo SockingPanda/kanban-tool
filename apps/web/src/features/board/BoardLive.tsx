@@ -41,6 +41,8 @@ export interface BoardLiveProps {
   readonly renderBoard?: boolean
   /** Existing fenced telemetry seam for Explorer/Events invalidation. */
   readonly onSessionTelemetry?: (entry: SyncTelemetryEntry) => void
+  /** Propagate browser connectivity changes to the App-level Explorer status. */
+  readonly onSyncStatusChange?: (status: BoardSyncStatus) => void
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string): BoardReadResource {
@@ -112,7 +114,7 @@ function retainResourceKey(resources: Map<string, BoardReadResource>, resource: 
   resources.set(resource.identityKey, resource)
 }
 
-export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSessionTelemetry }: BoardLiveProps) {
+export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSessionTelemetry, onSyncStatusChange }: BoardLiveProps) {
   const preferences = usePreferences()
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
@@ -135,6 +137,10 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   const [retryVersion, setRetryVersion] = useState(0)
   const [state, setState] = useState<BoardViewState>({ kind: "loading" })
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
+  const reportSyncStatus = useCallback((status: BoardSyncStatus) => {
+    setSyncStatus(status)
+    onSyncStatusChange?.(status)
+  }, [onSyncStatusChange])
 
   // This render-time fence closes the A → B gap before effects have a chance to run.
   activeContextRef.current = contextKey
@@ -350,18 +356,19 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
 
   useEffect(() => {
     if (visibleStateKind !== "ready") return
-    const onOffline = () => setSyncStatus("stale")
+    const onOffline = () => reportSyncStatus("offline")
     const onOnline = () => {
-      setSyncStatus("recovering")
+      reportSyncStatus("recovering")
       sessionRetryRef.current?.()
     }
+    if (typeof window !== "undefined" && !window.navigator.onLine) onOffline()
     window.addEventListener("offline", onOffline)
     window.addEventListener("online", onOnline)
     return () => {
       window.removeEventListener("offline", onOffline)
       window.removeEventListener("online", onOnline)
     }
-  }, [contextKey, visibleStateKind])
+  }, [contextKey, reportSyncStatus, visibleStateKind])
 
   const retry = useCallback(() => {
     setSyncStatus("recovering")

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import { asCanonicalBoardId } from "./lib/sync/contracts"
-import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation } from "./App.logic"
+import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation, explorerEventInvalidationPlan } from "./App.logic"
 import type { ExplorerEvent } from "./lib/api/explorer-read-model"
 
 const event = (id: number, eventId = `event-${id}`): ExplorerEvent => ({
@@ -48,9 +48,55 @@ describe("Explorer invalidation boundary", () => {
   })
 
   test("projects event kinds to mounted Explorer targets", () => {
-    const comment = explorerEventInvalidation({ ...event(3), task_id: "t_3", kind: "task.comment.created" }, asCanonicalBoardId("b_default"))
+    const comment = explorerEventInvalidation({
+      ...event(3),
+      task_id: "t_3",
+      kind: "task.comment.created",
+      payload: { comment_id: "comment-3", kind: "note", author_type: "user", agent_type: null },
+    }, asCanonicalBoardId("b_default"))
     expect(comment.board).toBe(false)
     expect(comment.inspector).toBe(true)
     expect(comment.runs).toBe(false)
+  })
+
+  test("derives dependency parent scope through the generated adapter", () => {
+    const plan = explorerEventInvalidationPlan({
+      ...event(4),
+      task_id: "child-task",
+      kind: "dependency.added",
+      payload: { parent_task_id: "parent-task" },
+    }, asCanonicalBoardId("b_default"))
+    expect(plan.fullRefetch).toBe(false)
+    expect(plan.targets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ root: "task-detail", taskId: "parent-task" }),
+      expect.objectContaining({ root: "task-dependencies", taskId: "parent-task" }),
+      expect.objectContaining({ root: "task-neighborhood", taskId: "parent-task" }),
+    ]))
+  })
+
+  test("derives linked step scope without falling back to a global refetch", () => {
+    const plan = explorerEventInvalidationPlan({
+      ...event(5),
+      task_id: "parent-task",
+      kind: "task.step.updated",
+      payload: { step_id: "step-5", linked_task_id: "linked-task", position: 1, required: true, status: "todo" },
+    }, asCanonicalBoardId("b_default"))
+    expect(plan.fullRefetch).toBe(false)
+    expect(plan.targets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ root: "task-neighborhood", taskId: "linked-task" }),
+    ]))
+  })
+
+  test("derives signal scope while keeping board projections untouched", () => {
+    const plan = explorerEventInvalidationPlan({
+      ...event(6),
+      kind: "signal.recorded",
+      payload: { signal_id: "signal-6", observation_id: "observation-6", kind: "quality", status: "open" },
+    }, asCanonicalBoardId("b_default"))
+    expect(plan.fullRefetch).toBe(false)
+    expect(plan.targets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ root: "signal", signalId: "signal-6" }),
+    ]))
+    expect(plan.targets.some((target) => ["columns", "tasks", "stats", "board-task-map"].includes(target.root))).toBe(false)
   })
 })

@@ -190,7 +190,7 @@ export function EventsPresentation({
   const copy = copies[locale]
   const error = state.error instanceof Error ? state.error : null
   const offline = !online || errorKind(error) === "offline"
-  const scopedData = state.data && (taskId === null || state.data.taskId === taskId || (state.stale && state.data.taskId === null)) ? state.data : null
+  const scopedData = state.data && (taskId === null || state.data.taskId === taskId) ? state.data : null
 
   if (!scopedData && (state.loading || !state.error) && !offline) {
     return <section className={styles.state} data-testid="events-loading" role="status" aria-labelledby="events-loading-heading"><h2 id="events-loading-heading">{copy.title}</h2><p>{copy.loading}</p></section>

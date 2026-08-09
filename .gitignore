@@ -16,6 +16,7 @@ apps/desktop/src-tauri/gen/
 # Local browser automation artifacts
 .playwright-cli/
 output/playwright/
+output/release/
 apps/desktop/src-tauri/binaries/
 apps/desktop/src-tauri/bin/
 apps/desktop/src-tauri/bin/kanban

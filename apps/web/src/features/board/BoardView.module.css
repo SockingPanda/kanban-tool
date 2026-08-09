@@ -40,6 +40,10 @@
     min-width: 0;
   }
 
+  .boardContent {
+    min-width: 0;
+  }
+
   .header h1,
   .column h2,
   .emptyBoard h2 {

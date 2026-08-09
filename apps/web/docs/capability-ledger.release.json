@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "stage": "stage09-release-proof-09A",
+  "base_revision": "311ef2fdbf238bee8b66e715cab0001df7cd186d",
+  "rows": [
+    { "id": "shell.runtime", "status": "ready", "flow": "apps/web/tests/release-proof.spec.ts#shell.runtime", "chromium": "full", "firefox": "key", "requires_real_host": true },
+    { "id": "task.collection", "status": "ready", "flow": "apps/web/tests/release-proof.spec.ts#task.collection", "chromium": "full", "firefox": "key", "requires_real_host": true },
+    { "id": "board.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "list.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "map.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "runs.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "events.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "signals.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "ontology.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "health.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "maintenance.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "settings.view", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "task.detail", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "task.create", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "task.transition", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "task.comments", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "task.dependencies", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "task.steps", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "task.labels", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "task.attachments", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "desktop.host", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "desktop.lifecycle", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "desktop.package", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true },
+    { "id": "desktop.smoke", "status": "pending", "flow": null, "chromium": "pending", "firefox": "pending", "requires_real_host": true }
+  ],
+  "gates": {
+    "real_host": "ready",
+    "axe": "pending",
+    "visual": "pending",
+    "performance": "pending",
+    "functional_2k": "pending",
+    "stress_5k": "pending",
+    "package": "pending"
+  }
+}

@@ -473,7 +473,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
       {controller?.isMutationPending ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</p> : null}
       {controller ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</p> : null}
-      <div id={`${id}-columns`} tabIndex={-1}>
+      <div className={styles.boardContent} id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (
           <BoardColumns model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} onSelectTask={onSelectTask} />
         ) : (

@@ -271,6 +271,7 @@ describe("BoardView", () => {
   test("键盘可到达列 section、heading 和横向滚动 region", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
 
+    expect(markup).toMatch(/<div class="[^"]*boardContent[^"]*" id="astryx-board-columns"/)
     expect(markup).toContain('role="region"')
     expect(markup).toContain('aria-label="看板列内容"')
     expect(markup).toContain('role="region" aria-label="看板列内容" tabindex="0"')

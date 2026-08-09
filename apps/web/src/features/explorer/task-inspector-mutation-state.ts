@@ -41,6 +41,7 @@ export type InspectorMutationOperation =
   | "uploadAttachment"
   | "downloadAttachment"
   | "deleteAttachment"
+  | "suggestLabels"
 
 export interface TaskInspectorMutationScope {
   /** Runtime/session + canonical board/task identity. */
@@ -164,6 +165,7 @@ export interface TaskInspectorMutationHandlers {
   uploadAttachment(input: InspectorUploadAttachmentInput): Promise<void>
   downloadAttachment(input: InspectorDownloadAttachmentInput | string): Promise<DownloadedAttachment | null>
   deleteAttachment(input: InspectorDeleteAttachmentInput | string): Promise<void>
+  suggestLabels(query?: InspectorSuggestTaskLabelsQuery): Promise<ApiSuggestTaskLabelsResponseContract | null>
 }
 
 export interface TaskInspectorMutationError {
@@ -177,7 +179,7 @@ export interface TaskInspectorMutationError {
 }
 
 export type TaskInspectorMutationRetryIntent =
-  | { readonly operation: "reload"; readonly taskId: string }
+  | { readonly operation: "reload"; readonly taskId: string; readonly event?: TaskInspectorMutationCommitted }
   | { readonly operation: "saveTask"; readonly taskId: string; readonly input: InspectorSaveTaskInput }
   | { readonly operation: "transition"; readonly taskId: string; readonly command: InspectorTransitionCommand }
   | { readonly operation: "addDependency"; readonly taskId: string; readonly parentTaskId: string }
@@ -192,6 +194,7 @@ export type TaskInspectorMutationRetryIntent =
   | { readonly operation: "uploadAttachment"; readonly taskId: string; readonly input: InspectorUploadAttachmentInput }
   | { readonly operation: "downloadAttachment"; readonly taskId: string; readonly attachmentId: string }
   | { readonly operation: "deleteAttachment"; readonly taskId: string; readonly attachmentId: string }
+  | { readonly operation: "suggestLabels"; readonly taskId: string; readonly query?: InspectorSuggestTaskLabelsQuery }
 
 export interface TaskInspectorMutationSnapshot {
   readonly scope: TaskInspectorMutationScope

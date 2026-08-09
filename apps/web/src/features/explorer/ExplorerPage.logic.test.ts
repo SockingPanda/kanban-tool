@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import { ExplorerReadError } from "../../lib/api/explorer-read-model"
-import { asyncReadToken, shouldClearMapTaskFromInspector, visibleAsyncReadState } from "./ExplorerPage.logic"
+import { asyncReadToken, inspectorRelationsView, shouldClearMapTaskFromInspector, visibleAsyncReadState } from "./ExplorerPage.logic"
 
 describe("ExplorerPage task URL authority", () => {
   test("clears only a typed task-not-found for the current map selection", () => {
@@ -36,5 +36,35 @@ describe("ExplorerPage task URL authority", () => {
 
     expect(visibleAsyncReadState(readyA, retryToken, true)).toEqual({ data: "task-a", error: null, loading: true })
     expect(visibleAsyncReadState(failedA, retryToken, true)).toEqual({ data: "task-a", error: null, loading: true })
+  })
+
+  test("dedupes relation rows at the adapter boundary while preserving canonical order", () => {
+    const task = (id: string, title = id) => ({ id, ref: `default#${id}`, title, status: "todo" as const })
+    const view = inspectorRelationsView({
+      comments: [
+        { id: "c_1", author: "alice", kind: "note", body: "first", created_at: 1, metadata: {} },
+        { id: "c_1", author: "alice", kind: "note", body: "duplicate", created_at: 2, metadata: {} },
+        { id: "c_2", author: "bob", kind: "signal", body: "second", created_at: 3, metadata: {} },
+      ],
+      dependencies: {
+        parents: [task("t_parent", "first parent"), task("t_parent", "duplicate parent")],
+        children: [task("t_child", "first child"), task("t_child", "duplicate child")],
+      },
+      steps: {
+        steps: [
+          { id: "s_1", title: "first step", body: null, required: true, status: "todo", linked_task: null },
+          { id: "s_1", title: "duplicate step", body: null, required: true, status: "todo", linked_task: null },
+          { id: "s_2", title: "second step", body: null, required: false, status: "done", linked_task: null },
+        ],
+        execution_plan: { state: "planned", reason: null },
+      },
+    })
+
+    expect(view.comments.map((comment) => comment.id)).toEqual(["c_1", "c_2"])
+    expect(view.comments[0]?.body).toBe("first")
+    expect(view.dependencies.parents.map((parent) => parent.id)).toEqual(["t_parent"])
+    expect(view.dependencies.children.map((child) => child.id)).toEqual(["t_child"])
+    expect(view.steps.steps.map((step) => step.id)).toEqual(["s_1", "s_2"])
+    expect(view.steps.steps[0]?.title).toBe("first step")
   })
 })

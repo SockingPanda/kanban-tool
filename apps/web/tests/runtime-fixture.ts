@@ -97,75 +97,8 @@ async function fulfillJSON(route: Route, payload: unknown): Promise<void> {
   })
 }
 
-/**
- * Install coherent board API fixtures and a real fetch-backed SSE stream.
- * The production WebSyncController and FetchSseTransport stay untouched.
- */
-export async function installBoardFixture(page: Page, options: BoardFixtureOptions = {}): Promise<BoardFixture> {
-  await installRuntimeFixture(page)
-  const apiRequests: string[] = []
-  let readyTaskTitle = "Ready task"
-
-  await page.route("**/api/v1/**", async (route) => {
-    const url = new URL(route.request().url())
-    apiRequests.push(`${url.pathname}${url.search}`)
-
-    if (url.pathname === "/api/v1/boards") {
-      await fulfillJSON(route, options.emptyBoards ? { data: [] } : {
-        data: [{
-          id: BOARD_ID,
-          slug: BOARD_SLUG,
-          name: "Default Board",
-          description: null,
-          created_at: 1,
-          updated_at: 2,
-          archived_at: null,
-        }],
-      })
-      return
-    }
-
-    if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/columns`) {
-      await fulfillJSON(route, {
-        data: TASK_STATUSES.map((status, index) => ({
-          id: `col_${status}`,
-          board_id: BOARD_ID,
-          status,
-          title: status[0]?.toUpperCase() + status.slice(1),
-          position: index + 1,
-          hidden: status === "archived",
-          wip_limit: null,
-          created_at: 1,
-          updated_at: 2,
-        })),
-      })
-      return
-    }
-
-    if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/tasks/by-status`) {
-      const status = url.searchParams.get("status") as TaskStatus | null
-      const limit = Number(url.searchParams.get("limit") ?? 1000)
-      const offset = Number(url.searchParams.get("offset") ?? 0)
-      const validStatus = status !== null && TASK_STATUSES.includes(status)
-      const tasks = validStatus && offset === 0
-        ? [task(status, TASK_STATUSES.indexOf(status) + 1, status === "ready" ? readyTaskTitle : `${status} task`)]
-        : []
-      await fulfillJSON(route, {
-        data: { statuses: [{ status: validStatus ? status : "ready", tasks, page: { limit, offset, total: tasks.length } }] },
-        meta: { limit, offset },
-      })
-      return
-    }
-
-    if (url.pathname === "/api/v1/events") {
-      const after = Number(url.searchParams.get("after") ?? 0)
-      await fulfillJSON(route, { data: [], meta: { next_after: Number.isSafeInteger(after) ? after : 0 } })
-      return
-    }
-
-    await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "not_found", message: "fixture route not found" } }) })
-  })
-
+/** Install a persistent fetch-backed SSE stream before page navigation. */
+export async function installPersistentSse(page: Page): Promise<void> {
   await page.addInitScript(() => {
     let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
     let streamConnectionCount = 0
@@ -228,6 +161,77 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
       Object.defineProperty(response, "url", { configurable: true, value: target.toString() })
       return response
     }
+  })
+}
+
+/**
+ * Install coherent board API fixtures and a real fetch-backed SSE stream.
+ * The production WebSyncController and FetchSseTransport stay untouched.
+ */
+export async function installBoardFixture(page: Page, options: BoardFixtureOptions = {}): Promise<BoardFixture> {
+  await installRuntimeFixture(page)
+  await installPersistentSse(page)
+  const apiRequests: string[] = []
+  let readyTaskTitle = "Ready task"
+
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url())
+    apiRequests.push(`${url.pathname}${url.search}`)
+
+    if (url.pathname === "/api/v1/boards") {
+      await fulfillJSON(route, options.emptyBoards ? { data: [] } : {
+        data: [{
+          id: BOARD_ID,
+          slug: BOARD_SLUG,
+          name: "Default Board",
+          description: null,
+          created_at: 1,
+          updated_at: 2,
+          archived_at: null,
+        }],
+      })
+      return
+    }
+
+    if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/columns`) {
+      await fulfillJSON(route, {
+        data: TASK_STATUSES.map((status, index) => ({
+          id: `col_${status}`,
+          board_id: BOARD_ID,
+          status,
+          title: status[0]?.toUpperCase() + status.slice(1),
+          position: index + 1,
+          hidden: status === "archived",
+          wip_limit: null,
+          created_at: 1,
+          updated_at: 2,
+        })),
+      })
+      return
+    }
+
+    if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/tasks/by-status`) {
+      const status = url.searchParams.get("status") as TaskStatus | null
+      const limit = Number(url.searchParams.get("limit") ?? 1000)
+      const offset = Number(url.searchParams.get("offset") ?? 0)
+      const validStatus = status !== null && TASK_STATUSES.includes(status)
+      const tasks = validStatus && offset === 0
+        ? [task(status, TASK_STATUSES.indexOf(status) + 1, status === "ready" ? readyTaskTitle : `${status} task`)]
+        : []
+      await fulfillJSON(route, {
+        data: { statuses: [{ status: validStatus ? status : "ready", tasks, page: { limit, offset, total: tasks.length } }] },
+        meta: { limit, offset },
+      })
+      return
+    }
+
+    if (url.pathname === "/api/v1/events") {
+      const after = Number(url.searchParams.get("after") ?? 0)
+      await fulfillJSON(route, { data: [], meta: { next_after: Number.isSafeInteger(after) ? after : 0 } })
+      return
+    }
+
+    await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "not_found", message: "fixture route not found" } }) })
   })
 
   async function emit(frame: string): Promise<void> {

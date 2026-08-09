@@ -1,10 +1,15 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react"
+import { Component, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react"
 
 import { BoardView } from "../board/BoardView"
-import type { BoardViewModel } from "../board/types"
+import { MutationDialog, MutationNotice } from "../board/BoardTaskMutations"
+import { boardMessagesForLocale, type BoardViewModel } from "../board/types"
+import { useBoardTaskMutationController } from "../board/task-mutation-controller"
+import { toBoardViewModel } from "../board/board-adapter"
 import type { BoardSyncStatus } from "../board/types"
+import type { BoardTaskCanonicalReloadHandler, BoardTaskMutationSurface } from "../board/task-mutation-state"
 import {
   ExplorerReadError,
+  loadTaskInspectorAttachments,
   loadTaskInspector,
   loadTaskInspectorEvents,
   loadTaskInspectorNeighborhood,
@@ -16,14 +21,18 @@ import {
   type TaskInspectorReadModel,
   type TaskListQueryState,
 } from "../../lib/api/explorer-read-model"
+import { createAttachmentDownloadClient } from "../../lib/api/attachment-download"
 import type { CanonicalBoardSlug } from "../../lib/board-slug"
 import type { Locale } from "../../lib/preferences"
-import type { BoardReadModel } from "../../lib/api/board-read-model"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
 import { restoreExplorerFocus, type ExplorerFocusElement, type ExplorerFocusSnapshot } from "../../lib/explorer-focus"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
+import { TaskInspectorRelationsPanel } from "./TaskInspectorRelationsPanel"
+import { TaskInspectorAssetsPanel, type InspectorAssetAttachment, type InspectorAssetLabel } from "./TaskInspectorAssetsPanel"
+import { inspectorMutationKey, type TaskInspectorMutationHandlers, type TaskInspectorMutationSnapshot, type TaskInspectorMutationSurface } from "./task-inspector-mutation-state"
+import { useTaskInspectorMutationController } from "./task-inspector-mutation-controller"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import { TaskRunsView } from "./TaskRunsView"
 import {
@@ -32,6 +41,7 @@ import {
   type AsyncReadInternalState,
   type AsyncReadState,
   visibleAsyncReadState,
+  inspectorRelationsView,
 } from "./ExplorerPage.logic"
 import { parseTaskMapUrlState, serializeTaskMapUrlState, type TaskMapUrlState } from "./TaskMapView.logic"
 import { EventsView } from "./EventsView"
@@ -83,6 +93,8 @@ export interface ExplorerPageProps {
   readonly eventsRefreshRevision?: number
   readonly eventsBatch?: BoardEventsBatch | null
   readonly syncStatus?: BoardSyncStatus
+  readonly taskMutations?: BoardTaskMutationSurface
+  readonly onVisibleCanonicalReloadChange?: (reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => void
 }
 
 const MAX_EVENT_KIND_FILTER_LENGTH = 128
@@ -175,9 +187,10 @@ function useAsyncRead<T>(
   load: (signal: AbortSignal) => Promise<T>,
   refreshRevision = 0,
   online = true,
-): AsyncReadState<T> & { readonly retry: () => void } {
+): AsyncReadState<T> & { readonly retry: () => void; readonly reload: () => Promise<void> } {
   const loadRef = useRef(load)
   loadRef.current = load
+  const reloadWaitersRef = useRef<Array<{ readonly resolve: () => void; readonly reject: (error: unknown) => void }>>([])
   const [generation, setGeneration] = useState(0)
   const { identityKey, requestKey: baseRequestKey } = asyncReadToken(enabled, key, generation)
   // A session event/poll boundary is a new request for the same visible
@@ -192,8 +205,16 @@ function useAsyncRead<T>(
   }))
 
   useEffect(() => {
+    const reloadWaiters = reloadWaitersRef.current.splice(0)
+    const resolveReload = () => {
+      for (const waiter of reloadWaiters) waiter.resolve()
+    }
+    const rejectReload = (error: unknown) => {
+      for (const waiter of reloadWaiters) waiter.reject(error)
+    }
     if (!enabled) {
       setState({ data: null, error: null, loading: false, identityKey, requestKey })
+      rejectReload(new ExplorerReadError("anomaly", "当前读取未启用。"))
       return
     }
     if (!online) {
@@ -204,6 +225,7 @@ function useAsyncRead<T>(
         identityKey,
         requestKey,
       }))
+      rejectReload(new ExplorerReadError("offline", "当前离线，无法加载 Explorer 数据。"))
       return
     }
     const controller = new AbortController()
@@ -217,10 +239,15 @@ function useAsyncRead<T>(
     }))
     void loadRef.current(controller.signal).then(
       (data) => {
-        if (active) setState({ data, error: null, loading: false, identityKey, requestKey })
+        if (active) {
+          setState({ data, error: null, loading: false, identityKey, requestKey })
+          resolveReload()
+        }
       },
       (error: unknown) => {
-        if (active && !(error instanceof Error && error.name === "AbortError")) {
+        if (active && error instanceof Error && error.name === "AbortError") {
+          rejectReload(error)
+        } else if (active) {
           setState((current) => ({
             data: current.identityKey === identityKey ? current.data : null,
             error: error instanceof Error ? error : new Error(String(error)),
@@ -228,18 +255,31 @@ function useAsyncRead<T>(
             identityKey,
             requestKey,
           }))
+          rejectReload(error)
         }
       },
     )
     return () => {
       active = false
       controller.abort()
+      rejectReload(new ExplorerReadError("anomaly", "读取在当前 identity 下被取消。"))
     }
   }, [enabled, generation, identityKey, key, online, requestKey])
+
+  useEffect(() => () => {
+    const pending = reloadWaitersRef.current.splice(0)
+    for (const waiter of pending) waiter.reject(new ExplorerReadError("anomaly", "读取在当前 identity 下被卸载。"))
+  }, [])
+
+  const reload = useCallback(() => new Promise<void>((resolve, reject) => {
+    reloadWaitersRef.current.push({ resolve, reject })
+    setGeneration((current) => current + 1)
+  }), [])
 
   return {
     ...visibleAsyncReadState(state, { identityKey, requestKey }, enabled),
     retry: () => setGeneration((current) => current + 1),
+    reload,
   }
 }
 
@@ -279,34 +319,6 @@ function taskListRow(task: NonNullable<Awaited<ReturnType<typeof loadTaskListPag
   }
 }
 
-function boardViewModel(model: BoardReadModel): BoardViewModel {
-  const tasksByStatus: Record<string, BoardViewModel["tasksByStatus"][string]> = {}
-  for (const [status, tasks] of Object.entries(model.tasksByStatus)) {
-    tasksByStatus[status] = (tasks ?? []).map((task) => ({
-      id: task.id,
-      ref: task.ref,
-      title: task.title,
-      status: task.status,
-      position: task.position,
-      priority: boardPriority(task.priority),
-      assignee: task.assignee,
-      readiness: {
-        dependencyBlocked: task.dependency_blocked,
-        unfinishedParentCount: task.unfinished_parent_count,
-        executionPlanState: task.execution_plan_state,
-        requiredStepCount: task.required_step_count,
-        completedRequiredStepCount: task.completed_required_step_count,
-        optionalStepCount: task.optional_step_count,
-      },
-    }))
-  }
-  return {
-    board: { id: model.identity.canonicalBoardId, slug: model.identity.slug, name: model.identity.name },
-    columns: model.columns.map((column) => ({ id: column.id, status: column.status, title: column.title, position: column.position, hidden: column.hidden })),
-    tasksByStatus,
-  }
-}
-
 function dependencyView(task: NonNullable<TaskInspectorReadModel["dependencies"]["parents"]>[number]): InspectorDependency {
   return { id: task.id, ref: task.ref, title: task.title, status: task.status }
 }
@@ -327,6 +339,9 @@ function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewMod
       ref: task.ref,
       title: task.title,
       status: task.status,
+      lockVersion: task.lock_version,
+      scheduledAt: task.scheduled_at,
+      dueAt: task.due_at,
       priority: boardPriority(task.priority),
       description: task.description,
       statusReason: task.status_reason,
@@ -362,6 +377,31 @@ function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewMod
   }
 }
 
+const inspectorWriteOperations = [
+  "saveTask",
+  "transition",
+  "addDependency",
+  "removeDependency",
+  "createStep",
+  "linkStep",
+  "markPlanNotRequired",
+  "addLabel",
+  "removeLabel",
+  "applySuggestedLabel",
+  "addComment",
+  "uploadAttachment",
+  "deleteAttachment",
+] as const
+
+function inspectorUiSnapshot(snapshot: TaskInspectorMutationSnapshot | null, taskId: string | null): TaskInspectorMutationSnapshot | undefined {
+  if (snapshot === null || taskId === null) return undefined
+  const reloadKey = inspectorMutationKey("reload", taskId)
+  if (!snapshot.pending.has(reloadKey)) return snapshot
+  const pending = new Set(snapshot.pending)
+  for (const operation of inspectorWriteOperations) pending.add(inspectorMutationKey(operation, taskId))
+  return { ...snapshot, pending }
+}
+
 function InspectorBoundary({ loading, error, onRetry, copy }: { readonly loading: boolean; readonly error: Error | null; readonly onRetry: () => void; readonly copy: ExplorerCopy }) {
   if (loading) return <aside className={styles.inspectorBoundary} data-testid="task-inspector-loading" role="status"><h2>{copy.inspectorLoading}</h2></aside>
   if (error) {
@@ -369,6 +409,34 @@ function InspectorBoundary({ loading, error, onRetry, copy }: { readonly loading
     return <aside className={styles.inspectorBoundary} data-testid={offline ? "task-inspector-offline" : "task-inspector-error"} role={offline ? "status" : "alert"}><h2>{offline ? copy.inspectorOffline : copy.inspectorError}</h2><p>{error.message}</p><button type="button" onClick={onRetry}>{copy.retry}</button></aside>
   }
   return null
+}
+
+function InspectorAssetsReadOnlyFallback({
+  data,
+  attachments,
+  attachmentsLoading,
+  attachmentsError,
+  locale,
+}: {
+  readonly data: TaskInspectorReadModel
+  readonly attachments: readonly { readonly id: string; readonly filename: string }[]
+  readonly attachmentsLoading: boolean
+  readonly attachmentsError: Error | null
+  readonly locale: Locale
+}) {
+  const copy = locale === "en"
+    ? { title: "Labels & attachments", notice: "Mutation controls are unavailable; showing the loaded read-only snapshot.", labels: "Labels", attachments: "Attachments", loading: "Loading attachments…", none: "None", error: "Attachments could not be refreshed." }
+    : { title: "标签与附件", notice: "写入控件暂不可用；当前显示已加载的只读快照。", labels: "标签", attachments: "附件", loading: "正在加载附件…", none: "暂无", error: "附件刷新失败。" }
+  return (
+    <section className={styles.assetsReadOnlyFallback} data-testid="inspector-assets-readonly" aria-labelledby="inspector-assets-readonly-heading">
+      <h2 id="inspector-assets-readonly-heading">{copy.title}</h2>
+      <p className={styles.assetsReadOnlyMuted} role="status">{copy.notice}</p>
+      <h3>{copy.labels}</h3>
+      {data.task.labels.length > 0 ? <ul className={styles.assetsReadOnlyList}>{data.task.labels.map((label) => <li key={label.id}>{label.name}</li>)}</ul> : <p className={styles.assetsReadOnlyEmpty}>{copy.none}</p>}
+      <h3>{copy.attachments}</h3>
+      {attachmentsLoading ? <p className={styles.assetsReadOnlyMuted} role="status">{copy.loading}</p> : attachmentsError ? <p className={styles.assetsReadOnlyError} role="status">{copy.error}</p> : attachments.length > 0 ? <ul className={styles.assetsReadOnlyList}>{attachments.map((attachment) => <li key={attachment.id}>{attachment.filename}</li>)}</ul> : <p className={styles.assetsReadOnlyEmpty}>{copy.none}</p>}
+    </section>
+  )
 }
 
 function ExplorerTabs({ route, basePath, taskId, onNavigate, copy }: { readonly route: Extract<AppRoute, { kind: "board" }>; readonly basePath: string; readonly taskId: string | null; readonly onNavigate?: ExplorerPageProps["onNavigate"]; readonly copy: ExplorerCopy }) {
@@ -386,7 +454,7 @@ function ExplorerTabs({ route, basePath, taskId, onNavigate, copy }: { readonly 
   )
 }
 
-export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus }: ExplorerPageProps) {
+export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
   const { locale } = usePreferences()
   const copy = explorerCopies[locale]
   const view = route.view ?? "board"
@@ -402,11 +470,108 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
   const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })), boardRevision, online !== false)
   const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }), boardRevision, online !== false)
+  const listMutationModel = useMemo<BoardViewModel | null>(() => {
+    const board = listRead.data?.board
+    if (board === undefined) return null
+    return {
+      board: { id: board.id, slug: board.slug, name: board.name },
+      columns: [],
+      tasksByStatus: {},
+    }
+  }, [listRead.data])
+  const listMutationController = useBoardTaskMutationController(listMutationModel, taskMutations, [], boardMessagesForLocale(locale))
   const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }), boardRevision, online !== false)
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
   const inspectorIdentity = `${runtime.apiBaseUrl}\u0000${runtime.webBuildId}\u0000${inspectorKey}`
-  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
+  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false, includeAttachments: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
+  const attachmentsRead = useAsyncRead(showInspector, `${inspectorKey}\u0000attachments`, (signal) => taskId
+    ? loadTaskInspectorAttachments(runtime, route.boardSlug, taskId, { signal })
+    : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
+  const reloadInspector = inspectorRead.reload
+  const reloadAttachments = attachmentsRead.reload
+  const reloadVisibleInspector = useCallback(async () => {
+    if (!showInspector) return
+    await Promise.all([reloadInspector(), reloadAttachments()])
+  }, [reloadAttachments, reloadInspector, showInspector])
+  useLayoutEffect(() => {
+    if (!showInspector) {
+      onVisibleCanonicalReloadChange?.(undefined)
+      return
+    }
+    onVisibleCanonicalReloadChange?.(reloadVisibleInspector)
+    return () => onVisibleCanonicalReloadChange?.(undefined, reloadVisibleInspector)
+  }, [onVisibleCanonicalReloadChange, reloadVisibleInspector, showInspector])
   const inspectorModel = useMemo(() => inspectorRead.data ? inspectorViewModel(inspectorRead.data) : null, [inspectorRead.data])
+  const inspectorRelations = useMemo(() => inspectorRead.data ? inspectorRelationsView(inspectorRead.data) : null, [inspectorRead.data])
+  const attachmentDownload = useMemo(() => {
+    try {
+      return createAttachmentDownloadClient(runtime)
+    } catch {
+      return undefined
+    }
+  }, [runtime])
+  const inspectorMutationSurface = useMemo<TaskInspectorMutationSurface | undefined>(() => {
+    if (!taskId || !inspectorRead.data || taskMutations?.inspectorClient === undefined) return undefined
+    const client = taskMutations.inspectorClient
+    const scope = {
+      identity: inspectorIdentity,
+      boardId: inspectorRead.data.board.id,
+      taskId,
+    }
+    return {
+      scope,
+      client,
+      claimTokens: taskMutations.claimTokens,
+      attachmentDownload,
+      suggestTaskLabels: (requestTaskId, query, options) => client.suggestTaskLabels(requestTaskId, query, options),
+      onMutationCommitted: (event) => {
+        taskMutations.onMutationCommitted?.({
+          kind: event.kind === "transition" ? "transition" : "edit",
+          taskId: event.taskId,
+        })
+      },
+      onCanonicalReload: async (event) => {
+        await Promise.resolve(taskMutations.onCanonicalReload?.({
+          reason: "retry",
+          mutationKind: event.kind === "transition" ? "transition" : "edit",
+        }))
+      },
+    }
+  }, [attachmentDownload, inspectorIdentity, inspectorRead, taskId, taskMutations])
+  const inspectorMutationController = useTaskInspectorMutationController(inspectorMutationSurface)
+  const inspectorMutationHandlers = useMemo<TaskInspectorMutationHandlers | undefined>(() => {
+    if (inspectorMutationController === null) return undefined
+    return {
+      saveTask: inspectorMutationController.saveTask.bind(inspectorMutationController),
+      transition: inspectorMutationController.transition.bind(inspectorMutationController),
+      addDependency: inspectorMutationController.addDependency.bind(inspectorMutationController),
+      removeDependency: inspectorMutationController.removeDependency.bind(inspectorMutationController),
+      createStep: inspectorMutationController.createStep.bind(inspectorMutationController),
+      linkStep: inspectorMutationController.linkStep.bind(inspectorMutationController),
+      markPlanNotRequired: inspectorMutationController.markPlanNotRequired.bind(inspectorMutationController),
+      addLabel: inspectorMutationController.addLabel.bind(inspectorMutationController),
+      removeLabel: inspectorMutationController.removeLabel.bind(inspectorMutationController),
+      applySuggestedLabel: inspectorMutationController.applySuggestedLabel.bind(inspectorMutationController),
+      addComment: inspectorMutationController.addComment.bind(inspectorMutationController),
+      uploadAttachment: inspectorMutationController.uploadAttachment.bind(inspectorMutationController),
+      downloadAttachment: inspectorMutationController.downloadAttachment.bind(inspectorMutationController),
+      deleteAttachment: inspectorMutationController.deleteAttachment.bind(inspectorMutationController),
+      suggestLabels: inspectorMutationController.suggestLabels.bind(inspectorMutationController),
+      retry: inspectorMutationController.retry.bind(inspectorMutationController),
+    }
+  }, [inspectorMutationController])
+  const inspectorMutationSnapshot = useMemo(
+    () => inspectorUiSnapshot(inspectorMutationController?.snapshot ?? null, taskId),
+    [inspectorMutationController?.snapshot, taskId],
+  )
+  const relationOwner = inspectorMutationHandlers !== undefined
+    && inspectorMutationSnapshot !== undefined
+    && inspectorRelations !== null
+    && taskId !== null
+    && inspectorRead.data !== null
+    ? { taskId, data: inspectorRead.data, relations: inspectorRelations, handlers: inspectorMutationHandlers, snapshot: inspectorMutationSnapshot }
+    : null
+  const relationPanelVisible = relationOwner !== null
 
   const navigate = useCallback((target: string, options?: { readonly replace?: boolean }) => {
     if (onNavigate) void onNavigate(target, options)
@@ -488,6 +653,20 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
       edges: neighborhood.edges.map((edge) => ({ id: edge.id, sourceTaskId: edge.source_task_id, targetTaskId: edge.target_task_id, kind: edge.kind })),
     }))
     : Promise.reject(new Error("Task Inspector 尚未选择任务")), [route.boardSlug, runtime, taskId])
+  const resolveInspectorTaskSelector = useCallback((selector: string): string | null => {
+    const value = selector.trim()
+    const boardResolved = taskMutations?.resolveTaskSelector?.(value)
+    if (boardResolved !== undefined && boardResolved !== null) return boardResolved
+    const model = inspectorRead.data
+    if (!model) return null
+    const candidates = [
+      model.task,
+      ...model.dependencies.parents,
+      ...model.dependencies.children,
+      ...model.steps.steps.flatMap((step) => step.linked_task ? [step.linked_task] : []),
+    ]
+    return candidates.find((candidate) => candidate.id === value || candidate.ref === value)?.id ?? null
+  }, [inspectorRead.data, taskMutations])
 
   const clearedTaskIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -516,20 +695,26 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         <main className={styles.primaryContent}>
           {view === "board" ? (
             boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
-              : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} />
+              : boardRead.data ? <BoardView state={{ kind: "ready", model: toBoardViewModel(boardRead.data) }} messages={boardMessagesForLocale(locale)} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} />
               : boardRead.error ? <div className={styles.boundary} data-testid={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "board-offline" : "board-error"} role={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "status" : "alert"}><h2>{boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? copy.boardOffline : copy.boardError}</h2><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>{copy.retry}</button></div> : null
           ) : null}
           {view === "list" ? (
-            <TaskListView
-              state={{ query: listQuery, meta: listRead.data?.meta ?? { offset: (listQuery.page - 1) * listQuery.limit, limit: listQuery.limit, total: 0 } }}
-              rows={listRead.data?.tasks.map(taskListRow) ?? []}
-              loading={listRead.loading}
-              error={listRead.error instanceof Error ? listRead.error : null}
-              onQueryChange={updateListQuery}
-              onSelectTask={selectTask}
-              onRetry={listRead.retry}
-              locale={locale}
-            />
+            <>
+              <TaskListView
+                state={{ query: listQuery, meta: listRead.data?.meta ?? { offset: (listQuery.page - 1) * listQuery.limit, limit: listQuery.limit, total: 0 } }}
+                rows={listRead.data?.tasks.map(taskListRow) ?? []}
+                loading={listRead.loading}
+                error={listRead.error instanceof Error ? listRead.error : null}
+                onQueryChange={updateListQuery}
+                onSelectTask={selectTask}
+                onRetry={listRead.retry}
+                onCreate={listMutationController?.openCreate}
+                isMutationPending={listMutationController?.isMutationPending}
+                locale={locale}
+              />
+              {listMutationController && listMutationController.dialog === null ? <MutationNotice controller={listMutationController} copy={boardMessagesForLocale(locale)} /> : null}
+              {listMutationController ? <MutationDialog controller={listMutationController} copy={boardMessagesForLocale(locale)} /> : null}
+            </>
           ) : null}
           {view === "map" ? (
             <TaskMapChunkBoundary locale={locale}>
@@ -568,7 +753,66 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
           ) : null}
         </main>
         {showInspector ? (
-          inspectorModel ? <TaskInspector key={inspectorIdentity} identity={inspectorIdentity} refreshRevision={inspectorRevision} model={inspectorModel} refreshError={inspectorRead.error instanceof Error ? inspectorRead.error.message : null} refreshOffline={inspectorRead.error instanceof ExplorerReadError && inspectorRead.error.kind === "offline"} online={online !== false} onRetry={inspectorRead.retry} onSelectTask={selectTask} locale={locale} onLoadRuns={loadInspectorRuns} onLoadEvents={loadInspectorEvents} onLoadNeighborhood={loadInspectorNeighborhood} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
+          inspectorModel ? (
+            <aside className={styles.inspectorStack}>
+              <TaskInspector
+                key={inspectorIdentity}
+                identity={inspectorIdentity}
+                refreshRevision={inspectorRevision}
+                model={inspectorModel}
+                refreshError={inspectorRead.error instanceof Error ? inspectorRead.error.message : null}
+                refreshOffline={inspectorRead.error instanceof ExplorerReadError && inspectorRead.error.kind === "offline"}
+                online={online !== false}
+                onRetry={inspectorRead.retry}
+                onSelectTask={selectTask}
+                locale={locale}
+                onLoadRuns={loadInspectorRuns}
+                onLoadEvents={loadInspectorEvents}
+                onLoadNeighborhood={loadInspectorNeighborhood}
+                mutationHandlers={inspectorMutationHandlers}
+                mutationSnapshot={inspectorMutationSnapshot}
+                hideReadOnlyRelations={relationPanelVisible}
+                claimToken={taskId ? taskMutations?.claimTokens?.get(taskId) ?? null : null}
+              />
+              {!relationPanelVisible && inspectorRead.data ? (
+                <InspectorAssetsReadOnlyFallback
+                  data={inspectorRead.data}
+                  attachments={attachmentsRead.data ?? []}
+                  attachmentsLoading={attachmentsRead.loading}
+                  attachmentsError={attachmentsRead.error instanceof Error ? attachmentsRead.error : null}
+                  locale={locale}
+                />
+              ) : null}
+              {relationOwner ? (
+                <>
+                  <TaskInspectorRelationsPanel
+                    taskId={relationOwner.taskId}
+                    comments={relationOwner.relations.comments}
+                    dependencies={relationOwner.relations.dependencies}
+                    steps={relationOwner.relations.steps}
+                    handlers={relationOwner.handlers}
+                    snapshot={relationOwner.snapshot}
+                    onSelectTask={selectTask}
+                    resolveTaskSelector={resolveInspectorTaskSelector}
+                    locale={locale}
+                  />
+                  <TaskInspectorAssetsPanel
+                    taskId={relationOwner.taskId}
+                    labels={relationOwner.data.task.labels as readonly InspectorAssetLabel[]}
+                    attachments={(attachmentsRead.data ?? []) as readonly InspectorAssetAttachment[]}
+                    suggestionResult={null}
+                    suggestionRequested={false}
+                    suggestionLoading={relationOwner.snapshot.pending.has(inspectorMutationKey("suggestLabels", relationOwner.taskId))}
+                    handlers={relationOwner.handlers}
+                    snapshot={relationOwner.snapshot}
+                    attachmentLoading={attachmentsRead.loading}
+                    attachmentError={attachmentsRead.error instanceof Error ? attachmentsRead.error.message : null}
+                    locale={locale}
+                  />
+                </>
+              ) : null}
+            </aside>
+          ) : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
         ) : null}
       </div>
     </section>

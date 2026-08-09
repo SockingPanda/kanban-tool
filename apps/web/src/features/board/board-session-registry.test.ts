@@ -55,7 +55,7 @@ function resource(
   } satisfies StreamContractAdapter
   return {
     selector,
-    transport: { get: vi.fn() },
+    transport: { get: vi.fn(), request: vi.fn(), requestBytes: vi.fn() },
     query,
     adapter,
     runtimeKey: runtimeIdentityKey(resourceRuntime),
@@ -101,6 +101,69 @@ describe("Board canonical session registry", () => {
     expect(activeBoardSessionCount()).toBe(0)
     expect(stop).toHaveBeenCalledTimes(1)
     expect(query.invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  test("refreshes the existing canonical query and publishes without creating another stream", async () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
+    const listener = vi.fn()
+    const handle = acquireBoardSession(runtime, model, resource(query), listener, vi.fn(), { createController })
+
+    await handle.refresh()
+
+    expect(query.reload).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith(readModel)
+    expect(createController).toHaveBeenCalledTimes(1)
+    handle.release()
+  })
+
+  test("coalesces concurrent refresh calls so mutations cannot abort one another", async () => {
+    let resolveReload: (value: BoardReadModel) => void = () => undefined
+    const reload = vi.fn(() => new Promise<BoardReadModel>((resolve) => { resolveReload = resolve }))
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload,
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const handle = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), {
+      createController: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() })),
+    })
+    const first = handle.refresh()
+    const second = handle.refresh()
+    expect(second).toBe(first)
+    expect(reload).toHaveBeenCalledTimes(1)
+    resolveReload(readModel)
+    await Promise.all([first, second])
+    handle.release()
+  })
+
+  test("publishes a refresh started by a released owner to a retained session owner", async () => {
+    let resolveReload: (value: BoardReadModel) => void = () => undefined
+    const reload = vi.fn(() => new Promise<BoardReadModel>((resolve) => { resolveReload = resolve }))
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload,
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
+    const firstListener = vi.fn()
+    const secondListener = vi.fn()
+    const first = acquireBoardSession(runtime, model, resource(query), firstListener, vi.fn(), { createController })
+    const second = acquireBoardSession(runtime, model, resource(query), secondListener, vi.fn(), { createController })
+
+    const refresh = first.refresh()
+    first.release()
+    expect(activeBoardSessionCount()).toBe(1)
+    resolveReload(readModel)
+    await refresh
+
+    expect(firstListener).not.toHaveBeenCalled()
+    expect(secondListener).toHaveBeenCalledWith(readModel)
+    second.release()
   })
 
   test("does not leak a session across runtime/build identity changes", () => {

@@ -163,6 +163,7 @@ describe("explorer task list URL state", () => {
       steps: "/api/v1/tasks/t_1/steps",
       runs: "/api/v1/tasks/t_1/runs",
       comments: "/api/v1/tasks/t_1/comments",
+      attachments: "/api/v1/tasks/t_1/attachments",
       events: "/api/v1/events?board=default&task_id=t_1&after=0&limit=50",
     })
   })

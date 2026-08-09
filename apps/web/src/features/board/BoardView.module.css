@@ -197,6 +197,12 @@
     border-color: var(--color-accent);
   }
 
+  .taskCard[aria-grabbed="true"] {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 0.15rem var(--color-accent);
+    user-select: none;
+  }
+
   .taskHeader {
     display: flex;
     align-items: flex-start;
@@ -275,6 +281,143 @@
   .readinessFact {
     border-inline-start: 0.15rem solid var(--color-border-emphasized);
     padding-inline-start: 0.4rem;
+  }
+
+  .taskLabels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.4rem;
+  }
+
+  .taskLabel {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.12rem 0.4rem;
+    background: var(--color-background-surface);
+    overflow-wrap: anywhere;
+  }
+
+  .taskActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-block-start: 0.9rem;
+    padding-block-start: 0.75rem;
+    border-block-start: 1px solid var(--color-border);
+  }
+
+  .mutedAction {
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+  }
+
+  .mutationNotice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.75rem;
+    border-inline-start: 0.2rem solid var(--color-status-warning, var(--color-accent));
+    padding: 0.7rem 0.85rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+  }
+
+  .mutationNotice strong {
+    color: var(--color-text-primary);
+  }
+
+  .dialog {
+    display: grid;
+    gap: 1rem;
+    width: min(32rem, 100%);
+    max-height: min(90dvh, 42rem);
+    margin: auto;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--color-border-emphasized);
+    padding: 1.25rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    box-shadow: 0 1rem 3rem var(--color-border);
+  }
+
+  .dialog::backdrop {
+    background: color-mix(in srgb, var(--color-background-body) 78%, transparent);
+  }
+
+  .dialogHeader,
+  .dialogActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .dialogHeader h2 {
+    margin: 0;
+  }
+
+  .dialogForm {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .dialogField {
+    display: grid;
+    gap: 0.4rem;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    font-weight: 650;
+  }
+
+  .dialogField input,
+  .dialogField textarea {
+    min-height: 2.5rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.55rem 0.7rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    font: inherit;
+  }
+
+  .dialogField textarea {
+    min-height: 6rem;
+    resize: vertical;
+  }
+
+  .dialogField input:focus-visible,
+  .dialogField textarea:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .dialogCheckField {
+    display: flex;
+    gap: 0.55rem;
+    align-items: flex-start;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .dialogActions {
+    justify-content: flex-end;
+  }
+
+  .visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+    padding: 0;
   }
 
   .emptyColumn {

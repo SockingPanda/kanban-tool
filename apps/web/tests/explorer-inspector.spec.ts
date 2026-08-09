@@ -90,6 +90,16 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await expect(page.getByTestId("task-map")).toBeVisible()
   })
 
+  test("creates and selects a task from the List header", async ({ page }) => {
+    await install(page)
+    await open(page, "list")
+    await expect(page.getByTestId("task-list")).toBeVisible()
+    await page.getByTestId("task-create").click()
+    await page.getByTestId("task-title-input").fill("Created from list")
+    await page.getByTestId("task-mutation-dialog").getByRole("button", { name: "创建", exact: true }).click()
+    await expect(page).toHaveURL(/\/app\/boards\/default\/list\?task=t_[^&]+$/)
+  })
+
   test("keeps one persistent SSE connection while Events refreshes from a business event", async ({ page }) => {
     const fixture = await install(page)
     await open(page, "events")
@@ -180,6 +190,8 @@ test.describe("Astryx Explorer browser acceptance", () => {
     const search = page.getByTestId("list-search")
     await search.focus()
     await expect(search).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(page.getByTestId("task-create")).toBeFocused()
     await page.keyboard.press("Tab")
     await expect(page.getByTestId("list-status-filter")).toBeFocused()
 

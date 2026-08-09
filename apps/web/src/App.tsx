@@ -6,14 +6,16 @@ import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 import { ProductShell } from "./ProductShell"
 import { BoardLive } from "./features/board/BoardLive"
 import { boardSyncStatusForTelemetry } from "./features/board/board-live-state"
+import type { BoardTaskCanonicalReloadHandler, BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
 import type { BoardSyncStatus } from "./features/board/types"
 import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation } from "./App.logic"
 import { parseBoardEvent, type BoardEventsBatch, type ExplorerEvent } from "./lib/api/explorer-read-model"
 import type { SyncTelemetryEntry } from "./lib/sync"
 import type { CanonicalBoardId } from "./lib/sync/contracts"
+import { parseCanonicalBoardSlug } from "./lib/board-slug"
 import { usePreferences } from "./lib/use-preferences"
 import { PreferencesProvider } from "./lib/preferences-provider"
-import { useAppRouter } from "./lib/router"
+import { routePath, useAppRouter } from "./lib/router"
 import { useWebRuntime } from "./lib/runtime-context"
 import { astryxMessages, astryxOverrides } from "./lib/i18n"
 
@@ -47,6 +49,9 @@ function RuntimeThemedShell() {
     basePath: runtime.webBasePath,
     defaultBoard: runtime.defaultBoard,
   })
+  const navigate = router.navigate
+  const routeRef = useRef(router.route)
+  routeRef.current = router.route
   const boardRoute = router.route.kind === "home" || router.route.kind === "board" ? router.route : null
   // The canonical BoardLive remains mounted for every board route as the
   // single session/SSE owner, while Explorer owns the visible board view.
@@ -63,6 +68,8 @@ function RuntimeThemedShell() {
     runsRevision: 0,
     eventsRefreshRevision: 0,
   }))
+  const [taskMutationState, setTaskMutationState] = useState<{ readonly key: string; readonly surface?: BoardTaskMutationSurface }>(() => ({ key: sessionKey }))
+  const visibleCanonicalReloadRef = useRef<BoardTaskCanonicalReloadHandler | null>(null)
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
   const [eventsBatchState, setEventsBatchState] = useState<{ readonly key: string; readonly batch: BoardEventsBatch | null }>(() => ({ key: sessionKey, batch: null }))
   const eventAppliedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -87,6 +94,52 @@ function RuntimeThemedShell() {
       }
     })
   }, [])
+
+  const onTaskMutationsChange = useCallback((surface: BoardTaskMutationSurface | undefined, releasedSurface?: BoardTaskMutationSurface) => {
+    if (surface === undefined) {
+      if (releasedSurface === undefined) return
+      setTaskMutationState((current) => {
+        // A delayed effect cleanup may belong to an older BoardLive surface;
+        // never clear a replacement surface that already owns this key.
+        if (current.surface !== releasedSurface) return current
+        return { key: current.key, surface: undefined }
+      })
+      return
+    }
+    if (sessionKeyRef.current !== sessionKey) return
+    setTaskMutationState({ key: sessionKey, surface })
+  }, [sessionKey])
+
+  const onMutationCommitted = useCallback((event: BoardTaskMutationCommitted) => {
+    if (sessionKeyRef.current !== sessionKey) return
+    if (event.kind !== "create") return
+    const boardSlug = parseCanonicalBoardSlug(event.boardSlug)
+    if (boardSlug === null) return
+    const currentRoute = routeRef.current
+    const view = currentRoute.kind === "board" && currentRoute.boardSlug === boardSlug ? currentRoute.view ?? "board" : "board"
+    const query = new URLSearchParams(currentRoute.kind === "board" && currentRoute.boardSlug === boardSlug ? currentRoute.query ?? "" : "")
+    query.set("task", event.taskId)
+    const target = routePath({ kind: "board", boardSlug, view, query: query.toString() }, { basePath: runtime.webBasePath })
+    void Promise.resolve(navigate(target)).catch(() => undefined)
+  }, [navigate, runtime.webBasePath, sessionKey])
+
+  const onVisibleCanonicalReloadChange = useCallback((reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => {
+    if (reload !== undefined) {
+      visibleCanonicalReloadRef.current = reload
+      return
+    }
+    if (releasedReload === undefined || visibleCanonicalReloadRef.current === releasedReload) visibleCanonicalReloadRef.current = null
+  }, [])
+
+  const onCanonicalReload = useCallback(async (options?: BoardTaskCanonicalReloadOptions) => {
+    if (sessionKeyRef.current !== sessionKey) return
+    // BoardLive has already awaited the canonical session refresh. Refresh the
+    // visible board projection and await the currently mounted Inspector reads
+    // through the shared useAsyncRead reload seam.
+    bumpExplorerRevision({ board: true, runs: options?.mutationKind === "transition" })
+    const reloadVisibleCanonical = visibleCanonicalReloadRef.current
+    if (reloadVisibleCanonical !== null) await reloadVisibleCanonical(options)
+  }, [bumpExplorerRevision, sessionKey])
 
   const flushEventBatch = useCallback(() => {
     const pending = pendingEventsRef.current
@@ -167,6 +220,7 @@ function RuntimeThemedShell() {
     pendingEventBoundarySourceRef.current = false
     setSyncStatus("connecting")
     setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, boardRevision: 0, inspectorRevision: 0, runsRevision: 0, eventsRefreshRevision: 0 })
+    setTaskMutationState((current) => current.key === sessionKey ? current : { key: sessionKey, surface: undefined })
     setEventsBatchState((current) => current.key === sessionKey ? current : { key: sessionKey, batch: null })
   }, [sessionKey])
 
@@ -212,6 +266,7 @@ function RuntimeThemedShell() {
   }, [flushEventBatch, scheduleBoundaryRefresh])
 
   const currentEventsBatch = eventsBatchState.key === sessionKey ? eventsBatchState.batch : null
+  const taskMutations = taskMutationState.key === sessionKey ? taskMutationState.surface : undefined
 
   return (
     <InternationalizationProvider locale={preferences.locale} messages={astryxMessages} overrides={astryxOverrides}>
@@ -231,6 +286,8 @@ function RuntimeThemedShell() {
           eventsRefreshRevision={sessionState.key === sessionKey ? sessionState.eventsRefreshRevision : 0}
           eventsBatch={currentEventsBatch}
           syncStatus={sessionState.key === sessionKey ? syncStatus : "connecting"}
+          taskMutations={taskMutations}
+          onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange}
         >
           {boardRoute ? (
             <BoardLive
@@ -240,6 +297,9 @@ function RuntimeThemedShell() {
               renderBoard={liveBoardVisible}
               onSessionTelemetry={onSessionTelemetry}
               onSyncStatusChange={setSyncStatus}
+              onTaskMutationsChange={onTaskMutationsChange}
+              onMutationCommitted={onMutationCommitted}
+              onCanonicalReload={onCanonicalReload}
             />
           ) : null}
         </ProductShell>

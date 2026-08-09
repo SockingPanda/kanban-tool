@@ -34,6 +34,7 @@ const inspectorRoots = new Set<QueryRoot>([
   "task-neighborhood",
   "task-steps",
   "task-comments",
+  "task-attachments",
   "task-label-suggestions",
 ])
 const runRoots = new Set<QueryRoot>(["task-runs", "task-run-log"])

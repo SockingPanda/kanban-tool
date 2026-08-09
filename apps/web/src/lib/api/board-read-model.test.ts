@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest"
 
 import type { WebRuntimeConfig } from "../runtime"
 import { BoardReadError, createBoardReadQuery, loadBoardReadModel } from "./board-read-model"
-import type { HttpTransportResponse } from "./http-transport"
+import { HttpTransportError, type HttpTransportResponse } from "./http-transport"
 
 const runtime = {
   apiBaseUrl: "",
@@ -51,7 +51,18 @@ function column(id: string, boardId: string, status: string, position: number, h
   }
 }
 
-function task(id: string, boardId: string, boardSlug: string, status: string, position: number) {
+function label(id: string, boardId = "b_default", name = id) {
+  return { id, board_id: boardId, name, color: null, created_at: 1, updated_at: 2 }
+}
+
+function task(
+  id: string,
+  boardId: string,
+  boardSlug: string,
+  status: string,
+  position: number,
+  labels: readonly ReturnType<typeof label>[] = [],
+) {
   return {
     id,
     board_id: boardId,
@@ -89,7 +100,7 @@ function task(id: string, boardId: string, boardSlug: string, status: string, po
     required_step_count: 0,
     completed_required_step_count: 0,
     optional_step_count: 0,
-    labels: [],
+    labels,
   }
 }
 
@@ -147,6 +158,28 @@ describe("board read model", () => {
       if (url.includes("/api/v1/boards?")) return jsonResponse({ data: [board("b_default", "default", "Default")] })
       if (url.endsWith("/columns")) return jsonResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
       return jsonResponse({ data: { statuses: [{ status: "todo", tasks: [], page: { limit: 1000, offset: 0, total: 0 } }] }, meta: { limit: 1000, offset: 0 } })
+    })
+
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+      name: "BoardReadError",
+      kind: "anomaly",
+    })
+  })
+
+  test.each([
+    ["cross-board label", [label("l_cross", "b_other")]],
+    ["duplicate label id", [label("l_duplicate"), label("l_duplicate")]],
+    ["blank label id", [label(" ", "b_default", "valid name")]],
+    ["blank label name", [label("l_blank_name", "b_default", " ")]],
+  ])("fails closed for %s in a task payload", async (_caseName, labels) => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input))
+      if (url.pathname === "/api/v1/boards") return jsonResponse({ data: [board("b_default", "default", "Default")] })
+      if (url.pathname.endsWith("/columns")) return jsonResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
+      return jsonResponse({
+        data: { statuses: [{ status: "ready", tasks: [task("t_label", "b_default", "default", "ready", 1, labels)], page: { limit: 1000, offset: 0, total: 1 } }] },
+        meta: { limit: 1000, offset: 0 },
+      })
     })
 
     await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
@@ -273,10 +306,16 @@ describe("board read model", () => {
     expect(Object.isFrozen(model.tasksByStatus)).toBe(true)
     expect(Object.isFrozen(model.tasksByStatus.ready)).toBe(true)
     expect(Object.isFrozen(ready)).toBe(true)
-    expect(ready).not.toHaveProperty("description")
+    expect(ready).toHaveProperty("seq")
+    expect(ready).toHaveProperty("description", null)
+    expect(ready).toHaveProperty("scheduled_at", null)
+    expect(ready).toHaveProperty("due_at", null)
+    expect(ready).toHaveProperty("last_heartbeat_at", null)
+    expect(ready).toHaveProperty("status_reason", null)
+    expect(ready).toHaveProperty("labels", [])
+    expect(Object.isFrozen(ready?.labels)).toBe(true)
     expect(ready).not.toHaveProperty("result")
     expect(ready).not.toHaveProperty("metadata")
-    expect(ready).not.toHaveProperty("labels")
   })
 
   test("enforces the shared raw-byte budget and reports an anomaly", async () => {
@@ -288,6 +327,17 @@ describe("board read model", () => {
         return { payload: { data: [] }, bytes: 0 }
       }),
     }
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport } })).rejects.toMatchObject({
+      name: "BoardReadError",
+      kind: "anomaly",
+    })
+  })
+
+  test("maps attachment-only invalid byte transport errors to anomaly", async () => {
+    const transport = {
+      get: vi.fn().mockRejectedValue(new HttpTransportError("invalid_bytes", "attachment body invalid")),
+    }
+
     await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",

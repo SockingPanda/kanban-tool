@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test"
 
-import { installRuntimeFixture } from "./runtime-fixture"
+import { installPersistentSse, installRuntimeFixture } from "./runtime-fixture"
 
 const BOARD_ID = "b_default"
 const BOARD_SLUG = "default"
@@ -20,6 +20,9 @@ export type ExplorerFixtureOptions = {
   readonly failMap?: boolean
   readonly failInspector?: boolean
   readonly delayList?: boolean
+  readonly withAssets?: boolean
+  readonly failLabelAddOnce?: boolean
+  readonly failInspectorReadsAfterLabelAdd?: number
 }
 
 export type ExplorerFixture = {
@@ -29,6 +32,7 @@ export type ExplorerFixture = {
   readonly emitHeartbeat: () => Promise<void>
   readonly emitTaskUpdated: () => Promise<void>
   readonly releaseList: () => void
+  readonly failNextInspectorReads: (count?: number) => void
 }
 
 type FixtureEvent = {
@@ -144,10 +148,20 @@ function boardSummary() {
  */
 export async function installExplorerFixture(page: Page, options: ExplorerFixtureOptions = {}): Promise<ExplorerFixture> {
   await installRuntimeFixture(page)
+  await installPersistentSse(page)
   const apiRequests: string[] = []
   const readyTask = fixtureTask("ready", 1, "Ready task", TASK_ID)
   const listTasks = [readyTask, fixtureTask("todo", 2, "Todo task")]
+  const attachments: Record<string, unknown>[] = options.withAssets
+    ? [{ id: "a_fixture", board_id: BOARD_ID, task_id: TASK_ID, filename: "fixture.txt", rel_path: "attachments/fixture.txt", content_type: "text/plain", size_bytes: 7, sha256: null, created_by: "playwright", created_at: 1 }]
+    : []
+  let labelAddFailuresRemaining = options.failLabelAddOnce === true ? 1 : 0
+  let inspectorReadFailuresAfterLabelAdd = typeof options.failInspectorReadsAfterLabelAdd === "number"
+    ? Math.max(0, Math.floor(options.failInspectorReadsAfterLabelAdd))
+    : 0
+  const stepsByTask = new Map<string, Record<string, unknown>[]>([[TASK_ID, []]])
   let events: FixtureEvent[] = options.emptyEvents ? [] : [fixtureEvent(1, "task.created")]
+  let inspectorReadFailuresRemaining = 0
   let releaseList: () => void = () => undefined
   const listGate = options.delayList
     ? new Promise<void>((resolve) => {
@@ -207,6 +221,15 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     }
 
     if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/tasks`) {
+      if (route.request().method() === "POST") {
+        const body = JSON.parse(route.request().postData() ?? "{}") as { readonly task_id?: unknown; readonly title?: unknown }
+        const taskId = typeof body.task_id === "string" ? body.task_id : "t_created"
+        const created = fixtureTask("todo", 3, typeof body.title === "string" ? body.title : "Created task", taskId)
+        listTasks.push(created)
+        stepsByTask.set(taskId, [])
+        await fulfillJson(route, { data: created })
+        return
+      }
       if (options.failList) {
         await fulfillUnavailable(route)
         return
@@ -255,8 +278,27 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       return
     }
 
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}` && route.request().method() === "PATCH") {
+      const body = JSON.parse(route.request().postData() ?? "{}") as { readonly title?: unknown; readonly description?: unknown; readonly assignee?: unknown; readonly priority?: unknown; readonly scheduled_at?: unknown; readonly due_at?: unknown }
+      if (typeof body.title === "string") readyTask.title = body.title
+      if (typeof body.description === "string" || body.description === null) readyTask.description = body.description
+      if (typeof body.assignee === "string" || body.assignee === null) readyTask.assignee = body.assignee
+      if (typeof body.priority === "number") readyTask.priority = body.priority
+      if (typeof body.scheduled_at === "number" || body.scheduled_at === null) readyTask.scheduled_at = body.scheduled_at
+      if (typeof body.due_at === "number" || body.due_at === null) readyTask.due_at = body.due_at
+      readyTask.lock_version = Number(readyTask.lock_version ?? 0) + 1
+      readyTask.updated_at = Number(readyTask.updated_at ?? 0) + 1
+      await fulfillJson(route, { data: readyTask })
+      return
+    }
+
     if (url.pathname === `/api/v1/tasks/${TASK_ID}`) {
       if (options.failInspector) {
+        await fulfillUnavailable(route)
+        return
+      }
+      if (inspectorReadFailuresRemaining > 0) {
+        inspectorReadFailuresRemaining -= 1
         await fulfillUnavailable(route)
         return
       }
@@ -296,10 +338,41 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     }
 
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/steps`) {
+      if (route.request().method() === "POST") {
+        const body = JSON.parse(route.request().postData() ?? "{}") as { readonly title?: unknown; readonly body?: unknown; readonly required?: unknown; readonly linked_task_ref?: unknown }
+        const step = {
+          id: `step_${(stepsByTask.get(TASK_ID)?.length ?? 0) + 1}`,
+          parent_task_id: TASK_ID,
+          title: typeof body.title === "string" ? body.title : "Created step",
+          body: typeof body.body === "string" ? body.body : null,
+          linked_task: null,
+          position: (stepsByTask.get(TASK_ID)?.length ?? 0) + 1,
+          required: body.required === true,
+          status: "todo",
+          resolution_note: null,
+          resolved_by: null,
+          resolved_at: null,
+          created_by: "playwright",
+          created_at: 1,
+          updated_by: "playwright",
+          updated_at: 1,
+        }
+        const taskSteps = stepsByTask.get(TASK_ID) ?? []
+        taskSteps.push(step)
+        stepsByTask.set(TASK_ID, taskSteps)
+        await fulfillJson(route, {
+          data: {
+            task_id: TASK_ID,
+            steps: taskSteps,
+            execution_plan: { board_id: BOARD_ID, task_id: TASK_ID, state: "planned", reason: null, updated_by: "playwright", updated_at: 1 },
+          },
+        })
+        return
+      }
       await fulfillJson(route, {
         data: {
           task_id: TASK_ID,
-          steps: [{
+          steps: [...(stepsByTask.get(TASK_ID) ?? []), {
             id: "step_fixture",
             parent_task_id: TASK_ID,
             title: "Verify browser path",
@@ -329,6 +402,48 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       return
     }
 
+    const genericStepMatch = url.pathname.match(/^\/api\/v1\/tasks\/(t_[^/]+)\/steps$/)
+    if (genericStepMatch && route.request().method() === "POST") {
+      const taskId = genericStepMatch[1] ?? "t_created"
+      const body = JSON.parse(route.request().postData() ?? "{}") as { readonly title?: unknown; readonly body?: unknown; readonly required?: unknown }
+      const taskSteps = stepsByTask.get(taskId) ?? []
+      const step = {
+        id: `step_${taskSteps.length + 1}`,
+        parent_task_id: taskId,
+        title: typeof body.title === "string" ? body.title : "Created step",
+        body: typeof body.body === "string" ? body.body : null,
+        linked_task: null,
+        position: taskSteps.length + 1,
+        required: body.required === true,
+        status: "todo",
+        resolution_note: null,
+        resolved_by: null,
+        resolved_at: null,
+        created_by: "playwright",
+        created_at: 1,
+        updated_by: "playwright",
+        updated_at: 1,
+      }
+      const nextSteps = [...taskSteps, step]
+      stepsByTask.set(taskId, nextSteps)
+      await fulfillJson(route, {
+        data: {
+          task_id: taskId,
+          steps: nextSteps,
+          execution_plan: { board_id: BOARD_ID, task_id: taskId, state: "planned", reason: null, updated_by: "playwright", updated_at: 1 },
+        },
+      })
+      return
+    }
+
+    const genericTaskMatch = url.pathname.match(/^\/api\/v1\/tasks\/(t_[^/]+)$/)
+    if (genericTaskMatch && route.request().method() === "GET") {
+      const task = listTasks.find((candidate) => candidate.id === genericTaskMatch[1])
+      if (task) await fulfillJson(route, { data: task })
+      else await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "not_found", message: "task not found" } }) })
+      return
+    }
+
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/runs`) {
       const runs = options.emptyRuns
         ? []
@@ -346,7 +461,76 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     }
 
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/comments`) {
+      if (route.request().method() === "POST") {
+        await fulfillJson(route, { data: { id: "comment_fixture", board_id: BOARD_ID, task_id: TASK_ID, author: "playwright", author_type: "user", agent_type: null, body: "fixture comment", kind: "note", metadata: {}, created_at: 1 } })
+        return
+      }
       await fulfillJson(route, { data: [] })
+      return
+    }
+
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/attachments`) {
+      if (route.request().method() === "POST") {
+        await fulfillJson(route, { data: readyTask })
+        return
+      }
+      await fulfillJson(route, { data: attachments })
+      return
+    }
+
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/attachments/a_fixture` && route.request().method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "text/plain", headers: { "content-length": "7", "x-kb-attachment-id": "a_fixture" }, body: "fixture" })
+      return
+    }
+
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/attachments/a_fixture` && route.request().method() === "DELETE") {
+      const index = attachments.findIndex((attachment) => attachment.id === "a_fixture")
+      if (index >= 0) attachments.splice(index, 1)
+      await fulfillJson(route, { data: { deleted: true } })
+      return
+    }
+
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/labels/suggestions`) {
+      await fulfillJson(route, {
+        data: {
+          task_id: TASK_ID,
+          board_id: BOARD_ID,
+          selected_labels: [],
+          candidates: [{ label_id: "l_fixture", label_name: "fixture", score: 0.9, weight: 1, already_applied: false, evidence_atoms: [], negative_evidence_atoms: [] }],
+          coverage: 0.5,
+          coverage_cosine: 0.5,
+          residual_norm: 0.1,
+          needs_new_label: false,
+          reason_codes: [],
+          degraded: false,
+          diagnostics: [],
+        },
+      })
+      return
+    }
+
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/labels` && route.request().method() === "POST") {
+      if (labelAddFailuresRemaining > 0) {
+        labelAddFailuresRemaining -= 1
+        await fulfillUnavailable(route)
+        return
+      }
+      const body = JSON.parse(route.request().postData() ?? "{}") as { readonly name?: unknown }
+      const name = typeof body.name === "string" ? body.name : "fixture"
+      const labels = Array.isArray(readyTask.labels) ? readyTask.labels : []
+      const label = { id: `l_${name}`, board_id: BOARD_ID, name, color: null, created_at: 1, updated_at: 1 }
+      readyTask.labels = [...labels, label]
+      readyTask.lock_version = Number(readyTask.lock_version ?? 0) + 1
+      if (inspectorReadFailuresAfterLabelAdd > 0) {
+        inspectorReadFailuresRemaining = inspectorReadFailuresAfterLabelAdd
+        inspectorReadFailuresAfterLabelAdd = 0
+      }
+      await fulfillJson(route, { data: readyTask, meta: null })
+      return
+    }
+
+    if (url.pathname.startsWith(`/api/v1/tasks/${TASK_ID}/labels/`) && route.request().method() === "DELETE") {
+      await fulfillJson(route, { data: readyTask })
       return
     }
 
@@ -362,40 +546,6 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     }
 
     await route.fulfill({ status: 404, contentType: "text/plain", body: "fixture route not found" })
-  })
-
-  await page.addInitScript(() => {
-    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
-    let streamConnectionCount = 0
-    const pendingFrames: string[] = []
-    const encoder = new TextEncoder()
-    const pushFrame = (frame: string) => {
-      if (streamController === null) pendingFrames.push(frame)
-      else streamController.enqueue(encoder.encode(frame))
-    }
-    Object.defineProperty(window, "__kanbanPushSse", { configurable: true, value: pushFrame })
-    Object.defineProperty(window, "__kanbanSseConnectionCount", { configurable: true, get: () => streamConnectionCount })
-
-    const nativeFetch = window.fetch.bind(window)
-    window.fetch = async (input, init) => {
-      const inputUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-      const target = new URL(inputUrl, window.location.href)
-      if (target.pathname !== "/api/v1/stream/events") return nativeFetch(input, init)
-
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          streamController = controller
-          streamConnectionCount += 1
-          for (const frame of pendingFrames.splice(0)) controller.enqueue(encoder.encode(frame))
-        },
-        cancel() {
-          streamController = null
-        },
-      })
-      const response = new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } })
-      Object.defineProperty(response, "url", { configurable: true, value: target.toString() })
-      return response
-    }
   })
 
   async function emit(frame: string): Promise<void> {
@@ -416,6 +566,9 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       const updated = fixtureEvent(2, "task.updated")
       events = [...events, updated]
       await emit(sseFrame("task.updated", updated, updated.id))
+    },
+    failNextInspectorReads(count = 1) {
+      inspectorReadFailuresRemaining = Math.max(0, Math.floor(count))
     },
   }
 }

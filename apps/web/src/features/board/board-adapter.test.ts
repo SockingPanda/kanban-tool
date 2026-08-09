@@ -39,11 +39,18 @@ const readModel: BoardReadModel = {
     ready: [
       {
         id: "t_ready",
+        seq: 1,
         ref: "default#1",
         title: "Ship board",
+        description: null,
         status: "ready",
+        status_reason: "等待依赖",
+        scheduled_at: null,
+        due_at: 1767225600000,
+        last_heartbeat_at: 1767139200000,
         priority: 3,
         position: 10,
+        lock_version: 7,
         assignee: "agent",
         dependency_blocked: true,
         unfinished_parent_count: 2,
@@ -51,6 +58,9 @@ const readModel: BoardReadModel = {
         required_step_count: 3,
         completed_required_step_count: 1,
         optional_step_count: 1,
+        labels: [
+          { id: "l_ui", board_id: "b_default", name: "界面", color: "#123456", created_at: 1, updated_at: 2 },
+        ],
       },
     ],
     done: [],
@@ -71,12 +81,20 @@ describe("BoardReadModel adapter", () => {
         ready: [
           {
             id: "t_ready",
+            seq: 1,
             ref: "default#1",
             title: "Ship board",
+            description: null,
             status: "ready",
+            scheduledAt: null,
+            dueAt: 1767225600000,
+            lastHeartbeatAt: 1767139200000,
+            statusReason: "等待依赖",
+            labels: [{ id: "l_ui", name: "界面", color: "#123456" }],
             position: 10,
             priority: 3,
             assignee: "agent",
+            lockVersion: 7,
             readiness: {
               dependencyBlocked: true,
               unfinishedParentCount: 2,
@@ -104,5 +122,8 @@ describe("BoardReadModel adapter", () => {
     expect(Object.isFrozen(model.tasksByStatus.ready?.[0])).toBe(true)
     expect(model.columns[0]).not.toHaveProperty("board_id")
     expect(model.tasksByStatus.ready?.[0]).not.toHaveProperty("dependency_blocked")
+    expect(model.tasksByStatus.ready?.[0]).toHaveProperty("labels")
+    expect(Object.isFrozen(model.tasksByStatus.ready?.[0]?.labels)).toBe(true)
+    expect(Object.isFrozen(model.tasksByStatus.ready?.[0]?.labels?.[0])).toBe(true)
   })
 })

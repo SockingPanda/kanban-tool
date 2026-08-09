@@ -8,6 +8,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
 
 import type { CanonicalBoardSlug } from "./lib/board-slug"
 import type { BoardEventsBatch } from "./lib/api/explorer-read-model"
+import type { BoardTaskCanonicalReloadHandler, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
 import type { BoardSyncStatus } from "./features/board/types"
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router"
@@ -37,6 +38,9 @@ export type ProductShellProps = {
   eventsRefreshRevision?: number
   eventsBatch?: BoardEventsBatch | null
   syncStatus?: BoardSyncStatus
+  taskMutations?: BoardTaskMutationSurface
+  /** Register the currently visible Inspector reads for awaited canonical reloads. */
+  onVisibleCanonicalReloadChange?: (reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => void
 }
 
 function safeText(value: string): string {
@@ -291,7 +295,7 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
   )
 }
 
-function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus }: ProductShellProps) {
+function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -378,7 +382,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   if (route.kind === "board") return (
     <>
       {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
-      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} />
+      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />
     </>
   )
 
@@ -394,7 +398,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   )
 }
 
-export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus }: ProductShellProps) {
+export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
 
@@ -421,7 +425,7 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus}>
+                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange}>
                   {children}
                 </RouteContent>
               </div>

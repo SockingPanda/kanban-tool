@@ -5,7 +5,7 @@ import { createEventsApiClient } from "./events-api"
 
 describe("typed list-events client", () => {
   test("validates query, serializes cursor parameters, and validates response", async () => {
-    const transport: HttpTransport = {
+    const transport: Pick<HttpTransport, "get"> = {
       get: vi.fn<HttpTransport["get"]>().mockResolvedValue({
         payload: { data: [], meta: { next_after: 9 } },
         bytes: 29,
@@ -20,7 +20,7 @@ describe("typed list-events client", () => {
   })
 
   test("rejects malformed response before it reaches the sink", async () => {
-    const transport: HttpTransport = {
+    const transport: Pick<HttpTransport, "get"> = {
       get: vi.fn<HttpTransport["get"]>().mockResolvedValue({
         payload: { data: [{ id: 1 }], meta: { next_after: 1 } },
         bytes: 23,
@@ -43,7 +43,7 @@ describe("typed list-events client", () => {
   })
 
   test("rejects an invalid raw byte count from the injected seam", async () => {
-    const transport: HttpTransport = {
+    const transport: Pick<HttpTransport, "get"> = {
       get: vi.fn<HttpTransport["get"]>().mockResolvedValue({
         payload: { data: [], meta: { next_after: 0 } },
         bytes: Number.NaN,

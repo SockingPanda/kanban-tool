@@ -8,6 +8,7 @@ import {
   type BoardReadModel,
 } from "../../lib/api/board-read-model"
 import { createHttpTransport } from "../../lib/api/http-transport"
+import { createTaskMutationClient } from "../../lib/api/task-mutations"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
 import { createGeneratedStreamContractAdapter, asCanonicalBoardId, type SyncTelemetryEntry } from "../../lib/sync"
@@ -21,6 +22,12 @@ import {
 } from "./types"
 import { toBoardViewModel } from "./board-adapter"
 import { boardSyncStatusForTelemetry, subscribeBrowserConnectivity } from "./board-live-state"
+import {
+  createBoardTaskClaimTokenStore,
+  type BoardTaskCanonicalReloadOptions,
+  type BoardTaskMutationCommitted,
+  type BoardTaskMutationSurface,
+} from "./task-mutation-state"
 import {
   acquireBoardSession,
   bindBoardResourceIdentity,
@@ -43,6 +50,12 @@ export interface BoardLiveProps {
   readonly onSessionTelemetry?: (entry: SyncTelemetryEntry) => void
   /** Propagate browser connectivity changes to the App-level Explorer status. */
   readonly onSyncStatusChange?: (status: BoardSyncStatus) => void
+  /** Expose the canonical session's typed mutation surface to the rendered Explorer board. */
+  readonly onTaskMutationsChange?: (surface: BoardTaskMutationSurface | undefined, releasedSurface?: BoardTaskMutationSurface) => void
+  /** Report a committed mutation so the App can invalidate Explorer readers/navigation. */
+  readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void
+  /** Await visible Explorer readers after the canonical session has reloaded. */
+  readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => Promise<void> | void
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string): BoardReadResource {
@@ -114,7 +127,7 @@ function retainResourceKey(resources: Map<string, BoardReadResource>, resource: 
   resources.set(resource.identityKey, resource)
 }
 
-export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSessionTelemetry, onSyncStatusChange }: BoardLiveProps) {
+export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload }: BoardLiveProps) {
   const preferences = usePreferences()
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
@@ -134,6 +147,8 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   const redirectedBoardRef = useRef<string | null>(null)
   const sessionHandleRef = useRef<BoardSessionHandle | null>(null)
   const sessionRetryRef = useRef<(() => void) | null>(null)
+  const claimTokenStoreRef = useRef(createBoardTaskClaimTokenStore())
+  const claimTokenBoardRef = useRef<string | null>(null)
   const [retryVersion, setRetryVersion] = useState(0)
   const [state, setState] = useState<BoardViewState>({ kind: "loading" })
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
@@ -271,6 +286,57 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   }, [contextState, route.kind, routeBoardSlug, runtime, selector])
   const visibleStateKind = visibleState.kind
   const visibleBoardSlug = visibleState.kind === "ready" ? visibleState.model.board.slug : null
+  const mutationBoardSlug = visibleBoardSlug === null ? null : parseCanonicalBoardSlug(visibleBoardSlug)
+
+  useEffect(() => {
+    if (claimTokenBoardRef.current !== mutationBoardSlug) {
+      claimTokenStoreRef.current.clear()
+      claimTokenBoardRef.current = mutationBoardSlug
+    }
+  }, [mutationBoardSlug])
+
+  const refreshCanonical = useCallback(async () => {
+    const handle = sessionHandleRef.current
+    if (handle === null) throw new Error("canonical board session is unavailable")
+    await handle.refresh()
+    return modelRef.current
+  }, [])
+
+  const taskMutations = useMemo<BoardTaskMutationSurface | undefined>(() => {
+    if (mutationBoardSlug === null) return undefined
+    try {
+      const client = createTaskMutationClient(runtime, mutationBoardSlug)
+      return {
+        client,
+        claimTokens: claimTokenStoreRef.current,
+        inspectorClient: client,
+        resolveTaskSelector: (selector) => {
+          const value = selector.trim()
+          if (!value) return null
+          const model = modelRef.current
+          if (model === null) return null
+          for (const tasks of Object.values(model.tasksByStatus)) {
+            const candidate = tasks.find((task) => task.id === value || task.ref === value)
+            if (candidate !== undefined) return candidate.id
+          }
+          return null
+        },
+        onCanonicalReload: async (options) => {
+          const canonical = await refreshCanonical()
+          await onCanonicalReload?.(options)
+          return canonical
+        },
+        onMutationCommitted: (event) => onMutationCommitted?.({ ...event, boardSlug: mutationBoardSlug }),
+      }
+    } catch {
+      return undefined
+    }
+  }, [mutationBoardSlug, onCanonicalReload, onMutationCommitted, refreshCanonical, runtime])
+
+  useEffect(() => {
+    onTaskMutationsChange?.(taskMutations)
+    return () => onTaskMutationsChange?.(undefined, taskMutations)
+  }, [onTaskMutationsChange, taskMutations])
 
   useEffect(() => {
     if (route.kind !== "home" || visibleStateKind !== "ready" || stateContextKeyRef.current !== contextKey || visibleBoardSlug === null) return
@@ -379,6 +445,7 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
       messages={boardMessages}
       syncStatus={visibleState.kind === "ready" ? syncStatus : undefined}
       onRetry={retry}
+      taskMutations={taskMutations}
       id="astryx-board"
     />
   )

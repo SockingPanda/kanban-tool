@@ -7,6 +7,7 @@ import { Text } from "@astryxdesign/core/Text"
 
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import styles from "./BoardView.module.css"
+import { MutationDialog, MutationNotice } from "./BoardTaskMutations"
 import {
   defaultBoardMessages,
   type BoardColumnViewModel,
@@ -18,6 +19,16 @@ import {
   type BoardSyncStatus,
   validateBoardViewModel,
 } from "./types"
+import {
+  canCompleteTask,
+  canPromoteTask,
+  transitionOptionsForTask,
+  type BoardTaskMutationSurface,
+} from "./task-mutation-state"
+import {
+  useBoardTaskMutationController,
+  type BoardTaskMutationController,
+} from "./task-mutation-controller"
 
 export interface BoardViewProps {
   readonly state: BoardViewState
@@ -28,6 +39,7 @@ export interface BoardViewProps {
   readonly syncStatus?: BoardSyncStatus
   readonly id?: string
   readonly className?: string
+  readonly taskMutations?: BoardTaskMutationSurface
   /** Explorer nests the live board under its page heading. */
   readonly headingLevel?: 1 | 2 | 3
 }
@@ -50,6 +62,30 @@ function priorityVariant(priority: BoardTaskViewModel["priority"]): "neutral" | 
   return "neutral"
 }
 
+const taskTimestampFormatters = new Map<string, Intl.DateTimeFormat>()
+
+function taskTimestampFormatter(locale: string): Intl.DateTimeFormat {
+  const cached = taskTimestampFormatters.get(locale)
+  if (cached) return cached
+  try {
+    const formatter = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" })
+    taskTimestampFormatters.set(locale, formatter)
+    return formatter
+  } catch {
+    const fallback = taskTimestampFormatters.get("en-US") ?? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
+    taskTimestampFormatters.set("en-US", fallback)
+    return fallback
+  }
+}
+
+function taskTimestamp(value: number | null | undefined, locale: string): { readonly display: string; readonly iso: string } | null {
+  if (value === null || value === undefined) return null
+  const milliseconds = Math.abs(value) < 1_000_000_000_000 ? value * 1_000 : value
+  const date = new Date(milliseconds)
+  if (Number.isNaN(date.getTime())) return { display: String(value), iso: String(value) }
+  return { display: taskTimestampFormatter(locale).format(date), iso: date.toISOString() }
+}
+
 function columnAnchorId(rootId: string, index: number) {
   return `${rootId}-column-${index}`
 }
@@ -69,11 +105,15 @@ function BoardHeader({
   board,
   titleId,
   copy,
+  onCreate,
+  isMutationPending,
   headingLevel,
 }: {
   readonly board?: BoardViewModel["board"]
   readonly titleId: string
   readonly copy: BoardMessages
+  readonly onCreate?: (trigger?: HTMLElement | null) => void
+  readonly isMutationPending?: boolean
   readonly headingLevel: 1 | 2 | 3
 }) {
   return (
@@ -94,6 +134,7 @@ function BoardHeader({
           </p>
         ) : null}
       </div>
+      {onCreate ? <Button label={copy.createTask} variant="primary" isDisabled={isMutationPending} onClick={(event) => onCreate(event.currentTarget)} data-testid="task-create" /> : null}
     </header>
   )
 }
@@ -171,18 +212,51 @@ function StateContent({ state, copy, onRetry }: { readonly state: BoardViewState
   return null
 }
 
-function TaskCard({ task, copy, onSelectTask }: { readonly task: BoardTaskViewModel; readonly copy: BoardMessages; readonly onSelectTask?: (taskId: string) => void }) {
+function TaskCard({
+  task,
+  copy,
+  controller,
+  onSelectTask,
+}: {
+  readonly task: BoardTaskViewModel
+  readonly copy: BoardMessages
+  readonly controller?: BoardTaskMutationController
+  readonly onSelectTask?: (taskId: string) => void
+}) {
   const dependencyText = task.readiness.dependencyBlocked
     ? `${copy.dependencyBlocked}（${task.readiness.unfinishedParentCount}）`
     : copy.dependencyClear
+  const scheduledAt = taskTimestamp(task.scheduledAt, copy.dateLocale)
+  const dueAt = taskTimestamp(task.dueAt, copy.dateLocale)
+  const lastHeartbeatAt = taskTimestamp(task.lastHeartbeatAt, copy.dateLocale)
+  const statusReason = task.statusReason?.trim() || copy.notAvailable
+  const labels = task.labels ?? []
+  const pending = controller?.isMutationPending === true
+    || controller?.isPending(`transition:${task.id}`) === true
+    || controller?.isPending(`edit:${task.id}`) === true
+  const transitionOptions = controller ? transitionOptionsForTask(task, controller.claimTokenForTask(task.id)) : []
+  const promoteNotReady = controller !== undefined && (task.status === "todo" || task.status === "scheduled") && !canPromoteTask(task)
+  const requiredStepsIncomplete = controller !== undefined && (task.status === "running" || task.status === "review") && !canCompleteTask(task)
 
   return (
     <Card
+      ref={controller ? (element) => controller.onTaskRef(task.id, element) : undefined}
       className={styles.taskCard}
       padding={3}
       data-testid="board-task"
       data-task-id={task.id}
       data-status={task.status}
+      draggable={controller ? !pending : undefined}
+      tabIndex={controller ? 0 : undefined}
+      role={controller ? "group" : undefined}
+      aria-roledescription={controller ? copy.taskCardRoleDescription : undefined}
+      aria-grabbed={controller ? controller.grabbedTaskId === task.id : undefined}
+      aria-busy={pending || undefined}
+      aria-label={controller ? `${task.ref} ${task.title}` : undefined}
+      aria-keyshortcuts={controller ? "Space Escape ArrowLeft ArrowRight Enter" : undefined}
+      onDragStart={controller ? (event) => controller.onDragStart(task.id, event) : undefined}
+      onDragEnd={controller ? () => controller.onDragEnd(task.id) : undefined}
+      onKeyDown={controller ? (event) => controller.onTaskKeyDown(task, event) : undefined}
     >
       <div className={styles.taskHeader}>
         <span className={styles.taskRef} translate="no">
@@ -207,6 +281,36 @@ function TaskCard({ task, copy, onSelectTask }: { readonly task: BoardTaskViewMo
           <dd>{task.assignee ?? copy.unassigned}</dd>
         </div>
         <div className={styles.taskDetailsRow}>
+          <dt>{copy.statusReasonLabel}</dt>
+          <dd data-testid="board-task-status-reason">{statusReason}</dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.scheduledLabel}</dt>
+          <dd data-testid="board-task-scheduled">
+            {scheduledAt ? <time dateTime={scheduledAt.iso}>{scheduledAt.display}</time> : copy.notAvailable}
+          </dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.dueLabel}</dt>
+          <dd data-testid="board-task-due">
+            {dueAt ? <time dateTime={dueAt.iso}>{dueAt.display}</time> : copy.notAvailable}
+          </dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.lastHeartbeatLabel}</dt>
+          <dd data-testid="board-task-heartbeat">
+            {lastHeartbeatAt ? <time dateTime={lastHeartbeatAt.iso}>{lastHeartbeatAt.display}</time> : copy.notAvailable}
+          </dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.labelsLabel}</dt>
+          <dd className={styles.taskLabels} data-testid="board-task-labels">
+            {labels.length === 0 ? copy.noLabels : labels.map((label) => (
+              <span className={styles.taskLabel} key={label.id} data-label-id={label.id}>{label.name}</span>
+            ))}
+          </dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
           <dt>{copy.readinessLabel}</dt>
           <dd className={styles.readinessFacts}>
             <span className={styles.readinessFact}>
@@ -224,11 +328,50 @@ function TaskCard({ task, copy, onSelectTask }: { readonly task: BoardTaskViewMo
           </dd>
         </div>
       </dl>
+      {controller ? (
+        <div className={styles.taskActions} aria-label={copy.transitionLabel} aria-busy={pending || undefined}>
+          <Button
+            label={copy.editTask}
+            variant="secondary"
+            size="sm"
+            isDisabled={pending}
+            onClick={(event) => controller.openEdit(task, event.currentTarget)}
+            data-testid={`task-edit-${task.id}`}
+          />
+          {transitionOptions.map((option) => (
+            <Button
+              key={option.action}
+              label={pending ? copy.mutationPending : copy.transitionNames[option.action] ?? option.action}
+              variant="secondary"
+              size="sm"
+              isDisabled={pending}
+              isLoading={pending}
+              onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
+              data-testid={`task-transition-${option.action}-${task.id}`}
+            />
+          ))}
+          {promoteNotReady ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.promoteNotReady}</span> : null}
+          {requiredStepsIncomplete ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.requiredStepsIncomplete}</span> : null}
+          {pending ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.mutationPending}</span> : null}
+        </div>
+      ) : null}
     </Card>
   )
 }
 
-function BoardColumns({ model, copy, rootId, onSelectTask }: { readonly model: BoardViewModel; readonly copy: BoardMessages; readonly rootId: string; readonly onSelectTask?: (taskId: string) => void }) {
+function BoardColumns({
+  model,
+  copy,
+  rootId,
+  controller,
+  onSelectTask,
+}: {
+  readonly model: BoardViewModel
+  readonly copy: BoardMessages
+  readonly rootId: string
+  readonly controller?: BoardTaskMutationController
+  readonly onSelectTask?: (taskId: string) => void
+}) {
   const columns = orderedVisibleColumns(model.columns)
 
   if (columns.length === 0) {
@@ -264,6 +407,10 @@ function BoardColumns({ model, copy, rootId, onSelectTask }: { readonly model: B
                 data-testid="board-column"
                 data-column-id={column.id}
                 data-status={column.status}
+                onDragOver={controller ? (event) => controller.onDragOver(column.status, event) : undefined}
+                onDrop={controller ? (event) => controller.onDrop(column.status, event) : undefined}
+                aria-dropeffect={controller ? "move" : undefined}
+                aria-label={controller ? `${column.title}；${copy.dropTargetLabel(column.title)}` : undefined}
               >
                 <header className={styles.columnHeader}>
                   <Heading level={2} id={headingId} tabIndex={-1}>
@@ -271,18 +418,18 @@ function BoardColumns({ model, copy, rootId, onSelectTask }: { readonly model: B
                   </Heading>
                   <p className={styles.columnCount}>{copy.columnTaskCount(tasks.length)}</p>
                 </header>
-                <ul className={styles.taskList} aria-label={column.title}>
+                <ul className={styles.taskList} aria-label={column.title} data-testid={controller ? `board-drop-target-${column.status}` : undefined}>
                   {tasks.length === 0 ? (
                     <li className={styles.emptyColumn} role="status" aria-live="polite">
                       <p>{copy.emptyColumn}</p>
                     </li>
-                  ) : (
-                    tasks.map((task) => (
-                      <li className={styles.taskListItem} key={task.id}>
-                        <TaskCard task={task} copy={copy} onSelectTask={onSelectTask} />
-                      </li>
-                    ))
-                  )}
+                ) : (
+                  tasks.map((task) => (
+                    <li className={styles.taskListItem} key={task.id}>
+                        <TaskCard task={task} copy={copy} controller={controller} onSelectTask={onSelectTask} />
+                    </li>
+                  ))
+                )}
                 </ul>
               </section>
             )
@@ -293,14 +440,18 @@ function BoardColumns({ model, copy, rootId, onSelectTask }: { readonly model: B
   )
 }
 
-export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, syncStatus, id = "astryx-board", className, headingLevel = 1 }: BoardViewProps) {
+export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, syncStatus, id = "astryx-board", className, headingLevel = 1, taskMutations }: BoardViewProps) {
   const copy = mergeMessages(messageOverrides)
+  const baseModel = state.kind === "ready" ? state.model : null
+  const mutationColumns = baseModel !== null && Array.isArray(baseModel.columns) ? baseModel.columns : []
+  const controller = useBoardTaskMutationController(baseModel, taskMutations, mutationColumns, copy)
+  const displayModel = controller?.model ?? baseModel
   const titleId = `${id}-title`
-  const validation = state.kind === "ready" ? validateBoardViewModel(state.model) : { valid: true as const }
+  const validation = displayModel !== null ? validateBoardViewModel(displayModel) : { valid: true as const }
   const board =
-    state.kind === "ready" && validation.valid ? state.model.board : state.kind === "empty" ? state.board : undefined
+    displayModel !== null && validation.valid ? displayModel.board : state.kind === "empty" ? state.board : undefined
   const renderedState: BoardViewState =
-    state.kind === "ready" && !validation.valid
+    displayModel !== null && !validation.valid
       ? { kind: "error", message: copy.invalidModelDescription }
       : state
   const rootClassName = className ? `${styles.board} ${className}` : styles.board
@@ -312,20 +463,24 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       aria-labelledby={titleId}
       data-testid="board-view"
       data-state={renderedState.kind}
-      data-anomaly={state.kind === "ready" && !validation.valid ? "board-model" : undefined}
+      data-anomaly={displayModel !== null && !validation.valid ? "board-model" : undefined}
     >
       <a className={styles.skipLink} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
-      <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} />
+      <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />
       {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
+      {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
+      {controller?.isMutationPending ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</p> : null}
+      {controller ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</p> : null}
       <div id={`${id}-columns`} tabIndex={-1}>
-        {renderedState.kind === "ready" ? (
-          <BoardColumns model={renderedState.model} copy={copy} rootId={id} onSelectTask={onSelectTask} />
+        {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (
+          <BoardColumns model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} onSelectTask={onSelectTask} />
         ) : (
           <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
         )}
       </div>
+      {controller ? <MutationDialog controller={controller} copy={copy} /> : null}
     </section>
   )
 }

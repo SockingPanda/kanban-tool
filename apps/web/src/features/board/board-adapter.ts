@@ -5,6 +5,7 @@ import type {
 import type {
   BoardColumnViewModel,
   BoardExecutionPlanState,
+  BoardTaskLabelViewModel,
   BoardTaskStatus,
   BoardTaskViewModel,
   BoardViewModel,
@@ -62,10 +63,22 @@ function projectTask(task: BoardTask, groupedStatus: BoardTaskStatus): BoardTask
   }
   return Object.freeze({
     id: task.id,
+    seq: task.seq,
     ref: task.ref,
     title: task.title,
+    description: task.description,
     status,
     position: task.position,
+    scheduledAt: task.scheduled_at,
+    dueAt: task.due_at,
+    lastHeartbeatAt: task.last_heartbeat_at,
+    statusReason: task.status_reason,
+    labels: Object.freeze(task.labels.map((label) => Object.freeze({
+      id: label.id,
+      name: label.name,
+      color: label.color,
+    } satisfies BoardTaskLabelViewModel))),
+    lockVersion: task.lock_version,
     priority: parsePriority(task.priority),
     assignee: task.assignee,
     readiness: Object.freeze({

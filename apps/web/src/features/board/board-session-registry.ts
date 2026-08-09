@@ -35,6 +35,7 @@ interface BoardSession {
   readonly resources: Set<BoardReadResource>
   readonly listeners: Set<(model: BoardReadModel) => void>
   readonly telemetryListeners: Set<(entry: SyncTelemetryEntry) => void>
+  refreshPromise: Promise<void> | null
   refs: number
   disposed: boolean
 }
@@ -42,6 +43,8 @@ interface BoardSession {
 export interface BoardSessionHandle {
   readonly release: () => void
   readonly retry: () => void
+  /** Reload canonical board data through the existing session and publish it to subscribers. */
+  readonly refresh: () => Promise<void>
   readonly generation: number
 }
 
@@ -204,6 +207,7 @@ export function acquireBoardSession(
       controller,
       listeners,
       telemetryListeners,
+      refreshPromise: null,
       refs: 0,
       disposed: false,
     }
@@ -242,6 +246,27 @@ export function acquireBoardSession(
     release,
     retry: () => {
       if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
+    },
+    refresh: () => {
+      if (released || session === undefined || session.disposed || sessions.get(key) !== session) return Promise.resolve()
+      if (session.refreshPromise !== null) return session.refreshPromise
+      const current = session
+      const generation = current.generation
+      const refreshPromise = (async () => {
+        const nextModel = await current.query.reload()
+        // The refresh belongs to the canonical session entry, not the handle
+        // that happened to start it. A released handle must not suppress a
+        // publish when another owner still retains the same session.
+        if (current.disposed || current.generation !== generation || sessions.get(key) !== current) return
+        for (const listener of current.listeners) listener(nextModel)
+      })()
+      current.refreshPromise = refreshPromise
+      void refreshPromise.then(() => {
+        if (current.refreshPromise === refreshPromise) current.refreshPromise = null
+      }, () => {
+        if (current.refreshPromise === refreshPromise) current.refreshPromise = null
+      })
+      return refreshPromise
     },
     generation: session.generation,
   }

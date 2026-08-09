@@ -14,6 +14,7 @@ import {
   inspectorMutationCommitted,
   inspectorRetryIntentMatches,
   inspectorRetryUserIntentMatches,
+  inspectorTransitionUserIntent,
   type InspectorActionDialogUserIntent,
   type InspectorEditDraft,
   type InspectorActionView,
@@ -821,6 +822,13 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         && inspectorActionDialogMatchesTransitionIntent(actionDialogRef.current, retryIntent.command)
       ) {
         closeActionDialog()
+      } else if (operation === "transition" && retryIntent.operation === "transition" && actionDialogRef.current !== null) {
+        actionDialogSubmissionRef.current = {
+          epoch,
+          taskId,
+          intent: inspectorTransitionUserIntent(retryIntent.command),
+          status: "preserve",
+        }
       }
       return outcome
     } catch {

@@ -254,9 +254,9 @@ describe("Ontology screen presentation", () => {
   })
 
   test("bounds review-group scope checks to a complete current-board signal page", () => {
-    const groups = [reviewGroupFixture(), reviewGroupFixture({ key: "foreign", signal_ids: ["los_other"] })]
+    const groups = [reviewGroupFixture(), reviewGroupFixture({ key: "foreign", signal_ids: ["los_other"] }), reviewGroupFixture({ key: "empty", signal_ids: [] })]
     expect(scopeReviewGroupsToKnownSignals(groups, [signalFixture()], true).map((group) => group.key)).toEqual(["lab_cli"])
-    expect(scopeReviewGroupsToKnownSignals(groups, [signalFixture()], false)).toHaveLength(2)
+    expect(scopeReviewGroupsToKnownSignals(groups, [signalFixture()], false).map((group) => group.key)).toEqual(["lab_cli", "foreign"])
   })
 
   test("does not expose an unsupported cluster grouping tab", () => {
@@ -358,6 +358,67 @@ describe("Ontology screen presentation", () => {
     expect(sameOntologyLifecycleIdentity(identityB, attemptB.identity)).toBe(true)
   })
 
+  test("UI retry keeps A snapshot after selecting B and hides the stale response", async () => {
+    const identityA = { api: null, signalId: "los_a" } as const
+    const identityB = { api: null, signalId: "los_b" } as const
+    const attemptA = createOntologyLifecycleAttempt("confirm", "los_a", "keep A", identityA)
+    const calls: Array<{ action: LifecycleAction; signalId: string; reason: string }> = []
+    const results: string[] = []
+    let rejectA!: (error: unknown) => void
+    const pendingA = new Promise<void>((_resolve, reject) => {
+      rejectA = reject
+    })
+    let currentIdentity: typeof identityA | typeof identityB = identityA
+    const invoke = vi.fn((action: LifecycleAction, signalId: string, reason: string) => {
+      calls.push({ action, signalId, reason })
+      return calls.length === 1 ? pendingA : Promise.resolve()
+    })
+    const retryA = () => {
+      void executeOntologyLifecycleAttempt(attemptA, invoke, () => sameOntologyLifecycleIdentity(currentIdentity, attemptA.identity))
+        .then((result) => results.push(result.kind))
+    }
+    const treeA = OntologySignalDetailView({
+      phase: "success",
+      detail: detailFixture({ signal: signalFixture({ id: "los_a" }) }),
+      actionError: new Error("A failed"),
+      actionReason: "keep A",
+      actionPending: false,
+      lifecycleEnabled: true,
+      onRetryAction: retryA,
+      onActionReasonChange: () => undefined,
+      onLifecycleAction: () => undefined,
+      onExplainAtom: () => undefined,
+    })
+    const retryButton = findButtonByLabel(treeA, "Retry action")
+    expect(retryButton).not.toBeNull()
+    retryButton?.props.onClick?.()
+
+    currentIdentity = identityB
+    rejectA(new Error("A failed"))
+    await vi.waitFor(() => expect(results).toEqual(["stale"]))
+    const treeB = OntologySignalDetailView({
+      phase: "success",
+      detail: detailFixture({ signal: signalFixture({ id: "los_b" }) }),
+      actionError: null,
+      actionReason: "new B reason",
+      actionPending: false,
+      lifecycleEnabled: true,
+      onRetryAction: retryA,
+      onActionReasonChange: () => undefined,
+      onLifecycleAction: () => undefined,
+      onExplainAtom: () => undefined,
+    })
+    expect(findButtonByLabel(treeB, "Retry action")).toBeNull()
+
+    retryButton?.props.onClick?.()
+    await vi.waitFor(() => expect(results).toEqual(["stale", "stale"]))
+    expect(calls).toEqual([
+      { action: "confirm", signalId: "los_a", reason: "keep A" },
+      { action: "confirm", signalId: "los_a", reason: "keep A" },
+    ])
+    expect(renderToStaticMarkup(treeB)).not.toContain("A failed")
+  })
+
   test("separates a missing signal detail from an empty selection", () => {
     const tree = OntologySignalDetailView({
       phase: "error",
@@ -426,4 +487,22 @@ function findButtonByText(node: ReactNode, text: string): ReactElement<ButtonPro
   const element = node as ReactElement<ButtonProps>
   if (element.props.label === text) return element
   return findButtonByText(element.props.children, text)
+}
+
+function findButtonByLabel(node: unknown, text: string): ReactElement<ButtonProps> | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const match = findButtonByLabel(child, text)
+      if (match) return match
+    }
+    return null
+  }
+  if (!isValidElement(node)) return null
+  const element = node as ReactElement<ButtonProps>
+  if (element.props.label === text) return element
+  for (const value of Object.values(element.props as Record<string, unknown>)) {
+    const match = findButtonByLabel(value, text)
+    if (match) return match
+  }
+  return null
 }

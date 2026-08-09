@@ -329,7 +329,12 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     const changed = !sameScope(previous?.scope ?? null, surface?.scope ?? null)
     this.surface = surface
     if (!changed) return
-    if (previous !== null && previous !== undefined) {
+    const rebindsSameTask = previous !== null
+      && previous !== undefined
+      && surface !== null
+      && previous.scope.taskId === surface.scope.taskId
+      && previous.scope.identity !== surface.scope.identity
+    if (rebindsSameTask) {
       previous.claimTokens?.delete(previous.scope.taskId)
       this.fallbackClaimTokens.delete(previous.scope.taskId)
     }

@@ -363,11 +363,55 @@ describe("Task Inspector mutation controller", () => {
     expect(transitionTask).toHaveBeenCalledTimes(1)
   })
 
-  test("clears task claim tokens when a runtime identity changes", () => {
+  test("preserves a shared claim token across inspector unmount and same-identity reopen", async () => {
+    const transitionTask = vi.fn()
+      .mockResolvedValueOnce(response({ claim_token: "shared-token" }))
+      .mockResolvedValueOnce(response())
+    const claimTokens = createTaskClaimTokenStore()
+    const mutationClient = client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] })
+    const controller = new TaskInspectorMutationController(surface(mutationClient, scope(), { claimTokens }))
+
+    await expect(controller.transition({ action: "claim", input: { worker_profile: "manual", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+    controller.setSurface(null)
+    controller.setSurface(surface(mutationClient, scope(), { claimTokens }))
+    await expect(controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+
+    expect(transitionTask.mock.calls[1]?.[2]).toMatchObject({ claim_token: "shared-token" })
+  })
+
+  test("preserves a fallback claim token while switching between tasks", async () => {
+    const transitionTask = vi.fn()
+      .mockResolvedValueOnce(response({ claim_token: "fallback-token" }))
+      .mockResolvedValueOnce(response())
+    const mutationClient = client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] })
+    const controller = new TaskInspectorMutationController(surface(mutationClient, scope("t_1")))
+
+    await expect(controller.transition({ action: "claim", input: { worker_profile: "manual", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+    controller.setSurface(surface(mutationClient, scope("t_2")))
+    controller.setSurface(surface(mutationClient, scope("t_1")))
+    await expect(controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+
+    expect(transitionTask.mock.calls[1]?.[2]).toMatchObject({ claim_token: "fallback-token" })
+  })
+
+  test("clears task claim tokens when the same task is rebound to a new runtime identity", () => {
     const claimTokens = createTaskClaimTokenStore({ t_1: "old-token" })
     const controller = new TaskInspectorMutationController(surface(client(), scope(), { claimTokens }))
     controller.setSurface(surface(client(), scope("t_1", "b_other"), { claimTokens }))
     expect(claimTokens.get("t_1")).toBeNull()
+  })
+
+  test("clears the fallback claim token when the same task is rebound to a new runtime identity", async () => {
+    const transitionTask = vi.fn()
+      .mockResolvedValueOnce(response({ claim_token: "old-token" }))
+    const mutationClient = client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] })
+    const controller = new TaskInspectorMutationController(surface(mutationClient, scope("t_1")))
+
+    await expect(controller.transition({ action: "claim", input: { worker_profile: "manual", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
+    controller.setSurface(surface(mutationClient, scope("t_1", "b_other")))
+    await expect(controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })).resolves.toEqual({ committed: false, reconciled: false })
+
+    expect(transitionTask).toHaveBeenCalledTimes(1)
   })
 
   test("emits exact event kinds for detail write handlers", async () => {

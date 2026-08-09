@@ -240,6 +240,16 @@ fn contractize(value: Value) -> Value {
                         .map(|id| json!({"id": id, "name": Value::Null}))
                         .collect::<Vec<_>>();
                     output.insert(target.to_owned(), Value::Array(labels));
+                } else if key == "change_json" && value.is_string() {
+                    let mut parsed = value
+                        .as_str()
+                        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+                        .unwrap_or(Value::Null);
+                    if let Some(object) = parsed.as_object_mut() {
+                        object.remove("_idempotency_key");
+                        object.remove("_idempotency_fingerprint");
+                    }
+                    output.insert(target.to_owned(), parsed);
                 } else if key.ends_with("_json") && value.is_string() {
                     let parsed = value
                         .as_str()

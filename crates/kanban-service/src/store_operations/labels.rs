@@ -322,6 +322,7 @@ impl TursoStore {
                 now: input.now,
                 created_by: &input.actor,
                 actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )

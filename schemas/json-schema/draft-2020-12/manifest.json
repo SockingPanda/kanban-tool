@@ -2861,7 +2861,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-label-ontology-action-request.v1.invalid.json",
       "path": "api/create-label-ontology-action-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-label-ontology-action-request.v1.valid.json",
-      "sha256": "sha256:005ebac221e7d9ee9079fd6b248f803a2e2f38fa7cea44d5bdaf0a6af7ff804d",
+      "sha256": "sha256:791c3d166e1ff2268ff96697e460eb8251adca681e085d00b0afdfd3b33b91fe",
       "strictness": "deny_unknown_fields"
     },
     {

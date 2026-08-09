@@ -803,6 +803,9 @@ wire!(
 wire!(
     pub struct LabelOntologyActionRequest {
         pub actor: LabelOntologyActorWire,
+        /// 作用域限定在所选看板上的 ontology lifecycle 重试 key。
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub idempotency_key: Option<String>,
         pub action_type: LabelOntologyActionTypeWire,
         pub signal_ids: Vec<String>,
         pub reason: String,

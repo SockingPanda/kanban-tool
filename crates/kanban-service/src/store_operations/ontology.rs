@@ -171,6 +171,8 @@ pub struct OntologyObservationInput {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct OntologyActionInput {
     pub actor: OntologyActorInput,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
     pub action_type: String,
     #[serde(default)]
     pub signal_ids: Vec<String>,
@@ -587,6 +589,7 @@ impl TursoStore {
                 now,
                 created_by: &input.actor,
                 actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -685,6 +688,7 @@ impl TursoStore {
                 now,
                 created_by: actor,
                 actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -1445,6 +1449,7 @@ impl TursoStore {
                 now,
                 created_by: &input.actor,
                 actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -1570,6 +1575,7 @@ impl TursoStore {
                 now,
                 created_by: &input.actor,
                 actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -2001,11 +2007,104 @@ impl TursoStore {
                 ));
             }
         }
+        let mut change_json = json_string_or_object(&input.change_json)?;
+        let validation_json = json_string_or_object(&input.validation_json)?.to_string();
+        let normalized_idempotency_key = input.idempotency_key.as_deref().map(str::trim);
+        if normalized_idempotency_key == Some("") {
+            return Err(StoreError::InvalidInput(
+                "idempotency_key must not be empty".to_owned(),
+            ));
+        }
+        let idempotency_key = normalized_idempotency_key.map(str::to_owned);
+        let request_fingerprint = idempotency_key.as_ref().map(|_| {
+            fnv_hash(
+                &json!({
+                    "action_type": input.action_type,
+                    "signal_ids": input.signal_ids,
+                    "reason": input.reason,
+                    "superseded_by_signal_id": input.superseded_by_signal_id,
+                    "parent_action_id": input.parent_action_id,
+                    "target_label_id": target_label_id,
+                    "result_label_id": result_label_id,
+                    "result_atom_id": input.result_atom_id,
+                    "result_atom_content_hash": input.result_atom_content_hash,
+                    "result_proposal_id": input.result_proposal_id,
+                    "canonical_before_hash": input.canonical_before_hash,
+                    "canonical_after_hash": input.canonical_after_hash,
+                    "change": change_json,
+                    "validation_status": input.validation_status,
+                    "validation": validation_json,
+                    "actor": {
+                        "name": input.actor.name.as_str(),
+                        "actor_type": input.actor.actor_type.as_str(),
+                        "agent_type": input.actor.agent_type.as_deref(),
+                    },
+                })
+                .to_string(),
+            )
+        });
+        if let (Some(key), Some(fingerprint)) = (&idempotency_key, &request_fingerprint) {
+            let object = change_json.as_object_mut().ok_or_else(|| {
+                StoreError::InvalidInput("change must be a JSON object".to_owned())
+            })?;
+            object.insert(
+                "_idempotency_key".to_owned(),
+                JsonValue::String(key.clone()),
+            );
+            object.insert(
+                "_idempotency_fingerprint".to_owned(),
+                JsonValue::String(fingerprint.clone()),
+            );
+        }
+        let deterministic_action_id = idempotency_key
+            .as_deref()
+            .map(|key| format!("loa_idem_{}", fnv_hash(&format!("{board_id}\n{key}"))));
         let now = now_ms();
         let mut connection = self.connection().await?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
+        if let (Some(action_id), Some(key), Some(fingerprint)) = (
+            deterministic_action_id.as_deref(),
+            idempotency_key.as_deref(),
+            request_fingerprint.as_deref(),
+        ) {
+            let existing = first_row(
+                transaction
+                    .query(
+                        "SELECT change_json FROM label_ontology_actions WHERE board_id=:board AND id=:id LIMIT 1",
+                        [(":board", board_id.as_str()), (":id", action_id)],
+                    )
+                    .await?,
+            )
+            .await
+            .ok();
+            if let Some(row) = existing {
+                let existing_change = text_value(row.get_value(0)?, "actions.change_json")?;
+                let metadata = serde_json::from_str::<JsonValue>(&existing_change)
+                    .ok()
+                    .and_then(|value| value.as_object().cloned());
+                if metadata
+                    .as_ref()
+                    .and_then(|value| value.get("_idempotency_key"))
+                    .and_then(JsonValue::as_str)
+                    == Some(key)
+                    && metadata
+                        .as_ref()
+                        .and_then(|value| value.get("_idempotency_fingerprint"))
+                        .and_then(JsonValue::as_str)
+                        == Some(fingerprint)
+                {
+                    transaction.commit().await?;
+                    return self.action_by_id(&board_id, action_id).await;
+                }
+                return Err(StoreError::OntologyIdempotencyConflict {
+                    board_id: board_id.clone(),
+                    key: key.to_owned(),
+                    existing_action_id: action_id.to_owned(),
+                });
+            }
+        }
         validate_result_atom(
             &transaction,
             &board_id,
@@ -2044,8 +2143,6 @@ impl TursoStore {
             )
             .await?;
         }
-        let change_json = json_string_or_object(&input.change_json)?;
-        let validation_json = json_string_or_object(&input.validation_json)?.to_string();
         let action_id = insert_action(
             &transaction,
             ActionInsertInput {
@@ -2066,6 +2163,7 @@ impl TursoStore {
                 now,
                 created_by: &input.actor.name,
                 actor_type: &input.actor.actor_type,
+                action_id: deterministic_action_id.as_deref(),
                 agent_type: input.actor.agent_type.as_deref(),
             },
         )
@@ -2256,6 +2354,7 @@ impl TursoStore {
                 now,
                 created_by: &input.actor.name,
                 actor_type: &input.actor.actor_type,
+                action_id: None,
                 agent_type: input.actor.agent_type.as_deref(),
             },
         )
@@ -2471,6 +2570,7 @@ impl TursoStore {
                 now,
                 created_by: &input.actor.name,
                 actor_type: &input.actor.actor_type,
+                action_id: None,
                 agent_type: input.actor.agent_type.as_deref(),
             },
         )
@@ -2524,6 +2624,7 @@ impl TursoStore {
                 now,
                 created_by: &input.actor.name,
                 actor_type: &input.actor.actor_type,
+                action_id: None,
                 agent_type: input.actor.agent_type.as_deref(),
             },
         )
@@ -3342,6 +3443,7 @@ pub(crate) struct ActionInsertInput<'a> {
     pub(crate) now: i64,
     pub(crate) created_by: &'a str,
     pub(crate) actor_type: &'a str,
+    pub(crate) action_id: Option<&'a str>,
     pub(crate) agent_type: Option<&'a str>,
 }
 
@@ -3367,9 +3469,12 @@ pub(crate) async fn insert_action(
         now,
         created_by,
         actor_type,
+        action_id: requested_action_id,
         agent_type,
     } = input;
-    let action_id = format!("loa_{}", ulid::Ulid::new());
+    let action_id = requested_action_id
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("loa_{}", ulid::Ulid::new()));
     transaction.execute("INSERT INTO label_ontology_actions(id,board_id,action_type,reason,target_label_id,result_label_id,result_atom_id,result_atom_content_hash,result_proposal_id,canonical_before_hash,canonical_after_hash,change_json,validation_status,validation_json,validation_requirement,created_by,created_by_type,agent_type,created_at) VALUES (:id,:board,:type,:reason,:target,:result_label,:atom,:atom_hash,:proposal,:before,:after,:change,:status,:validation,CASE WHEN :status='not_required' THEN 'none' ELSE 'required' END,:actor,:actor_type,:agent_type,:now)", turso::named_params! { ":id": action_id.as_str(), ":board": board_id, ":type": action_type, ":reason": reason.trim(), ":target": target_label_id, ":result_label": result_label_id, ":atom": result_atom_id, ":atom_hash": result_atom_content_hash, ":proposal": result_proposal_id, ":before": before_hash, ":after": after_hash, ":change": change_json.to_string().as_str(), ":status": validation_status, ":validation": validation_json, ":actor": created_by, ":actor_type": actor_type, ":agent_type": agent_type, ":now": now }).await?;
     for signal_id in signal_ids {
         transaction.execute("INSERT INTO label_ontology_action_signals(board_id,action_id,signal_id,created_at) SELECT :board,:action,id,:now FROM label_ontology_signals WHERE board_id=:board AND id=:signal", turso::named_params! { ":board": board_id, ":action": action_id.as_str(), ":signal": signal_id.as_str(), ":now": now }).await?;

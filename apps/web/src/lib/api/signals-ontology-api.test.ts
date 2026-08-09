@@ -163,4 +163,94 @@ describe("signals and ontology API seam", () => {
     })
     await expect(api.reviewSignals({ limit: 0 })).rejects.toMatchObject({ kind: "invalid_response" })
   })
+
+  test("posts only supported lifecycle actions with a stable retry key and board scope", async () => {
+    const action = {
+      id: "loa_1",
+      board_id: "b_1",
+      parent_action_id: null,
+      action_type: "confirm",
+      reason: "keep this signal",
+      target_label_id: null,
+      result_label_id: null,
+      result_atom_id: null,
+      result_atom_content_hash: null,
+      result_proposal_id: null,
+      canonical_before_hash: null,
+      canonical_after_hash: null,
+      change: {},
+      validation_requirement: "none",
+      validation_status: "not_required",
+      validation_effective_outcome: "not_required",
+      validation_latest_attempt_id: null,
+      validation: {},
+      created_by: "codex",
+      created_by_type: "user",
+      agent_type: null,
+      created_at: 1,
+      signal_ids: ["los_1"],
+    } as const
+    const post = vi.fn(async (_path: string, _body: unknown): Promise<HttpTransportResponse> => response({ data: action }))
+    const transport: SignalsOntologyReadTransport = { get: vi.fn(), post }
+    const api = createSignalsOntologyReadApi(runtime, {
+      board: "default",
+      identity: { selector: "default", canonicalBoardId: asCanonicalBoardId("b_1"), slug: "default", name: "Default" },
+      transport,
+    })
+
+    await expect(api.createLabelOntologyLifecycleAction("confirm", "los_1", "keep this signal")).resolves.toEqual(action)
+    await expect(api.createLabelOntologyLifecycleAction("confirm", "los_1", "keep this signal")).resolves.toEqual(action)
+    expect(post).toHaveBeenCalledTimes(2)
+    expect(post.mock.calls[0]?.[0]).toBe("/api/v1/boards/b_1/label-ontology/actions")
+    const firstBody = post.mock.calls[0]?.[1] as { idempotency_key?: string }
+    const secondBody = post.mock.calls[1]?.[1] as { idempotency_key?: string }
+    expect(post.mock.calls[0]?.[1]).toMatchObject({
+      actor: { name: "codex", type: "user", agent_type: null },
+      action_type: "confirm",
+      signal_ids: ["los_1"],
+      reason: "keep this signal",
+      idempotency_key: firstBody.idempotency_key,
+    })
+    expect(firstBody.idempotency_key).toBeTruthy()
+    expect(firstBody.idempotency_key).toBe(secondBody.idempotency_key)
+  })
+
+  test("rejects lifecycle responses outside the resolved board", async () => {
+    const transport: SignalsOntologyReadTransport = {
+      get: vi.fn(),
+      post: vi.fn(async (): Promise<HttpTransportResponse> => response({
+        data: {
+          id: "loa_other",
+          board_id: "b_other",
+          parent_action_id: null,
+          action_type: "confirm",
+          reason: "scope",
+          target_label_id: null,
+          result_label_id: null,
+          result_atom_id: null,
+          result_atom_content_hash: null,
+          result_proposal_id: null,
+          canonical_before_hash: null,
+          canonical_after_hash: null,
+          change: {},
+          validation_requirement: "none",
+          validation_status: "not_required",
+          validation_effective_outcome: "not_required",
+          validation_latest_attempt_id: null,
+          validation: {},
+          created_by: "codex",
+          created_by_type: "user",
+          agent_type: null,
+          created_at: 1,
+          signal_ids: ["los_1"],
+        },
+      })),
+    }
+    const api = createSignalsOntologyReadApi(runtime, {
+      board: "default",
+      identity: { selector: "default", canonicalBoardId: asCanonicalBoardId("b_1"), slug: "default", name: "Default" },
+      transport,
+    })
+    await expect(api.createLabelOntologyLifecycleAction("confirm", "los_1", "scope")).rejects.toMatchObject({ kind: "board_scope" })
+  })
 })

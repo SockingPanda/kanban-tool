@@ -120,6 +120,9 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
           onFiltersChange={(next) => navigateFeature(next)}
           onSelectSignal={(signalId) => navigateFeature({ ...(filters as OntologyRouteFilters), signal: signalId ?? undefined })}
           onCloseDetail={closeDetail}
+          onLifecycleAction={async (action, signalId, reason) => {
+            await state.api.createLabelOntologyLifecycleAction(action, signalId, reason)
+          }}
         />
       )}
     </Suspense>

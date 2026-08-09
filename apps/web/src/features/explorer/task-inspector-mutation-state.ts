@@ -196,9 +196,7 @@ export type TaskInspectorMutationRetryIntent =
   | { readonly operation: "applySuggestedLabel"; readonly taskId: string; readonly input: InspectorApplySuggestedLabelInput }
   | { readonly operation: "addComment"; readonly taskId: string; readonly input: InspectorCommentInput }
   | { readonly operation: "uploadAttachment"; readonly taskId: string; readonly input: InspectorUploadAttachmentInput }
-  | { readonly operation: "downloadAttachment"; readonly taskId: string; readonly attachmentId: string }
   | { readonly operation: "deleteAttachment"; readonly taskId: string; readonly attachmentId: string }
-  | { readonly operation: "suggestLabels"; readonly taskId: string; readonly query?: InspectorSuggestTaskLabelsQuery }
 
 export interface TaskInspectorMutationSnapshot {
   readonly scope: TaskInspectorMutationScope

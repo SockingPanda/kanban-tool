@@ -5,7 +5,9 @@ import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 
 import { ProductShell } from "./ProductShell"
 import { BoardLive } from "./features/board/BoardLive"
-import { appendExplorerEventBatch, coalesceExplorerBoundary } from "./App.logic"
+import { boardSyncStatusForTelemetry } from "./features/board/board-live-state"
+import type { BoardSyncStatus } from "./features/board/types"
+import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation } from "./App.logic"
 import { parseBoardEvent, type BoardEventsBatch, type ExplorerEvent } from "./lib/api/explorer-read-model"
 import type { SyncTelemetryEntry } from "./lib/sync"
 import type { CanonicalBoardId } from "./lib/sync/contracts"
@@ -16,6 +18,9 @@ import { useWebRuntime } from "./lib/runtime-context"
 import { astryxMessages, astryxOverrides } from "./lib/i18n"
 
 const explorerInvalidationTelemetry = new Set([
+  "connection-live",
+  "recovery-start",
+  "recovery-connection-retry",
   "event-applied",
   "recovery-complete",
   "poll-complete",
@@ -23,6 +28,14 @@ const explorerInvalidationTelemetry = new Set([
   "protocol-anomaly",
   "isolation-anomaly",
   "poll-protocol-anomaly",
+  "protocol-anomaly-suppressed",
+  "stalled",
+  "transport-failure",
+  "sink-effect-failure",
+  "recovery-failure",
+  "poll-failure",
+  "circuit-open",
+  "detached-async-failure",
 ])
 
 const EVENT_APPLIED_DEBOUNCE_MS = 200
@@ -43,11 +56,14 @@ function RuntimeThemedShell() {
     : `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${boardRoute.kind === "board" ? boardRoute.boardSlug : ""}`
   const sessionKeyRef = useRef(sessionKey)
   sessionKeyRef.current = sessionKey
-  const [sessionState, setSessionState] = useState<{ readonly key: string; readonly revision: number; readonly eventsRefreshRevision: number }>(() => ({
+  const [sessionState, setSessionState] = useState<{ readonly key: string; readonly boardRevision: number; readonly inspectorRevision: number; readonly runsRevision: number; readonly eventsRefreshRevision: number }>(() => ({
     key: sessionKey,
-    revision: 0,
+    boardRevision: 0,
+    inspectorRevision: 0,
+    runsRevision: 0,
     eventsRefreshRevision: 0,
   }))
+  const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
   const [eventsBatchState, setEventsBatchState] = useState<{ readonly key: string; readonly batch: BoardEventsBatch | null }>(() => ({ key: sessionKey, batch: null }))
   const eventAppliedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const boundaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -55,32 +71,46 @@ function RuntimeThemedShell() {
   const pendingBoardIdRef = useRef<CanonicalBoardId | null>(null)
   const pendingBoundaryRef = useRef(false)
   const pendingBoundaryTypesRef = useRef<Set<string>>(new Set())
+  const pendingEventInvalidationRef = useRef({ board: false, inspector: false, runs: false, fullRefetch: false })
+  const pendingEventBoundarySourceRef = useRef(false)
 
-  const bumpExplorerRevision = useCallback((refreshEvents = false) => {
+  const bumpExplorerRevision = useCallback((targets: { readonly board?: boolean; readonly inspector?: boolean; readonly runs?: boolean; readonly events?: boolean }) => {
     setSessionState((current) => {
       const key = sessionKeyRef.current
       if (current.key !== key) return current
-      return { key, revision: current.revision + 1, eventsRefreshRevision: current.eventsRefreshRevision + (refreshEvents ? 1 : 0) }
+      return {
+        key,
+        boardRevision: current.boardRevision + (targets.board === true ? 1 : 0),
+        inspectorRevision: current.inspectorRevision + (targets.inspector === true ? 1 : 0),
+        runsRevision: current.runsRevision + (targets.runs === true ? 1 : 0),
+        eventsRefreshRevision: current.eventsRefreshRevision + (targets.events === true ? 1 : 0),
+      }
     })
   }, [])
 
   const flushEventBatch = useCallback(() => {
     const pending = pendingEventsRef.current
     const boardId = pendingBoardIdRef.current
+    const invalidation = pendingEventInvalidationRef.current
+    const boundarySource = pendingEventBoundarySourceRef.current
     pendingEventsRef.current = []
     pendingBoardIdRef.current = null
+    pendingEventInvalidationRef.current = { board: false, inspector: false, runs: false, fullRefetch: false }
+    pendingEventBoundarySourceRef.current = false
     if (pending.length === 0 || boardId === null) return
     try {
       const events = appendExplorerEventBatch([], pending, boardId)
       const last = events.at(-1)
       if (!last) return
       setEventsBatchState({ key: sessionKeyRef.current, batch: { boardId, events, nextAfter: last.id } })
-      bumpExplorerRevision(false)
+      if (!pendingBoundaryRef.current && !boundarySource && !invalidation.fullRefetch) {
+        bumpExplorerRevision(invalidation)
+      }
     } catch {
       // A malformed batch is a recovery boundary; EventsView must not receive
       // an untrusted partial append.
       setEventsBatchState({ key: sessionKeyRef.current, batch: null })
-      bumpExplorerRevision(true)
+      bumpExplorerRevision({ board: true, inspector: true, runs: true, events: true })
     }
   }, [bumpExplorerRevision])
 
@@ -96,11 +126,16 @@ function RuntimeThemedShell() {
     boundaryTimerRef.current = setTimeout(() => {
       boundaryTimerRef.current = null
       if (!pendingBoundaryRef.current) return
+      if (eventAppliedTimerRef.current !== null) {
+        clearTimeout(eventAppliedTimerRef.current)
+        eventAppliedTimerRef.current = null
+        flushEventBatch()
+      }
       pendingBoundaryRef.current = false
       const boundary = coalesceExplorerBoundary([...pendingBoundaryTypesRef.current])
       pendingBoundaryTypesRef.current.clear()
       setEventsBatchState({ key: sessionKeyRef.current, batch: null })
-      if (boundary.invalidationDelta === 1) bumpExplorerRevision(boundary.eventsRefreshDelta === 1)
+      if (boundary.invalidationDelta === 1) bumpExplorerRevision({ board: true, inspector: true, runs: true, events: boundary.eventsRefreshDelta === 1 })
     }, 0)
   }, [bumpExplorerRevision, flushEventBatch])
 
@@ -117,7 +152,10 @@ function RuntimeThemedShell() {
     pendingBoardIdRef.current = null
     pendingBoundaryRef.current = false
     pendingBoundaryTypesRef.current.clear()
-    setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, revision: 0, eventsRefreshRevision: 0 })
+    pendingEventInvalidationRef.current = { board: false, inspector: false, runs: false, fullRefetch: false }
+    pendingEventBoundarySourceRef.current = false
+    setSyncStatus("connecting")
+    setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, boardRevision: 0, inspectorRevision: 0, runsRevision: 0, eventsRefreshRevision: 0 })
     setEventsBatchState((current) => current.key === sessionKey ? current : { key: sessionKey, batch: null })
   }, [sessionKey])
 
@@ -128,12 +166,25 @@ function RuntimeThemedShell() {
 
   const onSessionTelemetry = useCallback((entry: SyncTelemetryEntry) => {
     if (!explorerInvalidationTelemetry.has(entry.type)) return
+    const nextSyncStatus = boardSyncStatusForTelemetry(entry.type)
+    if (nextSyncStatus !== null) setSyncStatus(nextSyncStatus)
+    if (entry.type === "connection-live" || entry.type === "recovery-start" || entry.type === "recovery-connection-retry") return
     if (entry.type === "event-applied") {
       const event = parseBoardEvent(entry.details?.event)
       if (!event || event.board_id !== entry.boardId) {
         scheduleBoundaryRefresh("protocol-anomaly")
         return
       }
+      const invalidation = explorerEventInvalidation(event, entry.boardId)
+      pendingEventInvalidationRef.current = {
+        board: pendingEventInvalidationRef.current.board || invalidation.board,
+        inspector: pendingEventInvalidationRef.current.inspector || invalidation.inspector,
+        runs: pendingEventInvalidationRef.current.runs || invalidation.runs,
+        fullRefetch: pendingEventInvalidationRef.current.fullRefetch || invalidation.fullRefetch,
+      }
+      const source = typeof entry.details?.source === "string" ? entry.details.source : null
+      if (source === "recovery" || source === "poll" || source === "poll-boundary") pendingEventBoundarySourceRef.current = true
+      if (invalidation.fullRefetch) scheduleBoundaryRefresh("protocol-anomaly")
       if (pendingBoardIdRef.current !== null && pendingBoardIdRef.current !== entry.boardId) flushEventBatch()
       pendingBoardIdRef.current = entry.boardId
       pendingEventsRef.current.push(event)
@@ -162,9 +213,13 @@ function RuntimeThemedShell() {
           error={router.error instanceof Error ? router.error.message : undefined}
           onNavigate={router.navigate}
           onRetry={() => window.location.reload()}
-          invalidationRevision={sessionState.key === sessionKey ? sessionState.revision : 0}
+          invalidationRevision={sessionState.key === sessionKey ? sessionState.boardRevision : 0}
+          boardRevision={sessionState.key === sessionKey ? sessionState.boardRevision : 0}
+          inspectorRevision={sessionState.key === sessionKey ? sessionState.inspectorRevision : 0}
+          runsRevision={sessionState.key === sessionKey ? sessionState.runsRevision : 0}
           eventsRefreshRevision={sessionState.key === sessionKey ? sessionState.eventsRefreshRevision : 0}
           eventsBatch={currentEventsBatch}
+          syncStatus={sessionState.key === sessionKey ? syncStatus : "connecting"}
         >
           {boardRoute ? (
             <BoardLive

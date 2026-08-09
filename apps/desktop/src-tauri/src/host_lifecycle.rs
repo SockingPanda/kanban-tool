@@ -4,10 +4,17 @@ use std::{
     net::{SocketAddr, TcpStream},
     path::PathBuf,
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver},
+    },
     thread,
     time::{Duration, Instant},
 };
+
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 use kanban_protocol::{
     HealthResponse, WEB_ARTIFACT_BASE_PATH, WEB_PROTOCOL_VERSION, WebArtifactManifest,
@@ -23,8 +30,26 @@ const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 const HTTP_READ_TIMEOUT: Duration = Duration::from_millis(750);
 const HOST_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const REAPER_RETRY_INTERVAL: Duration = Duration::from_millis(25);
+const REAPER_MAX_BACKOFF: Duration = Duration::from_millis(500);
+const REAPER_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(1);
+const STDERR_DRAIN_TIMEOUT: Duration = Duration::from_millis(250);
 const MAX_HTTP_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_STDERR_DIAGNOSTIC_BYTES: usize = 16 * 1024;
+
+#[cfg(unix)]
+type OwnedProcessGroup = libc::pid_t;
+#[cfg(not(unix))]
+type OwnedProcessGroup = ();
+
+#[cfg(unix)]
+fn is_process_group_gone(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(libc::ESRCH)
+}
+
+#[cfg(not(unix))]
+fn is_process_group_gone(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::NotFound
+}
 
 #[derive(Debug, Clone, Copy)]
 struct ProbeTimeouts {
@@ -551,6 +576,27 @@ impl std::fmt::Display for HostStartupError {
 
 impl std::error::Error for HostStartupError {}
 
+#[cfg(unix)]
+fn configure_owned_process_group(command: &mut Command) {
+    // sidecar 成为独立 process group leader；owned cleanup 只向保存的 PGID 发信号。
+    command.process_group(0);
+}
+
+#[cfg(not(unix))]
+fn configure_owned_process_group(_command: &mut Command) {}
+
+fn process_group_for(process: &Child) -> Option<OwnedProcessGroup> {
+    #[cfg(unix)]
+    {
+        Some(process.id() as libc::pid_t)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = process;
+        None
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostOwnership {
     External,
@@ -565,12 +611,29 @@ pub struct HostHandle {
 }
 
 #[derive(Debug)]
+struct DrainHandle {
+    join: thread::JoinHandle<()>,
+    done: Receiver<()>,
+}
+
+#[derive(Debug)]
 struct OwnedChild {
     process: Option<Child>,
+    process_group: Option<OwnedProcessGroup>,
+    leader_reaped: bool,
+    group_signal_sent: bool,
     stderr: Arc<Mutex<VecDeque<u8>>>,
-    drain: Option<thread::JoinHandle<()>>,
+    drain: Option<DrainHandle>,
     drop_cleanup: bool,
 }
+
+static REAPER_FALLBACK_QUEUE: OnceLock<Mutex<Vec<OwnedChild>>> = OnceLock::new();
+static REAPER_SERVICE: OnceLock<Mutex<Option<mpsc::Sender<OwnedChild>>>> = OnceLock::new();
+static REAPER_RETRY_PUMP_RUNNING: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+static FORCE_REAPER_SPAWN_FAILURE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 impl OwnedChild {
     fn process(&self) -> &Child {
@@ -606,14 +669,25 @@ impl OwnedChild {
     }
 
     fn finish_drain(&mut self) {
-        if let Some(drain) = self.drain.take() {
-            let _ = drain.join();
+        let Some(drain) = self.drain.take() else {
+            return;
+        };
+        if drain.done.recv_timeout(STDERR_DRAIN_TIMEOUT).is_ok() {
+            let _ = drain.join.join();
+        } else {
+            eprintln!(
+                "kanban sidecar stderr drain 超过 {:?}，detach reader",
+                STDERR_DRAIN_TIMEOUT
+            );
         }
     }
 
     fn detach_for_reaper(&mut self) -> Option<Self> {
         self.process.take().map(|process| Self {
             process: Some(process),
+            process_group: self.process_group,
+            leader_reaped: self.leader_reaped,
+            group_signal_sent: self.group_signal_sent,
             stderr: Arc::clone(&self.stderr),
             drain: self.drain.take(),
             drop_cleanup: false,
@@ -634,9 +708,8 @@ impl Drop for OwnedChild {
             return;
         };
         let cleanup = force_stop(&mut child);
-        if cleanup.process_reaped {
-            child.finish_drain();
-            child.release_process();
+        if cleanup.ownership() == CleanupOwnership::Release {
+            handoff_to_reaper(child, "OwnedChild Drop after confirmed exit");
         } else {
             handoff_to_reaper(child, "OwnedChild Drop");
         }
@@ -660,19 +733,22 @@ impl HostHandle {
         };
         match child.process_mut().try_wait() {
             Ok(Some(_)) => {
-                child.finish_drain();
-                child.release_process();
-                self.child.take();
-                return Ok(ShutdownResult::AlreadyExited);
+                if finish_reaped_child(child) {
+                    self.child.take();
+                    return Ok(ShutdownResult::AlreadyExited);
+                }
+                return Err(ShutdownError::Io(
+                    "sidecar leader 已退出但 process group 尚未确认消失；保留 ownership 重试"
+                        .to_owned(),
+                ));
             }
             Ok(None) => {}
             Err(error) => {
-                let first_error = ShutdownError::Io(error.to_string());
-                return self.cleanup_after_error(first_error);
+                return self.cleanup_after_error(ShutdownError::Io(error.to_string()));
             }
         }
 
-        if let Err(error) = request_graceful_stop(child.process()) {
+        if let Err(error) = request_graceful_stop(child) {
             let first_error = ShutdownError::GracefulRequest(error.to_string());
             return self.cleanup_after_error(first_error);
         }
@@ -680,10 +756,14 @@ impl HostHandle {
         loop {
             match child.process_mut().try_wait() {
                 Ok(Some(_)) => {
-                    child.finish_drain();
-                    child.release_process();
-                    self.child.take();
-                    return Ok(ShutdownResult::Graceful);
+                    if finish_reaped_child(child) {
+                        self.child.take();
+                        return Ok(ShutdownResult::Graceful);
+                    }
+                    return Err(ShutdownError::Io(
+                        "sidecar leader 已退出但 process group 尚未确认消失；保留 ownership 重试"
+                            .to_owned(),
+                    ));
                 }
                 Ok(None) if Instant::now() < deadline => {
                     thread::sleep(HOST_POLL_INTERVAL);
@@ -695,6 +775,8 @@ impl HostHandle {
                         .first_error
                         .map(|error| ShutdownError::Io(error.to_string()));
                     if ownership == CleanupOwnership::Release {
+                        child.finish_drain();
+                        child.release_process();
                         self.child.take();
                     }
                     if ownership == CleanupOwnership::RetainForRetry {
@@ -723,11 +805,13 @@ impl HostHandle {
             .child
             .as_mut()
             .expect("owned host child disappeared during shutdown");
-        let cleanup = force_stop(cleanup);
-        if cleanup.ownership() == CleanupOwnership::Release {
+        let cleanup_outcome = force_stop(cleanup);
+        if cleanup_outcome.ownership() == CleanupOwnership::Release {
+            cleanup.finish_drain();
+            cleanup.release_process();
             self.child.take();
         }
-        if let Some(cleanup_error) = cleanup.first_error {
+        if let Some(cleanup_error) = cleanup_outcome.first_error {
             eprintln!("kanban owned host cleanup 失败：{cleanup_error}");
         }
         Err(first_error)
@@ -746,14 +830,16 @@ impl Drop for HostHandle {
             return;
         };
         let cleanup = force_stop(&mut child);
-        if let Some(error) = cleanup.first_error {
+        if let Some(ref error) = cleanup.first_error {
             eprintln!("kanban owned host Drop cleanup 失败：{error}");
         }
-        if cleanup.process_reaped {
-            // force_stop 已经确认退出并 drain；child 的 process ownership 已释放。
-            child.finish_drain();
-        } else if let Some(child) = child.detach_for_reaper() {
-            handoff_to_reaper(child, "owned host Drop");
+        if let Some(child) = child.detach_for_reaper() {
+            let context = if cleanup.ownership() == CleanupOwnership::Release {
+                "owned host Drop after confirmed exit"
+            } else {
+                "owned host Drop"
+            };
+            handoff_to_reaper(child, context);
         }
     }
 }
@@ -804,10 +890,10 @@ pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostSta
                 }),
                 Err(error) => {
                     let cleanup = force_stop(&mut child);
-                    if let Some(cleanup_error) = cleanup.first_error {
+                    if let Some(ref cleanup_error) = cleanup.first_error {
                         eprintln!("kanban sidecar cleanup 失败：{cleanup_error}");
                     }
-                    if cleanup.process_reaped {
+                    if cleanup.ownership() == CleanupOwnership::Release {
                         child.finish_drain();
                         child.release_process();
                     } else if let Some(child) = child.detach_for_reaper() {
@@ -821,6 +907,15 @@ pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostSta
 }
 
 fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupError> {
+    // 先建立可恢复的后台 cleanup owner；这样真正拥有 Child 之后，Drop 不会遇到无法交接的
+    // spawn failure。测试仍可通过 FORCE_REAPER_SPAWN_FAILURE 覆盖 handoff fallback。
+    #[cfg(not(test))]
+    if reaper_service("sidecar bootstrap").is_none() {
+        return Err(HostStartupError::SidecarSpawn {
+            path: config.sidecar_path.clone(),
+            message: "后台 sidecar reaper 无法启动".to_owned(),
+        });
+    }
     if !config.sidecar_path.is_file() {
         return Err(HostStartupError::SidecarSpawn {
             path: config.sidecar_path.clone(),
@@ -845,6 +940,7 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupErr
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+    configure_owned_process_group(&mut command);
     let mut process = command
         .spawn()
         .map_err(|error| HostStartupError::SidecarSpawn {
@@ -872,10 +968,13 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupErr
         MAX_STDERR_DIAGNOSTIC_BYTES,
     )));
     let diagnostics_for_thread = Arc::clone(&diagnostics);
+    let (drain_done_tx, drain_done_rx) = mpsc::channel();
     let drain = match thread::Builder::new()
         .name("kanban-desktop-sidecar-stderr".to_owned())
-        .spawn(move || drain_stderr(stderr, diagnostics_for_thread))
-    {
+        .spawn(move || {
+            drain_stderr(stderr, diagnostics_for_thread);
+            let _ = drain_done_tx.send(());
+        }) {
         Ok(drain) => drain,
         Err(error) => {
             cleanup_spawn_failure(
@@ -889,26 +988,37 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupErr
             });
         }
     };
+    let process_group = process_group_for(&process);
     Ok(OwnedChild {
         process: Some(process),
+        process_group,
+        leader_reaped: false,
+        group_signal_sent: false,
         stderr: diagnostics,
-        drain: Some(drain),
+        drain: Some(DrainHandle {
+            join: drain,
+            done: drain_done_rx,
+        }),
         drop_cleanup: true,
     })
 }
 
 fn cleanup_spawn_failure(process: Child, diagnostics: Arc<Mutex<VecDeque<u8>>>, message: String) {
+    let process_group = process_group_for(&process);
     let mut child = OwnedChild {
         process: Some(process),
+        process_group,
+        leader_reaped: false,
+        group_signal_sent: false,
         stderr: diagnostics,
         drain: None,
         drop_cleanup: true,
     };
     let cleanup = force_stop(&mut child);
-    if let Some(error) = cleanup.first_error {
+    if let Some(ref error) = cleanup.first_error {
         eprintln!("kanban sidecar spawn cleanup 失败：{error}");
     }
-    if cleanup.process_reaped {
+    if cleanup.ownership() == CleanupOwnership::Release {
         child.release_process();
     } else if let Some(child) = child.detach_for_reaper() {
         handoff_to_reaper(child, &message);
@@ -943,8 +1053,7 @@ fn wait_for_sidecar(
                     message: error.to_string(),
                 })?
         {
-            child.finish_drain();
-            child.release_process();
+            let _ = finish_reaped_child(child);
             let diagnostic = child.diagnostic(status);
             if !initial_probe.is_unavailable()
                 || diagnostic
@@ -1011,15 +1120,10 @@ fn drain_stderr(mut stderr: impl Read, diagnostics: Arc<Mutex<VecDeque<u8>>>) {
 trait ProcessCleanup {
     fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>>;
     fn kill(&mut self) -> io::Result<()>;
-}
 
-impl ProcessCleanup for Child {
-    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
-        Child::try_wait(self)
-    }
-
-    fn kill(&mut self) -> io::Result<()> {
-        Child::kill(self)
+    /// 清理过程除了 leader 之外的 process group；fake seam 没有 group，默认视为已确认。
+    fn group_cleanup_confirmed(&mut self, _first_error: &mut Option<io::Error>) -> bool {
+        true
     }
 }
 
@@ -1027,6 +1131,7 @@ impl ProcessCleanup for Child {
 struct CleanupOutcome {
     first_error: Option<io::Error>,
     process_reaped: bool,
+    group_cleanup_confirmed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1037,13 +1142,14 @@ enum CleanupOwnership {
 
 impl CleanupOutcome {
     fn ownership(&self) -> CleanupOwnership {
-        if self.process_reaped {
+        if self.process_reaped && self.group_cleanup_confirmed {
             CleanupOwnership::Release
         } else {
             CleanupOwnership::RetainForRetry
         }
     }
 
+    #[cfg(test)]
     fn should_join_drain(&self) -> bool {
         self.process_reaped
     }
@@ -1060,9 +1166,11 @@ fn force_stop_with<P: ProcessCleanup>(process: &mut P) -> CleanupOutcome {
             stop_without_wait(process, &mut first_error)
         }
     };
+    let group_cleanup_confirmed = process.group_cleanup_confirmed(&mut first_error);
     CleanupOutcome {
         first_error,
         process_reaped,
+        group_cleanup_confirmed,
     }
 }
 
@@ -1088,109 +1196,440 @@ fn stop_without_wait<P: ProcessCleanup>(
     }
 }
 
+#[cfg(unix)]
+fn kill_owned_process_group(child: &OwnedChild, signal: libc::c_int) -> io::Result<()> {
+    let process_group = child.process_group.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "owned sidecar process group is unavailable",
+        )
+    })?;
+    let leader = child.process().id() as libc::pid_t;
+    if process_group <= 1 || process_group != leader {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "owned sidecar process group no longer matches its leader",
+        ));
+    }
+    let result = unsafe { libc::kill(-process_group, signal) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(unix)]
+fn owned_process_group_gone(child: &OwnedChild) -> io::Result<bool> {
+    let process_group = child.process_group.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "owned sidecar process group is unavailable",
+        )
+    })?;
+    if process_group <= 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "owned sidecar process group is invalid",
+        ));
+    }
+    let result = unsafe { libc::kill(-process_group, 0) };
+    if result == 0 {
+        Ok(false)
+    } else {
+        let error = io::Error::last_os_error();
+        if is_process_group_gone(&error) {
+            Ok(true)
+        } else {
+            Err(error)
+        }
+    }
+}
+
+fn confirm_owned_group_cleanup(
+    child: &mut OwnedChild,
+    first_error: &mut Option<io::Error>,
+) -> bool {
+    #[cfg(unix)]
+    {
+        let probe = match owned_process_group_gone(child) {
+            Ok(gone) => gone,
+            Err(error) if is_process_group_gone(&error) => true,
+            Err(error) => {
+                if first_error.is_none() {
+                    *first_error = Some(error);
+                }
+                return false;
+            }
+        };
+        if probe {
+            return true;
+        }
+        if child.group_signal_sent {
+            return false;
+        }
+        match kill_owned_process_group(child, libc::SIGKILL) {
+            Ok(()) => child.group_signal_sent = true,
+            Err(error) if is_process_group_gone(&error) => return true,
+            Err(error) => {
+                if first_error.is_none() {
+                    *first_error = Some(error);
+                }
+                return false;
+            }
+        }
+        match owned_process_group_gone(child) {
+            Ok(gone) => gone,
+            Err(error) if is_process_group_gone(&error) => true,
+            Err(error) => {
+                if first_error.is_none() {
+                    *first_error = Some(error);
+                }
+                false
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (child, first_error);
+        true
+    }
+}
+
+fn finish_reaped_child(child: &mut OwnedChild) -> bool {
+    // leader 已经被 wait/reap 后仍持有原 Child/PGID ownership；若 group 仍在，只补发一次
+    // SIGKILL，之后必须等待 ESRCH 才释放 ownership。
+    child.leader_reaped = true;
+    let mut cleanup_error = None;
+    let group_gone = confirm_owned_group_cleanup(child, &mut cleanup_error);
+    if let Some(error) = cleanup_error {
+        eprintln!("kanban sidecar descendant group cleanup 失败：{error}");
+    }
+    if !group_gone {
+        return false;
+    }
+    child.finish_drain();
+    child.release_process();
+    true
+}
+
+struct OwnedProcessCleanup<'a> {
+    child: &'a mut OwnedChild,
+    group_signal_sent: bool,
+}
+
+impl<'a> OwnedProcessCleanup<'a> {
+    fn new(child: &'a mut OwnedChild) -> Self {
+        Self {
+            child,
+            group_signal_sent: false,
+        }
+    }
+}
+
+impl ProcessCleanup for OwnedProcessCleanup<'_> {
+    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+        let status = self.child.process_mut().try_wait()?;
+        if status.is_some() {
+            self.child.leader_reaped = true;
+        }
+        Ok(status)
+    }
+
+    fn kill(&mut self) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            match kill_owned_process_group(self.child, libc::SIGKILL) {
+                Ok(()) => {
+                    self.group_signal_sent = true;
+                    self.child.group_signal_sent = true;
+                    Ok(())
+                }
+                Err(error) if is_process_group_gone(&error) => {
+                    self.group_signal_sent = true;
+                    self.child.group_signal_sent = true;
+                    Ok(())
+                }
+                Err(group_error) => {
+                    // leader kill 仅作最后兜底，group error 仍需保留，使 caller 不会误以为
+                    // descendant 已清理完毕。
+                    let _ = self.child.process_mut().kill();
+                    Err(group_error)
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            self.child.process_mut().kill()
+        }
+    }
+
+    fn group_cleanup_confirmed(&mut self, first_error: &mut Option<io::Error>) -> bool {
+        #[cfg(unix)]
+        {
+            self.child.group_signal_sent |= self.group_signal_sent;
+            confirm_owned_group_cleanup(self.child, first_error)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = first_error;
+            true
+        }
+    }
+}
+
 fn force_stop(child: &mut OwnedChild) -> CleanupOutcome {
     if child.process.is_none() {
         return CleanupOutcome {
             first_error: None,
             process_reaped: true,
+            group_cleanup_confirmed: true,
         };
     }
-    let outcome = force_stop_with(child.process_mut());
-    if outcome.should_join_drain() {
-        child.finish_drain();
-        child.release_process();
-    }
-    outcome
+    let mut cleanup = OwnedProcessCleanup::new(child);
+    force_stop_with(&mut cleanup)
 }
 
 /// 将仍由本进程拥有的 sidecar 交给后台 reaper，避免 UI/Drop 等待子进程。
 fn handoff_to_reaper(child: OwnedChild, context: &str) {
-    match spawn_reaper(child) {
-        Ok(()) => {}
-        Err((mut child, error)) => {
-            // 极端情况下线程创建失败；不能丢掉 Child ownership，退回到同步 reap。
-            eprintln!("kanban {context} 后台 reaper 启动失败：{error}；回退同步 reap");
-            reap_blocking(&mut child);
-        }
+    #[cfg(test)]
+    if FORCE_REAPER_SPAWN_FAILURE.load(Ordering::Acquire) {
+        eprintln!("kanban {context} 注入 reaper spawn failure；保留 Child ownership");
+        REAPER_FALLBACK_QUEUE
+            .get_or_init(|| Mutex::new(Vec::new()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(child);
+        schedule_reaper_retry(context);
+        return;
+    }
+    REAPER_FALLBACK_QUEUE
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .push(child);
+    let Some(service) = reaper_service(context) else {
+        schedule_reaper_retry(context);
+        return;
+    };
+    flush_pending_reapers(service, context);
+}
+
+fn reaper_queue_is_empty() -> bool {
+    REAPER_FALLBACK_QUEUE
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .is_empty()
+}
+
+/// service 建立失败时由独立、有限次数的 pump 自驱重试；调用方只入队，不等待子进程。
+fn schedule_reaper_retry(context: &str) {
+    if REAPER_RETRY_PUMP_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    let context = context.to_owned();
+    let context_for_thread = context.clone();
+    let result = thread::Builder::new()
+        .name("kanban-desktop-sidecar-reaper-retry".to_owned())
+        .spawn(move || {
+            let mut delay = REAPER_RETRY_INTERVAL;
+            for _ in 0..8 {
+                if let Some(service) = reaper_service(&context_for_thread) {
+                    flush_pending_reapers(service, &context_for_thread);
+                    if reaper_queue_is_empty() {
+                        REAPER_RETRY_PUMP_RUNNING.store(false, Ordering::Release);
+                        return;
+                    }
+                }
+                thread::sleep(delay);
+                delay = delay
+                    .checked_mul(2)
+                    .unwrap_or(REAPER_MAX_BACKOFF)
+                    .min(REAPER_MAX_BACKOFF);
+            }
+            REAPER_RETRY_PUMP_RUNNING.store(false, Ordering::Release);
+            eprintln!(
+                "kanban {context_for_thread} reaper retry pump 已耗尽；保留 Child ownership 等待后续 handoff"
+            );
+        });
+    if result.is_err() {
+        REAPER_RETRY_PUMP_RUNNING.store(false, Ordering::Release);
+        eprintln!("kanban {context} reaper retry pump 启动失败；保留 Child ownership");
     }
 }
 
-fn spawn_reaper(child: OwnedChild) -> Result<(), (OwnedChild, io::Error)> {
-    let state = Arc::new(Mutex::new(Some(child)));
-    let state_for_thread = Arc::clone(&state);
+fn reaper_service(context: &str) -> Option<mpsc::Sender<OwnedChild>> {
+    let service = REAPER_SERVICE.get_or_init(|| Mutex::new(None));
+    let mut service = service
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(sender) = service.as_ref() {
+        return Some(sender.clone());
+    }
+
+    let (sender, receiver) = mpsc::channel();
     let result = thread::Builder::new()
         .name("kanban-desktop-sidecar-reaper".to_owned())
-        .spawn(move || {
-            let mut state = state_for_thread
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let Some(mut child) = state.take() else {
-                return;
-            };
-            reap_owned_child(&mut child);
-        });
+        .spawn(move || run_reaper_service(receiver));
     match result {
-        Ok(handle) => {
-            // 线程闭包本身持有 Child；JoinHandle 不需要阻塞调用方生命周期。
-            drop(handle);
-            Ok(())
+        Ok(_) => {
+            *service = Some(sender.clone());
+            Some(sender)
         }
         Err(error) => {
-            let child = match Arc::try_unwrap(state) {
-                Ok(state) => state
-                    .into_inner()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .expect("sidecar reaper spawn failure must retain Child ownership"),
-                Err(state) => state
+            eprintln!(
+                "kanban {context} 后台 reaper 启动失败：{error}；保留 Child ownership 等待后续重试"
+            );
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ReapTask {
+    child: OwnedChild,
+    next_due: Instant,
+    backoff: Duration,
+    next_error_log: Instant,
+}
+
+impl ReapTask {
+    fn new(child: OwnedChild) -> Self {
+        Self {
+            child,
+            next_due: Instant::now(),
+            backoff: REAPER_RETRY_INTERVAL,
+            next_error_log: Instant::now(),
+        }
+    }
+}
+
+fn run_reaper_service(receiver: mpsc::Receiver<OwnedChild>) {
+    let mut pending = VecDeque::<ReapTask>::new();
+    loop {
+        while let Ok(child) = receiver.try_recv() {
+            pending.push_back(ReapTask::new(child));
+        }
+
+        let now = Instant::now();
+        if let Some(index) = pending.iter().position(|task| task.next_due <= now) {
+            let mut task = pending
+                .remove(index)
+                .expect("reaper task index disappeared");
+            let cleanup = force_stop(&mut task.child);
+            if cleanup.ownership() == CleanupOwnership::Release {
+                task.child.finish_drain();
+                task.child.release_process();
+                continue;
+            }
+            if let Some(error) = cleanup.first_error
+                && Instant::now() >= task.next_error_log
+            {
+                eprintln!("kanban sidecar reaper {error}，继续持有 ownership");
+                task.next_error_log = deadline_after(Instant::now(), REAPER_ERROR_LOG_INTERVAL);
+            }
+            task.next_due = deadline_after(Instant::now(), task.backoff);
+            task.backoff = task
+                .backoff
+                .checked_mul(2)
+                .unwrap_or(REAPER_MAX_BACKOFF)
+                .min(REAPER_MAX_BACKOFF);
+            pending.push_back(task);
+            continue;
+        }
+
+        let wait = pending
+            .iter()
+            .map(|task| task.next_due.saturating_duration_since(Instant::now()))
+            .min()
+            .unwrap_or(REAPER_MAX_BACKOFF);
+        match receiver.recv_timeout(wait) {
+            Ok(child) => pending.push_back(ReapTask::new(child)),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+        }
+    }
+}
+
+fn clear_reaper_service() {
+    if let Some(service) = REAPER_SERVICE.get() {
+        *service
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+}
+
+fn flush_pending_reapers(mut service: mpsc::Sender<OwnedChild>, context: &str) {
+    let mut restart_attempts = 0;
+    loop {
+        let child = REAPER_FALLBACK_QUEUE
+            .get_or_init(|| Mutex::new(Vec::new()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .pop();
+        let Some(child) = child else {
+            return;
+        };
+        match service.send(child) {
+            Ok(()) => {}
+            Err(mpsc::SendError(child)) => {
+                REAPER_FALLBACK_QUEUE
+                    .get_or_init(|| Mutex::new(Vec::new()))
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .take()
-                    .expect("sidecar reaper spawn failure must retain Child ownership"),
-            };
-            Err((child, error))
+                    .push(child);
+                clear_reaper_service();
+                restart_attempts += 1;
+                if restart_attempts > 1 {
+                    eprintln!(
+                        "kanban {context} reaper service 已关闭；保留 Child ownership 等待后续重试"
+                    );
+                    return;
+                }
+                let Some(restarted) = reaper_service(context) else {
+                    return;
+                };
+                service = restarted;
+            }
         }
     }
 }
 
-fn reap_owned_child(child: &mut OwnedChild) {
-    loop {
-        match child.process_mut().try_wait() {
-            Ok(Some(_)) => {
-                child.finish_drain();
-                child.release_process();
-                return;
-            }
-            Ok(None) => {}
-            Err(error) => {
-                eprintln!("kanban sidecar reaper try_wait 失败：{error}");
-            }
-        }
-        if let Err(error) = child.process_mut().kill() {
-            eprintln!("kanban sidecar reaper kill 失败：{error}");
-        }
-        thread::sleep(REAPER_RETRY_INTERVAL);
-    }
-}
-
+#[cfg(test)]
 fn reap_blocking(child: &mut OwnedChild) {
-    if let Err(error) = child.process_mut().kill() {
-        eprintln!("kanban sidecar 同步 cleanup kill 失败：{error}");
+    let cleanup = force_stop(child);
+    if let Some(error) = cleanup.first_error {
+        eprintln!("kanban sidecar test cleanup kill 失败：{error}");
     }
     match child.process_mut().wait() {
         Ok(_) => {
             child.finish_drain();
             child.release_process();
         }
-        Err(error) => {
-            eprintln!("kanban sidecar 同步 cleanup wait 失败：{error}；继续后台式重试");
-            reap_owned_child(child);
-        }
+        Err(error) => panic!("test cleanup wait 失败：{error}"),
     }
 }
 
 #[cfg(unix)]
-fn request_graceful_stop(child: &Child) -> io::Result<()> {
-    let result = unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT) };
+fn request_graceful_stop(child: &OwnedChild) -> io::Result<()> {
+    let process_group = child.process_group.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "owned sidecar process group is unavailable",
+        )
+    })?;
+    let leader = child.process().id() as libc::pid_t;
+    if process_group <= 1 || process_group != leader {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "owned sidecar process group no longer matches its leader",
+        ));
+    }
+    let result = unsafe { libc::kill(-process_group, libc::SIGINT) };
     if result == 0 {
         Ok(())
     } else {
@@ -1199,7 +1638,7 @@ fn request_graceful_stop(child: &Child) -> io::Result<()> {
 }
 
 #[cfg(not(unix))]
-fn request_graceful_stop(_child: &Child) -> io::Result<()> {
+fn request_graceful_stop(_child: &OwnedChild) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "Desktop host graceful shutdown 仅支持 Linux/Unix",
@@ -1548,7 +1987,10 @@ mod tests {
             HostStartupError::SidecarIncompatible { .. }
         ));
         let cleanup = force_stop(&mut child);
-        if !cleanup.process_reaped {
+        if cleanup.process_reaped {
+            child.finish_drain();
+            child.release_process();
+        } else {
             reap_blocking(&mut child);
         }
         assert!(child.process.is_none(), "test sidecar must be reaped");
@@ -1599,8 +2041,12 @@ mod tests {
     #[test]
     fn startup_timeout_handoffs_owned_sidecar_to_reaper() {
         let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
-        let marker = std::env::temp_dir().join(format!(
+        let leader_marker = std::env::temp_dir().join(format!(
             "kanban-desktop-startup-exit-marker-{}-{id}",
+            std::process::id(),
+        ));
+        let descendant_marker = std::env::temp_dir().join(format!(
+            "kanban-desktop-startup-descendant-marker-{}-{id}",
             std::process::id(),
         ));
         let sidecar = std::env::temp_dir().join(format!(
@@ -1612,8 +2058,9 @@ mod tests {
             .local_addr()
             .expect("startup fixture address");
         let script = format!(
-            "#!/bin/sh\nprintf '%s' $$ > {}\nsleep 10\n",
-            marker.display()
+            "#!/bin/sh\nprintf '%s' $$ > {}\nsleep 10 &\nprintf '%s' $! > {}\nwait\n",
+            leader_marker.display(),
+            descendant_marker.display()
         );
         std::fs::write(&sidecar, script).expect("startup sidecar fixture");
         {
@@ -1631,19 +2078,37 @@ mod tests {
         config = config.with_probe_timeout(Duration::from_millis(25));
         let error = connect_or_spawn(&config).expect_err("timed out sidecar must fail startup");
         assert!(matches!(error, HostStartupError::StartupTimeout { .. }));
-        let pid = std::fs::read_to_string(&marker)
-            .expect("sidecar pid marker")
-            .parse::<i32>()
-            .expect("sidecar pid");
+        let read_pid = |path: &std::path::Path| {
+            let deadline = Instant::now() + Duration::from_secs(1);
+            loop {
+                if let Ok(value) = std::fs::read_to_string(path)
+                    && let Ok(pid) = value.parse::<i32>()
+                {
+                    return pid;
+                }
+                assert!(Instant::now() < deadline, "pid marker was not written");
+                thread::sleep(Duration::from_millis(10));
+            }
+        };
+        let leader_pid = read_pid(&leader_marker);
+        let descendant_pid = read_pid(&descendant_marker);
         let reap_deadline = Instant::now() + Duration::from_secs(2);
-        while unsafe { libc::kill(pid, 0) } == 0 && Instant::now() < reap_deadline {
+        while (unsafe { libc::kill(leader_pid, 0) } == 0
+            || unsafe { libc::kill(descendant_pid, 0) } == 0)
+            && Instant::now() < reap_deadline
+        {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(
-            unsafe { libc::kill(pid, 0) } != 0,
-            "sidecar pid remains alive"
+            unsafe { libc::kill(leader_pid, 0) } != 0,
+            "sidecar leader pid remains alive"
         );
-        let _ = std::fs::remove_file(marker);
+        assert!(
+            unsafe { libc::kill(descendant_pid, 0) } != 0,
+            "sidecar descendant pid remains alive"
+        );
+        let _ = std::fs::remove_file(leader_marker);
+        let _ = std::fs::remove_file(descendant_marker);
         let _ = std::fs::remove_file(sidecar);
     }
 
@@ -1733,6 +2198,34 @@ mod tests {
         assert!(
             unsafe { libc::kill(pid as libc::pid_t, 0) } != 0,
             "background reaper did not reap dropped sidecar"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reaper_spawn_failure_retains_child_until_service_recovers() {
+        let process = test_sleep_child(true);
+        let mut child = test_owned_child(process);
+        let pid = child.process().id() as libc::pid_t;
+        let detached = child.detach_for_reaper().expect("reaper ownership");
+        FORCE_REAPER_SPAWN_FAILURE.store(true, Ordering::Release);
+        let started_at = Instant::now();
+        handoff_to_reaper(detached, "injected reaper spawn failure");
+        FORCE_REAPER_SPAWN_FAILURE.store(false, Ordering::Release);
+        assert!(
+            started_at.elapsed() < Duration::from_millis(100),
+            "spawn-failure handoff must not block the caller"
+        );
+
+        let service = reaper_service("reaper recovery test").expect("reaper restart");
+        flush_pending_reapers(service, "reaper recovery test");
+        let reap_deadline = Instant::now() + Duration::from_secs(2);
+        while unsafe { libc::kill(pid, 0) } == 0 && Instant::now() < reap_deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            unsafe { libc::kill(pid, 0) } != 0,
+            "reaper recovery did not consume retained child"
         );
     }
 
@@ -1994,11 +2487,22 @@ mod tests {
             MAX_STDERR_DIAGNOSTIC_BYTES,
         )));
         let diagnostics_for_thread = Arc::clone(&diagnostics);
-        let drain = thread::spawn(move || drain_stderr(stderr, diagnostics_for_thread));
+        let (drain_done_tx, drain_done_rx) = mpsc::channel();
+        let drain = thread::spawn(move || {
+            drain_stderr(stderr, diagnostics_for_thread);
+            let _ = drain_done_tx.send(());
+        });
+        let process_group = process_group_for(&process);
         OwnedChild {
             process: Some(process),
+            process_group,
+            leader_reaped: false,
+            group_signal_sent: false,
             stderr: diagnostics,
-            drain: Some(drain),
+            drain: Some(DrainHandle {
+                join: drain,
+                done: drain_done_rx,
+            }),
             drop_cleanup: true,
         }
     }
@@ -2011,6 +2515,7 @@ mod tests {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
+        configure_owned_process_group(&mut command);
         unsafe {
             command.pre_exec(move || {
                 let handler = if ignore_sigint {

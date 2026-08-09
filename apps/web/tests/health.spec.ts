@@ -42,4 +42,25 @@ test.describe("Health operator workflow", () => {
     await expect(page.getByTestId("health-error")).toContainText("HTTP 503")
     await expect(page.getByTestId("health-refresh")).toBeEnabled()
   })
+
+  test("loads settings health diagnostics without a board query", async ({ page }) => {
+    const boardRequests: string[] = []
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname
+      if (pathname === "/api/v1/boards" || pathname.startsWith("/api/v1/boards/")) boardRequests.push(pathname)
+    })
+    await page.route("http://127.0.0.1:4173/health", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(healthFixture),
+      })
+    })
+
+    await page.goto("/app/settings", { waitUntil: "networkidle" })
+
+    await expect(page.getByTestId("settings-page")).toBeVisible()
+    await expect(page.getByTestId("settings-health")).toContainText(healthFixture.data.db_fingerprint)
+    expect(boardRequests).toEqual([])
+  })
 })

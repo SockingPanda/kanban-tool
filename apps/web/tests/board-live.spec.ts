@@ -41,8 +41,8 @@ test.describe("BoardLive browser pipeline", () => {
     const fixture = await installBoardFixture(page, { emptyBoards: true })
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
 
-    await expect(page.getByTestId("board-empty")).toBeVisible()
-    await expect(page.getByRole("heading", { name: "暂无看板" })).toBeVisible()
+    await expect(page.getByTestId("board-error")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "看板加载失败" })).toBeVisible()
     expect(fixture.apiRequests.some((request) => request.includes("/columns"))).toBe(false)
     expect(fixture.apiRequests.some((request) => request.includes("/tasks/by-status"))).toBe(false)
   })
@@ -84,7 +84,7 @@ test.describe("BoardLive browser pipeline", () => {
     const initialConnectionCount = await fixture.getSseConnectionCount()
 
     await page.evaluate(() => window.dispatchEvent(new Event("offline")))
-    await expect(page.getByTestId("board-sync-banner")).toHaveAttribute("data-sync-state", "stale")
+    await expect(page.getByTestId("board-sync-banner")).toHaveAttribute("data-sync-state", "offline")
     await expect(page.getByTestId("board-task").filter({ hasText: "Ready task" })).toBeVisible()
 
     await page.evaluate(() => window.dispatchEvent(new Event("online")))

@@ -110,7 +110,18 @@ function RuntimeThemedShell() {
       // A malformed batch is a recovery boundary; EventsView must not receive
       // an untrusted partial append.
       setEventsBatchState({ key: sessionKeyRef.current, batch: null })
-      bumpExplorerRevision({ board: true, inspector: true, runs: true, events: true })
+      pendingBoundaryRef.current = true
+      pendingBoundaryTypesRef.current.add("protocol-anomaly")
+      setSyncStatus("stale")
+      if (boundaryTimerRef.current === null) {
+        boundaryTimerRef.current = setTimeout(() => {
+          boundaryTimerRef.current = null
+          if (!pendingBoundaryRef.current) return
+          pendingBoundaryRef.current = false
+          pendingBoundaryTypesRef.current.clear()
+          bumpExplorerRevision({ board: true, inspector: true, runs: true, events: true })
+        }, 0)
+      }
     }
   }, [bumpExplorerRevision])
 

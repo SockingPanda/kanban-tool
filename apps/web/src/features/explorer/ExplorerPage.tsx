@@ -103,6 +103,11 @@ type ExplorerCopy = {
   readonly map: string
   readonly runs: string
   readonly events: string
+  readonly syncConnecting: string
+  readonly syncRecovering: string
+  readonly syncStale: string
+  readonly syncCircuitOpen: string
+  readonly syncOffline: string
 }
 
 const explorerCopies: Record<Locale, ExplorerCopy> = {
@@ -122,6 +127,11 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
     map: "关系图",
     runs: "运行记录",
     events: "事件",
+    syncConnecting: "正在连接实时同步…",
+    syncRecovering: "正在恢复同步",
+    syncStale: "同步暂时中断",
+    syncCircuitOpen: "同步暂时不可用",
+    syncOffline: "当前离线",
   },
   en: {
     eyebrow: "ASTRYX EXPLORER",
@@ -139,11 +149,24 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
     map: "Map",
     runs: "Runs",
     events: "Events",
+    syncConnecting: "Connecting to live sync…",
+    syncRecovering: "Recovering sync",
+    syncStale: "Sync is temporarily interrupted",
+    syncCircuitOpen: "Sync is temporarily unavailable",
+    syncOffline: "You are offline",
   },
 }
 
 function normalizeEventKindFilter(value: string | null | undefined): string {
   return (value ?? "").trim().slice(0, MAX_EVENT_KIND_FILTER_LENGTH)
+}
+
+function syncStatusLabel(status: BoardSyncStatus, copy: ExplorerCopy): string {
+  if (status === "connecting") return copy.syncConnecting
+  if (status === "recovering") return copy.syncRecovering
+  if (status === "circuit-open") return copy.syncCircuitOpen
+  if (status === "offline") return copy.syncOffline
+  return copy.syncStale
 }
 
 function useAsyncRead<T>(
@@ -487,6 +510,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         </div>
         {taskId ? <button type="button" className={styles.closeInspector} onClick={closeInspector}>{copy.closeInspector}</button> : null}
       </header>
+      {view !== "board" && syncStatus && syncStatus !== "live" ? <div className={styles.boundary} data-testid="explorer-sync-banner" role="status" aria-live="polite"><strong>{syncStatusLabel(syncStatus, copy)}</strong><span> {locale === "en" ? "The last usable snapshot remains visible." : "仍显示最近一次可用快照。"}</span></div> : null}
       <ExplorerTabs route={route} basePath={runtime.webBasePath} taskId={taskId} onNavigate={onNavigate} copy={copy} />
       <div className={showInspector ? styles.contentWithInspector : styles.content}>
         <main className={styles.primaryContent}>

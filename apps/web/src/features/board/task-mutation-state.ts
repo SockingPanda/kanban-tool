@@ -30,9 +30,16 @@ export interface BoardTaskMutationCommitted {
   readonly boardSlug?: string
 }
 
+export interface BoardTaskCanonicalReloadOptions {
+  /** Distinguish an initial conflict reconcile from a stale retry. */
+  readonly reason?: "initial" | "retry"
+  /** Preserve transition-specific invalidation when retrying a reload. */
+  readonly mutationKind?: BoardTaskMutationCommitted["kind"]
+}
+
 export interface BoardTaskMutationSurface {
   readonly client: BoardTaskMutationClient
-  readonly onCanonicalReload?: () => Promise<void> | void
+  readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => Promise<BoardViewModel | null> | void
   /** Called once after the server mutation writes commit, before reconcile. */
   readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void
 }

@@ -6,7 +6,7 @@ import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 import { ProductShell } from "./ProductShell"
 import { BoardLive } from "./features/board/BoardLive"
 import { boardSyncStatusForTelemetry } from "./features/board/board-live-state"
-import type { BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
+import type { BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
 import type { BoardSyncStatus } from "./features/board/types"
 import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation } from "./App.logic"
 import { parseBoardEvent, type BoardEventsBatch, type ExplorerEvent } from "./lib/api/explorer-read-model"
@@ -50,6 +50,8 @@ function RuntimeThemedShell() {
     defaultBoard: runtime.defaultBoard,
   })
   const navigate = router.navigate
+  const routeRef = useRef(router.route)
+  routeRef.current = router.route
   const boardRoute = router.route.kind === "home" || router.route.kind === "board" ? router.route : null
   // The canonical BoardLive remains mounted for every board route as the
   // single session/SSE owner, while Explorer owns the visible board view.
@@ -92,7 +94,17 @@ function RuntimeThemedShell() {
     })
   }, [])
 
-  const onTaskMutationsChange = useCallback((surface: BoardTaskMutationSurface | undefined) => {
+  const onTaskMutationsChange = useCallback((surface: BoardTaskMutationSurface | undefined, releasedSurface?: BoardTaskMutationSurface) => {
+    if (surface === undefined) {
+      if (releasedSurface === undefined) return
+      setTaskMutationState((current) => {
+        // A delayed effect cleanup may belong to an older BoardLive surface;
+        // never clear a replacement surface that already owns this key.
+        if (current.surface !== releasedSurface) return current
+        return { key: current.key, surface: undefined }
+      })
+      return
+    }
     if (sessionKeyRef.current !== sessionKey) return
     setTaskMutationState({ key: sessionKey, surface })
   }, [sessionKey])
@@ -106,11 +118,18 @@ function RuntimeThemedShell() {
     if (event.kind !== "create") return
     const boardSlug = parseCanonicalBoardSlug(event.boardSlug)
     if (boardSlug === null) return
-    const query = new URLSearchParams()
+    const currentRoute = routeRef.current
+    const view = currentRoute.kind === "board" && currentRoute.boardSlug === boardSlug ? currentRoute.view ?? "board" : "board"
+    const query = new URLSearchParams(currentRoute.kind === "board" && currentRoute.boardSlug === boardSlug ? currentRoute.query ?? "" : "")
     query.set("task", event.taskId)
-    const target = routePath({ kind: "board", boardSlug, view: "board", query: query.toString() }, { basePath: runtime.webBasePath })
+    const target = routePath({ kind: "board", boardSlug, view, query: query.toString() }, { basePath: runtime.webBasePath })
     void Promise.resolve(navigate(target)).catch(() => undefined)
   }, [bumpExplorerRevision, navigate, runtime.webBasePath, sessionKey])
+
+  const onCanonicalReload = useCallback((options?: BoardTaskCanonicalReloadOptions) => {
+    if (sessionKeyRef.current !== sessionKey || options?.reason === undefined) return
+    bumpExplorerRevision({ board: true, inspector: true, runs: options.mutationKind === "transition" })
+  }, [bumpExplorerRevision, sessionKey])
 
   const flushEventBatch = useCallback(() => {
     const pending = pendingEventsRef.current
@@ -191,6 +210,7 @@ function RuntimeThemedShell() {
     pendingEventBoundarySourceRef.current = false
     setSyncStatus("connecting")
     setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, boardRevision: 0, inspectorRevision: 0, runsRevision: 0, eventsRefreshRevision: 0 })
+    setTaskMutationState((current) => current.key === sessionKey ? current : { key: sessionKey, surface: undefined })
     setEventsBatchState((current) => current.key === sessionKey ? current : { key: sessionKey, batch: null })
   }, [sessionKey])
 
@@ -268,6 +288,7 @@ function RuntimeThemedShell() {
               onSyncStatusChange={setSyncStatus}
               onTaskMutationsChange={onTaskMutationsChange}
               onMutationCommitted={onMutationCommitted}
+              onCanonicalReload={onCanonicalReload}
             />
           ) : null}
         </ProductShell>

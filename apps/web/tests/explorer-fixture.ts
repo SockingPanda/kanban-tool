@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test"
 
-import { installRuntimeFixture } from "./runtime-fixture"
+import { installPersistentSse, installRuntimeFixture } from "./runtime-fixture"
 
 const BOARD_ID = "b_default"
 const BOARD_SLUG = "default"
@@ -144,6 +144,7 @@ function boardSummary() {
  */
 export async function installExplorerFixture(page: Page, options: ExplorerFixtureOptions = {}): Promise<ExplorerFixture> {
   await installRuntimeFixture(page)
+  await installPersistentSse(page)
   const apiRequests: string[] = []
   const readyTask = fixtureTask("ready", 1, "Ready task", TASK_ID)
   const listTasks = [readyTask, fixtureTask("todo", 2, "Todo task")]
@@ -207,6 +208,12 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     }
 
     if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/tasks`) {
+      if (route.request().method() === "POST") {
+        const body = JSON.parse(route.request().postData() ?? "{}") as { readonly task_id?: unknown; readonly title?: unknown }
+        const taskId = typeof body.task_id === "string" ? body.task_id : "t_created"
+        await fulfillJson(route, { data: fixtureTask("todo", 3, typeof body.title === "string" ? body.title : "Created task", taskId) })
+        return
+      }
       if (options.failList) {
         await fulfillUnavailable(route)
         return
@@ -362,40 +369,6 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     }
 
     await route.fulfill({ status: 404, contentType: "text/plain", body: "fixture route not found" })
-  })
-
-  await page.addInitScript(() => {
-    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
-    let streamConnectionCount = 0
-    const pendingFrames: string[] = []
-    const encoder = new TextEncoder()
-    const pushFrame = (frame: string) => {
-      if (streamController === null) pendingFrames.push(frame)
-      else streamController.enqueue(encoder.encode(frame))
-    }
-    Object.defineProperty(window, "__kanbanPushSse", { configurable: true, value: pushFrame })
-    Object.defineProperty(window, "__kanbanSseConnectionCount", { configurable: true, get: () => streamConnectionCount })
-
-    const nativeFetch = window.fetch.bind(window)
-    window.fetch = async (input, init) => {
-      const inputUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-      const target = new URL(inputUrl, window.location.href)
-      if (target.pathname !== "/api/v1/stream/events") return nativeFetch(input, init)
-
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          streamController = controller
-          streamConnectionCount += 1
-          for (const frame of pendingFrames.splice(0)) controller.enqueue(encoder.encode(frame))
-        },
-        cancel() {
-          streamController = null
-        },
-      })
-      const response = new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } })
-      Object.defineProperty(response, "url", { configurable: true, value: target.toString() })
-      return response
-    }
   })
 
   async function emit(frame: string): Promise<void> {

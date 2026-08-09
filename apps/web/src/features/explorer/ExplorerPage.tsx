@@ -1,7 +1,10 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react"
 
 import { BoardView } from "../board/BoardView"
-import type { BoardViewModel } from "../board/types"
+import { MutationDialog, MutationNotice } from "../board/BoardTaskMutations"
+import { boardMessagesForLocale, type BoardViewModel } from "../board/types"
+import { useBoardTaskMutationController } from "../board/task-mutation-controller"
+import { toBoardViewModel } from "../board/board-adapter"
 import type { BoardSyncStatus } from "../board/types"
 import type { BoardTaskMutationSurface } from "../board/task-mutation-state"
 import {
@@ -19,7 +22,6 @@ import {
 } from "../../lib/api/explorer-read-model"
 import type { CanonicalBoardSlug } from "../../lib/board-slug"
 import type { Locale } from "../../lib/preferences"
-import type { BoardReadModel } from "../../lib/api/board-read-model"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
@@ -281,38 +283,6 @@ function taskListRow(task: NonNullable<Awaited<ReturnType<typeof loadTaskListPag
   }
 }
 
-function boardViewModel(model: BoardReadModel): BoardViewModel {
-  const tasksByStatus: Record<string, BoardViewModel["tasksByStatus"][string]> = {}
-  for (const [status, tasks] of Object.entries(model.tasksByStatus)) {
-    tasksByStatus[status] = (tasks ?? []).map((task) => ({
-      id: task.id,
-      seq: task.seq,
-      ref: task.ref,
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      position: task.position,
-      scheduledAt: task.scheduled_at,
-      lockVersion: task.lock_version,
-      priority: boardPriority(task.priority),
-      assignee: task.assignee,
-      readiness: {
-        dependencyBlocked: task.dependency_blocked,
-        unfinishedParentCount: task.unfinished_parent_count,
-        executionPlanState: task.execution_plan_state,
-        requiredStepCount: task.required_step_count,
-        completedRequiredStepCount: task.completed_required_step_count,
-        optionalStepCount: task.optional_step_count,
-      },
-    }))
-  }
-  return {
-    board: { id: model.identity.canonicalBoardId, slug: model.identity.slug, name: model.identity.name },
-    columns: model.columns.map((column) => ({ id: column.id, status: column.status, title: column.title, position: column.position, hidden: column.hidden })),
-    tasksByStatus,
-  }
-}
-
 function dependencyView(task: NonNullable<TaskInspectorReadModel["dependencies"]["parents"]>[number]): InspectorDependency {
   return { id: task.id, ref: task.ref, title: task.title, status: task.status }
 }
@@ -408,6 +378,16 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
   const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })), boardRevision, online !== false)
   const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }), boardRevision, online !== false)
+  const listMutationModel = useMemo<BoardViewModel | null>(() => {
+    const board = listRead.data?.board
+    if (board === undefined) return null
+    return {
+      board: { id: board.id, slug: board.slug, name: board.name },
+      columns: [],
+      tasksByStatus: {},
+    }
+  }, [listRead.data])
+  const listMutationController = useBoardTaskMutationController(listMutationModel, taskMutations, [], boardMessagesForLocale(locale))
   const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }), boardRevision, online !== false)
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
   const inspectorIdentity = `${runtime.apiBaseUrl}\u0000${runtime.webBuildId}\u0000${inspectorKey}`
@@ -522,20 +502,26 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         <main className={styles.primaryContent}>
           {view === "board" ? (
             boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
-              : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} />
+              : boardRead.data ? <BoardView state={{ kind: "ready", model: toBoardViewModel(boardRead.data) }} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} />
               : boardRead.error ? <div className={styles.boundary} data-testid={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "board-offline" : "board-error"} role={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "status" : "alert"}><h2>{boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? copy.boardOffline : copy.boardError}</h2><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>{copy.retry}</button></div> : null
           ) : null}
           {view === "list" ? (
-            <TaskListView
-              state={{ query: listQuery, meta: listRead.data?.meta ?? { offset: (listQuery.page - 1) * listQuery.limit, limit: listQuery.limit, total: 0 } }}
-              rows={listRead.data?.tasks.map(taskListRow) ?? []}
-              loading={listRead.loading}
-              error={listRead.error instanceof Error ? listRead.error : null}
-              onQueryChange={updateListQuery}
-              onSelectTask={selectTask}
-              onRetry={listRead.retry}
-              locale={locale}
-            />
+            <>
+              <TaskListView
+                state={{ query: listQuery, meta: listRead.data?.meta ?? { offset: (listQuery.page - 1) * listQuery.limit, limit: listQuery.limit, total: 0 } }}
+                rows={listRead.data?.tasks.map(taskListRow) ?? []}
+                loading={listRead.loading}
+                error={listRead.error instanceof Error ? listRead.error : null}
+                onQueryChange={updateListQuery}
+                onSelectTask={selectTask}
+                onRetry={listRead.retry}
+                onCreate={listMutationController?.openCreate}
+                isMutationPending={listMutationController?.isMutationPending}
+                locale={locale}
+              />
+              {listMutationController && listMutationController.dialog === null ? <MutationNotice controller={listMutationController} copy={boardMessagesForLocale(locale)} /> : null}
+              {listMutationController ? <MutationDialog controller={listMutationController} copy={boardMessagesForLocale(locale)} /> : null}
+            </>
           ) : null}
           {view === "map" ? (
             <TaskMapChunkBoundary locale={locale}>

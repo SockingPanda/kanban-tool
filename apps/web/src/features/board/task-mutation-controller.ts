@@ -43,7 +43,7 @@ export type MutationDialog =
     }
 
 export type RetryIntent =
-  | { readonly kind: "reload" }
+  | { readonly kind: "reload"; readonly mutationKind?: BoardTaskMutationCommitted["kind"] }
   | {
       readonly kind: "create"
       readonly title: string
@@ -258,8 +258,8 @@ export function useBoardTaskMutationController(
     setPendingKeys(update.next)
   }
 
-  const reloadCanonical = async () => {
-    await surface?.onCanonicalReload?.()
+  const reloadCanonical = async (): Promise<BoardViewModel | null> => {
+    return (await surface?.onCanonicalReload?.()) ?? null
   }
 
   const isCurrentMutation = (generation: number) =>
@@ -268,6 +268,16 @@ export function useBoardTaskMutationController(
     && boardIdentityRef.current === renderBoardIdentity
     && surfaceIdentityRef.current === surface
 
+  const adoptCanonicalModel = (canonical: BoardViewModel | null, generation: number): boolean => {
+    if (canonical === null || canonical.board.id !== renderBoardIdentity || !isCurrentMutation(generation)) return false
+    setOptimisticModel(canonical)
+    // Keep the refreshed canonical snapshot active until the visible reader
+    // publishes the same model. This makes an immediate conflict retry use
+    // the server's lock_version instead of the still-stale prop snapshot.
+    optimisticDirtyRef.current = true
+    return true
+  }
+
   const closeDialogState = () => {
     setDialog(null)
     const trigger = dialogTriggerRef.current
@@ -275,30 +285,33 @@ export function useBoardTaskMutationController(
     if (trigger !== null) queueMicrotask(() => trigger.focus())
   }
 
-  const reconcileAfterMutation = async (): Promise<boolean> => {
+  const reconcileAfterMutation = async (mutationKind?: BoardTaskMutationCommitted["kind"], generation = mutationGenerationRef.current): Promise<boolean> => {
     try {
-      await reloadCanonical()
+      const canonical = mutationKind === undefined
+        ? await reloadCanonical()
+        : (await surface?.onCanonicalReload?.({ reason: "initial", mutationKind })) ?? null
+      adoptCanonicalModel(canonical, generation)
       return true
     } catch {
       return false
     }
   }
 
-  const runCanonicalReload = async () => {
+  const runCanonicalReload = async (mutationKind?: BoardTaskMutationCommitted["kind"]) => {
     if (surface === undefined || pendingRef.current.has("reload")) return
     const generation = mutationGenerationRef.current
     setPending("reload", true)
     try {
-      await reloadCanonical()
+      const canonical = (await surface.onCanonicalReload?.({ reason: "retry", mutationKind })) ?? null
       if (isCurrentMutation(generation)) {
         setNotice(null)
         setRetryIntent(null)
-        optimisticDirtyRef.current = false
+        optimisticDirtyRef.current = !adoptCanonicalModel(canonical, generation)
       }
     } catch (error) {
       if (isCurrentMutation(generation)) {
         setNotice({ kind: "stale", message: mutationMessage(error, copy, copy.reconcileStale) })
-        setRetryIntent({ kind: "reload" })
+        setRetryIntent({ kind: "reload", mutationKind })
       }
     } finally {
       if (isCurrentMutation(generation)) setPending("reload", false)
@@ -330,6 +343,12 @@ export function useBoardTaskMutationController(
           idempotency_key: attempt.idempotencyKey,
         })
         taskCreated = true
+        // The task write is the canonical create commit. Notify immediately
+        // while the create generation still owns this surface; an optional
+        // first-step failure must not hide the committed task or trigger a
+        // second navigation on its step-only retry.
+        if (!isCurrentMutation(generation)) return
+        notifyMutationCommitted(surface, { kind: "create", taskId: attempt.taskId })
       }
       // The first write may resolve after a board/runtime identity switch.
       // Do not issue the optional step mutation through the stale surface.
@@ -344,14 +363,14 @@ export function useBoardTaskMutationController(
     } catch (error) {
       if (isCurrentMutation(generation)) {
         if (taskCreated) {
-          const reloaded = await reconcileAfterMutation()
+          const reloaded = await reconcileAfterMutation(undefined, generation)
           if (!isCurrentMutation(generation)) return
           setRetryIntent({ kind: "create", ...attempt, taskCreated: true })
           setNotice({ kind: reloaded ? "error" : "stale", message: reloaded ? mutationMessage(error, copy, copy.mutationError) : copy.reconcileStale })
         } else if (isMutationConflict(error)) {
-          const reloaded = await reconcileAfterMutation()
+          const reloaded = await reconcileAfterMutation("create", generation)
           if (!isCurrentMutation(generation)) return
-          setRetryIntent(reloaded ? { kind: "create", ...attempt, taskCreated: false } : { kind: "reload" })
+          setRetryIntent(reloaded ? { kind: "create", ...attempt, taskCreated: false } : { kind: "reload", mutationKind: "create" })
           setNotice({ kind: reloaded ? "conflict" : "stale", message: reloaded ? copy.conflictDescription : copy.reconcileStale })
         } else {
           setNotice({ kind: "error", message: mutationMessage(error, copy, copy.mutationError) })
@@ -363,17 +382,15 @@ export function useBoardTaskMutationController(
       return
     }
     if (isCurrentMutation(generation)) {
-      notifyMutationCommitted(surface, { kind: "create", taskId: attempt.taskId })
-      const reloaded = await reconcileAfterMutation()
+      const reloaded = await reconcileAfterMutation(undefined, generation)
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
-        optimisticDirtyRef.current = false
         setRetryIntent(null)
         setDragAnnouncement(copy.mutationSuccess)
         closeDialogState()
       } else {
         optimisticDirtyRef.current = true
-        setRetryIntent({ kind: "reload" })
+        setRetryIntent({ kind: "reload", mutationKind: "create" })
         setNotice({ kind: "stale", message: copy.reconcileStale })
         closeDialogState()
       }
@@ -399,14 +416,13 @@ export function useBoardTaskMutationController(
         setOptimisticModel((current) => current === null ? current : rollbackTaskOptimistically(current, snapshot, taskId))
         if (isMutationConflict(error)) {
           if (isClaimTokenConflict(error)) claimTokensRef.current.delete(taskId)
-          const reloaded = await reconcileAfterMutation()
+          const reloaded = await reconcileAfterMutation("edit", generation)
           if (!isCurrentMutation(generation)) return
-          if (pendingRef.current.size <= 1) optimisticDirtyRef.current = false
           // Clear the synchronous mutation fence before exposing the retry
           // control; React may commit the notice before the remaining state
           // updates in this async branch.
           setPending(`edit:${taskId}`, false)
-          setRetryIntent(reloaded ? { kind: "edit", taskId, title } : { kind: "reload" })
+          setRetryIntent(reloaded ? { kind: "edit", taskId, title } : { kind: "reload", mutationKind: "edit" })
           setNotice({ kind: reloaded ? "conflict" : "stale", message: reloaded ? copy.conflictDescription : copy.reconcileStale })
         } else {
           setNotice({ kind: "error", message: mutationMessage(error, copy, copy.mutationError) })
@@ -422,16 +438,15 @@ export function useBoardTaskMutationController(
     }
     if (isCurrentMutation(generation)) {
       notifyMutationCommitted(surface, { kind: "edit", taskId })
-      const reloaded = await reconcileAfterMutation()
+      const reloaded = await reconcileAfterMutation(undefined, generation)
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
-        optimisticDirtyRef.current = false
         setRetryIntent(null)
         setDragAnnouncement(copy.mutationSuccess)
         closeDialogState()
       } else {
         optimisticDirtyRef.current = true
-        setRetryIntent({ kind: "reload" })
+        setRetryIntent({ kind: "reload", mutationKind: "edit" })
         setNotice({ kind: "stale", message: copy.reconcileStale })
         closeDialogState()
       }
@@ -503,32 +518,31 @@ export function useBoardTaskMutationController(
         setOptimisticModel((current) => current === null ? current : rollbackTaskOptimistically(current, snapshot, taskId))
         if (isMutationConflict(error)) {
           if (isClaimTokenConflict(error)) claimTokensRef.current.delete(taskId)
-          const reloaded = await reconcileAfterMutation()
+          const reloaded = await reconcileAfterMutation("transition", generation)
           if (!isCurrentMutation(generation)) return
-          setRetryIntent(reloaded ? { kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true } : { kind: "reload" })
+          setRetryIntent(reloaded ? { kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true } : { kind: "reload", mutationKind: "transition" })
           setNotice({ kind: reloaded ? "conflict" : "stale", message: reloaded ? copy.conflictDescription : copy.reconcileStale })
         } else {
           setNotice({ kind: "error", message: mutationMessage(error, copy, copy.mutationError) })
           setRetryIntent({ kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true })
           if (!retrying) closeDialogState()
         }
-        if (pendingRef.current.size <= 1) optimisticDirtyRef.current = false
+        if (!isMutationConflict(error) && pendingRef.current.size <= 1) optimisticDirtyRef.current = false
         setPending(`transition:${taskId}`, false)
       }
       return
     }
     if (isCurrentMutation(generation)) {
       notifyMutationCommitted(surface, { kind: "transition", taskId })
-      const reloaded = await reconcileAfterMutation()
+      const reloaded = await reconcileAfterMutation(undefined, generation)
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
-        optimisticDirtyRef.current = false
         setRetryIntent(null)
         setDragAnnouncement(copy.mutationSuccess)
         closeDialogState()
       } else {
         optimisticDirtyRef.current = true
-        setRetryIntent({ kind: "reload" })
+        setRetryIntent({ kind: "reload", mutationKind: "transition" })
         setNotice({ kind: "stale", message: copy.reconcileStale })
         closeDialogState()
       }
@@ -595,7 +609,7 @@ export function useBoardTaskMutationController(
   const retryMutation = () => {
     const retry = retryIntent
     if (retry === null) return
-    if (retry.kind === "reload") void runCanonicalReload()
+    if (retry.kind === "reload") void runCanonicalReload(retry.mutationKind)
     else {
       const current = retryIntentWithCurrentDialog(retry, dialog)
       setRetryIntent(current)

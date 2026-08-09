@@ -73,6 +73,7 @@ function claimResponse(boardId = "b_default", boardSlug = "default") {
 
 async function wireBoard(page: Page, options: {
   readonly updateStatus?: number
+  readonly updateStatuses?: readonly number[]
   readonly updateBody?: unknown
   readonly initialStatus?: TaskStatus
   readonly boardId?: string
@@ -89,15 +90,25 @@ async function wireBoard(page: Page, options: {
     ...(options.secondaryBoard === undefined ? [] : [options.secondaryBoard]),
   ]
   let status: TaskStatus = options.initialStatus ?? "todo"
+  let updateCount = 0
+  let taskLockVersion = 1
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request()
     const url = new URL(request.url())
     if (request.method() === "POST" || request.method() === "PATCH") {
       if (url.pathname.endsWith("/tasks/t_todo")) {
+        const responseStatus = options.updateStatuses?.[updateCount] ?? options.updateStatus ?? 200
+        updateCount += 1
+        if (responseStatus === 409) taskLockVersion = Math.max(taskLockVersion, 2)
+        const responseTask = task(status, "Draft", boardId, boardSlug)
+        responseTask.lock_version = taskLockVersion
+        const responseBody = options.updateStatuses !== undefined && responseStatus === 200
+          ? { data: responseTask }
+          : options.updateBody ?? { data: responseTask }
         await route.fulfill({
-          status: options.updateStatus ?? 200,
+          status: responseStatus,
           contentType: "application/json",
-          body: JSON.stringify(options.updateBody ?? { data: task(status, "Draft", boardId, boardSlug) }),
+          body: JSON.stringify(responseBody),
         })
         return
       }
@@ -131,7 +142,7 @@ async function wireBoard(page: Page, options: {
       const boardStatus = spec.boardSlug === boardSlug ? status : spec.status
       const visible = requested === boardStatus
         ? [
-            task(boardStatus, "Draft", spec.boardId, spec.boardSlug),
+            { ...task(boardStatus, "Draft", spec.boardId, spec.boardSlug), lock_version: spec.boardSlug === boardSlug ? taskLockVersion : 1 },
             ...(options.secondTask !== undefined && spec.boardSlug === boardSlug && (options.secondTask.status ?? "todo") === boardStatus
               ? [task(boardStatus, options.secondTask.title ?? "Second task", spec.boardId, spec.boardSlug, options.secondTask.taskId)]
               : []),
@@ -165,15 +176,33 @@ test.describe("board task mutation DOM behavior", () => {
   })
 
   test("shows pending, rolls back failed edits, and keeps transport details out of the DOM", async ({ page }) => {
-    let release: (() => void) | null = null
+    let firstRelease: (() => void) | null = null
+    let secondRelease: (() => void) | null = null
+    let firstStartedResolve!: () => void
+    let secondStartedResolve!: () => void
+    let firstSettledResolve!: () => void
+    let secondSettledResolve!: () => void
+    const firstStarted = new Promise<void>((resolve) => { firstStartedResolve = resolve })
+    const secondStarted = new Promise<void>((resolve) => { secondStartedResolve = resolve })
+    const firstSettled = new Promise<void>((resolve) => { firstSettledResolve = resolve })
+    const secondSettled = new Promise<void>((resolve) => { secondSettledResolve = resolve })
+    let patchCount = 0
     await wireBoard(page, { updateStatus: 503, updateBody: { error: { code: "internal", message: "SECRET transport detail" } } })
     await page.unroute("**/api/v1/**")
     await page.route("**/api/v1/**", async (route) => {
       const request = route.request()
       const url = new URL(request.url())
       if ((request.method() === "PATCH" || request.method() === "POST") && url.pathname.endsWith("/tasks/t_todo")) {
-        await new Promise<void>((resolve) => { release = resolve })
+        patchCount += 1
+        if (patchCount === 1) firstStartedResolve()
+        else secondStartedResolve()
+        await new Promise<void>((resolve) => {
+          if (patchCount === 1) firstRelease = resolve
+          else secondRelease = resolve
+        })
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "internal", message: "SECRET transport detail" } }) })
+        if (patchCount === 1) firstSettledResolve()
+        else secondSettledResolve()
         return
       }
       await route.fallback()
@@ -183,27 +212,39 @@ test.describe("board task mutation DOM behavior", () => {
     await page.getByTestId("task-title-input").fill("Changed")
     await page.getByRole("button", { name: "保存" }).click()
     await expect(page.getByTestId("task-mutation-dialog").getByRole("button", { name: "正在保存…" })).toBeDisabled()
-    release?.()
-    release = null
+    await firstStarted
+    if (firstRelease === null) throw new Error("first edit request did not expose a release gate")
+    firstRelease()
+    await firstSettled
     await expect(page.getByTestId("mutation-notice")).toContainText("任务操作失败")
     await expect(page.getByTestId("mutation-notice")).not.toContainText("SECRET")
     await expect(page.getByTestId("board-task")).toContainText("Draft")
     await page.getByTestId("mutation-retry").click()
     await expect(page.getByTestId("task-mutation-pending")).toBeAttached()
-    await expect.poll(() => release !== null).toBe(true)
-    release?.()
+    await secondStarted
+    if (secondRelease === null) throw new Error("second edit request did not expose a release gate")
+    secondRelease()
+    await secondSettled
     await expect(page.getByTestId("mutation-retry")).toBeVisible()
   })
 
   test("settles a successful mutation while the app is mounted through StrictMode", async ({ page }) => {
     let release: (() => void) | null = null
+    let requestStartedResolve!: () => void
+    let requestSettledResolve!: () => void
+    const requestStarted = new Promise<void>((resolve) => { requestStartedResolve = resolve })
+    const requestSettled = new Promise<void>((resolve) => { requestSettledResolve = resolve })
+    let patchCount = 0
     await wireBoard(page)
     await page.route("**/api/v1/tasks/t_todo", async (route) => {
       const request = route.request()
       const url = new URL(request.url())
       if (request.method() === "PATCH" && url.pathname.endsWith("/tasks/t_todo")) {
+        patchCount += 1
+        requestStartedResolve()
         await new Promise<void>((resolve) => { release = resolve })
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", "Changed") }) })
+        requestSettledResolve()
         return
       }
       await route.fallback()
@@ -212,9 +253,13 @@ test.describe("board task mutation DOM behavior", () => {
     await page.getByTestId("task-title-input").fill("Changed")
     await page.getByRole("button", { name: "保存" }).click()
     await expect(page.getByTestId("task-mutation-dialog").getByRole("button", { name: "正在保存…" })).toBeDisabled()
-    release?.()
+    await requestStarted
+    if (release === null) throw new Error("edit request did not expose a release gate")
+    release()
+    await requestSettled
     await expect(page.getByRole("dialog")).not.toBeVisible()
     await expect(page.getByTestId("task-mutation-dialog").getByRole("button", { name: "正在保存…" })).toHaveCount(0)
+    expect(patchCount).toBe(1)
   })
 
   test("accepts a legal internal pointer drag through the native drag lifecycle", async ({ page }) => {
@@ -229,27 +274,36 @@ test.describe("board task mutation DOM behavior", () => {
 
   test("serializes task mutations across cards and releases the next dialog after settle", async ({ page }) => {
     let release: (() => void) | null = null
+    let requestStartedResolve!: () => void
+    let requestSettledResolve!: () => void
+    const requestStarted = new Promise<void>((resolve) => { requestStartedResolve = resolve })
+    const requestSettled = new Promise<void>((resolve) => { requestSettledResolve = resolve })
     await wireBoard(page, { secondTask: { taskId: "t_other", title: "Second task" } })
     await page.route("**/api/v1/tasks/t_todo", async (route) => {
       if (route.request().method() !== "PATCH") {
         await route.fallback()
         return
       }
+      requestStartedResolve()
       await new Promise<void>((resolve) => { release = resolve })
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", "Pending") }) })
+      requestSettledResolve()
     })
 
     await page.getByTestId("task-edit-t_todo").click()
     await page.getByTestId("task-title-input").fill("Pending")
     await page.getByRole("button", { name: "保存" }).click()
     await expect(page.getByTestId("task-mutation-pending")).toBeAttached()
+    await requestStarted
 
     const secondEdit = page.getByTestId("task-edit-t_other")
     await expect(secondEdit).toBeDisabled()
     await secondEdit.dispatchEvent("click")
     await expect(page.getByTestId("task-title-input")).toHaveValue("Pending")
 
-    release?.()
+    if (release === null) throw new Error("serialized edit request did not expose a release gate")
+    release()
+    await requestSettled
     await expect(page.getByRole("dialog")).not.toBeVisible()
     await secondEdit.click()
     await expect(page.getByTestId("task-title-input")).toHaveValue("Second task")
@@ -258,37 +312,45 @@ test.describe("board task mutation DOM behavior", () => {
   test("does not leak a deferred claim token across a board identity switch", async ({ page }) => {
     await wireBoard(page, { initialStatus: "ready", secondaryBoard: { boardId: "b_other", boardSlug: "other", status: "running" } })
     let releaseClaim: (() => void) | null = null
-    let claimStarted: (() => void) | null = null
-    const claimStartedPromise = new Promise<void>((resolve) => { claimStarted = resolve })
+    let claimStartedResolve!: () => void
+    let claimSettledResolve!: () => void
+    const claimStartedPromise = new Promise<void>((resolve) => { claimStartedResolve = resolve })
+    const claimSettledPromise = new Promise<void>((resolve) => { claimSettledResolve = resolve })
     await page.route("**/api/v1/tasks/t_todo/transitions/claim", async (route) => {
-      claimStarted?.()
+      claimStartedResolve()
       await new Promise<void>((resolve) => { releaseClaim = resolve })
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(claimResponse()) })
+      claimSettledResolve()
     })
     await page.getByTestId("task-transition-claim-t_todo").click()
     await claimStartedPromise
 
     await page.goto("/app/boards/other/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByText("b_other · other")).toBeVisible()
-    releaseClaim?.()
+    if (releaseClaim === null) throw new Error("claim request did not expose a release gate")
+    releaseClaim()
+    await claimSettledPromise
     await expect(page.getByTestId("task-transition-submit-review-t_todo")).toHaveCount(0)
   })
 
   test("does not write a first step after deferred create crosses a board identity switch", async ({ page }) => {
     await wireBoard(page, { secondaryBoard: { boardId: "b_other", boardSlug: "other", status: "todo" } })
     let releaseCreate: (() => void) | null = null
-    let createStarted: (() => void) | null = null
-    const createStartedPromise = new Promise<void>((resolve) => { createStarted = resolve })
+    let createStartedResolve!: () => void
+    let createSettledResolve!: () => void
+    const createStartedPromise = new Promise<void>((resolve) => { createStartedResolve = resolve })
+    const createSettledPromise = new Promise<void>((resolve) => { createSettledResolve = resolve })
     const stepBodies: Array<Record<string, unknown>> = []
     await page.route("**/api/v1/boards/default/tasks", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback()
         return
       }
-      createStarted?.()
+      createStartedResolve()
       await new Promise<void>((resolve) => { releaseCreate = resolve })
       const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", String(body.title ?? "Created task")) }) })
+      createSettledResolve()
     })
     await page.route("**/api/v1/tasks/*/steps", async (route) => {
       stepBodies.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>)
@@ -303,14 +365,40 @@ test.describe("board task mutation DOM behavior", () => {
 
     await page.goto("/app/boards/other/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByText("b_other · other")).toBeVisible()
-    releaseCreate?.()
-    await page.waitForTimeout(250)
+    await expect(page).toHaveURL(/\/app\/boards\/other\/board$/)
+    if (releaseCreate === null) throw new Error("create request did not expose a release gate")
+    releaseCreate()
+    await createSettledPromise
     expect(stepBodies).toHaveLength(0)
   })
 
+  test("does not reuse a released mutation surface after a settings route cycle", async ({ page }) => {
+    await wireBoard(page)
+    await page.route("**/api/v1/boards/default/tasks", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback()
+        return
+      }
+      const body = JSON.parse(route.request().postData() ?? "{}") as { readonly task_id?: unknown; readonly title?: unknown }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: task("todo", typeof body.title === "string" ? body.title : "Created task", "b_default", "default", typeof body.task_id === "string" ? body.task_id : "t_created") }),
+      })
+    })
+    await page.getByTestId("nav-settings").click()
+    await expect(page.getByTestId("settings-page")).toBeVisible()
+    await page.goBack({ waitUntil: "domcontentloaded" })
+    await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
+    await expect(page.getByTestId("board-view")).toBeVisible()
+    await page.getByTestId("task-create").click()
+    await page.getByTestId("task-title-input").fill("After settings")
+    await page.getByRole("button", { name: "创建" }).click()
+    await expect(page).toHaveURL(/\/app\/boards\/default\/board\?task=t_[^&]+$/)
+  })
+
   test("keeps the edit input open for a canonical conflict and offers an explicit retry", async ({ page }) => {
-    await wireBoard(page, { updateStatus: 409, updateBody: { error: { code: "conflict", message: "SECRET conflict detail" } } })
-    await page.waitForTimeout(250)
+    await wireBoard(page, { updateStatuses: [409, 200], updateBody: { error: { code: "conflict", message: "SECRET conflict detail" } } })
     const updateBodies: Array<Record<string, unknown>> = []
     page.on("request", (request) => {
       if (request.method() === "PATCH" && request.url().endsWith("/api/v1/tasks/t_todo")) {
@@ -328,6 +416,8 @@ test.describe("board task mutation DOM behavior", () => {
     await page.getByTestId("task-title-input").fill("Concurrent edit revised")
     await page.getByTestId("mutation-retry").click()
     await expect.poll(() => updateBodies.length).toBe(2)
+    expect(updateBodies[0]?.expected_lock_version).toBe(1)
+    expect(updateBodies[1]?.expected_lock_version).toBe(2)
     expect(updateBodies[1]?.title).toBe("Concurrent edit revised")
   })
 
@@ -357,6 +447,19 @@ test.describe("board task mutation DOM behavior", () => {
   test("navigates to the created task in the canonical board route", async ({ page }) => {
     await wireBoard(page)
     let createdTaskId: string | null = null
+    let failCanonicalRead = false
+    const inspectorReads: string[] = []
+    page.on("request", (request) => {
+      const url = new URL(request.url())
+      if (request.method() === "GET" && /^\/api\/v1\/tasks\/t_[^/]+$/.test(url.pathname)) inspectorReads.push(url.pathname)
+    })
+    await page.route("**/api/v1/boards/default/columns", async (route) => {
+      if (route.request().method() === "GET" && failCanonicalRead) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "unavailable", message: "fixture canonical read failure" } }) })
+        return
+      }
+      await route.fallback()
+    })
     await page.route("**/api/v1/boards/default/tasks", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback()
@@ -364,6 +467,7 @@ test.describe("board task mutation DOM behavior", () => {
       }
       const body = JSON.parse(route.request().postData() ?? "{}") as { readonly task_id?: unknown }
       createdTaskId = typeof body.task_id === "string" ? body.task_id : null
+      failCanonicalRead = true
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -373,6 +477,7 @@ test.describe("board task mutation DOM behavior", () => {
 
     await page.getByTestId("task-create").click()
     await page.getByTestId("task-title-input").fill("Created task")
+    await page.evaluate(() => (window as unknown as { __kanbanCloseSse?: () => void }).__kanbanCloseSse?.())
     await page.getByRole("button", { name: "创建" }).click()
 
     await expect.poll(() => createdTaskId).toMatch(/^t_/)
@@ -380,6 +485,13 @@ test.describe("board task mutation DOM behavior", () => {
       const url = new URL(page.url())
       return `${url.pathname}?${url.searchParams.toString()}`
     }).toBe(`/app/boards/default/board?task=${createdTaskId}`)
+    await expect(page.getByTestId("mutation-notice")).toHaveAttribute("data-notice-kind", "stale")
+    await expect(page.getByTestId("mutation-retry")).toHaveText("重新读取看板")
+    await expect.poll(() => inspectorReads.length).toBeGreaterThan(0)
+    const inspectorReadsBeforeRetry = inspectorReads.length
+    failCanonicalRead = false
+    await page.getByTestId("mutation-retry").click()
+    await expect.poll(() => inspectorReads.length).toBeGreaterThan(inspectorReadsBeforeRetry)
   })
 
   test("retains a created task id when its first required step fails and retries only the step", async ({ page }) => {
@@ -423,8 +535,16 @@ test.describe("board task mutation DOM behavior", () => {
     await page.getByRole("button", { name: "创建" }).click()
     await expect(page.getByTestId("mutation-retry")).toBeVisible()
     await expect(page.getByTestId("mutation-retry")).toHaveText("重试添加首个步骤")
+    await expect.poll(() => {
+      const url = new URL(page.url())
+      return `${url.pathname}?${url.searchParams.toString()}`
+    }).toMatch(/^\/app\/boards\/default\/board\?task=t_/)
+    const canonicalTaskUrl = page.url()
+    const canonicalHistoryLength = await page.evaluate(() => window.history.length)
     await page.getByTestId("mutation-retry").click()
     await expect.poll(() => stepBodies.length).toBe(2)
+    expect(page.url()).toBe(canonicalTaskUrl)
+    expect(await page.evaluate(() => window.history.length)).toBe(canonicalHistoryLength)
     expect(createBodies).toHaveLength(1)
     expect(createBodies[0]?.title).toBe("Created with step")
     expect(createBodies[0]?.description).toBe("Description")

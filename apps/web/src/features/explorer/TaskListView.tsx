@@ -31,6 +31,8 @@ export interface TaskListViewProps {
   readonly onQueryChange: (query: TaskListQueryState) => void
   readonly onSelectTask: (taskId: string) => void
   readonly onRetry?: () => void
+  readonly onCreate?: (trigger?: HTMLElement | null) => void
+  readonly isMutationPending?: boolean
   readonly locale?: Locale
 }
 
@@ -61,6 +63,7 @@ type ListCopy = {
   readonly page: string
   readonly pageSuffix: string
   readonly next: string
+  readonly createTask: string
   readonly statusValues: Readonly<Record<TaskListStatus, string>>
   readonly planValues: Readonly<Record<TaskListPlanFilter, string>>
   readonly planState: Readonly<Record<"unplanned" | "planned" | "not_required", string>>
@@ -68,13 +71,13 @@ type ListCopy = {
 
 const copies: Record<Locale, ListCopy> = {
   zh: {
-    eyebrow: "任务浏览", title: "任务列表", loading: "正在加载任务列表…", refreshing: "正在刷新…", search: "搜索", searchPlaceholder: "标题、ref 或描述", filters: "任务列表筛选", status: "状态", allStatuses: "全部状态", sort: "排序", pageSize: "每页", includeArchived: "包含已归档", priority: "优先级", plan: "计划", reset: "重置", error: "任务列表加载失败", offline: "当前离线，无法加载任务列表。", retry: "重试", empty: "没有匹配的任务。", table: "任务列表内容", headers: ["Ref", "标题", "状态", "优先级", "执行者", "计划", "步骤", "更新"], blocked: "阻塞", previous: "上一页", page: "第", pageSuffix: " 页", next: "下一页",
+    eyebrow: "任务浏览", title: "任务列表", loading: "正在加载任务列表…", refreshing: "正在刷新…", search: "搜索", searchPlaceholder: "标题、ref 或描述", filters: "任务列表筛选", status: "状态", allStatuses: "全部状态", sort: "排序", pageSize: "每页", includeArchived: "包含已归档", priority: "优先级", plan: "计划", reset: "重置", error: "任务列表加载失败", offline: "当前离线，无法加载任务列表。", retry: "重试", empty: "没有匹配的任务。", table: "任务列表内容", headers: ["Ref", "标题", "状态", "优先级", "执行者", "计划", "步骤", "更新"], blocked: "阻塞", previous: "上一页", page: "第", pageSuffix: " 页", next: "下一页", createTask: "创建任务",
     statusValues: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planValues: { plan_needed: "需要计划", has_steps: "有步骤", incomplete_required_steps: "必需步骤未完成" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
   },
   en: {
-    eyebrow: "TASK EXPLORER", title: "Task list", loading: "Loading tasks…", refreshing: "Refreshing…", search: "Search", searchPlaceholder: "Title, ref, or description", filters: "Task list filters", status: "Status", allStatuses: "All statuses", sort: "Sort", pageSize: "Page size", includeArchived: "Include archived", priority: "Priority", plan: "Plan", reset: "Reset", error: "Task list failed to load", offline: "You are offline; the task list cannot be loaded.", retry: "Retry", empty: "No matching tasks.", table: "Task list", headers: ["Ref", "Title", "Status", "Priority", "Assignee", "Plan", "Steps", "Updated"], blocked: "blocked", previous: "Previous", page: "Page", pageSuffix: "", next: "Next",
+    eyebrow: "TASK EXPLORER", title: "Task list", loading: "Loading tasks…", refreshing: "Refreshing…", search: "Search", searchPlaceholder: "Title, ref, or description", filters: "Task list filters", status: "Status", allStatuses: "All statuses", sort: "Sort", pageSize: "Page size", includeArchived: "Include archived", priority: "Priority", plan: "Plan", reset: "Reset", error: "Task list failed to load", offline: "You are offline; the task list cannot be loaded.", retry: "Retry", empty: "No matching tasks.", table: "Task list", headers: ["Ref", "Title", "Status", "Priority", "Assignee", "Plan", "Steps", "Updated"], blocked: "blocked", previous: "Previous", page: "Page", pageSuffix: "", next: "Next", createTask: "Create task",
     statusValues: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planValues: { plan_needed: "Plan needed", has_steps: "Has steps", incomplete_required_steps: "Incomplete required steps" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
@@ -128,7 +131,7 @@ function listRange(meta: TaskListViewState["meta"]): string {
   return `${meta.offset + 1}–${Math.min(meta.offset + meta.limit, meta.total)} / ${meta.total}`
 }
 
-export function TaskListView({ state, rows, loading, error, onQueryChange, onSelectTask, onRetry, locale = "zh" }: TaskListViewProps) {
+export function TaskListView({ state, rows, loading, error, onQueryChange, onSelectTask, onRetry, onCreate, isMutationPending = false, locale = "zh" }: TaskListViewProps) {
   const copy = copies[locale]
   const currentPage = Math.floor(state.meta.offset / Math.max(1, state.meta.limit)) + 1
   const totalPages = pageCount(state.meta)
@@ -151,16 +154,19 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
           <h2 id="task-list-heading">{copy.title}</h2>
           <p className={styles.muted}>{loading ? copy.refreshing : listRange(state.meta)}</p>
         </div>
-        <label className={styles.searchField}>
-          <span>{copy.search}</span>
-          <input
-            data-testid="list-search"
-            type="search"
-            value={state.query.search}
-            placeholder={copy.searchPlaceholder}
-            onChange={(event) => updateQuery(state.query, onQueryChange, { search: event.currentTarget.value })}
-          />
-        </label>
+        <div className={styles.toolbarActions}>
+          <label className={styles.searchField}>
+            <span>{copy.search}</span>
+            <input
+              data-testid="list-search"
+              type="search"
+              value={state.query.search}
+              placeholder={copy.searchPlaceholder}
+              onChange={(event) => updateQuery(state.query, onQueryChange, { search: event.currentTarget.value })}
+            />
+          </label>
+          {onCreate ? <button type="button" className={styles.createButton} disabled={isMutationPending} onClick={(event) => onCreate(event.currentTarget)} data-testid="task-create">{copy.createTask}</button> : null}
+        </div>
       </header>
 
       <div className={styles.controls} aria-label={copy.filters}>

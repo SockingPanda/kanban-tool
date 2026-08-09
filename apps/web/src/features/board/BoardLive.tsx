@@ -22,7 +22,7 @@ import {
 } from "./types"
 import { toBoardViewModel } from "./board-adapter"
 import { boardSyncStatusForTelemetry, subscribeBrowserConnectivity } from "./board-live-state"
-import type { BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./task-mutation-state"
+import type { BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./task-mutation-state"
 import {
   acquireBoardSession,
   bindBoardResourceIdentity,
@@ -46,9 +46,11 @@ export interface BoardLiveProps {
   /** Propagate browser connectivity changes to the App-level Explorer status. */
   readonly onSyncStatusChange?: (status: BoardSyncStatus) => void
   /** Expose the canonical session's typed mutation surface to the rendered Explorer board. */
-  readonly onTaskMutationsChange?: (surface: BoardTaskMutationSurface | undefined) => void
+  readonly onTaskMutationsChange?: (surface: BoardTaskMutationSurface | undefined, releasedSurface?: BoardTaskMutationSurface) => void
   /** Report a committed mutation so the App can invalidate Explorer readers/navigation. */
   readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void
+  /** Invalidate visible Explorer readers when a stale mutation retry reloads canonical data. */
+  readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => void
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string): BoardReadResource {
@@ -120,7 +122,7 @@ function retainResourceKey(resources: Map<string, BoardReadResource>, resource: 
   resources.set(resource.identityKey, resource)
 }
 
-export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted }: BoardLiveProps) {
+export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload }: BoardLiveProps) {
   const preferences = usePreferences()
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
@@ -281,6 +283,7 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
 
   const refreshCanonical = useCallback(async () => {
     await sessionHandleRef.current?.refresh()
+    return modelRef.current
   }, [])
 
   const taskMutations = useMemo<BoardTaskMutationSurface | undefined>(() => {
@@ -288,17 +291,20 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
     try {
       return {
         client: createTaskMutationClient(runtime, mutationBoardSlug),
-        onCanonicalReload: refreshCanonical,
+        onCanonicalReload: async (options) => {
+          onCanonicalReload?.(options)
+          return refreshCanonical()
+        },
         onMutationCommitted: (event) => onMutationCommitted?.({ ...event, boardSlug: mutationBoardSlug }),
       }
     } catch {
       return undefined
     }
-  }, [mutationBoardSlug, onMutationCommitted, refreshCanonical, runtime])
+  }, [mutationBoardSlug, onCanonicalReload, onMutationCommitted, refreshCanonical, runtime])
 
   useEffect(() => {
     onTaskMutationsChange?.(taskMutations)
-    return () => onTaskMutationsChange?.(undefined)
+    return () => onTaskMutationsChange?.(undefined, taskMutations)
   }, [onTaskMutationsChange, taskMutations])
 
   useEffect(() => {

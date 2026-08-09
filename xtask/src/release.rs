@@ -1010,6 +1010,17 @@ fn read_regular_bytes(path: &Path) -> ToolResult<Vec<u8>> {
     Ok(fs::read(path)?)
 }
 
+fn read_regular_source_bytes(path: &Path) -> ToolResult<Vec<u8>> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(error(format!(
+            "source/binary 必须是 regular file: {}",
+            path.display()
+        )));
+    }
+    Ok(fs::read(path)?)
+}
+
 fn atomic_write_json(path: &Path, value: &impl Serialize) -> ToolResult<()> {
     let parent = path.parent().ok_or_else(|| error("receipt 缺少 parent"))?;
     reject_symlink_chain(parent)?;
@@ -1047,7 +1058,7 @@ fn collect_evidence_hashes(root: &Path) -> ToolResult<BTreeMap<String, String>> 
         "browser-firefox.json",
     ]
     .into_iter()
-    .map(|name| Ok((name.to_owned(), sha256_file(&root.join(name))?)))
+    .map(|name| Ok((name.to_owned(), sha256_evidence_file(&root.join(name))?)))
     .collect()
 }
 
@@ -1226,6 +1237,11 @@ fn validate_host_argv(
 }
 
 fn sha256_file(path: &Path) -> ToolResult<String> {
+    let mut hash = Sha256::new();
+    hash.update(read_regular_source_bytes(path)?);
+    Ok(format!("sha256:{:x}", hash.finalize()))
+}
+fn sha256_evidence_file(path: &Path) -> ToolResult<String> {
     let mut hash = Sha256::new();
     hash.update(read_regular_bytes(path)?);
     Ok(format!("sha256:{:x}", hash.finalize()))
@@ -1745,6 +1761,26 @@ mod tests {
         fs::write(&target, b"{}").expect("target");
         std::os::unix::fs::symlink(&target, root.join("link.json")).expect("link");
         assert!(read_regular_bytes(&root.join("link.json")).is_err());
+        fs::remove_dir_all(&root).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn evidence_reader_rejects_hardlink_but_source_reader_accepts_it() {
+        let root = env::temp_dir().join(format!("release-proof-hardlink-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("test root");
+        let target = root.join("target.json");
+        let hardlink = root.join("hardlink.json");
+        fs::write(&target, b"{}").expect("target");
+        fs::hard_link(&target, &hardlink).expect("hardlink");
+        assert!(read_regular_bytes(&hardlink).is_err());
+        assert_eq!(
+            read_regular_source_bytes(&hardlink).expect("source hardlink"),
+            b"{}"
+        );
+        assert!(sha256_evidence_file(&hardlink).is_err());
+        assert!(sha256_file(&hardlink).is_ok());
         fs::remove_dir_all(&root).expect("cleanup");
     }
 

@@ -215,6 +215,12 @@
     min-width: 0;
   }
 
+  /* Astryx 浅色错误色板的文字对比度低于 WCAG AA 阈值。 */
+  .taskHeader :global(.astryx-badge.error) {
+    background-color: #a50c25;
+    color: #ffffff;
+  }
+
   .taskRef {
     min-width: 0;
     font-size: 0.75rem;

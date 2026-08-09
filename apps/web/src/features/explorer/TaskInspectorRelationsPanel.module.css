@@ -156,12 +156,6 @@
     font-size: 0.76rem;
   }
 
-  .formGrid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem;
-  }
-
   .form input,
   .form textarea,
   .form select,
@@ -275,9 +269,4 @@
     padding: 0;
   }
 
-  @media (max-width: 38rem) {
-    .formGrid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
 }

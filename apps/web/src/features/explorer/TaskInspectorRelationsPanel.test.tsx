@@ -63,6 +63,7 @@ function props(overrides: Partial<TaskInspectorRelationsPanelProps> = {}): TaskI
       retries: new Map(),
     },
     onSelectTask: vi.fn(),
+    resolveTaskSelector: (selector) => selector === "default#1" ? "t_parent" : null,
     ...overrides,
   }
 }
@@ -112,7 +113,6 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain("暂无评论。")
     expect(markup).toContain("暂无依赖。")
     expect(markup).toContain("暂无步骤。")
-    expect(markup).toContain('data-testid="task-inspector-comment-author"')
     expect(markup).toContain('data-testid="task-inspector-step-title"')
   })
 
@@ -164,8 +164,7 @@ describe("TaskInspectorRelationsPanel", () => {
 
 describe("TaskInspectorRelationsPanel input seams", () => {
   test("builds exact typed comment input", () => {
-    expect(__test.commentInput(" alice ", " decision ", " Keep this ")).toEqual({
-      author: "alice",
+    expect(__test.commentInput(" decision ", " Keep this ")).toEqual({
       kind: "decision",
       body: "Keep this",
     })
@@ -175,5 +174,16 @@ describe("TaskInspectorRelationsPanel input seams", () => {
     expect(__test.stepInput(" Verify ", " Body ", true)).toEqual({ title: "Verify", body: "Body", required: true })
     expect(__test.stepInput(" Link ", "", false, " default#2 ")).toEqual({ title: "Link", required: false, linked_task_ref: "default#2" })
     expect(__test.planInput(" manual execution ")).toEqual({ reason: "manual execution" })
+  })
+
+  test("resolves direct ids and same-board refs before a mutation, with no call for unresolved input", () => {
+    const resolver = vi.fn((selector: string) => selector === "default#2" ? "t_2" : null)
+    expect(__test.resolveTaskSelector(" t_direct ", resolver)).toBe("t_direct")
+    expect(resolver).not.toHaveBeenCalled()
+    expect(__test.resolveTaskSelector(" default#2 ", resolver)).toBe("t_2")
+    const addDependency = vi.fn()
+    const unresolved = __test.resolveTaskSelector("default#404", resolver)
+    if (unresolved) addDependency(unresolved)
+    expect(addDependency).not.toHaveBeenCalled()
   })
 })

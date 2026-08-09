@@ -6,7 +6,7 @@ import {
   type TaskInspectorMutationHandlers,
   type TaskInspectorMutationSnapshot,
 } from "./task-inspector-mutation-state"
-import { buildCommentInput, buildPlanInput, buildStepInput } from "./TaskInspectorRelationsPanel.logic"
+import { buildCommentInput, buildPlanInput, buildStepInput, resolveTaskSelector, type TaskSelectorResolver } from "./TaskInspectorRelationsPanel.logic"
 import styles from "./TaskInspectorRelationsPanel.module.css"
 
 export type TaskInspectorRelationTaskStatus =
@@ -75,6 +75,8 @@ export interface TaskInspectorRelationsPanelProps {
   readonly handlers: TaskInspectorMutationHandlers
   readonly snapshot: TaskInspectorMutationSnapshot
   readonly onSelectTask: (taskId: string) => void
+  /** Synchronous same-board ref/id resolution seam owned by the parent read model. */
+  readonly resolveTaskSelector: TaskSelectorResolver
   readonly locale?: "zh" | "en"
   readonly commentPageSize?: number
 }
@@ -86,7 +88,6 @@ type RelationsCopy = {
   readonly newest: string
   readonly oldest: string
   readonly commentCount: (count: number) => string
-  readonly commentAuthor: string
   readonly commentKind: string
   readonly commentBody: string
   readonly commentPlaceholder: string
@@ -124,6 +125,8 @@ type RelationsCopy = {
   readonly markPlanNotRequired: string
   readonly markingPlanNotRequired: string
   readonly metadata: string
+  readonly unresolvedDependency: string
+  readonly unresolvedLinkedTask: string
   readonly page: (current: number, total: number) => string
   readonly previous: string
   readonly next: string
@@ -139,7 +142,6 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     newest: "最新优先",
     oldest: "最早优先",
     commentCount: (count) => `${count} 条评论`,
-    commentAuthor: "作者",
     commentKind: "类型",
     commentBody: "评论内容",
     commentPlaceholder: "记录交接、决定或观察…",
@@ -177,6 +179,8 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     markPlanNotRequired: "标记为无需计划",
     markingPlanNotRequired: "正在更新计划…",
     metadata: "元数据",
+    unresolvedDependency: "无法解析该父任务 ref 或 id。",
+    unresolvedLinkedTask: "无法解析该关联任务 ref 或 id。",
     page: (current, total) => `第 ${current} / ${total} 页`,
     previous: "上一页",
     next: "下一页",
@@ -190,7 +194,6 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     newest: "Newest first",
     oldest: "Oldest first",
     commentCount: (count) => `${count} comments`,
-    commentAuthor: "Author",
     commentKind: "Kind",
     commentBody: "Comment body",
     commentPlaceholder: "Record a handoff, decision, or observation…",
@@ -228,6 +231,8 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     markPlanNotRequired: "Mark plan not required",
     markingPlanNotRequired: "Updating plan…",
     metadata: "Metadata",
+    unresolvedDependency: "The parent task ref or id could not be resolved.",
+    unresolvedLinkedTask: "The linked task ref or id could not be resolved.",
     page: (current, total) => `Page ${current} of ${total}`,
     previous: "Previous",
     next: "Next",
@@ -316,7 +321,6 @@ function CommentsPanel({
 }) {
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest")
   const [page, setPage] = useState(0)
-  const [author, setAuthor] = useState("")
   const [kind, setKind] = useState<TaskInspectorCommentKind>("note")
   const [body, setBody] = useState("")
   const sortedComments = useMemo(() => [...comments].sort((left, right) => {
@@ -333,11 +337,10 @@ function CommentsPanel({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const input = buildCommentInput(author, kind, body)
-    if (!input.author || !input.body) return
+    const input = buildCommentInput(kind, body)
+    if (!input.body) return
     try {
       await handlers.addComment(input)
-      setAuthor("")
       setBody("")
       setKind("note")
     } catch {
@@ -396,25 +399,19 @@ function CommentsPanel({
         </>
       )}
       <form className={styles.form} onSubmit={(event) => void submit(event)} aria-busy={pending || undefined}>
-        <div className={styles.formGrid}>
-          <label>
-            <span>{localeCopy.commentAuthor}</span>
-            <input data-testid="task-inspector-comment-author" name="comment-author" autoComplete="off" value={author} onChange={(event) => setAuthor(event.currentTarget.value)} />
-          </label>
-          <label>
-            <span>{localeCopy.commentKind}</span>
-            <select name="comment-kind" value={kind} onChange={(event) => setKind(event.currentTarget.value as TaskInspectorCommentKind)}>
-              <option value="note">note</option>
-              <option value="decision">decision</option>
-              <option value="signal">signal</option>
-            </select>
-          </label>
-        </div>
+        <label>
+          <span>{localeCopy.commentKind}</span>
+          <select name="comment-kind" value={kind} onChange={(event) => setKind(event.currentTarget.value as TaskInspectorCommentKind)}>
+            <option value="note">note</option>
+            <option value="decision">decision</option>
+            <option value="signal">signal</option>
+          </select>
+        </label>
         <label>
           <span>{localeCopy.commentBody}</span>
           <textarea name="comment-body" autoComplete="off" value={body} onChange={(event) => setBody(event.currentTarget.value)} placeholder={localeCopy.commentPlaceholder} />
         </label>
-        <button type="submit" disabled={pending || !author.trim() || !body.trim()}>{pending ? localeCopy.addingComment : localeCopy.addComment}</button>
+        <button type="submit" disabled={pending || !body.trim()}>{pending ? localeCopy.addingComment : localeCopy.addComment}</button>
         <Feedback error={error} pendingLabel={pending ? localeCopy.addingComment : undefined} />
       </form>
     </section>
@@ -427,6 +424,7 @@ function DependenciesPanel({
   handlers,
   snapshot,
   onSelectTask,
+  resolveSelector,
   localeCopy,
 }: {
   readonly taskId: string
@@ -434,9 +432,11 @@ function DependenciesPanel({
   readonly handlers: TaskInspectorMutationHandlers
   readonly snapshot: TaskInspectorMutationSnapshot
   readonly onSelectTask: (taskId: string) => void
+  readonly resolveSelector: TaskSelectorResolver
   readonly localeCopy: RelationsCopy
 }) {
   const [input, setInput] = useState("")
+  const [resolutionError, setResolutionError] = useState<string | null>(null)
   const addPending = pendingFor(snapshot, "addDependency", taskId)
   const addError = errorFor(snapshot, "addDependency", taskId)
   const removePending = pendingFor(snapshot, "removeDependency", taskId)
@@ -446,9 +446,15 @@ function DependenciesPanel({
     event.preventDefault()
     const value = input.trim()
     if (!value) return
+    const parentTaskId = resolveTaskSelector(value, resolveSelector)
+    if (!parentTaskId) {
+      setResolutionError(localeCopy.unresolvedDependency)
+      return
+    }
     try {
-      await handlers.addDependency(value)
+      await handlers.addDependency(parentTaskId)
       setInput("")
+      setResolutionError(null)
     } catch {
       // Keep the ref/id visible so the controller can retry the same intent.
     }
@@ -483,10 +489,11 @@ function DependenciesPanel({
       <form className={styles.form} onSubmit={(event) => void add(event)} aria-busy={addPending || undefined}>
         <label>
           <span>{localeCopy.dependencyInput}</span>
-          <input name="dependency-parent" autoComplete="off" value={input} onChange={(event) => setInput(event.currentTarget.value)} placeholder={localeCopy.dependencyPlaceholder} />
+          <input name="dependency-parent" autoComplete="off" value={input} onChange={(event) => { setInput(event.currentTarget.value); setResolutionError(null) }} placeholder={localeCopy.dependencyPlaceholder} />
         </label>
         <button type="submit" disabled={addPending || !input.trim()}>{addPending ? localeCopy.addingDependency : localeCopy.addDependency}</button>
         <Feedback error={addError ?? removeError} pendingLabel={addPending ? localeCopy.addingDependency : removePending ? localeCopy.removingDependency : undefined} />
+        {resolutionError ? <p className={styles.error} role="alert" aria-live="polite">{resolutionError}</p> : null}
       </form>
     </section>
   )
@@ -498,6 +505,7 @@ function StepsPanel({
   handlers,
   snapshot,
   onSelectTask,
+  resolveSelector,
   localeCopy,
 }: {
   readonly taskId: string
@@ -505,12 +513,14 @@ function StepsPanel({
   readonly handlers: TaskInspectorMutationHandlers
   readonly snapshot: TaskInspectorMutationSnapshot
   readonly onSelectTask: (taskId: string) => void
+  readonly resolveSelector: TaskSelectorResolver
   readonly localeCopy: RelationsCopy
 }) {
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
   const [required, setRequired] = useState(true)
   const [linkedTaskRef, setLinkedTaskRef] = useState("")
+  const [linkedTaskResolutionError, setLinkedTaskResolutionError] = useState<string | null>(null)
   const [planReason, setPlanReason] = useState("")
   const stepsView = asStepsView(stepsInput)
   const createPending = pendingFor(snapshot, "createStep", taskId)
@@ -523,7 +533,12 @@ function StepsPanel({
   const plan = stepsView.executionPlan
 
   const submitStep = async (link: boolean) => {
-    const input = buildStepInput(title, body, required, link ? linkedTaskRef : undefined)
+    const linkedTaskId = link ? resolveTaskSelector(linkedTaskRef, resolveSelector) : null
+    if (link && !linkedTaskId) {
+      setLinkedTaskResolutionError(localeCopy.unresolvedLinkedTask)
+      return
+    }
+    const input = buildStepInput(title, body, required, linkedTaskId ?? undefined)
     if (!input.title || (link && !input.linked_task_ref)) return
     try {
       if (link) await handlers.linkStep(input)
@@ -532,6 +547,7 @@ function StepsPanel({
       setBody("")
       setRequired(true)
       setLinkedTaskRef("")
+      setLinkedTaskResolutionError(null)
     } catch {
       // Keep the draft available for a retry.
     }
@@ -589,13 +605,14 @@ function StepsPanel({
         </label>
         <label>
           <span>{localeCopy.stepLink}</span>
-          <input name="step-linked-task" autoComplete="off" value={linkedTaskRef} onChange={(event) => setLinkedTaskRef(event.currentTarget.value)} placeholder={localeCopy.stepLinkPlaceholder} />
+          <input name="step-linked-task" autoComplete="off" value={linkedTaskRef} onChange={(event) => { setLinkedTaskRef(event.currentTarget.value); setLinkedTaskResolutionError(null) }} placeholder={localeCopy.stepLinkPlaceholder} />
         </label>
         <div className={styles.buttonRow}>
           <button data-testid="task-inspector-create-step" type="button" disabled={stepPending || !title.trim()} onClick={() => void submitStep(false)}>{stepPending ? localeCopy.creatingStep : localeCopy.createStep}</button>
           <button data-testid="task-inspector-link-step" type="button" disabled={stepPending || !title.trim() || !linkedTaskRef.trim()} onClick={() => void submitStep(true)}>{stepPending ? localeCopy.creatingStep : localeCopy.createAndLinkStep}</button>
         </div>
         <Feedback error={createError ?? linkError} pendingLabel={stepPending ? localeCopy.creatingStep : undefined} />
+        {linkedTaskResolutionError ? <p className={styles.error} role="alert" aria-live="polite">{linkedTaskResolutionError}</p> : null}
       </form>
       <form className={styles.form} onSubmit={(event) => void submitPlan(event)} aria-busy={planPending || undefined}>
         <label>
@@ -617,6 +634,7 @@ export function TaskInspectorRelationsPanel({
   handlers,
   snapshot,
   onSelectTask,
+  resolveTaskSelector: resolveSelector,
   locale = "zh",
   commentPageSize = 10,
 }: TaskInspectorRelationsPanelProps) {
@@ -625,8 +643,8 @@ export function TaskInspectorRelationsPanel({
   return (
     <div className={styles.relations} data-testid="task-inspector-relations">
       <CommentsPanel taskId={taskId} comments={comments} handlers={handlers} snapshot={snapshot} localeCopy={localeCopy} pageSize={safePageSize} />
-      <DependenciesPanel taskId={taskId} dependencies={dependencies} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} localeCopy={localeCopy} />
-      <StepsPanel taskId={taskId} stepsInput={steps} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} localeCopy={localeCopy} />
+      <DependenciesPanel taskId={taskId} dependencies={dependencies} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} resolveSelector={resolveSelector} localeCopy={localeCopy} />
+      <StepsPanel taskId={taskId} stepsInput={steps} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} resolveSelector={resolveSelector} localeCopy={localeCopy} />
     </div>
   )
 }

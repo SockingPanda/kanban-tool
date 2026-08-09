@@ -1,5 +1,6 @@
 import type { ApiHealthResponseContract } from "./generated/contracts/api-health-response"
 import { parseApiHealthResponse } from "./generated/contracts/api-health-response"
+import type { ApiErrorResponseContract } from "./generated/contracts/api-error-response"
 import { ContractValidationError } from "./generated/runtime"
 import {
   createHttpTransport,
@@ -17,17 +18,32 @@ export class HealthReadError extends Error {
   readonly kind: HealthReadErrorKind
   readonly status: number | null
   readonly contractId: string | null
+  readonly apiErrorCode: ApiErrorResponseContract["error"]["code"] | null
+  readonly apiError: Pick<ApiErrorResponseContract["error"], "code"> | null
 
   constructor(
     kind: HealthReadErrorKind,
     message: string,
-    options: { status?: number; contractId?: string; cause?: unknown } = {},
+    options: {
+      status?: number
+      contractId?: string
+      apiErrorCode?: ApiErrorResponseContract["error"]["code"]
+      apiError?: Pick<ApiErrorResponseContract["error"], "code"> | null
+      cause?: unknown
+    } = {},
   ) {
     super(message, { cause: options.cause })
     this.name = "HealthReadError"
     this.kind = kind
     this.status = options.status ?? null
     this.contractId = options.contractId ?? null
+    this.apiErrorCode = options.apiErrorCode ?? options.apiError?.code ?? null
+    this.apiError = this.apiErrorCode === null ? null : { code: this.apiErrorCode }
+  }
+
+  /** Structured server error code, without exposing the raw response body. */
+  get code(): ApiErrorResponseContract["error"]["code"] | null {
+    return this.apiErrorCode
   }
 }
 
@@ -43,9 +59,13 @@ function wrapError(error: unknown): never {
   if (isAbortError(error)) throw error
   if (error instanceof HealthReadError) throw error
   if (error instanceof HttpTransportError) {
-    throw new HealthReadError(error.kind, error.message, { status: error.status ?? undefined, cause: error })
+    throw new HealthReadError(error.kind, "Web health request failed.", {
+      status: error.status ?? undefined,
+      apiErrorCode: error.apiError?.code,
+      cause: error,
+    })
   }
-  throw error
+  throw new HealthReadError("invalid_contract", "Web health response is invalid.", { cause: error })
 }
 
 /** Read `/health` through the same-origin typed transport and generated contract. */

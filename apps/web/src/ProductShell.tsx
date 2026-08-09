@@ -4,7 +4,7 @@ import { Layout } from "@astryxdesign/core/Layout"
 import { LayoutContent } from "@astryxdesign/core/Layout"
 import { SideNav } from "@astryxdesign/core/SideNav"
 import { SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav"
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react"
 
 import type { CanonicalBoardSlug } from "./lib/board-slug"
 import type { WebRuntimeConfig } from "./lib/runtime"
@@ -14,6 +14,7 @@ import { usePreferences } from "./lib/use-preferences"
 import { createTranslator, type MessageKey } from "./lib/i18n"
 import { readHealth, type HealthReport } from "./lib/api/health-read-model"
 import { HealthPage } from "./features/health/HealthPage"
+import { presentHealthError } from "./features/health/health-error"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -275,11 +276,14 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
   const t = createTranslator(preferences.locale)
   const [health, setHealth] = useState<HealthReport | null>(null)
   const [healthError, setHealthError] = useState<unknown>(null)
-  const [healthLoading, setHealthLoading] = useState(true)
+  const [healthPending, setHealthPending] = useState(true)
+  const healthControllerRef = useRef<AbortController | null>(null)
 
-  useEffect(() => {
+  const loadHealth = useCallback(() => {
+    if (healthControllerRef.current) return
     const controller = new AbortController()
-    setHealthLoading(true)
+    healthControllerRef.current = controller
+    setHealthPending(true)
     void readHealth({ runtime, signal: controller.signal })
       .then((report) => {
         setHealth(report)
@@ -290,10 +294,23 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
         setHealthError(error)
       })
       .finally(() => {
-        if (!controller.signal.aborted) setHealthLoading(false)
+        if (healthControllerRef.current === controller) {
+          healthControllerRef.current = null
+          setHealthPending(false)
+        }
       })
-    return () => controller.abort()
   }, [runtime])
+
+  useEffect(() => {
+    loadHealth()
+    return () => {
+      const controller = healthControllerRef.current
+      controller?.abort()
+      if (healthControllerRef.current === controller) healthControllerRef.current = null
+    }
+  }, [loadHealth])
+
+  const healthCopy = healthError ? presentHealthError(healthError, t) : null
 
   return (
     <section className={styles.page} aria-labelledby="settings-heading" data-testid="settings-page">
@@ -359,20 +376,26 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
         <dl className={styles.runtimeFacts} data-testid="settings-health">
           <div>
             <dt>{t("healthDb")}</dt>
-            <dd translate="no">{healthLoading ? t("loading") : health?.db ?? t("reported")}</dd>
+            <dd translate="no">{healthPending && !health ? t("loading") : health?.db?.trim() || t("reported")}</dd>
           </div>
           <div>
             <dt>{t("dbPath")}</dt>
-            <dd translate="no">{healthLoading ? t("loading") : health?.db_path?.trim() || t("reported")}</dd>
+            <dd translate="no">{healthPending && !health ? t("loading") : health?.db_path?.trim() || t("reported")}</dd>
           </div>
           <div>
             <dt>{t("dbFingerprint")}</dt>
-            <dd translate="no">{healthLoading ? t("loading") : health?.db_fingerprint?.trim() || t("reported")}</dd>
+            <dd translate="no">{healthPending && !health ? t("loading") : health?.db_fingerprint?.trim() || t("reported")}</dd>
           </div>
-          {healthError ? (
+          {healthCopy ? (
             <div role="alert" data-testid="settings-health-error">
-              <dt>{t("healthUnavailable")}</dt>
-              <dd>{healthError instanceof Error ? healthError.message : String(healthError)}</dd>
+              <dt>{healthCopy.title}</dt>
+              <dd>
+                <span>{healthCopy.detail}</span>
+                <span>{healthCopy.nextStep}</span>
+                <button type="button" className={styles.healthRetry} disabled={healthPending} onClick={loadHealth} data-testid="settings-health-retry">
+                  {healthPending ? t("loading") : t("retry")}
+                </button>
+              </dd>
             </div>
           ) : null}
         </dl>

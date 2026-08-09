@@ -5,6 +5,7 @@ import type { WebRuntimeConfig } from "../../lib/runtime"
 import type { HealthReport } from "../../lib/api/health-read-model"
 import { PreferencesProvider } from "../../lib/preferences-provider"
 import { HealthPage } from "./HealthPage"
+import { healthMetricTone } from "./health-metrics"
 
 const runtime = {
   apiBaseUrl: "",
@@ -41,5 +42,26 @@ describe("HealthPage", () => {
 
     expect(markup).toContain('data-testid="health-loading"')
     expect(markup).not.toContain('data-testid="health-metric-ok"')
+  })
+
+  test("treats the production turso database identity as healthy when the report is healthy", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <HealthPage runtime={runtime} initialReport={{ ...health, db: "turso" }} />
+      </PreferencesProvider>,
+    )
+
+    expect(healthMetricTone(true)).toBe("ready")
+    expect(markup).toContain("turso")
+  })
+
+  test("uses the localized not-reported fallback for empty identity fields", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <HealthPage runtime={runtime} initialReport={{ ...health, version: "", db_path: "", db_fingerprint: "" }} />
+      </PreferencesProvider>,
+    )
+
+    expect(markup).toContain("未报告")
   })
 })

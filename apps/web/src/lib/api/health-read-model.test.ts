@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 
 import type { HttpTransportResponse } from "./http-transport"
+import { HttpTransportError } from "./http-transport"
 import { readHealth } from "./health-read-model"
 
 function response(payload: unknown): HttpTransportResponse {
@@ -36,5 +37,26 @@ describe("health read model", () => {
       kind: "invalid_contract",
       contractId: "api.health.response",
     })
+  })
+
+  test("keeps typed API code and status without exposing the server message", async () => {
+    const serverMessage = "database path /srv/private/kanban.db is unavailable"
+    const transport = {
+      get: vi.fn(async () => {
+        throw new HttpTransportError("http", serverMessage, {
+          status: 503,
+          apiError: { code: "server_unavailable", message: serverMessage },
+        })
+      }),
+    }
+
+    const error = await readHealth({ transport }).catch((cause: unknown) => cause)
+    expect(error).toMatchObject({
+      kind: "http",
+      status: 503,
+      code: "server_unavailable",
+      apiErrorCode: "server_unavailable",
+    })
+    expect(error).not.toMatchObject({ message: expect.stringContaining("/srv/private") })
   })
 })

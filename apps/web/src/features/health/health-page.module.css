@@ -136,7 +136,17 @@
     border-inline-start-color: var(--color-status-negative, #ad3b31);
   }
 
-  .error strong {
+  .stale {
+    display: grid;
+    gap: 0.6rem;
+    padding: 1.2rem;
+    border-inline-start: 0.2rem solid var(--color-accent);
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+  }
+
+  .error strong,
+  .stale strong {
     color: var(--color-text-primary);
   }
 

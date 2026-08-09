@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { readHealth, type HealthReadError, type HealthReport } from "../../lib/api/health-read-model"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
+import { presentHealthError } from "./health-error"
+import { healthMetricTone } from "./health-metrics"
 import styles from "./health-page.module.css"
 
 export type HealthPageProps = {
@@ -14,58 +16,55 @@ export type HealthPageProps = {
 
 type HealthState =
   | { kind: "loading" }
-  | { kind: "ready"; report: HealthReport }
+  | { kind: "ready"; report: HealthReport; staleError?: unknown }
   | { kind: "error"; error: unknown }
 
-const fallbackText = "—"
-
-function reported(value: string | null | undefined): string {
+function reported(value: string | null | undefined, fallback: string): string {
   const trimmed = value?.trim()
-  return trimmed || fallbackText
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-function metricTone(value: boolean | string): string {
-  if (value === true || value === "ok") return styles.ready
-  return styles.degraded
+  return trimmed || fallback
 }
 
 export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
   const { locale } = usePreferences()
   const t = createTranslator(locale)
   const [state, setState] = useState<HealthState>(() => initialReport ? { kind: "ready", report: initialReport } : { kind: "loading" })
-  const [refreshing, setRefreshing] = useState(false)
+  const [pending, setPending] = useState(!initialReport)
+  const requestControllerRef = useRef<AbortController | null>(null)
 
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async () => {
+    if (requestControllerRef.current) return
     const reader = read ?? ((nextSignal?: AbortSignal) => readHealth({ runtime, signal: nextSignal }))
-    const report = await reader(signal)
-    setState({ kind: "ready", report })
+    const controller = new AbortController()
+    requestControllerRef.current = controller
+    setPending(true)
+    try {
+      const report = await reader(controller.signal)
+      setState({ kind: "ready", report })
+    } catch (error: unknown) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
+      setState((previous) => previous.kind === "ready"
+        ? { kind: "ready", report: previous.report, staleError: error }
+        : { kind: "error", error })
+    } finally {
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null
+        setPending(false)
+      }
+    }
   }, [read, runtime])
 
   useEffect(() => {
-    if (initialReport) return
-    const controller = new AbortController()
-    void load(controller.signal).catch((error: unknown) => {
-      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
-      setState({ kind: "error", error })
-    })
-    return () => controller.abort()
+    if (!initialReport) void load()
+    return () => {
+      const controller = requestControllerRef.current
+      controller?.abort()
+      if (requestControllerRef.current === controller) requestControllerRef.current = null
+    }
   }, [initialReport, load])
 
   const refresh = () => {
-    if (refreshing) return
-    const controller = new AbortController()
-    setRefreshing(true)
-    void load(controller.signal)
-      .catch((error: unknown) => {
-        if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
-        setState({ kind: "error", error })
-      })
-      .finally(() => setRefreshing(false))
+    if (pending) return
+    void load()
   }
 
   return (
@@ -76,8 +75,8 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
           <h1 id="health-heading">{t("healthHeading")}</h1>
           <p className={styles.lede}>{t("healthDescription")}</p>
         </div>
-        <button type="button" className={styles.refresh} disabled={refreshing} onClick={refresh} data-testid="health-refresh">
-          {refreshing ? t("loading") : t("refresh")}
+        <button type="button" className={styles.refresh} disabled={pending} onClick={refresh} data-testid="health-refresh">
+          {pending ? t("loading") : t("refresh")}
         </button>
       </div>
 
@@ -87,14 +86,22 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
 
       {state.kind === "error" ? (
         <div className={styles.error} role="alert" data-testid="health-error">
-          <strong>{t("healthUnavailable")}</strong>
-          <span>{errorMessage(state.error)}</span>
+          <HealthErrorContent error={state.error} t={t} />
           <button type="button" className={styles.retry} onClick={refresh}>{t("retry")}</button>
         </div>
       ) : null}
 
       {state.kind === "ready" ? (
-        <HealthMetrics report={state.report} t={t} />
+        <>
+          <HealthMetrics report={state.report} t={t} />
+          {state.staleError ? (
+            <div className={styles.stale} role="alert" data-testid="health-stale">
+              <HealthErrorContent error={state.staleError} t={t} />
+              <p>{t("healthStale")}</p>
+              <button type="button" className={styles.retry} disabled={pending} onClick={refresh}>{t("retry")}</button>
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       <section className={styles.runtime} aria-labelledby="health-runtime-heading" data-testid="health-runtime">
@@ -103,12 +110,12 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
           <h2 id="health-runtime-heading">{t("runtimeIdentity")}</h2>
         </div>
         <dl className={styles.runtimeGrid}>
-          <RuntimeFact label={t("defaultBoard")} value={runtime.defaultBoard} />
-          <RuntimeFact label={t("actor")} value={runtime.actor} />
-          <RuntimeFact label={t("api")} value={runtime.apiBaseUrl || "/"} />
-          <RuntimeFact label={t("server")} value={runtime.serverVersion} />
-          <RuntimeFact label={t("protocol")} value={runtime.protocolVersion} />
-          <RuntimeFact label={t("build")} value={runtime.webBuildId} />
+          <RuntimeFact label={t("defaultBoard")} value={runtime.defaultBoard} fallback={t("reported")} />
+          <RuntimeFact label={t("actor")} value={runtime.actor} fallback={t("reported")} />
+          <RuntimeFact label={t("api")} value={runtime.apiBaseUrl || "/"} fallback={t("reported")} />
+          <RuntimeFact label={t("server")} value={runtime.serverVersion} fallback={t("reported")} />
+          <RuntimeFact label={t("protocol")} value={runtime.protocolVersion} fallback={t("reported")} />
+          <RuntimeFact label={t("build")} value={runtime.webBuildId} fallback={t("reported")} />
         </dl>
       </section>
     </section>
@@ -117,11 +124,11 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
 
 function HealthMetrics({ report, t }: { report: HealthReport; t: ReturnType<typeof createTranslator> }) {
   const metrics = [
-    { id: "ok", label: t("healthOk"), value: String(report.ok), tone: metricTone(report.ok) },
-    { id: "db", label: t("healthDb"), value: report.db, tone: metricTone(report.db) },
-    { id: "version", label: t("version"), value: report.version, tone: styles.neutral },
-    { id: "db-path", label: t("dbPath"), value: reported(report.db_path), tone: styles.neutral },
-    { id: "db-fingerprint", label: t("dbFingerprint"), value: reported(report.db_fingerprint), tone: styles.neutral },
+    { id: "ok", label: t("healthOk"), value: String(report.ok), tone: styles[healthMetricTone(report.ok)] },
+    { id: "db", label: t("healthDb"), value: reported(report.db, t("reported")), tone: styles[healthMetricTone(report.ok)] },
+    { id: "version", label: t("version"), value: reported(report.version, t("reported")), tone: styles.neutral },
+    { id: "db-path", label: t("dbPath"), value: reported(report.db_path, t("reported")), tone: styles.neutral },
+    { id: "db-fingerprint", label: t("dbFingerprint"), value: reported(report.db_fingerprint, t("reported")), tone: styles.neutral },
   ] as const
 
   return (
@@ -136,12 +143,23 @@ function HealthMetrics({ report, t }: { report: HealthReport; t: ReturnType<type
   )
 }
 
-function RuntimeFact({ label, value }: { label: string; value: string }) {
+function RuntimeFact({ label, value, fallback }: { label: string; value: string; fallback: string }) {
   return (
     <div className={styles.runtimeFact}>
       <dt>{label}</dt>
-      <dd translate="no">{reported(value)}</dd>
+      <dd translate="no">{reported(value, fallback)}</dd>
     </div>
+  )
+}
+
+function HealthErrorContent({ error, t }: { error: unknown; t: ReturnType<typeof createTranslator> }) {
+  const copy = presentHealthError(error, t)
+  return (
+    <>
+      <strong>{copy.title}</strong>
+      <span data-testid="health-error-detail">{copy.detail}</span>
+      <span data-testid="health-error-next-step">{copy.nextStep}</span>
+    </>
   )
 }
 

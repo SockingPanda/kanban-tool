@@ -438,6 +438,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
               onQueryChange={updateListQuery}
               onSelectTask={selectTask}
               onRetry={listRead.retry}
+              locale={locale}
             />
           ) : null}
           {view === "map" ? (

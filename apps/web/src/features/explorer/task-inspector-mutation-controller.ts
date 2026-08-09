@@ -412,7 +412,13 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     const surface = this.surface
     if (surface === null || this.disposed || taskId !== surface.scope.taskId) return null
     const key = inspectorMutationKey(operation, taskId)
-    if (this.pending.has(key) || (isWriteOperation(operation) && this.writeTasks.has(taskId))) return null
+    const reloadKey = inspectorMutationKey("reload", taskId)
+    if (
+      this.pending.has(key)
+      || (operation === "reload" && this.writeTasks.has(taskId))
+      || (isWriteOperation(operation) && this.pending.has(reloadKey))
+      || (isWriteOperation(operation) && this.writeTasks.has(taskId))
+    ) return null
     const active: ActiveOperation = {
       generation: this.generation,
       scope: surface.scope,

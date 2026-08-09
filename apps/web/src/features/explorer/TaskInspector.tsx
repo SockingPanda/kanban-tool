@@ -345,7 +345,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", onLoadRuns, 
     setRunsStatus(model.runs.length > 0 ? "ready" : "idle")
     setEventsStatus(model.events.length > 0 ? "ready" : "idle")
     setNeighborhoodStatus(model.neighborhood ? "ready" : "idle")
-  }, [model.task.id])
+  }, [model.events, model.neighborhood, model.runs, model.task.id])
 
   const loadRuns = (event: SyntheticEvent<HTMLDetailsElement>) => {
     if (!event.currentTarget.open || runsStatus !== "idle" || !onLoadRuns) return

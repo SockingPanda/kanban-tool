@@ -347,6 +347,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }))
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
   const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
+  const inspectorModel = useMemo(() => inspectorRead.data ? inspectorViewModel(inspectorRead.data) : null, [inspectorRead.data])
 
   const navigate = useCallback((target: string, options?: { readonly replace?: boolean }) => {
     if (onNavigate) void onNavigate(target, options)
@@ -475,7 +476,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
           ) : null}
         </main>
         {showInspector ? (
-          inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} locale={locale} onLoadRuns={loadInspectorRuns} onLoadEvents={loadInspectorEvents} onLoadNeighborhood={loadInspectorNeighborhood} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
+          inspectorModel ? <TaskInspector model={inspectorModel} onSelectTask={selectTask} locale={locale} onLoadRuns={loadInspectorRuns} onLoadEvents={loadInspectorEvents} onLoadNeighborhood={loadInspectorNeighborhood} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
         ) : null}
       </div>
     </section>

@@ -1,3 +1,5 @@
+import { useState } from "react"
+
 import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
@@ -29,6 +31,7 @@ import {
   useBoardTaskMutationController,
   type BoardTaskMutationController,
 } from "./task-mutation-controller"
+import { BOARD_PAGE_SIZE, boardPageWindow } from "./board-pagination"
 
 export interface BoardViewProps {
   readonly state: BoardViewState
@@ -372,6 +375,7 @@ function BoardColumns({
   readonly controller?: BoardTaskMutationController
   readonly onSelectTask?: (taskId: string) => void
 }) {
+  const [pagesByColumn, setPagesByColumn] = useState<Record<string, number>>({})
   const columns = orderedVisibleColumns(model.columns)
 
   if (columns.length === 0) {
@@ -380,8 +384,14 @@ function BoardColumns({
     return <EmptyBoard title={title} description={description} />
   }
 
+  const columnTasks = columns.map((column) => ({ column, tasks: tasksForColumn(model, column) }))
+  const boardTaskTotal = columnTasks.reduce((total, entry) => total + entry.tasks.length, 0)
+
   return (
     <>
+      <p className={styles.boardTotal} data-testid="board-task-total" data-total={boardTaskTotal}>
+        {copy.boardTaskTotal(boardTaskTotal)}
+      </p>
       <nav className={styles.columnNavigation} aria-label={copy.columnNavigationLabel}>
         <ul className={styles.columnNavigationList}>
           {columns.map((column, index) => (
@@ -393,9 +403,13 @@ function BoardColumns({
       </nav>
       <div className={styles.boardColumns} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
         <div className={styles.columnsGrid}>
-          {columns.map((column, index) => {
-            const tasks = tasksForColumn(model, column)
+          {columnTasks.map(({ column, tasks }, index) => {
             const headingId = `${columnAnchorId(rootId, index)}-heading`
+            const requestedPage = pagesByColumn[column.id] ?? 1
+            const pageWindow = boardPageWindow(tasks.length, requestedPage)
+            const visibleTasks = tasks.slice(pageWindow.start, pageWindow.end)
+            const rangeStart = tasks.length === 0 ? 0 : pageWindow.start + 1
+            const rangeEnd = pageWindow.end
 
             return (
               <section
@@ -416,21 +430,66 @@ function BoardColumns({
                   <Heading level={2} id={headingId} tabIndex={-1}>
                     {column.title}
                   </Heading>
-                  <p className={styles.columnCount}>{copy.columnTaskCount(tasks.length)}</p>
+                  <p className={styles.columnCount} data-testid="board-column-total" data-total={tasks.length}>
+                    {copy.columnTaskCount(tasks.length)}
+                  </p>
                 </header>
                 <ul className={styles.taskList} aria-label={column.title} data-testid={controller ? `board-drop-target-${column.status}` : undefined}>
-                  {tasks.length === 0 ? (
+                  {visibleTasks.length === 0 ? (
                     <li className={styles.emptyColumn}>
                       <p role="status" aria-live="polite">{copy.emptyColumn}</p>
                     </li>
                 ) : (
-                  tasks.map((task) => (
+                  visibleTasks.map((task) => (
                     <li className={styles.taskListItem} key={task.id}>
                         <TaskCard task={task} copy={copy} controller={controller} onSelectTask={onSelectTask} />
                     </li>
                   ))
                 )}
                 </ul>
+                {tasks.length > BOARD_PAGE_SIZE ? (
+                  <nav
+                    className={styles.pagination}
+                    aria-label={copy.pageNavigationLabel(column.title)}
+                    data-testid="board-column-pagination"
+                    data-column-id={column.id}
+                  >
+                    <span
+                      className={styles.pageRange}
+                      aria-live="polite"
+                      data-testid="board-column-page"
+                      data-page={pageWindow.page}
+                      data-total-pages={pageWindow.totalPages}
+                      data-range-start={rangeStart}
+                      data-range-end={rangeEnd}
+                      data-total={tasks.length}
+                    >
+                      {copy.pageRange(rangeStart, rangeEnd, tasks.length)}
+                    </span>
+                    <div className={styles.pageActions}>
+                      <button
+                        type="button"
+                        className={styles.pageButton}
+                        disabled={pageWindow.page <= 1}
+                        aria-label={copy.pagePreviousLabel(column.title)}
+                        data-testid="board-page-previous"
+                        onClick={() => setPagesByColumn((current) => ({ ...current, [column.id]: pageWindow.page - 1 }))}
+                      >
+                        {copy.pagePrevious}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pageButton}
+                        disabled={pageWindow.page >= pageWindow.totalPages}
+                        aria-label={copy.pageNextLabel(column.title)}
+                        data-testid="board-page-next"
+                        onClick={() => setPagesByColumn((current) => ({ ...current, [column.id]: pageWindow.page + 1 }))}
+                      >
+                        {copy.pageNext}
+                      </button>
+                    </div>
+                  </nav>
+                ) : null}
               </section>
             )
           })}
@@ -475,7 +534,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       {controller ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</p> : null}
       <div className={styles.boardContent} id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (
-          <BoardColumns model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} onSelectTask={onSelectTask} />
+          <BoardColumns key={displayModel.board.id} model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} onSelectTask={onSelectTask} />
         ) : (
           <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
         )}

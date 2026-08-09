@@ -51,6 +51,29 @@ const stats = {
   active_parents_with_incomplete_required_steps: 0,
 }
 
+const statusWithLifecycle = {
+  ...status,
+  stores: [{
+    store_name: "projection-store",
+    active_generation: null,
+    active_fingerprint: null,
+    previous_generation: null,
+    building_generation: null,
+    lifecycle_status: "ready-from-service",
+    fence_epoch: 0,
+    last_event_id: 0,
+    dirty: false,
+    pending: 0,
+    running: 0,
+    failed: 0,
+    last_error: null,
+    phase: "ready",
+    degraded: false,
+    errors: [],
+    updated_at: serviceNowMs,
+  }],
+}
+
 describe("MaintenancePage", () => {
   test("renders status, unsupported legacy capability, and loading-safe boundaries", () => {
     const loading = renderToStaticMarkup(
@@ -101,5 +124,14 @@ describe("MaintenancePage", () => {
     const expected = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(serviceNowMs))
     expect(markup).toContain(expected)
     expect(markup).not.toContain(String(serviceNowMs))
+  })
+
+  test("marks service lifecycle literals as non-translatable", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <MaintenancePage runtime={runtime} boardSlug="default" initial={{ status: statusWithLifecycle }} />
+      </PreferencesProvider>,
+    )
+    expect(markup).toContain('translate="no">ready-from-service</span>')
   })
 })

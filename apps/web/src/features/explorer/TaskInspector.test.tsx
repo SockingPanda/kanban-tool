@@ -8,6 +8,9 @@ import {
 import {
   buildInspectorTransitionCommand,
   buildInspectorSaveTaskInput,
+  inspectorActionDialogMatchesTransitionIntent,
+  inspectorActionDialogUserIntent,
+  inspectorActionDialogUserIntentMatches,
   inspectorEditDraft,
   inspectorMutationCommitted,
   inspectorRetryIntentMatches,
@@ -60,7 +63,7 @@ const model: TaskInspectorViewModel = {
 describe("TaskInspector", () => {
   test("renders the editor trigger and the exact nine legal transition labels", () => {
     const handlers = {} as TaskInspectorMutationHandlers
-    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} locale="en" mutationHandlers={handlers} claimToken="claim_1" />)
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" mutationHandlers={handlers} claimToken="claim_1" />)
 
     expect(markup).toContain("Edit task")
     expect(markup).toContain('data-testid="inspector-actions"')
@@ -143,6 +146,22 @@ describe("TaskInspector", () => {
     expect(inspectorRetryIntentMatches(transitionIntent, "transition", null)).toBe(false)
   })
 
+  test("matches dialog drafts independently from a canonical policy view", () => {
+    const dialog = { kind: "description" as const, action: "specify" as const, description: " Add details ", trigger: null }
+    const submitted = inspectorActionDialogUserIntent(dialog)
+
+    // committed transition 可能使当前策略 view 消失；仍打开的本地对话框
+    // 继续作为 close-after-commit 的事实来源。
+    expect(inspectorActionDialogUserIntentMatches(dialog, submitted)).toBe(true)
+    expect(inspectorActionDialogUserIntentMatches({ ...dialog, description: "Changed" }, submitted)).toBe(false)
+    expect(inspectorActionDialogUserIntentMatches(null, submitted)).toBe(false)
+
+    const blockCommand = buildInspectorTransitionCommand(model.task, "block", { reason: "Needs review", confirmed: true }, null)
+    expect(blockCommand).not.toBeNull()
+    expect(inspectorActionDialogMatchesTransitionIntent({ kind: "reason", action: "block", reason: " Needs review ", confirmed: true }, blockCommand!)).toBe(true)
+    expect(inspectorActionDialogMatchesTransitionIntent({ kind: "reason", action: "block", reason: "Changed", confirmed: true }, blockCommand!)).toBe(false)
+  })
+
   test("renders an exact action retry even before a current dialog command exists", () => {
     const command = buildInspectorTransitionCommand(model.task, "block", { reason: "Needs review", confirmed: true }, null)
     expect(command).not.toBeNull()
@@ -154,8 +173,21 @@ describe("TaskInspector", () => {
       errors: new Map([[key, { operation: "transition", taskId: model.task.id, kind: "error", message: "failed", status: null, code: null, recoverable: true }]]),
       retries: new Map([[key, { operation: "transition", taskId: model.task.id, command: command! }]]),
     }
-    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} mutationSnapshot={snapshot} />)
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} mutationSnapshot={snapshot} />)
     expect(markup).toContain("Retry")
+  })
+
+  test("does not consume a mutation snapshot from another runtime identity", () => {
+    const key = inspectorMutationKey("transition", model.task.id)
+    const snapshot: TaskInspectorMutationSnapshot = {
+      scope: { identity: "other-runtime", boardId: "default", taskId: model.task.id },
+      generation: 1,
+      pending: new Set(),
+      errors: new Map([[key, { operation: "transition", taskId: model.task.id, kind: "error", message: "stale", status: null, code: null, recoverable: true }]]),
+      retries: new Map(),
+    }
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} mutationSnapshot={snapshot} />)
+    expect(markup).not.toContain("stale")
   })
 
   test("keeps a save retry visible when the editor is not mounted", () => {
@@ -168,7 +200,7 @@ describe("TaskInspector", () => {
       errors: new Map([[key, { operation: "saveTask", taskId: model.task.id, kind: "error", message: "save failed", status: null, code: null, recoverable: true }]]),
       retries: new Map([[key, { operation: "saveTask", taskId: model.task.id, input }]]),
     }
-    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} mutationSnapshot={snapshot} />)
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} mutationSnapshot={snapshot} />)
     expect(markup).toContain("save failed")
     expect(markup).toContain("Retry")
   })
@@ -181,12 +213,12 @@ describe("TaskInspector", () => {
       errors: new Map(),
       retries: new Map(),
     }
-    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} mutationSnapshot={snapshot} />)
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} mutationSnapshot={snapshot} />)
     expect(markup).toMatch(/class="[^"]*editButton[^"]*"[^>]*disabled/)
   })
 
   test("renders every read-only inspector section and claim/runtime facts", () => {
-    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} />)
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" />)
 
     expect(markup).toContain('data-testid="task-inspector"')
     for (const id of ["inspector-metadata", "inspector-claim", "inspector-steps", "inspector-dependencies", "inspector-comments", "inspector-runs", "inspector-events", "inspector-runtime"]) {
@@ -211,6 +243,7 @@ describe("TaskInspector", () => {
       <TaskInspector
         model={{ ...model, runs: [], events: [], neighborhood: undefined }}
         onSelectTask={vi.fn()}
+        identity="runtime"
         onLoadRuns={onLoadRuns}
         onLoadEvents={onLoadEvents}
         onLoadNeighborhood={onLoadNeighborhood}
@@ -223,7 +256,7 @@ describe("TaskInspector", () => {
   })
 
   test("keeps the Chinese inspector copy localized", () => {
-    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} locale="zh" />)
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="zh" />)
 
     expect(markup).toContain("任务检查器")
     expect(markup).toContain("认领者")
@@ -237,6 +270,7 @@ describe("TaskInspector", () => {
       <TaskInspector
         model={model}
         onSelectTask={vi.fn()}
+        identity="runtime"
         online={false}
         refreshOffline
         refreshError="offline"

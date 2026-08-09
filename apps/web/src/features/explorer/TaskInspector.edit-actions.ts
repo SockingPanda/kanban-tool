@@ -60,6 +60,50 @@ function sameUserIntentValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(userIntentValue(left)) === JSON.stringify(userIntentValue(right))
 }
 
+/**
+ * 操作对话框中可由用户编辑的值。这里刻意排除锁版本、认领令牌等策略
+ * 派生字段，避免规范 transition 刷新后仍然有效的本地对话框被误判为过期。
+ */
+export type InspectorActionDialogUserIntent =
+  | { readonly action: "specify"; readonly description: string }
+  | { readonly action: "block"; readonly reason: string; readonly confirmed: boolean }
+  | { readonly action: Exclude<InspectorActionId, "specify" | "block">; readonly confirmed: true }
+
+export type InspectorActionDialogDraft =
+  | { readonly kind: "description"; readonly action: "specify"; readonly description: string }
+  | { readonly kind: "reason"; readonly action: "block"; readonly reason: string; readonly confirmed: boolean }
+  | { readonly kind: "confirm"; readonly action: Exclude<InspectorActionId, "specify" | "block"> }
+
+/** 只捕获当前对话框的可编辑意图，并按 wire command 的规则规范化。 */
+export function inspectorActionDialogUserIntent(dialog: InspectorActionDialogDraft): InspectorActionDialogUserIntent {
+  if (dialog.kind === "description") return { action: "specify", description: dialog.description.trim() }
+  if (dialog.kind === "reason") return { action: "block", reason: dialog.reason.trim(), confirmed: dialog.confirmed }
+  return { action: dialog.action, confirmed: true }
+}
+
+/** 从保存的完整 wire transition retry 中还原同一份面向用户的意图。 */
+export function inspectorTransitionUserIntent(command: InspectorTransitionCommand): InspectorActionDialogUserIntent {
+  if (command.action === "specify") return { action: "specify", description: typeof command.input.description === "string" ? command.input.description.trim() : "" }
+  if (command.action === "block") return { action: "block", reason: command.input.reason.trim(), confirmed: command.input.force === true }
+  return { action: command.action, confirmed: true }
+}
+
+/** 不比较策略字段，只将打开的对话框与已提交/保存的 transition 意图比较。 */
+export function inspectorActionDialogUserIntentMatches(
+  dialog: InspectorActionDialogDraft | null,
+  intent: InspectorActionDialogUserIntent,
+): boolean {
+  return dialog !== null && sameIntentValue(inspectorActionDialogUserIntent(dialog), intent)
+}
+
+/** 只比较用户可编辑字段，将打开的对话框与保存的完整 wire retry 比较。 */
+export function inspectorActionDialogMatchesTransitionIntent(
+  dialog: InspectorActionDialogDraft | null,
+  command: InspectorTransitionCommand,
+): boolean {
+  return inspectorActionDialogUserIntentMatches(dialog, inspectorTransitionUserIntent(command))
+}
+
 /** Compare a current editor/action value with the exact intent retained by the controller. */
 export function inspectorRetryIntentMatches(
   intent: TaskInspectorMutationRetryIntent | undefined,

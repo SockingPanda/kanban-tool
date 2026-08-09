@@ -88,9 +88,9 @@ export function buildPlanInput(reason: string): { readonly reason: string } {
   return { reason: reason.trim() }
 }
 
-/** Drafts are cleared only after the canonical write has committed. */
-export function shouldClearDraft(outcome: InspectorMutationOutcome): boolean {
-  return outcome.committed
+/** Drafts clear only after commit and only when the user has not changed the submitted draft. */
+export function shouldClearDraft(outcome: InspectorMutationOutcome, draftMatchesSubmittedInput = true): boolean {
+  return outcome.committed && draftMatchesSubmittedInput
 }
 
 export function shouldClearRetryDraft(outcome: InspectorMutationOutcome, draftMatchesSavedIntent: boolean): boolean {

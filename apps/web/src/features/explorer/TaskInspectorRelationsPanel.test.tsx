@@ -158,6 +158,23 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain('role="alert"')
   })
 
+  test("disables all relation writes while reload is pending", () => {
+    const snapshot = props().snapshot
+    const markup = renderToStaticMarkup(
+      <TaskInspectorRelationsPanel
+        {...props({ snapshot: { ...snapshot, pending: new Set(["reload:t_current"]) } })}
+      />,
+    )
+
+    expect(markup).toMatch(/<button type="submit" disabled="">添加评论<\/button>/)
+    expect(markup).toMatch(/<button type="submit" disabled="">添加父依赖<\/button>/)
+    expect(markup).toMatch(/disabled=""[^>]*aria-label="移除父依赖：Parent"/)
+    expect(markup).toMatch(/data-testid="task-inspector-create-step"[^>]*disabled=""/)
+    expect(markup).toMatch(/data-testid="task-inspector-link-step"[^>]*disabled=""/)
+    expect(markup).toMatch(/data-testid="task-inspector-mark-plan-not-required"[^>]*disabled=""/)
+    expect(markup).toContain('role="status" aria-live="polite">正在重试…</p>')
+  })
+
   test("keeps exact retry intents visible while preserving diverged drafts", () => {
     const snapshot = props().snapshot
     const addCommentKey = "addComment:t_current"
@@ -247,6 +264,7 @@ describe("TaskInspectorRelationsPanel input seams", () => {
     expect(__test.shouldClearDraft({ committed: false, reconciled: true })).toBe(false)
     expect(__test.shouldClearDraft({ committed: true, reconciled: false })).toBe(true)
     expect(__test.shouldClearDraft({ committed: true, reconciled: true })).toBe(true)
+    expect(__test.shouldClearDraft({ committed: true, reconciled: true }, false)).toBe(false)
     expect(__test.shouldClearRetryDraft({ committed: false, reconciled: false }, true)).toBe(false)
     expect(__test.shouldClearRetryDraft({ committed: true, reconciled: false }, true)).toBe(true)
     expect(__test.shouldClearRetryDraft({ committed: true, reconciled: false }, false)).toBe(false)
@@ -264,6 +282,7 @@ describe("TaskInspectorRelationsPanel input seams", () => {
     expect(__test.planDraftMatchesRetry("why", "why")).toBe(true)
     expect(__test.planDraftMatchesRetry("changed", "why")).toBe(false)
     expect(__test.scopeEpochMatches({ identity: "runtime\u0000t1", generation: 1, taskId: "t1" }, { identity: "runtime\u0000t1", generation: 2, taskId: "t1" })).toBe(false)
+    expect(__test.scopeEpochMatches({ identity: "runtime\u0000t1", generation: 1, taskId: "t1" }, { identity: "runtime\u0000t1", generation: 1, taskId: "t2" })).toBe(false)
     expect(__test.scopeEpochMatches({ identity: "runtime\u0000t1", generation: 1, taskId: "t1" }, { identity: "runtime\u0000t1", generation: 1, taskId: "t1" })).toBe(true)
   })
 

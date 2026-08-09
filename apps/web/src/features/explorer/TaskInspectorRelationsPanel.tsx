@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
 
 import {
   inspectorMutationKey,
@@ -311,22 +311,27 @@ const writeOperations = [
 ] as const
 
 function writePendingFor(snapshot: TaskInspectorMutationSnapshot, taskId: string): boolean {
-  return writeOperations.some((operation) => pendingFor(snapshot, operation, taskId))
+  return pendingFor(snapshot, "reload", taskId) || writeOperations.some((operation) => pendingFor(snapshot, operation, taskId))
 }
 
 function useScopeEpoch(snapshot: TaskInspectorMutationSnapshot, taskId: string) {
+  const identity = snapshot.scope.identity
+  const generation = snapshot.generation
   const scopeEpochRef = useRef<InspectorScopeEpoch>({
-    identity: snapshot.scope.identity,
-    generation: snapshot.generation,
+    identity,
+    generation,
     taskId,
   })
   const currentEpoch: InspectorScopeEpoch = {
-    identity: snapshot.scope.identity,
-    generation: snapshot.generation,
+    identity,
+    generation,
     taskId,
   }
   const changed = !scopeEpochMatches(scopeEpochRef.current, currentEpoch)
-  if (changed) scopeEpochRef.current = currentEpoch
+  useLayoutEffect(() => {
+    const committedEpoch: InspectorScopeEpoch = { identity, generation, taskId }
+    if (!scopeEpochMatches(scopeEpochRef.current, committedEpoch)) scopeEpochRef.current = committedEpoch
+  }, [generation, identity, taskId])
   return { ref: scopeEpochRef, changed }
 }
 
@@ -452,7 +457,7 @@ function CommentsPanel({
     try {
       const outcome = await handlers.addComment(input)
       if (!scopeEpochMatches(operationEpoch, scopeEpochRef.current)) return
-      if (!shouldClearDraft(outcome)) return
+      if (!shouldClearDraft(outcome, commentDraftMatchesRetry(draftRef.current.kind, draftRef.current.body, input))) return
       setBody("")
       setKind("note")
       setBodyError(null)
@@ -605,6 +610,7 @@ function DependenciesPanel({
     const parentTaskId = resolveTaskSelector(value, resolveSelector)
     if (!parentTaskId) {
       setResolutionError(localeCopy.unresolvedDependency)
+      inputRef.current?.focus()
       return
     }
     if (retryMatches) return
@@ -612,7 +618,7 @@ function DependenciesPanel({
     try {
       const outcome = await handlers.addDependency(parentTaskId)
       if (!scopeEpochMatches(operationEpoch, scopeEpochRef.current)) return
-      if (!shouldClearDraft(outcome)) return
+      if (!shouldClearDraft(outcome, dependencyDraftMatchesRetry(draftRef.current, parentTaskId, resolveSelector))) return
       setInput("")
       setResolutionError(null)
     } catch {
@@ -716,6 +722,7 @@ function StepsPanel({
   const [planReason, setPlanReason] = useState("")
   const [planReasonError, setPlanReasonError] = useState<string | null>(null)
   const planReasonRef = useRef<HTMLInputElement | null>(null)
+  const linkedTaskRefInput = useRef<HTMLInputElement | null>(null)
   const { ref: scopeEpochRef, changed: scopeChanged } = useScopeEpoch(snapshot, taskId)
   const renderEpoch = scopeEpochRef.current
   const draftRef = useRef({ title, body, required, linkedTaskRef, planReason })
@@ -764,6 +771,7 @@ function StepsPanel({
     const linkedTaskId = link && linkedTaskRef.trim() ? resolveTaskSelector(linkedTaskRef, resolveSelector) : null
     if (link && !linkedTaskId) {
       setLinkedTaskResolutionError(localeCopy.unresolvedLinkedTask)
+      linkedTaskRefInput.current?.focus()
       return
     }
     const submission = buildStepSubmission(title, body, required, linkedTaskId ?? undefined, link ? "link" : "create")
@@ -775,7 +783,7 @@ function StepsPanel({
         ? await handlers.linkStep(submission.input)
         : await handlers.createStep(submission.input)
       if (!scopeEpochMatches(operationEpoch, scopeEpochRef.current)) return
-      if (!shouldClearDraft(outcome)) return
+      if (!shouldClearDraft(outcome, stepDraftMatchesRetry(draftRef.current.title, draftRef.current.body, draftRef.current.required, draftRef.current.linkedTaskRef, submission.input, resolveSelector))) return
       setTitle("")
       setBody("")
       setRequired(true)
@@ -800,7 +808,7 @@ function StepsPanel({
     try {
       const outcome = await handlers.markPlanNotRequired(input)
       if (!scopeEpochMatches(operationEpoch, scopeEpochRef.current)) return
-      if (!shouldClearDraft(outcome)) return
+      if (!shouldClearDraft(outcome, planDraftMatchesRetry(draftRef.current.planReason, input.reason))) return
       setPlanReason("")
       setPlanReasonError(null)
     } catch {
@@ -865,7 +873,7 @@ function StepsPanel({
         </label>
         <label>
           <span>{localeCopy.stepLink}</span>
-          <input name="step-linked-task" autoComplete="off" aria-invalid={linkedTaskResolutionError ? "true" : "false"} aria-describedby={linkedTaskResolutionError ? "task-inspector-step-link-error" : undefined} value={linkedTaskRef} onChange={(event) => { setLinkedTaskRef(event.currentTarget.value); setLinkedTaskResolutionError(null) }} placeholder={localeCopy.stepLinkPlaceholder} />
+          <input ref={linkedTaskRefInput} name="step-linked-task" autoComplete="off" aria-invalid={linkedTaskResolutionError ? "true" : "false"} aria-describedby={linkedTaskResolutionError ? "task-inspector-step-link-error" : undefined} value={linkedTaskRef} onChange={(event) => { setLinkedTaskRef(event.currentTarget.value); setLinkedTaskResolutionError(null) }} placeholder={localeCopy.stepLinkPlaceholder} />
         </label>
         <div className={styles.buttonRow}>
           <button data-testid="task-inspector-create-step" type="button" disabled={writePending || createRetryMatches} onClick={() => void submitStep(false)}>{stepPending ? localeCopy.creatingStep : localeCopy.createStep}</button>
@@ -916,11 +924,13 @@ export function TaskInspectorRelationsPanel({
   const safePageSize = Number.isSafeInteger(commentPageSize) && commentPageSize > 0 ? commentPageSize : 10
   const writePending = writePendingFor(snapshot, taskId)
   const reloadKey = inspectorMutationKey("reload", taskId)
+  const reloadPending = pendingFor(snapshot, "reload", taskId)
   const reloadError = errorFor(snapshot, "reload", taskId)
   return (
     <div className={styles.relations} data-testid="task-inspector-relations">
       <Feedback
         error={reloadError}
+        pendingLabel={reloadPending ? localeCopy.retrying : undefined}
         retry={{ key: reloadKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying }}
       />
       <CommentsPanel taskId={taskId} comments={comments} handlers={handlers} snapshot={snapshot} localeCopy={localeCopy} locale={locale} pageSize={safePageSize} />

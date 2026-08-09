@@ -47,7 +47,7 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
     setInvalidationRevision(0)
     lastEventCursor.current = null
     lastBoundaryCursor.current = null
-  }, [routeKey])
+  }, [route.view, routeKey])
 
   useEffect(() => {
     const controller = new AbortController()

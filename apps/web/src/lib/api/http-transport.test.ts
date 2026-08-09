@@ -429,6 +429,81 @@ describe("same-origin Web HTTP transport", () => {
     )
   })
 
+  test.each([
+    "a_%25",
+    "a_%25FF",
+    "a_%E4%B8%AD",
+    "a_%252f",
+    "a_%255c",
+    "a_%2500",
+    "a_%252e",
+  ])("accepts a canonical opaque attachment segment: %s", async (segment) => {
+    const path = `/api/v1/tasks/t_1/attachments/${segment}`
+    const response = sameOriginResponse(new Uint8Array([104]), {
+      status: 200,
+      headers: {
+        "content-type": "application/octet-stream",
+        "content-length": "1",
+      },
+    }, path)
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(transport.requestBytes({ method: "GET", path })).resolves.toMatchObject({
+      bytes: new Uint8Array([104]),
+    })
+    expect(fetcher).toHaveBeenCalledWith(
+      `https://kanban.test/__kb_api__${path}`,
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  test.each([
+    "/api/v1/tasks/t_1/attachments/a_%2f",
+    "/api/v1/tasks/t_1/attachments/a_%5c",
+    "/api/v1/tasks/t_1/attachments/a_%00",
+    "/api/v1/tasks/t_1/attachments/%2e%2e",
+    "/api/v1/tasks/t_1/attachments/a_%ZZ",
+    "/api/v1/tasks/t_1/attachments/a_%41",
+    "/api/v1/tasks/t_1/attachments/a_%252f?download=1",
+    "/api/v1/tasks/t_1/attachments/a_%252f/extra",
+  ])("rejects an unsafe opaque attachment route before fetch: %s", async (path) => {
+    const fetcher = vi.fn<typeof fetch>()
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(transport.requestBytes({ method: "GET", path })).rejects.toMatchObject({ kind: "cross_origin" })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    { label: "wrong attachment id", responsePath: "/api/v1/tasks/t_1/attachments/other" },
+    { label: "double-decoded separator", responsePath: "/api/v1/tasks/t_1/attachments/a_%2f" },
+    { label: "extra path segment", responsePath: "/api/v1/tasks/t_1/attachments/a_%252f/extra" },
+    { label: "unexpected query", responsePath: "/api/v1/tasks/t_1/attachments/a_%252f?download=1" },
+  ])("rejects a $label in the final attachment response URL", async ({ responsePath }) => {
+    const requestPath = "/api/v1/tasks/t_1/attachments/a_%252f"
+    const response = sameOriginResponse(new Uint8Array([104]), {
+      status: 200,
+      headers: {
+        "content-type": "application/octet-stream",
+        "content-length": "1",
+      },
+    }, responsePath)
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(transport.requestBytes({ method: "GET", path: requestPath })).rejects.toMatchObject({ kind: "cross_origin" })
+  })
+
   test("fails closed for missing, invalid, and merged duplicate Content-Length", async () => {
     const canceled: boolean[] = []
     const response = (contentLengthValue: string | null, index: number) => {

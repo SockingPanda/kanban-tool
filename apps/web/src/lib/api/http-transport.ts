@@ -164,14 +164,18 @@ function isHex(value: string): boolean {
   return /^[0-9a-f]$/i.test(value)
 }
 
-function requestURL(base: URL, path: string): string {
+interface RequestURLOptions {
+  readonly opaqueAttachmentPath?: boolean
+}
+
+function requestURL(base: URL, path: string, options: RequestURLOptions = {}): string {
   if (!path.startsWith("/") || path.startsWith("//") || /^[a-z][a-z\d+.-]*:/i.test(path)) {
     throw new HttpTransportError(
       "cross_origin",
       "Web API path 必须是当前 origin 下的绝对路径。",
     )
   }
-  if (hasDotSegmentOrBackslash(path)) {
+  if (!options.opaqueAttachmentPath && hasDotSegmentOrBackslash(path)) {
     throw new HttpTransportError(
       "cross_origin",
       "Web API path 不得包含 dot segment 或 backslash。",
@@ -199,6 +203,69 @@ function requestURL(base: URL, path: string): string {
     )
   }
   return url.toString()
+}
+
+function validateCanonicalOpaqueSegment(segment: string, name: string): void {
+  if (segment.length === 0 || hasMalformedPercent(segment)) {
+    throw new HttpTransportError(
+      "cross_origin",
+      `Web API ${name} path segment 必须是规范编码。`,
+    )
+  }
+
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(segment)
+  } catch (cause) {
+    throw new HttpTransportError(
+      "cross_origin",
+      `Web API ${name} path segment 不是有效的 UTF-8 编码。`,
+      { cause },
+    )
+  }
+  if (
+    decoded === "."
+    || decoded === ".."
+    || decoded.includes("/")
+    || decoded.includes("\\")
+    || decoded.includes("\u0000")
+    || encodeURIComponent(decoded) !== segment
+  ) {
+    throw new HttpTransportError(
+      "cross_origin",
+      `Web API ${name} path segment 不得包含路径控制字符，且必须保持规范编码。`,
+    )
+  }
+}
+
+function attachmentRouteURL(base: URL, path: string): string {
+  if (path.includes("?") || path.includes("#")) {
+    throw new HttpTransportError(
+      "cross_origin",
+      "Web API attachment path 不得包含 query 或 fragment。",
+    )
+  }
+
+  const segments = path.split("/")
+  if (
+    segments.length !== 7
+    || segments[0] !== ""
+    || segments[1] !== "api"
+    || segments[2] !== "v1"
+    || segments[3] !== "tasks"
+    || segments[5] !== "attachments"
+    || segments[4] === undefined
+    || segments[6] === undefined
+  ) {
+    throw new HttpTransportError(
+      "cross_origin",
+      "Web API attachment path 必须匹配唯一的 task/attachment route。",
+    )
+  }
+
+  validateCanonicalOpaqueSegment(segments[4], "task")
+  validateCanonicalOpaqueSegment(segments[6], "attachment")
+  return requestURL(base, path, { opaqueAttachmentPath: true })
 }
 
 function isAbortError(error: unknown): boolean {
@@ -531,6 +598,20 @@ function validateFinalOrigin(response: Response, requestOrigin: string): void {
   }
 }
 
+function validateFinalURL(response: Response, requestURLValue: string): void {
+  let finalURL: URL
+  let expectedURL: URL
+  try {
+    finalURL = new URL(response.url)
+    expectedURL = new URL(requestURLValue)
+  } catch (cause) {
+    throw new HttpTransportError("cross_origin", "Web API 响应 URL 不是有效 URL。", { cause })
+  }
+  if (finalURL.href !== expectedURL.href) {
+    throw new HttpTransportError("cross_origin", "Web API 响应 URL 与请求的 attachment route 不一致。")
+  }
+}
+
 const REQUEST_HEADER_NAMES = new Set(["Accept-Language", "Content-Type", "X-KB-Actor"])
 
 function requestHeaders(
@@ -693,7 +774,7 @@ export function createHttpTransport(
     readonly signal?: AbortSignal
   }): Promise<HttpTransportBytesResponse> {
     const { path, headers: requestHeaderValues, signal } = options
-    const url = requestURL(base, path)
+    const url = attachmentRouteURL(base, path)
     const headers = requestHeaders(requestHeaderValues, false, "application/octet-stream")
 
     let response: Response
@@ -718,6 +799,7 @@ export function createHttpTransport(
 
     try {
       validateFinalOrigin(response, base.origin)
+      validateFinalURL(response, url)
     } catch (error) {
       await cancelResponseBody(response)
       throw error

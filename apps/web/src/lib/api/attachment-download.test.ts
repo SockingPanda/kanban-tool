@@ -72,4 +72,50 @@ describe("attachment download operation", () => {
       }),
     )
   })
+
+  test.each([
+    { attachmentId: "a_%FF", encoded: "a_%25FF" },
+    { attachmentId: "a_中", encoded: "a_%E4%B8%AD" },
+    { attachmentId: "a_%2f", encoded: "a_%252f" },
+    { attachmentId: "a_%5c", encoded: "a_%255c" },
+    { attachmentId: "a_%00", encoded: "a_%2500" },
+    { attachmentId: "a_%2e", encoded: "a_%252e" },
+  ])("preserves a legal opaque attachment id: $attachmentId", async ({ attachmentId, encoded }) => {
+    const response = new Response(new Uint8Array([104]), {
+      status: 200,
+      headers: {
+        "content-type": "text/plain",
+        "content-length": "1",
+      },
+    })
+    Object.defineProperty(response, "url", { value: `https://kanban.test/__kb_api__/api/v1/tasks/t_1/attachments/${encoded}` })
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const client = createAttachmentDownloadClient(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(client.downloadAttachment("t_1", attachmentId)).resolves.toMatchObject({
+      content: new Uint8Array([104]),
+    })
+    expect(fetcher).toHaveBeenCalledWith(
+      `https://kanban.test/__kb_api__/api/v1/tasks/t_1/attachments/${encoded}`,
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  test.each([
+    "a_1/part",
+    "a_1\\part",
+    "a_1\u0000part",
+  ])("rejects an attachment id containing a path control character: %s", async (attachmentId) => {
+    const fetcher = vi.fn<typeof fetch>()
+    const client = createAttachmentDownloadClient(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(client.downloadAttachment("t_1", attachmentId)).rejects.toMatchObject({ kind: "cross_origin" })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
 })

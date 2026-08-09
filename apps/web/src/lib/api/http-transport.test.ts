@@ -468,6 +468,10 @@ describe("same-origin Web HTTP transport", () => {
     "/api/v1/tasks/t_1/attachments/%2e%2e",
     "/api/v1/tasks/t_1/attachments/a_%ZZ",
     "/api/v1/tasks/t_1/attachments/a_%41",
+    "/api/v1/tasks/x_1/attachments/a_1",
+    "/api/v1/tasks/t_/attachments/a_1",
+    "/api/v1/tasks/t_1/attachments/z_1",
+    "/api/v1/tasks/t_1/attachments/a_",
     "/api/v1/tasks/t_1/attachments/a_%252f?download=1",
     "/api/v1/tasks/t_1/attachments/a_%252f/extra",
   ])("rejects an unsafe opaque attachment route before fetch: %s", async (path) => {
@@ -561,11 +565,11 @@ describe("same-origin Web HTTP transport", () => {
     const response = sameOriginResponse(body, {
       status: 404,
       headers: { "content-type": "application/json", "content-length": String(new TextEncoder().encode(body).byteLength) },
-    }, "/api/v1/tasks/t_1/attachments/missing")
+    }, "/api/v1/tasks/t_1/attachments/a_missing")
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
     const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
 
-    await expect(transport.requestBytes({ method: "GET", path: "/api/v1/tasks/t_1/attachments/missing" })).rejects.toMatchObject({
+    await expect(transport.requestBytes({ method: "GET", path: "/api/v1/tasks/t_1/attachments/a_missing" })).rejects.toMatchObject({
       kind: "http",
       status: 404,
       apiError: { code: "not_found", message: "attachment missing" },

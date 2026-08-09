@@ -205,7 +205,7 @@ function requestURL(base: URL, path: string, options: RequestURLOptions = {}): s
   return url.toString()
 }
 
-function validateCanonicalOpaqueSegment(segment: string, name: string): void {
+function validateCanonicalOpaqueSegment(segment: string, name: string, expectedPrefix: string): void {
   if (segment.length === 0 || hasMalformedPercent(segment)) {
     throw new HttpTransportError(
       "cross_origin",
@@ -229,6 +229,8 @@ function validateCanonicalOpaqueSegment(segment: string, name: string): void {
     || decoded.includes("/")
     || decoded.includes("\\")
     || decoded.includes("\u0000")
+    || !decoded.startsWith(expectedPrefix)
+    || decoded.length === expectedPrefix.length
     || encodeURIComponent(decoded) !== segment
   ) {
     throw new HttpTransportError(
@@ -263,8 +265,8 @@ function attachmentRouteURL(base: URL, path: string): string {
     )
   }
 
-  validateCanonicalOpaqueSegment(segments[4], "task")
-  validateCanonicalOpaqueSegment(segments[6], "attachment")
+  validateCanonicalOpaqueSegment(segments[4], "task", "t_")
+  validateCanonicalOpaqueSegment(segments[6], "attachment", "a_")
   return requestURL(base, path, { opaqueAttachmentPath: true })
 }
 

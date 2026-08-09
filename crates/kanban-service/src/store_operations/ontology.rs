@@ -30,6 +30,16 @@ use crate::{
 
 pub(crate) const LABEL_ATOM_INDEX_STORE: &str = "vector_label_atoms";
 const MAX_LIST_LIMIT: i64 = 1000;
+const MAX_SURFACE_LIMIT: usize = 100;
+
+fn validate_surface_limit(limit: usize, surface: &str) -> Result<(), StoreError> {
+    if !(1..=MAX_SURFACE_LIMIT).contains(&limit) {
+        return Err(StoreError::InvalidInput(format!(
+            "{surface} limit must be between 1 and {MAX_SURFACE_LIMIT}"
+        )));
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct UpsertLabelSemanticsInput {
@@ -161,6 +171,8 @@ pub struct OntologyObservationInput {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct OntologyActionInput {
     pub actor: OntologyActorInput,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
     pub action_type: String,
     #[serde(default)]
     pub signal_ids: Vec<String>,
@@ -576,6 +588,8 @@ impl TursoStore {
                 validation_json: "{}",
                 now,
                 created_by: &input.actor,
+                actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -673,6 +687,8 @@ impl TursoStore {
                 validation_json: "{}",
                 now,
                 created_by: actor,
+                actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -1432,6 +1448,8 @@ impl TursoStore {
                 validation_json: "{}",
                 now,
                 created_by: &input.actor,
+                actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -1556,6 +1574,8 @@ impl TursoStore {
                 validation_json: "{}",
                 now,
                 created_by: &input.actor,
+                actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -1672,6 +1692,22 @@ impl TursoStore {
                 },
             ).await?;
         }
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id,board_id,task_id,run_id,kind,actor,payload_json,created_at) VALUES (:event,:board,:task,NULL,'label.ontology.observation.recorded',:actor,:payload,:created)",
+                turso::named_params! {
+                    ":event": format!("e_label_ontology_observation_{observation_id}").as_str(),
+                    ":board": board_id.as_str(),
+                    ":task": task_id.as_str(),
+                    ":actor": input.actor.name.as_str(),
+                    ":payload": json!({
+                        "observation_id": observation_id.as_str(),
+                        "signal_ids": input.signals.iter().enumerate().map(|(index, _)| format!("los_{}_{}", observation_id.trim_start_matches("lor_"), index)).collect::<Vec<_>>(),
+                    }).to_string().as_str(),
+                    ":created": now,
+                },
+            )
+            .await?;
         transaction.commit().await?;
         self.observation_by_id(&board_id, &observation_id).await
     }
@@ -1685,6 +1721,7 @@ impl TursoStore {
         include_all: bool,
         limit: usize,
     ) -> Result<Vec<LabelOntologySignalRecord>, StoreError> {
+        validate_surface_limit(limit, "label ontology signal list")?;
         let (task_ref, target_label_ref, proposed_label_name) = label_filters;
         let board_id = self.ontology_board_id(board).await?;
         let task_id = match task_ref {
@@ -1695,9 +1732,36 @@ impl TursoStore {
             Some(value) => Some(self.ontology_label(&board_id, value).await?.0),
             None => None,
         };
+        self.list_label_ontology_signals_page(
+            &board_id,
+            statuses,
+            kinds,
+            task_id.as_deref(),
+            target_label_id.as_deref(),
+            proposed_label_name,
+            include_all,
+            limit,
+            0,
+        )
+        .await
+    }
+
+    async fn list_label_ontology_signals_page(
+        &self,
+        board_id: &str,
+        statuses: &[String],
+        kinds: &[String],
+        task_id: Option<&str>,
+        target_label_id: Option<&str>,
+        proposed_label_name: Option<&str>,
+        include_all: bool,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<LabelOntologySignalRecord>, StoreError> {
+        validate_surface_limit(limit, "label ontology signal page")?;
         let connection = self.connection().await?;
         let mut sql = "SELECT id,observation_id,board_id,kind,status,target_label_id,target_label_name_snapshot,related_labels_json,proposed_action,candidate_atom_polarity,candidate_atom_kind,candidate_text,candidate_content_hash,proposed_label_name,proposed_label_name_normalized,proposal_json,agent_selected,suggest_state,suggest_score,suggest_rank,final_selected,rationale,confidence,signal_key,superseded_by_signal_id,status_reason,created_at,updated_at,reviewed_at,closed_at FROM label_ontology_signals WHERE board_id=:board".to_owned();
-        let mut params: Vec<Value> = vec![Value::Text(board_id.clone())];
+        let mut params: Vec<Value> = vec![Value::Text(board_id.to_owned())];
         let board_placeholder = "?1";
         sql = sql.replace(":board", board_placeholder);
         if !include_all {
@@ -1731,13 +1795,13 @@ impl TursoStore {
             let board_placeholder = params.len() + 1;
             let task_placeholder = board_placeholder + 1;
             sql.push_str(&format!(" AND observation_id IN (SELECT id FROM label_ontology_observations WHERE board_id=?{board_placeholder} AND task_id=?{task_placeholder})"));
-            params.push(Value::Text(board_id.clone()));
-            params.push(Value::Text(task_id));
+            params.push(Value::Text(board_id.to_owned()));
+            params.push(Value::Text(task_id.to_owned()));
         }
         if let Some(label_id) = target_label_id {
             let placeholder = params.len() + 1;
             sql.push_str(&format!(" AND target_label_id=?{placeholder}"));
-            params.push(Value::Text(label_id));
+            params.push(Value::Text(label_id.to_owned()));
         }
         if let Some(name) = proposed_label_name {
             let placeholder = params.len() + 1;
@@ -1747,12 +1811,12 @@ impl TursoStore {
             params.push(Value::Text(normalize_label_name(name)));
         }
         let limit_placeholder = params.len() + 1;
+        let offset_placeholder = limit_placeholder + 1;
         sql.push_str(&format!(
-            " ORDER BY created_at ASC,id ASC LIMIT ?{limit_placeholder}"
+            " ORDER BY created_at ASC,id ASC LIMIT ?{limit_placeholder} OFFSET ?{offset_placeholder}"
         ));
-        params.push(Value::Integer(
-            limit.clamp(1, MAX_LIST_LIMIT as usize) as i64
-        ));
+        params.push(Value::Integer(limit as i64));
+        params.push(Value::Integer(offset as i64));
         let mut rows = connection
             .query(&sql, turso::params_from_iter(params))
             .await?;
@@ -1792,15 +1856,51 @@ impl TursoStore {
         include_all: bool,
         limit: usize,
     ) -> Result<Vec<LabelOntologyReviewGroupRecord>, StoreError> {
-        let signals = self
-            .list_label_ontology_signals(
-                board,
-                &[],
-                &[],
-                (None, None, None),
-                include_all,
-                MAX_LIST_LIMIT as usize,
-            )
+        validate_surface_limit(limit, "ontology review")?;
+        if !matches!(
+            group_by,
+            "label"
+                | "target_label"
+                | "target-label"
+                | "candidate_atom"
+                | "candidate-atom"
+                | "proposed_label"
+                | "proposed-label"
+        ) {
+            return Err(StoreError::InvalidInput(
+                "cluster review projection is unavailable".to_owned(),
+            ));
+        }
+        let board_id = self.ontology_board_id(board).await?;
+        let mut signals = Vec::new();
+        let mut offset = 0;
+        loop {
+            let page = self
+                .list_label_ontology_signals_page(
+                    &board_id,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    None,
+                    include_all,
+                    MAX_SURFACE_LIMIT,
+                    offset,
+                )
+                .await?;
+            let page_len = page.len();
+            signals.extend(page);
+            if page_len < MAX_SURFACE_LIMIT {
+                break;
+            }
+            offset += page_len;
+        }
+        let observation_ids = signals
+            .iter()
+            .map(|signal| signal.observation_id.clone())
+            .collect::<BTreeSet<_>>();
+        let task_refs = self
+            .observation_task_refs(&board_id, &observation_ids)
             .await?;
         let mut groups = BTreeMap::<String, Vec<LabelOntologySignalRecord>>::new();
         for signal in signals {
@@ -1824,7 +1924,7 @@ impl TursoStore {
         }
         let mut result = Vec::new();
         for (key, values) in groups {
-            result.push(review_group(group_by, key, values));
+            result.push(review_group(group_by, key, values, &task_refs));
         }
         result.sort_by(|left, right| {
             right
@@ -1832,8 +1932,43 @@ impl TursoStore {
                 .cmp(&left.signal_count)
                 .then_with(|| left.key.cmp(&right.key))
         });
-        result.truncate(limit.clamp(1, MAX_LIST_LIMIT as usize));
+        result.truncate(limit);
         Ok(result)
+    }
+
+    async fn observation_task_refs(
+        &self,
+        board_id: &str,
+        observation_ids: &BTreeSet<String>,
+    ) -> Result<BTreeMap<String, String>, StoreError> {
+        if observation_ids.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        let connection = self.connection().await?;
+        let mut sql =
+            "SELECT id,task_ref_snapshot FROM label_ontology_observations WHERE board_id=?1 AND id IN ("
+                .to_owned();
+        let mut params = vec![Value::Text(board_id.to_owned())];
+        for (index, observation_id) in observation_ids.iter().enumerate() {
+            if index > 0 {
+                sql.push(',');
+            }
+            let placeholder = params.len() + 1;
+            sql.push_str(&format!("?{placeholder}"));
+            params.push(Value::Text(observation_id.clone()));
+        }
+        sql.push(')');
+        let mut rows = connection
+            .query(&sql, turso::params_from_iter(params))
+            .await?;
+        let mut refs = BTreeMap::new();
+        while let Some(row) = rows.next().await? {
+            refs.insert(
+                text_value(row.get_value(0)?, "observations.id")?,
+                text_value(row.get_value(1)?, "observations.task_ref_snapshot")?,
+            );
+        }
+        Ok(refs)
     }
 
     pub async fn create_label_ontology_action(
@@ -1872,11 +2007,111 @@ impl TursoStore {
                 ));
             }
         }
+        let mut change_json = json_string_or_object(&input.change_json)?;
+        let validation_json = json_string_or_object(&input.validation_json)?.to_string();
+        let normalized_idempotency_key = input.idempotency_key.as_deref().map(str::trim);
+        if normalized_idempotency_key == Some("") {
+            return Err(StoreError::InvalidInput(
+                "idempotency_key must not be empty".to_owned(),
+            ));
+        }
+        let idempotency_key = normalized_idempotency_key.map(str::to_owned);
+        let request_fingerprint = idempotency_key.as_ref().map(|_| {
+            fnv_hash(
+                &json!({
+                    "action_type": input.action_type,
+                    "signal_ids": input.signal_ids,
+                    "reason": input.reason,
+                    "superseded_by_signal_id": input.superseded_by_signal_id,
+                    "parent_action_id": input.parent_action_id,
+                    "target_label_id": target_label_id,
+                    "result_label_id": result_label_id,
+                    "result_atom_id": input.result_atom_id,
+                    "result_atom_content_hash": input.result_atom_content_hash,
+                    "result_proposal_id": input.result_proposal_id,
+                    "canonical_before_hash": input.canonical_before_hash,
+                    "canonical_after_hash": input.canonical_after_hash,
+                    "change": change_json,
+                    "validation_status": input.validation_status,
+                    "validation": validation_json,
+                    "actor": {
+                        "name": input.actor.name.as_str(),
+                        "actor_type": input.actor.actor_type.as_str(),
+                        "agent_type": input.actor.agent_type.as_deref(),
+                    },
+                })
+                .to_string(),
+            )
+        });
+        if let (Some(key), Some(fingerprint)) = (&idempotency_key, &request_fingerprint) {
+            let object = change_json.as_object_mut().ok_or_else(|| {
+                StoreError::InvalidInput("change must be a JSON object".to_owned())
+            })?;
+            object.insert(
+                "_idempotency_key".to_owned(),
+                JsonValue::String(key.clone()),
+            );
+            object.insert(
+                "_idempotency_fingerprint".to_owned(),
+                JsonValue::String(fingerprint.clone()),
+            );
+        }
+        let deterministic_action_id = idempotency_key
+            .as_deref()
+            .map(|key| format!("loa_idem_{}", fnv_hash(&format!("{board_id}\n{key}"))));
         let now = now_ms();
         let mut connection = self.connection().await?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
+        if let (Some(action_id), Some(key), Some(fingerprint)) = (
+            deterministic_action_id.as_deref(),
+            idempotency_key.as_deref(),
+            request_fingerprint.as_deref(),
+        ) {
+            let existing = first_row(
+                transaction
+                    .query(
+                        "SELECT change_json FROM label_ontology_actions WHERE board_id=:board AND id=:id LIMIT 1",
+                        [(":board", board_id.as_str()), (":id", action_id)],
+                    )
+                    .await?,
+            )
+            .await
+            .ok();
+            if let Some(row) = existing {
+                let existing_change = text_value(row.get_value(0)?, "actions.change_json")?;
+                let metadata = serde_json::from_str::<JsonValue>(&existing_change)
+                    .ok()
+                    .and_then(|value| value.as_object().cloned());
+                if metadata
+                    .as_ref()
+                    .and_then(|value| value.get("_idempotency_key"))
+                    .and_then(JsonValue::as_str)
+                    == Some(key)
+                    && metadata
+                        .as_ref()
+                        .and_then(|value| value.get("_idempotency_fingerprint"))
+                        .and_then(JsonValue::as_str)
+                        == Some(fingerprint)
+                {
+                    transaction.commit().await?;
+                    return self.action_by_id(&board_id, action_id).await;
+                }
+                return Err(StoreError::OntologyIdempotencyConflict {
+                    board_id: board_id.clone(),
+                    key: key.to_owned(),
+                    existing_action_id: action_id.to_owned(),
+                });
+            }
+        }
+        validate_result_atom(
+            &transaction,
+            &board_id,
+            input.result_atom_id.as_deref(),
+            input.result_atom_content_hash.as_deref(),
+        )
+        .await?;
         for signal_id in &input.signal_ids {
             let row = first_row(
                 transaction
@@ -1908,8 +2143,6 @@ impl TursoStore {
             )
             .await?;
         }
-        let change_json = json_string_or_object(&input.change_json)?;
-        let validation_json = json_string_or_object(&input.validation_json)?.to_string();
         let action_id = insert_action(
             &transaction,
             ActionInsertInput {
@@ -1929,8 +2162,21 @@ impl TursoStore {
                 validation_json: &validation_json,
                 now,
                 created_by: &input.actor.name,
+                actor_type: &input.actor.actor_type,
+                action_id: deterministic_action_id.as_deref(),
                 agent_type: input.actor.agent_type.as_deref(),
             },
+        )
+        .await?;
+        insert_ontology_signal_review_events(
+            &transaction,
+            &board_id,
+            &action_id,
+            &input.signal_ids,
+            &input.action_type,
+            &input.reason,
+            &input.actor.name,
+            now,
         )
         .await?;
         transaction.commit().await?;
@@ -2107,6 +2353,8 @@ impl TursoStore {
                 validation_json: "{}",
                 now,
                 created_by: &input.actor.name,
+                actor_type: &input.actor.actor_type,
+                action_id: None,
                 agent_type: input.actor.agent_type.as_deref(),
             },
         )
@@ -2321,6 +2569,8 @@ impl TursoStore {
                 .to_string(),
                 now,
                 created_by: &input.actor.name,
+                actor_type: &input.actor.actor_type,
+                action_id: None,
                 agent_type: input.actor.agent_type.as_deref(),
             },
         )
@@ -2373,6 +2623,8 @@ impl TursoStore {
                 validation_json: &input.validation_json,
                 now,
                 created_by: &input.actor.name,
+                actor_type: &input.actor.actor_type,
+                action_id: None,
                 agent_type: input.actor.agent_type.as_deref(),
             },
         )
@@ -3009,6 +3261,69 @@ fn validate_actor(actor: &OntologyActorInput) -> Result<(), StoreError> {
     }
     Ok(())
 }
+
+async fn validate_result_atom(
+    transaction: &turso::transaction::Transaction<'_>,
+    board_id: &str,
+    atom_id: Option<&str>,
+    content_hash: Option<&str>,
+) -> Result<(), StoreError> {
+    if atom_id.is_none() && content_hash.is_none() {
+        return Ok(());
+    }
+    let by_id = if let Some(atom_id) = atom_id {
+        let row = first_row(
+            transaction
+                .query(
+                    "SELECT content_hash FROM label_atoms WHERE board_id=:board AND id=:id LIMIT 1",
+                    [(":board", board_id), (":id", atom_id)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|_| {
+            StoreError::InvalidInput(format!("result atom does not exist on board: {atom_id}"))
+        })?;
+        Some(text_value(row.get_value(0)?, "label_atoms.content_hash")?)
+    } else {
+        None
+    };
+    if let Some(content_hash) = content_hash {
+        let row = first_row(
+            transaction
+                .query(
+                    "SELECT id FROM label_atoms WHERE board_id=:board AND content_hash=:hash LIMIT 1",
+                    [(":board", board_id), (":hash", content_hash)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|_| {
+            StoreError::InvalidInput(format!(
+                "result atom content hash does not exist on board: {content_hash}"
+            ))
+        })?;
+        let hash_atom_id = text_value(row.get_value(0)?, "label_atoms.id")?;
+        if let Some(atom_id) = atom_id {
+            if hash_atom_id != atom_id {
+                return Err(StoreError::InvalidInput(
+                    "result atom id and content hash identify different atoms".to_owned(),
+                ));
+            }
+        }
+    }
+    if let (Some(atom_id), Some(actual_hash), Some(requested_hash)) =
+        (atom_id, by_id.as_deref(), content_hash)
+    {
+        if actual_hash != requested_hash {
+            return Err(StoreError::InvalidInput(format!(
+                "result atom content hash mismatch for {atom_id}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn validate_atom_kind(polarity: &str, kind: &str, text: &str) -> Result<(), StoreError> {
     if text.trim().is_empty() {
         return Err(StoreError::InvalidInput("atom text is required".to_owned()));
@@ -3028,9 +3343,10 @@ fn review_group(
     group_by: &str,
     key: String,
     signals: Vec<LabelOntologySignalRecord>,
+    observation_task_refs: &BTreeMap<String, String>,
 ) -> LabelOntologyReviewGroupRecord {
     let mut status = BTreeMap::<String, i64>::new();
-    let task_refs = BTreeSet::new();
+    let mut task_refs = BTreeSet::new();
     let mut ids = Vec::new();
     let mut labels = BTreeSet::new();
     let mut proposals = BTreeSet::new();
@@ -3041,6 +3357,9 @@ fn review_group(
     for signal in &signals {
         *status.entry(signal.status.clone()).or_default() += 1;
         ids.push(signal.id.clone());
+        if let Some(task_ref) = observation_task_refs.get(&signal.observation_id) {
+            task_refs.insert(task_ref.clone());
+        }
         if let Some(name) = &signal.proposed_label_name_normalized {
             proposals.insert(name.clone());
         }
@@ -3123,6 +3442,8 @@ pub(crate) struct ActionInsertInput<'a> {
     pub(crate) validation_json: &'a str,
     pub(crate) now: i64,
     pub(crate) created_by: &'a str,
+    pub(crate) actor_type: &'a str,
+    pub(crate) action_id: Option<&'a str>,
     pub(crate) agent_type: Option<&'a str>,
 }
 
@@ -3147,18 +3468,35 @@ pub(crate) async fn insert_action(
         validation_json,
         now,
         created_by,
+        actor_type,
+        action_id: requested_action_id,
         agent_type,
     } = input;
-    let action_id = format!("loa_{}", ulid::Ulid::new());
-    let actor_type = if agent_type.is_some() {
-        "agent"
-    } else {
-        "user"
-    };
+    let action_id = requested_action_id
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("loa_{}", ulid::Ulid::new()));
     transaction.execute("INSERT INTO label_ontology_actions(id,board_id,action_type,reason,target_label_id,result_label_id,result_atom_id,result_atom_content_hash,result_proposal_id,canonical_before_hash,canonical_after_hash,change_json,validation_status,validation_json,validation_requirement,created_by,created_by_type,agent_type,created_at) VALUES (:id,:board,:type,:reason,:target,:result_label,:atom,:atom_hash,:proposal,:before,:after,:change,:status,:validation,CASE WHEN :status='not_required' THEN 'none' ELSE 'required' END,:actor,:actor_type,:agent_type,:now)", turso::named_params! { ":id": action_id.as_str(), ":board": board_id, ":type": action_type, ":reason": reason.trim(), ":target": target_label_id, ":result_label": result_label_id, ":atom": result_atom_id, ":atom_hash": result_atom_content_hash, ":proposal": result_proposal_id, ":before": before_hash, ":after": after_hash, ":change": change_json.to_string().as_str(), ":status": validation_status, ":validation": validation_json, ":actor": created_by, ":actor_type": actor_type, ":agent_type": agent_type, ":now": now }).await?;
     for signal_id in signal_ids {
         transaction.execute("INSERT INTO label_ontology_action_signals(board_id,action_id,signal_id,created_at) SELECT :board,:action,id,:now FROM label_ontology_signals WHERE board_id=:board AND id=:signal", turso::named_params! { ":board": board_id, ":action": action_id.as_str(), ":signal": signal_id.as_str(), ":now": now }).await?;
     }
+    transaction
+        .execute(
+            "INSERT INTO task_events(event_id,board_id,task_id,run_id,kind,actor,payload_json,created_at) VALUES (:event,:board,NULL,NULL,'label.ontology.action.created',:actor,:payload,:created)",
+            turso::named_params! {
+                ":event": format!("e_label_ontology_action_{action_id}").as_str(),
+                ":board": board_id,
+                ":actor": created_by,
+                ":payload": json!({
+                    "action_id": action_id.as_str(),
+                    "action_type": action_type,
+                    "signal_ids": signal_ids,
+                })
+                .to_string()
+                .as_str(),
+                ":created": now,
+            },
+        )
+        .await?;
     Ok(action_id)
 }
 
@@ -3191,7 +3529,104 @@ async fn update_signal_status(
         _ => return Ok(()),
     };
     for signal_id in signal_ids {
+        let current = first_row(
+            transaction
+                .query(
+                    "SELECT status FROM label_ontology_signals WHERE board_id=:board AND id=:id LIMIT 1",
+                    [(":board", board_id), (":id", signal_id.as_str())],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|_| {
+            StoreError::InvalidInput(format!(
+                "ontology signal does not exist on board: {signal_id}"
+            ))
+        })?;
+        let current_status = text_value(current.get_value(0)?, "ontology_signals.status")?;
+        if !ontology_signal_transition_allowed(&current_status, status) {
+            return Err(StoreError::InvalidTransition(format!(
+                "ontology signal {signal_id} cannot transition from {current_status} to {status}"
+            )));
+        }
+        if action_type == "supersede" {
+            let replacement = superseded_by.ok_or_else(|| {
+                StoreError::InvalidInput(
+                    "superseded_by_signal_id is required for supersede".to_owned(),
+                )
+            })?;
+            if replacement == signal_id {
+                return Err(StoreError::InvalidInput(
+                    "superseded_by_signal_id must differ from signal_id".to_owned(),
+                ));
+            }
+            first_row(
+                transaction
+                    .query(
+                        "SELECT id FROM label_ontology_signals WHERE board_id=:board AND id=:id LIMIT 1",
+                        [(":board", board_id), (":id", replacement)],
+                    )
+                    .await?,
+            )
+            .await
+            .map_err(|_| {
+                StoreError::InvalidInput(format!(
+                    "superseded_by_signal_id does not exist on board: {replacement}"
+                ))
+            })?;
+        }
         transaction.execute("UPDATE label_ontology_signals SET status=:status,status_reason=:reason,superseded_by_signal_id=COALESCE(:superseded,superseded_by_signal_id),reviewed_at=:now,closed_at=CASE WHEN :status IN ('resolved','rejected','superseded') THEN :now ELSE closed_at END,updated_at=:now WHERE board_id=:board AND id=:id", turso::named_params! { ":status": status, ":reason": reason, ":superseded": superseded_by, ":now": now, ":board": board_id, ":id": signal_id.as_str() }).await?;
     }
     Ok(())
+}
+
+async fn insert_ontology_signal_review_events(
+    transaction: &turso::transaction::Transaction<'_>,
+    board_id: &str,
+    action_id: &str,
+    signal_ids: &[String],
+    action_type: &str,
+    reason: &str,
+    actor: &str,
+    now: i64,
+) -> Result<(), StoreError> {
+    let status = match action_type {
+        "confirm" => "confirmed",
+        "reject" => "rejected",
+        "resolve_no_change" => "resolved",
+        "supersede" => "superseded",
+        _ => return Ok(()),
+    };
+    for signal_id in signal_ids {
+        let event_id = format!("e_label_ontology_signal_{signal_id}_{action_id}");
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id,board_id,task_id,run_id,kind,actor,payload_json,created_at) VALUES (:event,:board,NULL,NULL,'label.ontology.signal.reviewed',:actor,:payload,:created)",
+                turso::named_params! {
+                    ":event": event_id.as_str(),
+                    ":board": board_id,
+                    ":actor": actor,
+                    ":payload": json!({
+                        "signal_id": signal_id,
+                        "action_id": action_id,
+                        "status": status,
+                        "reason": reason,
+                    })
+                    .to_string()
+                    .as_str(),
+                    ":created": now,
+                },
+            )
+            .await?;
+    }
+    Ok(())
+}
+
+fn ontology_signal_transition_allowed(current: &str, next: &str) -> bool {
+    match current {
+        "open" => matches!(next, "confirmed" | "rejected" | "resolved" | "superseded"),
+        "confirmed" => matches!(next, "rejected" | "resolved" | "superseded"),
+        "resolved" | "rejected" | "superseded" => false,
+        _ => false,
+    }
 }

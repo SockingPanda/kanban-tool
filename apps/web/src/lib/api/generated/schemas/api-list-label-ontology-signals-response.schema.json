@@ -185,16 +185,21 @@
       ],
       "type": "object"
     },
-    "LimitMeta": {
+    "SignalFilterMeta": {
       "additionalProperties": false,
       "properties": {
+        "include_all": {
+          "type": "boolean"
+        },
         "limit": {
           "format": "uint",
-          "minimum": 0,
+          "maximum": 100,
+          "minimum": 1,
           "type": "integer"
         }
       },
       "required": [
+        "include_all",
         "limit"
       ],
       "type": "object"
@@ -211,7 +216,7 @@
       "type": "array"
     },
     "meta": {
-      "$ref": "#/$defs/LimitMeta"
+      "$ref": "#/$defs/SignalFilterMeta"
     }
   },
   "required": [

@@ -15,10 +15,27 @@ export type InvalidBoardRoute = {
 }
 
 export type BoardRouteView = "board" | "list" | "map" | "runs" | "events"
+export type BoardView = BoardRouteView | "signals" | "ontology"
+
+export interface SignalsRouteFilters {
+  readonly status?: "review" | "all" | "open" | "confirmed" | "resolved" | "rejected" | "superseded"
+  readonly kinds?: readonly string[]
+  readonly task?: string
+  readonly signal?: string
+}
+
+export interface OntologyRouteFilters {
+  readonly includeAll?: boolean
+  readonly groupBy?: "label" | "candidate_atom" | "proposed_label" | "cluster"
+  readonly signal?: string
+  readonly atom?: string
+}
+
+export type BoardRouteFilters = SignalsRouteFilters | OntologyRouteFilters
 
 export type AppRoute =
   | { kind: "home"; pathname: string }
-  | { kind: "board"; boardSlug: CanonicalBoardSlug; pathname: string; view?: BoardRouteView; query?: string }
+  | { kind: "board"; boardSlug: CanonicalBoardSlug; pathname: string; view?: BoardView; query?: string; filters?: BoardRouteFilters }
   | { kind: "settings"; pathname: string }
   | { kind: "not-found"; pathname: string }
   | InvalidBoardRoute
@@ -26,7 +43,13 @@ export type AppRoute =
 export type AppNavigationTarget =
   | AppRoute
   | { kind: "home" }
-  | { kind: "board"; boardSlug: CanonicalBoardSlug }
+  | {
+      kind: "board"
+      boardSlug: CanonicalBoardSlug
+      view?: BoardView
+      query?: string
+      filters?: BoardRouteFilters
+    }
   | { kind: "settings" }
   | string
 
@@ -96,6 +119,68 @@ function decodeBoardSlug(value: string, pathname: string): CanonicalBoardSlug | 
   return parseCanonicalBoardSlug(decoded) ?? invalidBoardRoute(pathname, decoded)
 }
 
+function parseSignalsFilters(search: string): SignalsRouteFilters {
+  const params = new URLSearchParams(search)
+  const rawStatus = params.get("status")
+  const status = rawStatus === "all" || rawStatus === "open" || rawStatus === "confirmed" || rawStatus === "resolved" || rawStatus === "rejected" || rawStatus === "superseded"
+    ? rawStatus
+    : rawStatus === "review"
+      ? "review"
+      : undefined
+  const kinds = params
+    .getAll("kind")
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean)
+  const task = params.get("task")?.trim() || undefined
+  const signal = params.get("signal")?.trim() || undefined
+  return {
+    ...(status === undefined ? {} : { status }),
+    ...(kinds.length === 0 ? {} : { kinds }),
+    ...(task === undefined ? {} : { task }),
+    ...(signal === undefined ? {} : { signal }),
+  }
+}
+
+function parseOntologyFilters(search: string): OntologyRouteFilters {
+  const params = new URLSearchParams(search)
+  const rawGroupBy = params.get("group_by")
+  const groupBy = rawGroupBy === "candidate_atom" || rawGroupBy === "proposed_label" || rawGroupBy === "cluster"
+    ? rawGroupBy
+    : "label"
+  const signal = params.get("signal")?.trim() || undefined
+  const atom = params.get("atom")?.trim() || undefined
+  return {
+    includeAll: params.get("include_all") === "true",
+    groupBy,
+    ...(signal === undefined ? {} : { signal }),
+    ...(atom === undefined ? {} : { atom }),
+  }
+}
+
+function appendFeatureQuery(params: URLSearchParams, view: "signals" | "ontology", filters: BoardRouteFilters | undefined): void {
+  if (view === "signals") {
+    const signalFilters = filters as SignalsRouteFilters | undefined
+    if (signalFilters?.status !== undefined && signalFilters.status !== "review") params.set("status", signalFilters.status)
+    for (const kind of signalFilters?.kinds ?? []) {
+      const trimmed = kind.trim()
+      if (trimmed) params.append("kind", trimmed)
+    }
+    const task = signalFilters?.task?.trim()
+    if (task) params.set("task", task)
+    const signal = signalFilters?.signal?.trim()
+    if (signal) params.set("signal", signal)
+  } else {
+    const ontologyFilters = filters as OntologyRouteFilters | undefined
+    if (ontologyFilters?.includeAll === true) params.set("include_all", "true")
+    if (ontologyFilters?.groupBy !== undefined && ontologyFilters.groupBy !== "label") params.set("group_by", ontologyFilters.groupBy)
+    const signal = ontologyFilters?.signal?.trim()
+    if (signal) params.set("signal", signal)
+    const atom = ontologyFilters?.atom?.trim()
+    if (atom) params.set("atom", atom)
+  }
+}
+
 export function parseAppRoute(
   input = typeof window === "undefined" ? DEFAULT_BASE_PATH : window.location.href,
   options: { basePath?: string } = {},
@@ -119,13 +204,20 @@ export function parseAppRoute(
     // `/boards/:slug` is the canonical default Board view. Normalize it to
     // the same board route as the explicit `/board` suffix.
     const view = separator > 0 ? tail.slice(separator + 1) : "board"
-    if (!(["board", "list", "map", "runs", "events"] as const).includes(view as BoardRouteView)) {
+    if (!(["board", "list", "map", "runs", "events", "signals", "ontology"] as const).includes(view as BoardView)) {
       return { kind: "not-found", pathname }
     }
     const slug = separator > 0 ? tail.slice(0, separator) : tail
     const boardSlug = decodeBoardSlug(slug, pathname)
     if (typeof boardSlug === "string") {
-      const route = { kind: "board" as const, boardSlug, pathname: routePath({ kind: "board", boardSlug, view: view as BoardRouteView }, options) }
+      const route = { kind: "board" as const, boardSlug, pathname: routePath({ kind: "board", boardSlug, view: view as BoardView }, options) }
+      if (view === "signals" || view === "ontology") {
+        return {
+          ...route,
+          view,
+          filters: view === "signals" ? parseSignalsFilters(query) : parseOntologyFilters(query),
+        }
+      }
       if (view === "board" && query.length === 0) return route
       return { ...route, view: view as BoardRouteView, ...(query.length > 0 ? { query } : {}) }
     }
@@ -138,7 +230,7 @@ export function parseAppRoute(
 type RoutePathInput =
   | AppRoute
   | { kind: "home" }
-  | { kind: "board"; boardSlug: CanonicalBoardSlug; view?: BoardRouteView; query?: string }
+  | { kind: "board"; boardSlug: CanonicalBoardSlug; view?: BoardView; query?: string; filters?: BoardRouteFilters }
   | { kind: "settings" }
 
 function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOptions): AppRoute {
@@ -156,6 +248,7 @@ function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOpt
         pathname: routePath(target, options),
         ...("view" in target && target.view ? { view: target.view } : {}),
         ...("query" in target && target.query ? { query: target.query } : {}),
+        ...("filters" in target && target.filters !== undefined ? { filters: target.filters } : {}),
       }
     case "settings":
       return { kind: "settings", pathname: routePath(target, options) }
@@ -177,11 +270,15 @@ export function routePath(route: RoutePathInput, options: { basePath?: string } 
       if (!boardSlug) {
         throw validateCanonicalBoardSlug(route.boardSlug) ?? new CanonicalBoardSlugError(route.boardSlug, "invalid-character")
       }
-      {
-        const view = route.view ?? "board"
-        const path = `${basePath}boards/${encodeURIComponent(boardSlug)}/${view}`
-        return route.query ? `${path}?${route.query.replace(/^\?/, "")}` : path
+      const view = route.view ?? "board"
+      const pathname = `${basePath}boards/${encodeURIComponent(boardSlug)}/${view}`
+      if (view === "signals" || view === "ontology") {
+        const params = new URLSearchParams()
+        appendFeatureQuery(params, view, route.filters)
+        const search = params.toString()
+        return search.length > 0 ? `${pathname}?${search}` : pathname
       }
+      return route.query ? `${pathname}?${route.query.replace(/^\?/, "")}` : pathname
     }
     case "not-found":
     case "error":

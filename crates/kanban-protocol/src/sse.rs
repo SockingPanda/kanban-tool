@@ -25,6 +25,7 @@ pub const STREAM_EVENT_ENVELOPE_FIELDS: &[&str] = &[
 pub const TASK_SCOPED_EVENT_KINDS: &[&str] = &[
     "dependency.added",
     "dependency.removed",
+    "label.ontology.observation.recorded",
     "task.archived",
     "task.blocked",
     "task.claimed",
@@ -225,6 +226,15 @@ impl schemars::JsonSchema for StreamEventData {
                 }
                 "label.created" => schema_for::<LabelCreatedPayload>(generator),
                 "label.deleted" => schema_for::<LabelDeletedPayload>(generator),
+                "label.ontology.action.created" => {
+                    schema_for::<LabelOntologyActionCreatedPayload>(generator)
+                }
+                "label.ontology.observation.recorded" => {
+                    schema_for::<LabelOntologyObservationRecordedPayload>(generator)
+                }
+                "label.ontology.signal.reviewed" => {
+                    schema_for::<LabelOntologySignalReviewedPayload>(generator)
+                }
                 "signal.recorded" => schema_for::<SignalRecordedPayload>(generator),
                 "signal.reviewed" => schema_for::<SignalReviewedPayload>(generator),
                 "task.blocked" => union(vec![
@@ -416,6 +426,11 @@ mod tests {
     fn task_scope_metadata_is_exact_and_canonical_fields_are_stable() {
         assert!(task_scoped_event_kind("task.heartbeat"));
         assert!(task_scoped_event_kind("dependency.added"));
+        assert!(task_scoped_event_kind(
+            "label.ontology.observation.recorded"
+        ));
+        assert!(!task_scoped_event_kind("label.ontology.action.created"));
+        assert!(!task_scoped_event_kind("label.ontology.signal.reviewed"));
         assert!(!task_scoped_event_kind("task.attachment.created"));
         assert_eq!(
             STREAM_EVENT_ENVELOPE_FIELDS,

@@ -101,6 +101,26 @@ describe("literal event invalidation plans", () => {
     expect(step.targets.map(targetKey)).toContain('task-neighborhood(task="linked")|observed=false')
   })
 
+  test("routes ontology ledger events to ontology roots without generic signal aliases", () => {
+    const observation = classifyEvent(event({
+      kind: "label.ontology.observation.recorded",
+      scope: { taskId: "task-a" },
+    }))
+    expect(observation.fullRefetch).toBe(false)
+    expect(observation.targets.map(targetKey)).toContain('label-ontology(board="board-a")|observed=false')
+    expect(observation.targets.map(targetKey)).toContain('task-detail(task="task-a")|observed=false')
+    expect(observation.targets.map(targetKey)).not.toContain('signals(board="board-a")|observed=false')
+
+    const reviewed = classifyEvent(event({
+      kind: "label.ontology.signal.reviewed",
+      scope: { taskId: null, signalId: "los-1" },
+      taskId: null,
+      runId: null,
+    }))
+    expect(reviewed.targets.map(targetKey)).toContain('label-ontology-signal(signal="los-1")|observed=false')
+    expect(reviewed.targets.map(targetKey)).not.toContain('signal(signal="los-1")')
+  })
+
   test("does not upgrade future prefix lookalikes", () => {
     const plan = classifyEvent(event({ kind: "task.step.future", known: false }))
     expect(plan.fullRefetch).toBe(true)

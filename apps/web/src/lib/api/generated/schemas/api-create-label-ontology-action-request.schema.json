@@ -79,6 +79,13 @@
     "change": {
       "$ref": "#/$defs/JsonBodyField"
     },
+    "idempotency_key": {
+      "description": "作用域限定在所选看板上的 ontology lifecycle 重试 key。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "parent_action_id": {
       "type": [
         "string",

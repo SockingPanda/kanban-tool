@@ -55,6 +55,7 @@ export interface BoardSessionTestDependencies {
 
 const sessions = new Map<string, BoardSession>()
 /** Feature readers observe the canonical session; they never open another stream. */
+const sessionObservers = new Map<string, Set<(model: BoardReadModel) => void>>()
 const sessionTelemetryObservers = new Map<string, Set<(entry: SyncTelemetryEntry) => void>>()
 
 export function runtimeIdentityKey(runtime: WebRuntimeConfig): string {
@@ -114,9 +115,40 @@ export function resetBoardSessionsForTests(): void {
     session.query.invalidate()
   }
   sessions.clear()
+  sessionObservers.clear()
   sessionTelemetryObservers.clear()
 }
 
+/**
+ * Subscribe to model publications for one canonical board session.
+ *
+ * The observer is intentionally keyed separately from acquire/release refs so
+ * a feature route can subscribe before BoardLive has finished resolving its
+ * board identity. The pending observer is attached automatically when the
+ * session starts, and no second SSE/polling source is created.
+ */
+export function subscribeBoardSession(
+  runtime: WebRuntimeConfig,
+  canonicalBoardId: CanonicalBoardId,
+  listener: (model: BoardReadModel) => void,
+): () => void {
+  const key = sessionKey(runtime, canonicalBoardId)
+  let observers = sessionObservers.get(key)
+  if (observers === undefined) {
+    observers = new Set()
+    sessionObservers.set(key, observers)
+  }
+  observers.add(listener)
+  let active = true
+  return () => {
+    if (!active) return
+    active = false
+    const current = sessionObservers.get(key)
+    if (current === undefined) return
+    current.delete(listener)
+    if (current.size === 0 && sessions.get(key) === undefined) sessionObservers.delete(key)
+  }
+}
 /** Subscribe to the already-validated SSE/recovery telemetry of one session. */
 export function subscribeBoardSessionTelemetry(
   runtime: WebRuntimeConfig,
@@ -180,6 +212,7 @@ export function acquireBoardSession(
       adapter: resource.adapter,
       publish: (nextModel) => {
         for (const listener of listeners) listener(nextModel)
+        for (const observer of sessionObservers.get(key) ?? []) observer(nextModel)
       },
     })
     const controllerOptions = {
@@ -259,6 +292,7 @@ export function acquireBoardSession(
         // publish when another owner still retains the same session.
         if (current.disposed || current.generation !== generation || sessions.get(key) !== current) return
         for (const listener of current.listeners) listener(nextModel)
+        for (const observer of sessionObservers.get(key) ?? []) observer(nextModel)
       })()
       current.refreshPromise = refreshPromise
       void refreshPromise.then(() => {

@@ -4,6 +4,7 @@ import { Theme } from "@astryxdesign/core/theme"
 import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 
 import { ProductShell } from "./ProductShell"
+import { BoardFeatureRoute, type FeatureRoute } from "./features/BoardFeatureRoute"
 import { BoardLive } from "./features/board/BoardLive"
 import { boardSyncStatusForTelemetry } from "./features/board/board-live-state"
 import type { BoardTaskCanonicalReloadHandler, BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
@@ -267,6 +268,9 @@ function RuntimeThemedShell() {
 
   const currentEventsBatch = eventsBatchState.key === sessionKey ? eventsBatchState.batch : null
   const taskMutations = taskMutationState.key === sessionKey ? taskMutationState.surface : undefined
+  const featureRoute = router.route.kind === "board" && (router.route.view === "signals" || router.route.view === "ontology")
+    ? router.route as FeatureRoute
+    : null
 
   return (
     <InternationalizationProvider locale={preferences.locale} messages={astryxMessages} overrides={astryxOverrides}>
@@ -302,6 +306,7 @@ function RuntimeThemedShell() {
               onCanonicalReload={onCanonicalReload}
             />
           ) : null}
+          {featureRoute ? <BoardFeatureRoute runtime={runtime} route={featureRoute} onNavigate={router.navigate} /> : null}
         </ProductShell>
       </Theme>
     </InternationalizationProvider>

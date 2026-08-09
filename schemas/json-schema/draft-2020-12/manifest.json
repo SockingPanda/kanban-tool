@@ -1651,7 +1651,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-events-response.v1.invalid.json",
       "path": "api/list-events-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-events-response.v1.valid.json",
-      "sha256": "sha256:9ece9933de32d242327d442fb066a4a4910db52885dd5c9c48281811ca66b2f5",
+      "sha256": "sha256:789831b19089ea34c4edb56f88f14fdba350cec0f52a4419a6cae6f4ad7faf51",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1681,7 +1681,7 @@
       "invalid_fixture": "schemas/fixtures/sse/stream-event-data.v1.invalid.json",
       "path": "sse/stream-event-data.v1.schema.json",
       "schema_fixture": "schemas/fixtures/sse/stream-event-data.v1.valid.json",
-      "sha256": "sha256:d206a56f7b845aff3b6ffd4add18222ca151c486101b9a1f4e065c4f437cdd25",
+      "sha256": "sha256:1e37043ab93382ec66b1d00e87c7814a134f17d28d4129087af4c72bf2d52470",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2301,7 +2301,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-signals-query.v1.invalid.json",
       "path": "api/list-signals-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-signals-query.v1.valid.json",
-      "sha256": "sha256:c3b04f49dde75707b19889c359904761a21354571fcb3464a7d4606f79d4b1f8",
+      "sha256": "sha256:0e7b2e8f0cf41f7fe2ad15e8025f7046659d6e9539d7f1c5ca3475fb82ad642a",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2321,7 +2321,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-signals-response.v1.invalid.json",
       "path": "api/list-signals-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-signals-response.v1.valid.json",
-      "sha256": "sha256:bdf727dba447c49ed6f8a0fc88c4067798af33775f808a105e3f980dec6ee25a",
+      "sha256": "sha256:cb9522c66dd393cdbe7d5067bf0000482f1a950794c22dbbfecf8377a7edc45c",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2341,7 +2341,7 @@
       "invalid_fixture": "schemas/fixtures/api/review-signals-query.v1.invalid.json",
       "path": "api/review-signals-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/review-signals-query.v1.valid.json",
-      "sha256": "sha256:d2b11449f0ffa6405e3f67e65509d3b44ace4166f28fad164789c22165eaf902",
+      "sha256": "sha256:573110a6755b75ee0cb91e681f2aaaaef9b4e3eb1dc0aaccb20097b45b350187",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2361,7 +2361,7 @@
       "invalid_fixture": "schemas/fixtures/api/review-signals-response.v1.invalid.json",
       "path": "api/review-signals-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/review-signals-response.v1.valid.json",
-      "sha256": "sha256:538e1f51e4713291927e3149cdf6ecc944878e87bf84ec2b9c7294aac9c7fa5a",
+      "sha256": "sha256:8079815221511e77b209072dd33ccb4de25d0710062fa20f2c125b7808b5f167",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2771,7 +2771,7 @@
       "invalid_fixture": "schemas/fixtures/api/label-ontology-signal-query.v1.invalid.json",
       "path": "api/label-ontology-signal-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/label-ontology-signal-query.v1.valid.json",
-      "sha256": "sha256:614beb7a8a8f8531cf5b30923233d03ff1eb658c68ec3ffd53654789f8e62597",
+      "sha256": "sha256:d41ebba6f3ced7620afb8cdf937256655fa8023faaa90194064fd303515fdd8f",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2791,7 +2791,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-label-ontology-signals-response.v1.invalid.json",
       "path": "api/list-label-ontology-signals-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-label-ontology-signals-response.v1.valid.json",
-      "sha256": "sha256:f9e0d608fa369710a749be6611e4c90236020024d36d460c403ea75d660eec12",
+      "sha256": "sha256:4f93cd5d02c4d74f0172d48005ecb148e4b099ab04bef9fb61b2c00b21401df1",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2831,7 +2831,7 @@
       "invalid_fixture": "schemas/fixtures/api/review-label-ontology-response.v1.invalid.json",
       "path": "api/review-label-ontology-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/review-label-ontology-response.v1.valid.json",
-      "sha256": "sha256:f3d8a80a1340e242abf1235d682d599124ff02c22cf22ab7fff4063a6f07c1fb",
+      "sha256": "sha256:86e9b572cdadf88d99c376e1941ea10727aafe546b3000024c02092a568f9c6c",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2861,7 +2861,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-label-ontology-action-request.v1.invalid.json",
       "path": "api/create-label-ontology-action-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-label-ontology-action-request.v1.valid.json",
-      "sha256": "sha256:005ebac221e7d9ee9079fd6b248f803a2e2f38fa7cea44d5bdaf0a6af7ff804d",
+      "sha256": "sha256:791c3d166e1ff2268ff96697e460eb8251adca681e085d00b0afdfd3b33b91fe",
       "strictness": "deny_unknown_fields"
     },
     {

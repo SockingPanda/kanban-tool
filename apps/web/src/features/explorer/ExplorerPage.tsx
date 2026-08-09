@@ -457,7 +457,7 @@ function ExplorerTabs({ route, basePath, taskId, onNavigate, copy }: { readonly 
 export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
   const { locale } = usePreferences()
   const copy = explorerCopies[locale]
-  const view = route.view ?? "board"
+  const view: BoardRouteView = route.view === "signals" || route.view === "ontology" ? "board" : route.view ?? "board"
   const params = queryParams(route)
   const rawTaskId = params.get("task")?.trim() || null
   const mapUrlState = useMemo(() => parseTaskMapUrlState(route.query ?? ""), [route.query])

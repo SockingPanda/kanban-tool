@@ -628,7 +628,10 @@ wire!(
             default = "default_label_surface_limit",
             skip_serializing_if = "is_default_label_surface_limit"
         )]
-        #[cfg_attr(feature = "schema", schemars(extend("default" = 100)))]
+        #[cfg_attr(
+            feature = "schema",
+            schemars(extend("default" = 100, "minimum" = 1, "maximum" = 100))
+        )]
         pub limit: usize,
     }
 );
@@ -800,6 +803,9 @@ wire!(
 wire!(
     pub struct LabelOntologyActionRequest {
         pub actor: LabelOntologyActorWire,
+        /// 作用域限定在所选看板上的 ontology lifecycle 重试 key。
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub idempotency_key: Option<String>,
         pub action_type: LabelOntologyActionTypeWire,
         pub signal_ids: Vec<String>,
         pub reason: String,
@@ -1077,7 +1083,10 @@ wire!(
             default = "default_label_surface_limit",
             skip_serializing_if = "is_default_label_surface_limit"
         )]
-        #[cfg_attr(feature = "schema", schemars(extend("default" = 100)))]
+        #[cfg_attr(
+            feature = "schema",
+            schemars(extend("default" = 100, "minimum" = 1, "maximum" = 100))
+        )]
         pub limit: usize,
     }
 );

@@ -137,6 +137,72 @@
       ],
       "type": "object"
     },
+    "LabelOntologyActionCreatedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "type": "string"
+        },
+        "action_type": {
+          "type": "string"
+        },
+        "signal_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_type",
+        "signal_ids"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyObservationRecordedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "observation_id": {
+          "type": "string"
+        },
+        "signal_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "observation_id",
+        "signal_ids"
+      ],
+      "type": "object"
+    },
+    "LabelOntologySignalReviewedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "signal_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SignalStatus"
+        }
+      },
+      "required": [
+        "signal_id",
+        "action_id",
+        "status",
+        "reason"
+      ],
+      "type": "object"
+    },
     "LabelProposalPayload": {
       "additionalProperties": false,
       "properties": {
@@ -562,6 +628,165 @@
             },
             "payload": {
               "$ref": "#/$defs/LabelDeletedPayload"
+            },
+            "run_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "task_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "event_id",
+            "board_id",
+            "task_id",
+            "run_id",
+            "kind",
+            "actor",
+            "payload",
+            "created_at"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "actor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "board_id": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "integer"
+            },
+            "event_id": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "kind": {
+              "const": "label.ontology.action.created"
+            },
+            "payload": {
+              "$ref": "#/$defs/LabelOntologyActionCreatedPayload"
+            },
+            "run_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "task_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "event_id",
+            "board_id",
+            "task_id",
+            "run_id",
+            "kind",
+            "actor",
+            "payload",
+            "created_at"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "actor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "board_id": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "integer"
+            },
+            "event_id": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "kind": {
+              "const": "label.ontology.observation.recorded"
+            },
+            "payload": {
+              "$ref": "#/$defs/LabelOntologyObservationRecordedPayload"
+            },
+            "run_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "task_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "event_id",
+            "board_id",
+            "task_id",
+            "run_id",
+            "kind",
+            "actor",
+            "payload",
+            "created_at"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "actor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "board_id": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "integer"
+            },
+            "event_id": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "kind": {
+              "const": "label.ontology.signal.reviewed"
+            },
+            "payload": {
+              "$ref": "#/$defs/LabelOntologySignalReviewedPayload"
             },
             "run_id": {
               "type": [
@@ -2603,6 +2828,9 @@
                   "dependency.removed",
                   "label.created",
                   "label.deleted",
+                  "label.ontology.action.created",
+                  "label.ontology.observation.recorded",
+                  "label.ontology.signal.reviewed",
                   "signal.recorded",
                   "signal.reviewed",
                   "task.archived",

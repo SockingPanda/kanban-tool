@@ -4,6 +4,7 @@ import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 
 import { ProductShell } from "./ProductShell"
 import { BoardFeatureRoute, type FeatureRoute } from "./features/BoardFeatureRoute"
+import { BoardLive } from "./features/board/BoardLive"
 import { usePreferences } from "./lib/use-preferences"
 import { PreferencesProvider } from "./lib/preferences-provider"
 import { useAppRouter } from "./lib/router"
@@ -17,6 +18,8 @@ function RuntimeThemedShell() {
     basePath: runtime.webBasePath,
     defaultBoard: runtime.defaultBoard,
   })
+  const boardRoute = router.route.kind === "home" || router.route.kind === "board" ? router.route : null
+  const featureRoute = router.route.kind === "board" && router.route.view ? router.route as FeatureRoute : null
 
   return (
     <InternationalizationProvider locale={preferences.locale} messages={astryxMessages} overrides={astryxOverrides}>
@@ -30,9 +33,8 @@ function RuntimeThemedShell() {
           onNavigate={router.navigate}
           onRetry={() => window.location.reload()}
         >
-          {router.route.kind === "board" && router.route.view ? (
-            <BoardFeatureRoute runtime={runtime} route={router.route as FeatureRoute} onNavigate={router.navigate} />
-          ) : null}
+          {boardRoute ? <BoardLive runtime={runtime} route={boardRoute} onNavigate={router.navigate} renderBoardView={featureRoute === null} /> : null}
+          {featureRoute ? <BoardFeatureRoute runtime={runtime} route={featureRoute} onNavigate={router.navigate} /> : null}
         </ProductShell>
       </Theme>
     </InternationalizationProvider>

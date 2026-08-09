@@ -582,6 +582,7 @@ fn contract_module(contract_id: &str, schema: &Value) -> ToolResult<Vec<u8>> {
     let type_name = schema_type_name(contract_id);
     let validator = validator_name(contract_id);
     let parser = format!("parse{}", pascal_identifier(contract_id));
+    let slug = safe_slug(contract_id);
     let schema_text = json_to_typescript(schema)?;
     let mut output = String::from("// 由 `xtask web-contracts generate` 生成；请勿手工编辑。\n");
     if contains_unsafe_json_number(schema) {
@@ -589,14 +590,14 @@ fn contract_module(contract_id: &str, schema: &Value) -> ToolResult<Vec<u8>> {
             "/* eslint-disable no-loss-of-precision -- JSON Schema 的 int64 边界有意超过 JS 安全整数范围。 */\n",
         );
     }
-    output.push_str(
-        "import type { FromSchema } from \"json-schema-to-ts\";\nimport { ContractValidationError, createContractValidator } from \"../runtime\";\n\n",
-    );
+    output.push_str(&format!(
+        "import type {{ FromSchema }} from \"json-schema-to-ts\";\nimport {{ ContractValidationError, createContractValidator }} from \"../runtime\";\nimport staticValidator from \"virtual:kanban-contract-validator/{slug}\";\n\n"
+    ));
     output.push_str(&format!(
         "export const {const_name} = {schema_text} as const;\nexport type {type_name} = FromSchema<typeof {const_name}>;\n\n"
     ));
     output.push_str(&format!(
-        "export const {validator}: ReturnType<typeof createContractValidator<{type_name}>> = createContractValidator<{type_name}>(\n  {contract_id:?},\n  {const_name},\n);\n\n"
+        "export const {validator}: ReturnType<typeof createContractValidator<{type_name}>> = createContractValidator<{type_name}>(\n  {contract_id:?},\n  staticValidator,\n);\n\n"
     ));
     output.push_str(&format!(
         "export function {parser}(value: unknown): {type_name} {{\n  if (!{validator}(value)) throw new ContractValidationError({contract_id:?}, {validator}.errors);\n  return value;\n}}\n"
@@ -606,21 +607,30 @@ fn contract_module(contract_id: &str, schema: &Value) -> ToolResult<Vec<u8>> {
 
 fn runtime_module() -> Vec<u8> {
     r###"// 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020";
-
-// `strict` 保持开启；协议沿用的 int64/uint format 只在这里关闭格式校验，整数类型仍由 JSON Schema 校验。
-const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false });
-const validatorCache = new WeakMap<object, ValidateFunction>();
+export type ContractErrorObject = {
+  readonly instancePath: string;
+  readonly schemaPath: string;
+  readonly keyword: string;
+  readonly params: Record<string, unknown>;
+  readonly message?: string;
+  readonly propertyName?: string;
+  readonly schema?: unknown;
+  readonly data?: unknown;
+};
 
 export type ContractValidator<T> = ((value: unknown) => value is T) & {
-  readonly errors: ErrorObject[] | null | undefined;
+  readonly errors: ContractErrorObject[] | null | undefined;
+};
+
+type StaticValidator = ((value: unknown) => boolean) & {
+  errors?: ContractErrorObject[] | null | undefined;
 };
 
 export class ContractValidationError extends Error {
   readonly contractId: string;
-  readonly errors: ErrorObject[] | null | undefined;
+  readonly errors: ContractErrorObject[] | null | undefined;
 
-  constructor(contractId: string, errors: ErrorObject[] | null | undefined) {
+  constructor(contractId: string, errors: ContractErrorObject[] | null | undefined) {
     super(`Invalid ${contractId} payload`);
     this.name = "ContractValidationError";
     this.contractId = contractId;
@@ -653,18 +663,9 @@ function unsafeNumberPath(value: unknown, path = ""): string | null {
   return null;
 }
 
-function compileValidator(id: string, schema: object): ValidateFunction {
-  const cached = validatorCache.get(schema);
-  if (cached) return cached;
-  const validator = ajv.compile(schema);
-  validatorCache.set(schema, validator);
-  return validator;
-}
-
-// 数字策略 `reject_unsafe_json_numbers`：先拒绝非有限数和非安全整数，再交给 AJV。
-export function createContractValidator<T>(id: string, schema: object): ContractValidator<T> {
-  let compiled: ValidateFunction | undefined;
-  let errors: ErrorObject[] | null | undefined;
+// 数字策略 `reject_unsafe_json_numbers`：先拒绝非有限数和非安全整数，再调用构建期生成的静态 validator。
+export function createContractValidator<T>(_id: string, staticValidator: StaticValidator): ContractValidator<T> {
+  let errors: ContractErrorObject[] | null | undefined;
   const validate = Object.assign(
     (value: unknown): value is T => {
       const unsafePath = unsafeNumberPath(value);
@@ -673,9 +674,8 @@ export function createContractValidator<T>(id: string, schema: object): Contract
         validate.errors = errors;
         return false;
       }
-      compiled ??= compileValidator(id, schema);
-      const valid = compiled(value);
-      errors = compiled.errors;
+      const valid = staticValidator(value);
+      errors = staticValidator.errors;
       validate.errors = errors;
       return valid;
     },
@@ -1599,6 +1599,9 @@ mod tests {
         let runtime_ts = String::from_utf8(files["runtime.ts"].clone()).expect("runtime TS");
         assert!(runtime_ts.contains("Number.isSafeInteger"));
         assert!(runtime_ts.contains("safeNumber"));
+        assert!(!runtime_ts.contains("ajv.compile"));
+        assert!(!runtime_ts.contains("new Function"));
+        assert!(!runtime_ts.contains("Ajv2020"));
     }
 
     #[test]
@@ -1615,6 +1618,9 @@ mod tests {
         let contract = String::from_utf8(files["contracts/api-get-task-path.ts"].clone())
             .expect("contract module");
         assert!(contract.contains("from \"../runtime\""));
+        assert!(contract.contains("from \"virtual:kanban-contract-validator/api-get-task-path\""));
+        assert!(contract.contains("staticValidator"));
+        assert!(!contract.contains("createContractValidator<ApiGetTaskPathContract>(\n  \"api.get-task.path\",\n  ApiGetTaskPathSchema"));
         assert!(!contract.contains("from \"../schemas\""));
         assert!(!contract.contains("from \"../validators\""));
         let test_only = String::from_utf8(files["test-only.ts"].clone()).expect("test-only TS");

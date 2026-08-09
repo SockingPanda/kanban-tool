@@ -17,10 +17,12 @@ const runtime = {
 type ResponseBody = Record<string, unknown>
 
 function jsonResponse(body: ResponseBody, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+  const response = new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
   })
+  Object.defineProperty(response, "url", { value: "http://127.0.0.1/api/v1/boards" })
+  return response
 }
 
 function board(id: string, slug: string, name: string, archivedAt: number | null = null) {
@@ -359,5 +361,17 @@ describe("board read model", () => {
       kind: "empty",
       reason: "board-not-found",
     } satisfies Partial<BoardReadError>)
+  })
+
+  test("exposes an explicit no-boards error without inventing a board identity", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ data: [] }))
+
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+      name: "BoardReadError",
+      kind: "empty",
+      reason: "no-boards",
+      selector: "default",
+    } satisfies Partial<BoardReadError>)
+    expect(fetcher).toHaveBeenCalledTimes(1)
   })
 })

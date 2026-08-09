@@ -152,6 +152,24 @@ grep -Fq 'scripts/test-desktop-packaged-smoke.sh' <<<"$desktop_smoke_block" || {
   exit 1
 }
 
+desktop_proof_block="$(sed -n '/^desktop-package-proof:/,/^[^[:space:]]/p' "$JUSTFILE")"
+grep -Fq 'just desktop-build' <<<"$desktop_proof_block" || {
+  echo "error: desktop-package-proof must build the packaged Deb before proof" >&2
+  exit 1
+}
+grep -Fq 'scripts/test-desktop-packaged-smoke.sh --proof' <<<"$desktop_proof_block" || {
+  echo "error: desktop-package-proof must reuse the packaged smoke launcher in proof mode" >&2
+  exit 1
+}
+rg -n 'release package --(diagnostic )?--root|desktop-package-evidence\.json|desktop-package-diagnostic-evidence\.json|desktop-package-receipt\.json' "$PACKAGED_SMOKE_SCRIPT" >/dev/null || {
+  echo "error: packaged proof must emit and validate the xtask Desktop package evidence" >&2
+  exit 1
+}
+rg -n 'prepare_evidence_destination|chmod 700|chmod 0600|mv -T "\$tmp_evidence" "\$EVIDENCE_PATH"|configuration/artifact validation failed|listener_any 8721|listener_any "\$AUX_PORT"' "$PACKAGED_SMOKE_SCRIPT" >/dev/null || {
+  echo "error: packaged proof must bind private atomic evidence, explicit artifact failure and both listener cleanup checks" >&2
+  exit 1
+}
+
 if rg -n 'kanban-(vector-lancedb|graph-oxigraph)|prepare-desktop-helper|test-desktop-helper' \
   "$TAURI_CONF" "$DESKTOP_MANIFEST" "$JUSTFILE" "$PACKAGE_LAYOUT_SCRIPT"; then
   echo "error: retired helper packaging references remain" >&2

@@ -58,6 +58,9 @@ pub fn run() {
         })
         .setup(|app| {
             let config_result = host_launch_config(app);
+            if let Err(error) = &config_result {
+                eprintln!("kanban Desktop configuration/artifact validation failed: {error}");
+            }
             let config = config_result.as_ref().ok().cloned();
             let app_url_result = ValidatedAppUrl::fixed();
             let app_url = app_url_result.as_ref().ok().cloned();

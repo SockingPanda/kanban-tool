@@ -197,6 +197,10 @@ desktop-packaged-smoke:
     just desktop-build
     scripts/test-desktop-packaged-smoke.sh
 
+desktop-package-proof:
+    just desktop-build
+    scripts/test-desktop-packaged-smoke.sh --proof
+
 smoke:
     scripts/smoke-v1-local.sh
 

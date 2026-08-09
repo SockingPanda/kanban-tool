@@ -18,6 +18,7 @@ import {
   isLabelRetryDraftCurrent,
   isInspectorAssetsScopeCurrent,
   requestSuggestedLabels,
+  shouldShowInspectorSnapshotError,
   shouldClearAssetDraft,
   type SuggestLabelsHandler,
 } from "./TaskInspectorAssetsPanel.logic"
@@ -255,6 +256,30 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(markup).toContain("刷新建议")
   })
 
+  test("renders a snapshot suggestion failure inline without an empty state or duplicate alert", () => {
+    const markup = renderToStaticMarkup(
+      <TaskInspectorAssetsPanel
+        taskId="t_1"
+        labels={[]}
+        attachments={[]}
+        suggestionResult={null}
+        suggestionRequested
+        handlers={handlers()}
+        snapshot={snapshot({
+          errors: new Map([[
+            "suggestLabels:t_1",
+            { operation: "suggestLabels", taskId: "t_1", kind: "error", message: "建议服务失败", status: 503, code: null, recoverable: true },
+          ]]),
+        })}
+      />,
+    )
+
+    expect(markup).toContain("建议服务失败")
+    expect(markup).not.toContain("暂无标签建议")
+    expect(markup).not.toContain('data-testid="inspector-mutation-errors"')
+    expect(markup).toContain("刷新建议")
+  })
+
   test("clears label and file drafts only after a committed write", () => {
     expect(shouldClearAssetDraft({ committed: false, reconciled: false })).toBe(false)
     expect(shouldClearAssetDraft({ committed: false, reconciled: true })).toBe(false)
@@ -274,6 +299,15 @@ describe("TaskInspectorAssetsPanel", () => {
   test("locks only an unchanged label retry draft", () => {
     expect(isLabelRetryDraftCurrent(" backend ", "backend")).toBe(true)
     expect(isLabelRetryDraftCurrent("frontend", "backend")).toBe(false)
+  })
+
+  test("dedupes a snapshot error when its inline owner already has the same key", () => {
+    const error = { operation: "downloadAttachment" as const, taskId: "t_1" }
+    const pending = new Set<string>()
+    const retryBusy = new Set<string>()
+
+    expect(shouldShowInspectorSnapshotError("downloadAttachment:t_1", error, "t_1", pending, retryBusy, new Map([["downloadAttachment:t_1", "下载失败"]]))).toBe(false)
+    expect(shouldShowInspectorSnapshotError("downloadAttachment:t_1", error, "t_1", pending, retryBusy, new Map())).toBe(true)
   })
 
   test("fences stale promises across t1 to t2 to t1 scope epochs", () => {

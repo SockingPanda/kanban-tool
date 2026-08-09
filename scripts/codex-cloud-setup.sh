@@ -224,7 +224,7 @@ prewarm_desktop_dependencies() {
     return 0
   fi
 
-  log "Prewarming desktop typecheck cache"
+  log "Prewarming Web typecheck cache"
   (
     cd "$ROOT"
     just web-typecheck

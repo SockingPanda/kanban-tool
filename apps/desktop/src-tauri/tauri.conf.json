@@ -4,12 +4,12 @@
   "version": "3.0.0",
   "identifier": "io.github.sockingpanda.kanban",
   "build": {
-    "beforeDevCommand": "pnpm dev --host 127.0.0.1",
-    "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "pnpm vite-build",
-    "frontendDist": "../dist"
+    "beforeDevCommand": "just desktop-dev-prep",
+    "beforeBuildCommand": "pnpm --filter @kanban-tool/web vite-build",
+    "frontendDist": "../bootstrap"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Kanban Tool",
@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src http://127.0.0.1:* http://localhost:*"
+      "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; img-src 'self' data: asset: http://asset.localhost; style-src 'self'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:8721; font-src 'self'"
     }
   },
   "bundle": {
@@ -29,10 +29,18 @@
       "icons/icon.png"
     ],
     "resources": {
-      "../../web/dist/": "web/"
+      "../../web/dist/": "web/",
+      "bin/kanban": "kanban"
     },
     "targets": [
       "deb"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "xdg-utils"
+        ]
+      }
+    }
   }
 }

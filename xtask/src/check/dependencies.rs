@@ -31,7 +31,7 @@ const RETIRED_PACKAGES: &[&str] = &["kanban-sqlite", "kanban-local"];
 #[derive(Clone, Copy)]
 struct DependencyPolicy {
     name: &'static str,
-    owner: &'static str,
+    owners: &'static [&'static str],
     requirement: &'static str,
     exact_version: Option<&'static str>,
     uses_default_features: bool,
@@ -41,7 +41,7 @@ struct DependencyPolicy {
 const OWNER_POLICIES: &[DependencyPolicy] = &[
     DependencyPolicy {
         name: "turso",
-        owner: SERVICE_PACKAGE,
+        owners: &[SERVICE_PACKAGE],
         requirement: "=0.7.2",
         exact_version: Some("0.7.2"),
         uses_default_features: false,
@@ -49,7 +49,7 @@ const OWNER_POLICIES: &[DependencyPolicy] = &[
     },
     DependencyPolicy {
         name: "axum",
-        owner: SERVER_PACKAGE,
+        owners: &[SERVER_PACKAGE],
         requirement: "^0.7",
         exact_version: None,
         uses_default_features: true,
@@ -57,7 +57,7 @@ const OWNER_POLICIES: &[DependencyPolicy] = &[
     },
     DependencyPolicy {
         name: "ureq",
-        owner: "kanban-client",
+        owners: &["kanban-client"],
         requirement: "^2.12",
         exact_version: None,
         uses_default_features: false,
@@ -65,7 +65,7 @@ const OWNER_POLICIES: &[DependencyPolicy] = &[
     },
     DependencyPolicy {
         name: "rmcp",
-        owner: "kanban-mcp",
+        owners: &["kanban-mcp"],
         requirement: "=3.1.0",
         exact_version: Some("3.1.0"),
         uses_default_features: false,
@@ -73,7 +73,7 @@ const OWNER_POLICIES: &[DependencyPolicy] = &[
     },
     DependencyPolicy {
         name: "tauri",
-        owner: "kanban-desktop",
+        owners: &["kanban-desktop"],
         requirement: "^2",
         exact_version: None,
         uses_default_features: true,
@@ -81,7 +81,7 @@ const OWNER_POLICIES: &[DependencyPolicy] = &[
     },
     DependencyPolicy {
         name: "libc",
-        owner: WEB_ARTIFACT_PACKAGE,
+        owners: &[WEB_ARTIFACT_PACKAGE, "kanban-desktop"],
         requirement: "^0.2",
         exact_version: None,
         uses_default_features: false,
@@ -684,121 +684,124 @@ fn validate_owner_policies(
                 }
             }
         }
-        if owners.len() != 1 || owners[0].0 != policy.owner {
+        if owners.len() != policy.owners.len()
+            || owners.iter().any(|owner| !policy.owners.contains(&owner.0))
+        {
             return Err(error(format!(
-                "{} 必须只有 owner {}，实际 owners={:?}",
+                "{} 必须由 owners {:?} 共同持有，实际 owners={:?}",
                 policy.name,
-                policy.owner,
+                policy.owners,
                 owners.iter().map(|owner| owner.0).collect::<Vec<_>>()
             )));
         }
-        let (owner_name, owner_package, dependency) = owners[0];
-        let context = format!("{owner_name} -> {}", policy.name);
-        if dependency_alias(dependency)? != policy.name {
-            return Err(error(format!("{context} 禁止 dependency alias rename")));
-        }
-        if dependency.get("req").and_then(Value::as_str) != Some(policy.requirement) {
-            return Err(error(format!(
-                "{context} req 必须是 {}，实际 {:?}",
-                policy.requirement,
-                dependency.get("req")
-            )));
-        }
-        if optional_string_field(dependency, "source", &context)? != Some(CRATES_IO_SOURCE) {
-            return Err(error(format!("{context} source 必须是 crates.io")));
-        }
-        if dependency.get("path").is_some()
-            || dependency
-                .get("registry")
-                .is_some_and(|value| !value.is_null())
-        {
-            return Err(error(format!("{context} 禁止 path/registry override")));
-        }
-        if dependency
-            .get("kind")
-            .is_some_and(|value| value.as_str().is_some_and(|kind| !normal_kind(Some(kind))))
-        {
-            return Err(error(format!("{context} 必须是 normal dependency")));
-        }
-        if !normal_kind(dependency.get("kind").and_then(Value::as_str))
-            || !matches!(dependency.get("optional"), Some(Value::Bool(false)))
-            || dependency
-                .get("target")
-                .is_some_and(|value| !value.is_null())
-        {
-            return Err(error(format!(
-                "{context} 必须是 nonoptional、非 target normal dependency"
-            )));
-        }
-        let actual_features = feature_set(dependency, &context)?;
-        let expected_features = policy.features.iter().copied().collect::<HashSet<_>>();
-        if actual_features != expected_features {
-            return Err(error(format!(
-                "{context} leaf features 漂移: expected={expected_features:?}, actual={actual_features:?}"
-            )));
-        }
-        if bool_field(dependency, "uses_default_features", &context)?
-            != policy.uses_default_features
-        {
-            return Err(error(format!("{context} default feature policy 漂移")));
-        }
+        for (owner_name, owner_package, dependency) in owners {
+            let context = format!("{owner_name} -> {}", policy.name);
+            if dependency_alias(dependency)? != policy.name {
+                return Err(error(format!("{context} 禁止 dependency alias rename")));
+            }
+            if dependency.get("req").and_then(Value::as_str) != Some(policy.requirement) {
+                return Err(error(format!(
+                    "{context} req 必须是 {}，实际 {:?}",
+                    policy.requirement,
+                    dependency.get("req")
+                )));
+            }
+            if optional_string_field(dependency, "source", &context)? != Some(CRATES_IO_SOURCE) {
+                return Err(error(format!("{context} source 必须是 crates.io")));
+            }
+            if dependency.get("path").is_some()
+                || dependency
+                    .get("registry")
+                    .is_some_and(|value| !value.is_null())
+            {
+                return Err(error(format!("{context} 禁止 path/registry override")));
+            }
+            if dependency
+                .get("kind")
+                .is_some_and(|value| value.as_str().is_some_and(|kind| !normal_kind(Some(kind))))
+            {
+                return Err(error(format!("{context} 必须是 normal dependency")));
+            }
+            if !normal_kind(dependency.get("kind").and_then(Value::as_str))
+                || !matches!(dependency.get("optional"), Some(Value::Bool(false)))
+                || dependency
+                    .get("target")
+                    .is_some_and(|value| !value.is_null())
+            {
+                return Err(error(format!(
+                    "{context} 必须是 nonoptional、非 target normal dependency"
+                )));
+            }
+            let actual_features = feature_set(dependency, &context)?;
+            let expected_features = policy.features.iter().copied().collect::<HashSet<_>>();
+            if actual_features != expected_features {
+                return Err(error(format!(
+                    "{context} leaf features 漂移: expected={expected_features:?}, actual={actual_features:?}"
+                )));
+            }
+            if bool_field(dependency, "uses_default_features", &context)?
+                != policy.uses_default_features
+            {
+                return Err(error(format!("{context} default feature policy 漂移")));
+            }
 
-        let owner_id = workspace
-            .get(owner_name)
-            .ok_or_else(|| error(format!("workspace owner 缺失: {owner_name}")))?;
-        let node = nodes
-            .get(owner_id)
-            .ok_or_else(|| error(format!("{owner_name} 缺少 resolve node")))?;
-        let edge = direct_edge(node, policy.name, owner_name)?;
-        normal_edge(edge, &context, true)?;
-        let resolved_id = string_field(edge, "pkg", &context)?;
-        let resolved = packages
-            .get(resolved_id)
-            .ok_or_else(|| error(format!("{context} resolved package 缺失: {resolved_id}")))?;
-        if package_name(resolved)? != policy.name
-            || optional_string_field(resolved, "source", &context)? != Some(CRATES_IO_SOURCE)
-        {
-            return Err(error(format!(
-                "{context} resolved package identity/source 错误"
-            )));
-        }
-        let version = string_field(resolved, "version", &context)?;
-        if !resolved_version_matches(version, policy) {
-            return Err(error(format!(
-                "{context} resolved version 不满足 {}: {version}",
-                policy.requirement
-            )));
-        }
-        let resolved_node = nodes
-            .get(resolved_id)
-            .ok_or_else(|| error(format!("{context} resolved node 缺失")))?;
-        let features = unique_string_array(
-            resolved_node
-                .get("features")
-                .ok_or_else(|| error(format!("{context} resolved features 缺失")))?,
-            &format!("{context} resolved features"),
-        )?
-        .into_iter()
-        .collect::<HashSet<_>>();
-        if policy.uses_default_features && !features.contains("default") {
-            return Err(error(format!("{context} resolved default feature 漂移")));
-        }
-        if !policy
-            .features
-            .iter()
-            .all(|feature| features.contains(feature))
-        {
-            return Err(error(format!(
-                "{context} resolved features 缺少 owner feature"
-            )));
-        }
+            let owner_id = workspace
+                .get(owner_name)
+                .ok_or_else(|| error(format!("workspace owner 缺失: {owner_name}")))?;
+            let node = nodes
+                .get(owner_id)
+                .ok_or_else(|| error(format!("{owner_name} 缺少 resolve node")))?;
+            let edge = direct_edge(node, policy.name, owner_name)?;
+            normal_edge(edge, &context, true)?;
+            let resolved_id = string_field(edge, "pkg", &context)?;
+            let resolved = packages
+                .get(resolved_id)
+                .ok_or_else(|| error(format!("{context} resolved package 缺失: {resolved_id}")))?;
+            if package_name(resolved)? != policy.name
+                || optional_string_field(resolved, "source", &context)? != Some(CRATES_IO_SOURCE)
+            {
+                return Err(error(format!(
+                    "{context} resolved package identity/source 错误"
+                )));
+            }
+            let version = string_field(resolved, "version", &context)?;
+            if !resolved_version_matches(version, policy) {
+                return Err(error(format!(
+                    "{context} resolved version 不满足 {}: {version}",
+                    policy.requirement
+                )));
+            }
+            let resolved_node = nodes
+                .get(resolved_id)
+                .ok_or_else(|| error(format!("{context} resolved node 缺失")))?;
+            let features = unique_string_array(
+                resolved_node
+                    .get("features")
+                    .ok_or_else(|| error(format!("{context} resolved features 缺失")))?,
+                &format!("{context} resolved features"),
+            )?
+            .into_iter()
+            .collect::<HashSet<_>>();
+            if policy.uses_default_features && !features.contains("default") {
+                return Err(error(format!("{context} resolved default feature 漂移")));
+            }
+            if !policy
+                .features
+                .iter()
+                .all(|feature| features.contains(feature))
+            {
+                return Err(error(format!(
+                    "{context} resolved features 缺少 owner feature"
+                )));
+            }
 
-        // 即使 fixture 通过额外 metadata 字段设置 alias，也保持 owner package
-        // identity 的显式绑定。
-        if package_name(owner_package)? != policy.owner {
-            return Err(error(format!(
-                "workspace owner identity 漂移: {owner_name}"
-            )));
+            // 即使 fixture 通过额外 metadata 字段设置 alias，也保持 owner package
+            // identity 的显式绑定。
+            if package_name(owner_package)? != owner_name {
+                return Err(error(format!(
+                    "workspace owner identity 漂移: {owner_name}"
+                )));
+            }
         }
     }
     Ok(())
@@ -1706,7 +1709,10 @@ mod tests {
         ));
         packages.push(package(
             "kanban-desktop",
-            vec![registry_dependency("tauri", "^2", true, &["tray-icon"])],
+            vec![
+                registry_dependency("tauri", "^2", true, &["tray-icon"]),
+                registry_dependency("libc", "^0.2", false, &[]),
+            ],
         ));
         packages.push(package(
             TOOL_PACKAGE,
@@ -1789,7 +1795,10 @@ mod tests {
         ));
         nodes.push(node(
             &id("kanban-desktop"),
-            vec![edge("tauri", &registry_id("tauri", "2.11.2"))],
+            vec![
+                edge("tauri", &registry_id("tauri", "2.11.2")),
+                edge("libc", &registry_id("libc", "0.2.186")),
+            ],
             &[],
         ));
         nodes.push(node(
@@ -1951,6 +1960,24 @@ mod tests {
                 .as_array_mut()
                 .unwrap()
                 .push(registry_dependency("turso", "=0.7.2", false, &["fts"]));
+        });
+    }
+
+    #[test]
+    fn libc_multi_owner_set_is_exact() {
+        assert_reject(fixture(), |metadata| {
+            package_record(metadata, "kanban-cli")["dependencies"]
+                .as_array_mut()
+                .unwrap()
+                .push(registry_dependency("libc", "^0.2", false, &[]));
+            node_record(metadata, "kanban-cli")["deps"]
+                .as_array_mut()
+                .unwrap()
+                .push(edge("libc", &registry_id("libc", "0.2.186")));
+            node_record(metadata, "kanban-cli")["dependencies"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!(registry_id("libc", "0.2.186")));
         });
     }
 

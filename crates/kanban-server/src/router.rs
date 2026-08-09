@@ -203,8 +203,8 @@ fn force_shutdown_error() -> std::io::Error {
 fn desktop_cors_layer() -> CorsLayer {
     CorsLayer::new()
         .allow_origin(AllowOrigin::list([
-            HeaderValue::from_static("http://127.0.0.1:1420"),
-            HeaderValue::from_static("http://localhost:1420"),
+            HeaderValue::from_static("http://127.0.0.1:1421"),
+            HeaderValue::from_static("http://localhost:1421"),
             HeaderValue::from_static("http://tauri.localhost"),
             HeaderValue::from_static("https://tauri.localhost"),
             HeaderValue::from_static("tauri://localhost"),
@@ -285,7 +285,7 @@ mod contract_catalog_tests {
                 Request::builder()
                     .method("OPTIONS")
                     .uri("/api/v1/stream/events")
-                    .header(header::ORIGIN, "http://127.0.0.1:1420")
+                    .header(header::ORIGIN, "http://127.0.0.1:1421")
                     .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
                     .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "last-event-id")
                     .body(Body::empty())
@@ -296,7 +296,7 @@ mod contract_catalog_tests {
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
             response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
-            "http://127.0.0.1:1420"
+            "http://127.0.0.1:1421"
         );
         assert!(
             response.headers()[header::ACCESS_CONTROL_ALLOW_HEADERS]

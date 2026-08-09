@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react"
 
 import type { Locale } from "../../lib/preferences"
-import type { TaskInspectorMutationError, TaskInspectorMutationSnapshot } from "./task-inspector-mutation-state"
+import type { TaskInspectorMutationSnapshot } from "./task-inspector-mutation-state"
 import {
   createAttachmentUploadIntent,
   createInspectorAssetsActions,
   exactAttachmentBytes,
   formatAttachmentSize,
+  advanceInspectorAssetsScope,
+  isInspectorAssetsScopeCurrent,
+  isAttachmentRetryDraftCurrent,
   requestSuggestedLabels,
   shouldClearAssetDraft,
   type InspectorAssetAttachment,
@@ -14,11 +17,12 @@ import {
   type InspectorAssetsActions,
   type InspectorAssetsMutationHandlers,
   type InspectorLabelSuggestionResult,
+  type InspectorAssetsScopeIdentity,
   type SuggestLabelsHandler,
 } from "./TaskInspectorAssetsPanel.logic"
 import styles from "./TaskInspectorAssetsPanel.module.css"
 
-export type { InspectorAssetAttachment, InspectorAssetLabel, InspectorAssetsActions, InspectorAssetsMutationHandlers, InspectorLabelSuggestionResult, SuggestLabelsHandler }
+export type { InspectorAssetAttachment, InspectorAssetLabel, InspectorAssetsActions, InspectorAssetsMutationHandlers, InspectorAssetsScopeIdentity, InspectorLabelSuggestionResult, SuggestLabelsHandler }
 
 export interface TaskInspectorAssetsPanelProps {
   readonly taskId: string
@@ -78,6 +82,7 @@ type AssetsCopy = {
   readonly mutationError: string
   readonly reloadStale: string
   readonly retry: string
+  readonly retrying: string
   readonly error: string
 }
 
@@ -124,7 +129,8 @@ const copies: Record<Locale, AssetsCopy> = {
     deleting: "正在删除…",
     mutationError: "操作失败",
     reloadStale: "写入已提交，但刷新失败；当前数据可能过期。",
-    retry: "重试",
+    retry: "重试原提交",
+    retrying: "正在重试原提交…",
     error: "操作失败，请重试。",
   },
   en: {
@@ -169,7 +175,8 @@ const copies: Record<Locale, AssetsCopy> = {
     deleting: "Deleting…",
     mutationError: "Operation failed",
     reloadStale: "The write committed, but refresh failed; data may be stale.",
-    retry: "Retry",
+    retry: "Retry original submission",
+    retrying: "Retrying original submission…",
     error: "Operation failed. Try again.",
   },
 }
@@ -184,16 +191,13 @@ function errorMessage(error: unknown): string {
   return "操作失败，请重试。"
 }
 
-function mutationError(errors: ReadonlyMap<string, TaskInspectorMutationError>, keys: readonly string[]): string | null {
-  for (const key of keys) {
-    const error = errors.get(key)
-    if (error) return error.message
-  }
-  return null
-}
-
 function actionKey(operation: string, taskId: string): string {
   return `${operation}:${taskId}`
+}
+
+function operationFromMutationKey(key: string, taskId: string): string | null {
+  const suffix = `:${taskId}`
+  return key.endsWith(suffix) ? key.slice(0, -suffix.length) : null
 }
 
 const writeOperations = [
@@ -261,7 +265,7 @@ function SuggestionRow({
         <span>{copy.score(entry.score.toFixed(3))}</span>
         <Evidence entry={entry} />
       </div>
-      <button type="button" className={styles.smallButton} data-testid="label-suggestion-apply" disabled={disabled} onClick={() => onApply(entry.label_name)}>{applied ? copy.applied : copy.apply}</button>
+      <button type="button" className={styles.smallButton} data-testid="label-suggestion-apply" disabled={disabled} aria-label={`${applied ? copy.applied : copy.apply} ${entry.label_name}`} onClick={() => onApply(entry.label_name)}>{applied ? copy.applied : copy.apply}</button>
     </li>
   )
 }
@@ -300,14 +304,20 @@ export function TaskInspectorAssetsPanel({
   const attachmentFileId = `${panelId}-attachment-file`
   const pending = snapshot.pending
   const errors = snapshot.errors
-  const latestTaskIdRef = useRef(taskId)
-  latestTaskIdRef.current = taskId
-  const previousTaskIdRef = useRef(taskId)
+  const scopeIdentityRef = useRef<InspectorAssetsScopeIdentity>({ taskId, epoch: 0, generation: snapshot.generation })
+  scopeIdentityRef.current = advanceInspectorAssetsScope(scopeIdentityRef.current, taskId, snapshot.generation)
+  const isCurrentScope = useCallback((captured: InspectorAssetsScopeIdentity): boolean => isInspectorAssetsScopeCurrent(scopeIdentityRef.current, captured), [])
+  const previousScopeRef = useRef({ taskId, generation: snapshot.generation })
   const localBusyRef = useRef(new Set<string>())
   const [localBusy, setLocalBusy] = useState<ReadonlySet<string>>(new Set())
   const [localErrors, setLocalErrors] = useState<ReadonlyMap<string, string>>(new Map())
   const [labelInput, setLabelInput] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const labelInputRef = useRef(labelInput)
+  labelInputRef.current = labelInput
+  const selectedFileRef = useRef<File | null>(selectedFile)
+  selectedFileRef.current = selectedFile
+  const attemptedUploadFileRef = useRef<File | null>(null)
   const [fileInputKey, setFileInputKey] = useState(0)
   const [suggestionBusy, setSuggestionBusy] = useState(false)
   const [suggestionLocalError, setSuggestionLocalError] = useState<string | null>(null)
@@ -316,20 +326,22 @@ export function TaskInspectorAssetsPanel({
   const [retryBusy, setRetryBusy] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
-    if (previousTaskIdRef.current === taskId) return
-    previousTaskIdRef.current = taskId
+    const previous = previousScopeRef.current
+    if (previous.taskId === taskId && previous.generation === snapshot.generation) return
+    previousScopeRef.current = { taskId, generation: snapshot.generation }
     localBusyRef.current.clear()
     setLocalBusy(new Set())
     setLocalErrors(new Map())
     setLabelInput("")
     setSelectedFile(null)
+    attemptedUploadFileRef.current = null
     setFileInputKey((current) => current + 1)
     setSuggestionBusy(false)
     setSuggestionLocalError(null)
     setSuggestionLocalResult(null)
     retryBusyRef.current.clear()
     setRetryBusy(new Set())
-  }, [taskId])
+  }, [snapshot.generation, taskId])
 
   const isPending = useCallback((operation: string): boolean => {
     const key = actionKey(operation, taskId)
@@ -342,12 +354,12 @@ export function TaskInspectorAssetsPanel({
       const local = localErrors.get(key)
       if (local) return local
     }
-    return mutationError(errors, keys)
-  }, [errors, localErrors, taskId])
+    return null
+  }, [localErrors, taskId])
 
   const runAction = useCallback(async <T,>(operation: string, action: () => Promise<T>): Promise<T | null> => {
-    const identity = taskId
-    const key = actionKey(operation, identity)
+    const identity = scopeIdentityRef.current
+    const key = actionKey(operation, identity.taskId)
     if (localBusyRef.current.has(key) || pending.has(key)) return null
     localBusyRef.current.add(key)
     setLocalBusy(new Set(localBusyRef.current))
@@ -358,29 +370,29 @@ export function TaskInspectorAssetsPanel({
     })
     try {
       const result = await action()
-      return latestTaskIdRef.current === identity ? result : null
+      return isCurrentScope(identity) ? result : null
     } catch (error) {
-      if (latestTaskIdRef.current === identity) setLocalErrors((current) => new Map(current).set(key, errorMessage(error)))
+      if (isCurrentScope(identity)) setLocalErrors((current) => new Map(current).set(key, errorMessage(error)))
       return null
     } finally {
-      if (latestTaskIdRef.current === identity) {
+      if (isCurrentScope(identity)) {
         localBusyRef.current.delete(key)
         setLocalBusy(new Set(localBusyRef.current))
       }
     }
-  }, [pending, taskId])
+  }, [isCurrentScope, pending])
 
   const actions = useMemo(() => createInspectorAssetsActions(handlers), [handlers])
   const writePending = useMemo(
-    () => writeOperations.some((operation) => isPending(operation)) || isPending("reload"),
-    [isPending],
+    () => writeOperations.some((operation) => isPending(operation)) || isPending("reload") || retryBusy.size > 0,
+    [isPending, retryBusy],
   )
   const existingLabelNames = useMemo(() => new Set(labels.map((entry) => normalizedLabelName(entry.name))), [labels])
   const addLabel = useCallback(async () => {
     const name = labelInput.trim()
     if (!name || existingLabelNames.has(normalizedLabelName(name))) return
     const outcome = await runAction("addLabel", () => actions.addLabel(name))
-    if (shouldClearAssetDraft(outcome)) setLabelInput("")
+    if (shouldClearAssetDraft(outcome) && labelInputRef.current.trim() === name) setLabelInput("")
   }, [actions, existingLabelNames, labelInput, runAction])
   const onLabelSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -409,28 +421,31 @@ export function TaskInspectorAssetsPanel({
   const suggestionPending = suggestionBusy || suggestionLoading || isPending("suggestLabels")
   const requestSuggestions = useCallback(() => {
     if (suggestionPending) return
-    const identity = taskId
+    const identity = scopeIdentityRef.current
     setSuggestionLocalError(null)
     setSuggestionBusy(true)
     void requestSuggestedLabels(handlers.suggestLabels)
       .then((response) => {
-        if (latestTaskIdRef.current !== identity) return
+        if (!isCurrentScope(identity)) return
         setSuggestionLocalResult(response?.data ?? null)
       })
       .catch((error: unknown) => {
-        if (latestTaskIdRef.current === identity) setSuggestionLocalError(errorMessage(error))
+        if (isCurrentScope(identity)) setSuggestionLocalError(errorMessage(error))
       })
       .finally(() => {
-        if (latestTaskIdRef.current === identity) setSuggestionBusy(false)
+        if (isCurrentScope(identity)) setSuggestionBusy(false)
       })
-  }, [handlers, suggestionPending, taskId])
+  }, [handlers, isCurrentScope, suggestionPending])
 
   const uploadFile = useCallback(() => {
     if (!selectedFile) return
-    void runAction("uploadAttachment", async () => actions.uploadAttachment(await createAttachmentUploadIntent(selectedFile)))
+    const attemptedFile = selectedFile
+    attemptedUploadFileRef.current = attemptedFile
+    void runAction("uploadAttachment", async () => actions.uploadAttachment(await createAttachmentUploadIntent(attemptedFile)))
       .then((outcome) => {
-        if (!shouldClearAssetDraft(outcome)) return
+        if (!shouldClearAssetDraft(outcome) || selectedFileRef.current !== attemptedFile) return
         setSelectedFile(null)
+        attemptedUploadFileRef.current = null
         setFileInputKey((current) => current + 1)
       })
   }, [actions, runAction, selectedFile])
@@ -458,16 +473,28 @@ export function TaskInspectorAssetsPanel({
     if (retryBusyRef.current.has(key) || pending.has(key) || writePending) return
     retryBusyRef.current.add(key)
     setRetryBusy(new Set(retryBusyRef.current))
-    const identity = taskId
+    const identity = scopeIdentityRef.current
+    const operation = operationFromMutationKey(key, identity.taskId)
+    const intent = snapshot.retries.get(key)
     void Promise.resolve()
       .then(() => handlers.retry(key))
+      .then(async (outcome) => {
+        if (!isCurrentScope(identity) || !shouldClearAssetDraft(outcome)) return
+        if (operation === "addLabel" && intent?.operation === "addLabel" && typeof intent.input.name === "string" && intent.input.name.trim() === labelInputRef.current.trim()) setLabelInput("")
+        const currentFile = selectedFileRef.current
+        if (operation === "uploadAttachment" && intent?.operation === "uploadAttachment" && isAttachmentRetryDraftCurrent(currentFile, attemptedUploadFileRef.current) && isCurrentScope(identity)) {
+          setSelectedFile(null)
+          attemptedUploadFileRef.current = null
+          setFileInputKey((current) => current + 1)
+        }
+      })
       .catch(() => undefined)
       .finally(() => {
-        if (latestTaskIdRef.current !== identity) return
+        if (!isCurrentScope(identity)) return
         retryBusyRef.current.delete(key)
         setRetryBusy(new Set(retryBusyRef.current))
       })
-  }, [handlers, pending, taskId, writePending])
+  }, [handlers, isCurrentScope, pending, snapshot.retries, writePending])
 
   const labelsError = errorFor(["addLabel", "removeLabel", "applySuggestedLabel"])
   const suggestionsError = suggestionLocalError ?? suggestionError ?? errorFor(["suggestLabels"])
@@ -476,10 +503,23 @@ export function TaskInspectorAssetsPanel({
   const duplicateIdsText = [...duplicateSuggestionIds].join(", ")
   const uploadPending = isPending("uploadAttachment")
   const snapshotErrors = useMemo(
-    () => [...errors.entries()].filter(([key, error]) => error.taskId === taskId && key.endsWith(`:${taskId}`)),
-    [errors, taskId],
+    () => [...errors.entries()].filter(([key, error]) => error.taskId === taskId && key.endsWith(`:${taskId}`) && !pending.has(key) && !retryBusy.has(key)),
+    [errors, pending, retryBusy, taskId],
   )
+  const canRetrySnapshotError = useCallback((key: string, operation: string): boolean => {
+    if (!snapshot.retries.has(key) || operation === "suggestLabels" || operation === "downloadAttachment") return false
+    return true
+  }, [snapshot.retries])
+  const addLabelRetryIntent = snapshot.retries.get(actionKey("addLabel", taskId))
+  const addLabelRetryLocked = addLabelRetryIntent?.operation === "addLabel"
+    && typeof addLabelRetryIntent.input.name === "string"
+    && addLabelRetryIntent.input.name.trim() === labelInput.trim()
+  const uploadRetryIntent = snapshot.retries.get(actionKey("uploadAttachment", taskId))
+  const uploadRetryLocked = uploadRetryIntent?.operation === "uploadAttachment"
+    && selectedFile !== null
+    && isAttachmentRetryDraftCurrent(selectedFile, attemptedUploadFileRef.current)
   const panelBusy = suggestionPending || writePending || isPending("downloadAttachment") || attachmentLoading
+  const retrying = retryBusy.size > 0 || isPending("reload")
 
   return (
     <section className={styles.panel} data-testid="inspector-assets" aria-labelledby={`${panelId}-heading`} aria-busy={panelBusy}>
@@ -494,11 +534,12 @@ export function TaskInspectorAssetsPanel({
           {snapshotErrors.map(([key, error]) => (
             <div key={key} className={styles.mutationError} data-testid="inspector-mutation-error" data-operation-key={key} role="alert">
               <p><strong>{error.operation === "reload" ? copy.reloadStale : copy.mutationError}:</strong> {error.message}</p>
-              {snapshot.retries.has(key) ? <button type="button" className={styles.smallButton} disabled={retryBusy.has(key) || pending.has(key) || writePending} onClick={() => retryMutation(key)}>{retryBusy.has(key) ? "…" : copy.retry}</button> : null}
+              {canRetrySnapshotError(key, error.operation) ? <button type="button" className={styles.smallButton} data-testid="inspector-retry" data-retry-key={key} disabled={retryBusy.has(key) || pending.has(key) || writePending} onClick={() => retryMutation(key)}>{retryBusy.has(key) ? "…" : copy.retry}</button> : null}
             </div>
           ))}
         </div>
       ) : null}
+      {retrying ? <p className={styles.state} data-testid="inspector-retry-status" role="status" aria-live="polite">{copy.retrying}</p> : null}
 
       <section className={styles.section} data-testid="inspector-labels" aria-labelledby={`${panelId}-labels-heading`}>
         <h3 id={`${panelId}-labels-heading`}>{copy.labels}</h3>
@@ -510,8 +551,8 @@ export function TaskInspectorAssetsPanel({
         <form className={styles.labelForm} onSubmit={onLabelSubmit}>
           <label htmlFor={labelInputId}>{copy.labelName}</label>
           <div className={styles.inputRow}>
-            <input id={labelInputId} name="label-name" autoComplete="off" value={labelInput} placeholder={copy.labelPlaceholder} onChange={(event) => setLabelInput(event.currentTarget.value)} />
-            <button type="submit" className={styles.actionButton} data-testid="label-add" disabled={!labelInput.trim() || existingLabelNames.has(normalizedLabelName(labelInput)) || writePending}>{isPending("addLabel") ? "…" : copy.addLabel}</button>
+            <input id={labelInputId} name="label-name" autoComplete="off" value={labelInput} placeholder={copy.labelPlaceholder} disabled={writePending || addLabelRetryLocked} onChange={(event) => setLabelInput(event.currentTarget.value)} />
+            <button type="submit" className={styles.actionButton} data-testid="label-add" disabled={!labelInput.trim() || existingLabelNames.has(normalizedLabelName(labelInput)) || writePending || addLabelRetryLocked}>{isPending("addLabel") ? "…" : copy.addLabel}</button>
           </div>
         </form>
         {labelsError ? <p className={styles.error} role="alert">{labelsError}</p> : null}
@@ -543,7 +584,7 @@ export function TaskInspectorAssetsPanel({
         <div className={styles.uploadBox}>
           <label htmlFor={attachmentFileId}>{copy.chooseFile}</label>
           <input id={attachmentFileId} data-testid="attachment-file" key={fileInputKey} type="file" aria-label={copy.chooseFile} disabled={writePending} onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] ?? null)} />
-          <button type="button" className={styles.actionButton} data-testid="attachment-upload" disabled={!selectedFile || writePending} onClick={uploadFile}>{uploadPending ? copy.uploading : copy.upload}</button>
+          <button type="button" className={styles.actionButton} data-testid="attachment-upload" disabled={!selectedFile || writePending || uploadRetryLocked} onClick={uploadFile}>{uploadPending ? copy.uploading : copy.upload}</button>
         </div>
         {attachmentLoading ? <p className={styles.state} data-testid="attachments-loading" role="status" aria-live="polite">{copy.loadingAttachments}</p> : null}
         {attachmentsError ? <p className={styles.error} data-testid="attachments-error" role="alert"><strong>{copy.attachmentError}:</strong> {attachmentsError}</p> : null}

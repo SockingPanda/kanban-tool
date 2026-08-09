@@ -13,6 +13,9 @@ import {
   createAttachmentUploadIntent,
   createInspectorAssetsActions,
   exactAttachmentBytes,
+  advanceInspectorAssetsScope,
+  isAttachmentRetryDraftCurrent,
+  isInspectorAssetsScopeCurrent,
   requestSuggestedLabels,
   shouldClearAssetDraft,
   type SuggestLabelsHandler,
@@ -96,7 +99,7 @@ function handlers(overrides: Partial<InspectorAssetsMutationHandlers> = {}): Ins
     downloadAttachment: vi.fn(async () => null),
     deleteAttachment: vi.fn(async () => committed),
     suggestLabels: vi.fn(async () => null),
-    retry: vi.fn(async () => true),
+    retry: vi.fn(async () => committed),
     ...overrides,
   }
 }
@@ -182,13 +185,17 @@ describe("TaskInspectorAssetsPanel", () => {
         suggestionResult={null}
         suggestionRequested={false}
         handlers={handlers()}
-        snapshot={snapshot({ pending: new Set(["uploadAttachment:t_1", "addLabel:t_1"]) })}
+        snapshot={snapshot({ pending: new Set(["uploadAttachment:t_1", "addLabel:t_1", "reload:t_1"]) })}
         attachmentLoading
         attachmentError="读取附件失败"
       />,
     )
 
     expect(pending).toContain("正在上传")
+    expect(pending).toContain('data-testid="inspector-retry-status"')
+    expect(pending).toContain("正在重试原提交")
+    expect(pending).toContain('data-testid="label-add"')
+    expect(pending).toContain('data-testid="attachment-upload"')
     expect(pending).toContain("读取附件失败")
     expect(pending).toContain("暂无附件")
     expect(pending).toContain('role="alert"')
@@ -233,10 +240,33 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(shouldClearAssetDraft({ committed: true, reconciled: true })).toBe(true)
   })
 
+  test("requires the original File object for an upload retry draft", () => {
+    const attempted = { name: "same.txt", size: 3 } as File
+    const sameMetadata = { name: "same.txt", size: 3 } as File
+
+    expect(isAttachmentRetryDraftCurrent(attempted, attempted)).toBe(true)
+    expect(isAttachmentRetryDraftCurrent(sameMetadata, attempted)).toBe(false)
+    expect(isAttachmentRetryDraftCurrent(null, attempted)).toBe(false)
+  })
+
+  test("fences stale promises across t1 to t2 to t1 scope epochs", () => {
+    const first = { taskId: "t_1", epoch: 0, generation: 1 }
+    const runtimeReplacement = advanceInspectorAssetsScope(first, "t_1", 2)
+    const second = advanceInspectorAssetsScope(first, "t_2", 2)
+    const third = advanceInspectorAssetsScope(second, "t_1", 3)
+
+    expect(runtimeReplacement.epoch).toBe(0)
+    expect(isInspectorAssetsScopeCurrent(runtimeReplacement, first)).toBe(false)
+    expect(third.epoch).toBe(2)
+    expect(isInspectorAssetsScopeCurrent(third, first)).toBe(false)
+    expect(isInspectorAssetsScopeCurrent(third, second)).toBe(false)
+    expect(isInspectorAssetsScopeCurrent(third, third)).toBe(true)
+  })
+
   test("renders every snapshot error and its exact retry key", async () => {
     const retry = vi.fn(async (key?: string) => {
       void key
-      return true
+      return { committed: true, reconciled: true }
     })
     const markup = renderToStaticMarkup(
       <TaskInspectorAssetsPanel
@@ -250,10 +280,14 @@ describe("TaskInspectorAssetsPanel", () => {
           errors: new Map([
             ["addLabel:t_1", { operation: "addLabel", taskId: "t_1", kind: "error", message: "mutation_failed", status: 500, code: null, recoverable: true }],
             ["reload:t_1", { operation: "reload", taskId: "t_1", kind: "stale", message: "stale", status: null, code: null, recoverable: true }],
+            ["suggestLabels:t_1", { operation: "suggestLabels", taskId: "t_1", kind: "error", message: "unavailable", status: 503, code: null, recoverable: true }],
+            ["downloadAttachment:t_1", { operation: "downloadAttachment", taskId: "t_1", kind: "error", message: "unavailable", status: 503, code: null, recoverable: true }],
           ]),
           retries: new Map([
             ["addLabel:t_1", { operation: "addLabel", taskId: "t_1", input: { name: "backend", create_missing: false } }],
             ["reload:t_1", { operation: "reload", taskId: "t_1" }],
+            ["suggestLabels:t_1", { operation: "suggestLabels", taskId: "t_1", query: { limit: 5 } }],
+            ["downloadAttachment:t_1", { operation: "downloadAttachment", taskId: "t_1", attachmentId: "a_1" }],
           ]),
         })}
       />,
@@ -263,7 +297,8 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(markup).toContain('data-operation-key="addLabel:t_1"')
     expect(markup).toContain('data-operation-key="reload:t_1"')
     expect(markup).toContain("写入已提交，但刷新失败")
-    expect(markup.match(/>重试</g)?.length).toBe(2)
+    expect(markup).toContain('data-retry-key="addLabel:t_1"')
+    expect(markup).toContain('data-retry-key="reload:t_1"')
     await retry("reload:t_1")
     expect(retry).toHaveBeenCalledWith("reload:t_1")
   })

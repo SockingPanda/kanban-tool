@@ -983,7 +983,7 @@ export interface TaskInspectorReadOptions extends ExplorerReadOptions {
   readonly includeNeighborhood?: boolean
   readonly includeRuns?: boolean
   readonly includeEvents?: boolean
-  /** Attachment metadata is a separate read so downloads remain lazy bytes reads. */
+  /** Let mounted UI defer attachment metadata while keeping bytes downloads lazy. */
   readonly includeAttachments?: boolean
 }
 

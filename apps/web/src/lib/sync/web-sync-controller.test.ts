@@ -562,6 +562,10 @@ describe("WebSyncController", () => {
     expect(controller.snapshot().lastConfirmedCursor).toBe(2)
     expect(controller.snapshot().state).toBe("live")
     expect(telemetry.filter((entry) => entry.type === "connection-live")).toHaveLength(1)
+    const recoveryCompleteIndex = telemetry.findIndex((entry) => entry.type === "recovery-complete")
+    const connectionLiveIndex = telemetry.findIndex((entry) => entry.type === "connection-live")
+    expect(recoveryCompleteIndex).toBeGreaterThanOrEqual(0)
+    expect(connectionLiveIndex).toBeGreaterThan(recoveryCompleteIndex)
   })
 
   test("fences a failed overlapping connection and restarts the recovery barrier", async () => {

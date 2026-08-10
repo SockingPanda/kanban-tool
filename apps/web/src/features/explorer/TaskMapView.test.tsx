@@ -191,6 +191,9 @@ describe("TaskMapView", () => {
     expect(markup).toContain('data-testid="task-map-node"')
     expect(markup).toContain('data-task-id="ready"')
     expect(markup).toContain("dep:done:ready")
+    expect(markup).toContain('<section class="')
+    expect(markup).toContain('aria-labelledby="task-map-edges-heading"')
+    expect(markup).toContain('id="task-map-edges-heading"')
     expect(markup).toContain("当前选择")
   })
 

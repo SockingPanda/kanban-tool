@@ -19,6 +19,22 @@ package 和 provenance 证据，读取 workspace metadata、protocol catalog 和
 - `package cli`：先验证与 workspace version 一致的 `apps/web/dist` Web artifact，再从 immutable
   snapshot 将 manifest 和全部 payload exact bytes 携带到 `/usr/share/kanban-tool/web`，最后构建
   standalone `kanban` Debian package。
+- `release check|receipt`：校验 Stage09 release-proof ledger、09A real-host browser evidence、
+  当前 HEAD/base 与 generated contract provenance，并以 no-follow 原子写入 deterministic receipt。
+  `receipt` 只允许将 `kanban serve`/临时 canonical DB 的 live health、runtime、manifest、PID 和
+  migration evidence 写入结果；axe/visual/performance/stress/package 在 09A 明确保持 `pending`，
+  不得被 mock/preview lane 冒充完成。根 `just release-proof-09a` 在 host PID 仍存活时闭合
+  `check → serve/restart → browser → receipt` DAG；不要在 host 退出后单独重放 receipt。
+- `release package`：消费 `just desktop-package-proof` 生成的 Desktop package evidence；在
+  Desktop/sidecar 仍存活时直接读取 `/proc` identity、argv、`/proc/exe` path/SHA 与固定 8721
+  listener owner，重新验证 Deb、bundled Web manifest/payload exact bytes、live runtime/manifest，
+  并验证隔离 canonical DB 的 rollback path 保持 dev:inode、content SHA 与 seed 不变（typed
+  Turso fingerprint 前后均须存在，但重启 readback host 可能刷新 file metadata），且必须有
+  Desktop artifact/configuration validation marker。clean worktree 的 formal 模式通过后以
+  no-follow 原子写入独立 `desktop-package-receipt.json`；dirty targeted proof 使用
+  `release package --diagnostic` 写入独立 `desktop-package-diagnostic-evidence.json` 并执行同一
+  语义校验，但绝不写 formal receipt。它不修改 09A ledger，也不把 Web browser gate 冒充
+  package gate。
 
 仓库工具的 ownership 是：Rust/`xtask` 持有语义校验、生成、依赖图、affected、benchmark、package 和
 provenance；Shell 只负责编排平台工具、环境与进程；frontend TypeScript 与外部平台命令按各自 owner

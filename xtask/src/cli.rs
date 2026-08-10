@@ -8,7 +8,7 @@ use xtask::{ToolResult, web_assets, web_contracts};
 use crate::{
     affected,
     check::{agents, dependencies, docs, tooling},
-    package,
+    package, release,
 };
 
 pub(crate) fn run() -> ToolResult<()> {
@@ -43,6 +43,9 @@ pub(crate) fn run() -> ToolResult<()> {
     }
     if group == "web-assets" && subcommand == Some("check") {
         return web_assets::run(&arguments[2..]);
+    }
+    if group == "release" {
+        return release::run(subcommand, &arguments[2..]);
     }
     let root = parse_options(&arguments[2..])?;
 
@@ -156,6 +159,6 @@ fn invalid(message: impl Into<String>) -> ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|web-assets check|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|web-assets check|release check|receipt|package|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n用法：xtask release receipt [--root PATH] [--out PATH] [--artifact PATH]\n用法：xtask release package [--diagnostic] [--root PATH] [--evidence PATH] [--out PATH]"
     );
 }

@@ -40,6 +40,10 @@
     min-width: 0;
   }
 
+  .boardContent {
+    min-width: 0;
+  }
+
   .header h1,
   .column h2,
   .emptyBoard h2 {
@@ -174,6 +178,13 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .boardTotal {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+  }
+
   .taskList {
     display: grid;
     gap: 0.65rem;
@@ -186,6 +197,51 @@
     min-width: 0;
     content-visibility: auto;
     contain-intrinsic-size: 8rem;
+  }
+
+  .pagination {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+    border-top: 1px solid var(--color-border);
+    padding-top: 0.7rem;
+  }
+
+  .pageRange {
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pageActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .pageButton {
+    min-height: 2.25rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.35rem 0.7rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .pageButton:hover:not(:disabled) {
+    border-color: var(--color-accent);
+  }
+
+  .pageButton:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .pageButton:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 
   .taskCard {
@@ -209,6 +265,12 @@
     justify-content: space-between;
     gap: 0.75rem;
     min-width: 0;
+  }
+
+  /* Astryx 浅色错误色板的文字对比度低于 WCAG AA 阈值。 */
+  .taskHeader :global(.astryx-badge.error) {
+    background-color: #a50c25;
+    color: #ffffff;
   }
 
   .taskRef {

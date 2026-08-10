@@ -5,6 +5,7 @@ mod document;
 mod git;
 mod package;
 mod process;
+mod release;
 mod repository;
 
 fn main() {

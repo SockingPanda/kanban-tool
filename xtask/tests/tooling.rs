@@ -194,6 +194,7 @@ fn assert_local_references(value: &Value, root_id: &str) {
 
 #[test]
 fn binary_help_preserves_public_cli_contract() {
+    // `release package` is a public Stage09 package-proof command.
     let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
         .arg("--help")
         .output()
@@ -203,7 +204,7 @@ fn binary_help_preserves_public_cli_contract() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         String::from_utf8(output.stdout).expect("help output must be UTF-8"),
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|web-assets check|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|web-assets check|release check|receipt|package|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n用法：xtask release receipt [--root PATH] [--out PATH] [--artifact PATH]\n用法：xtask release package [--diagnostic] [--root PATH] [--evidence PATH] [--out PATH]\n"
     );
 }
 
@@ -419,7 +420,7 @@ fn web_contract_generation_is_selection_scoped() {
     assert!(operation_ids.contains("sse.stream-events"));
     assert!(!operation_ids.contains("api.create-board"));
     assert!(!operation_ids.contains("api.update-step"));
-    assert!(!operation_ids.contains("api.list-task-labels"));
+    assert!(operation_ids.contains("api.list-task-labels"));
     let contracts: Value =
         serde_json::from_slice(files.get("contracts.json").expect("contracts manifest"))
             .expect("contracts manifest should be JSON");

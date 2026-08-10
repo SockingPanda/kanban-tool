@@ -1472,7 +1472,7 @@ mod tests {
                 .any(|endpoint| endpoint.operation_id == "api.update-step")
         );
         assert!(
-            !resolved
+            resolved
                 .endpoints
                 .iter()
                 .any(|endpoint| endpoint.operation_id == "api.list-task-labels")
@@ -1508,8 +1508,8 @@ mod tests {
         let sse = String::from_utf8(files["sse.ts"].clone()).expect("generated SSE is UTF-8");
         assert_eq!(
             sse.matches("  \"").count(),
-            40,
-            "protocol known SSE kind count must stay 40"
+            43,
+            "protocol known SSE kind count must stay 43"
         );
         assert!(sse.contains("sseEventDataValidator(value)"));
         assert!(sse.contains("./contracts/sse-event-data"));

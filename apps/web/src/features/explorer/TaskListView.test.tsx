@@ -42,6 +42,8 @@ describe("TaskListView", () => {
 
     expect(markup).toContain('data-testid="task-list"')
     expect(markup).toContain('data-testid="list-search"')
+    expect(markup).toContain('role="group"')
+    expect(markup).toContain('aria-label="任务列表筛选"')
     expect(markup).toContain('data-testid="task-row"')
     expect(markup).toContain("<caption")
     expect(markup).toContain('scope="col"')

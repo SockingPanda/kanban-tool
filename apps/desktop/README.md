@@ -27,5 +27,15 @@ probe 到随后 navigation 的极窄 race 不引入第二套 auth，也不扩大
   binary、唯一 sidecar 和与 `apps/web/dist` 字节一致的 Web artifact。
 - `just desktop-packaged-smoke` 在 extracted Deb 的 WebKitGTK/Xvfb/dbus 环境验证固定 host、`/app/`
   page load 与 normal Quit cleanup。
+- `just desktop-package-proof` 复用同一 packaged smoke launcher，在真实 Desktop/sidecar 仍存活时
+  生成 clean/dirty-SHA、Deb/binary/sidecar/Web payload、PID/argv/8721 和 runtime/manifest identity
+  evidence，并在隔离临时 DB 上验证损坏 manifest 的 rollback 不改变 path/dev:inode/content/seed；
+  rollback 只接受 Desktop 自身输出的 artifact/configuration validation marker、损坏启动未
+  spawn sidecar，以及完整 wrapper/app/sidecar 回收（typed Turso fingerprint 前后均记录，但
+  readback reopen 允许 metadata 变化）。clean worktree 的 formal
+  模式写入 `desktop-package-receipt.json`，dirty targeted 模式改用独立
+  `desktop-package-diagnostic-evidence.json` 并执行 `release package --diagnostic`，不写 formal
+  receipt。proof 通过后再 bounded cleanup，并客观确认 app/sidecar/wrapper 与 8721/18722 listener
+  全部回收，失败不会触碰用户 DB。
 
 精确命令以根 `justfile` 和 Tauri config 为准。旧 Desktop React/Vite 入口已删除，不提供历史兼容层。

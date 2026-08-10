@@ -289,7 +289,9 @@ function FilterBar({ copy, value, onChange }: { readonly copy: EventsCopy; reado
       <label htmlFor="events-kind-filter">{copy.kindFilter}</label>
       <input
         id="events-kind-filter"
+        name="event-kind"
         type="search"
+        autoComplete="off"
         value={draft}
         placeholder={copy.kindFilterPlaceholder}
         onChange={(event) => setDraft(event.currentTarget.value)}

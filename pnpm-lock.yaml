@@ -41,6 +41,9 @@ importers:
       '@astryxdesign/cli':
         specifier: 0.3.0
         version: 0.3.0(@astryxdesign/core@0.3.0(@stylexjs/stylex@0.19.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@astryxdesign/theme-neutral@0.3.0(@astryxdesign/core@0.3.0(@stylexjs/stylex@0.19.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8))(gpt-tokenizer@3.4.0)(supports-color@7.2.0)
+      '@axe-core/playwright':
+        specifier: 4.12.1
+        version: 4.12.1(playwright-core@1.62.1)
       '@eslint/js':
         specifier: ^9.17.0
         version: 9.39.4
@@ -114,6 +117,11 @@ packages:
     peerDependencies:
       '@astryxdesign/core': 0.3.0
       react: '>=19'
+
+  '@axe-core/playwright@4.12.1':
+    resolution: {integrity: sha512-rMd7xriptqKpP+w5265i4Hdkv2X5kbu6uiBi/B2I7uf3hieRBM3qDCfaKPtxfiYb2mKXfF+yLODJwIx+Jv1GDw==}
+    peerDependencies:
+      playwright-core: '>= 1.0.0'
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -715,6 +723,10 @@ packages:
 
   ast-types@0.16.1:
     resolution: {integrity: sha512-6t10qk83GOG8p0vKmaCr8eiilZwO171AvbROMtvvNiwrTly62t+7XkA8RdIIVbpMhCASAsxgAzdRSwh6nw/5Dg==}
+    engines: {node: '>=4'}
+
+  axe-core@4.12.1:
+    resolution: {integrity: sha512-s7iGf5GaVMxEG0ENN9x+xTr7GFZCb1ZP/1uATUpCEK2X78nDB3RwbtFCo9pGAf9ru+VwoQ464DkaLEeRM08wJA==}
     engines: {node: '>=4'}
 
   balanced-match@1.0.2:
@@ -1595,6 +1607,11 @@ snapshots:
       lucide-react: 1.29.0(react@19.2.8)
       react: 19.2.8
 
+  '@axe-core/playwright@4.12.1(playwright-core@1.62.1)':
+    dependencies:
+      axe-core: 4.12.1
+      playwright-core: 1.62.1
+
   '@babel/code-frame@7.29.7':
     dependencies:
       '@babel/helper-validator-identifier': 7.29.7
@@ -2224,6 +2241,8 @@ snapshots:
   ast-types@0.16.1:
     dependencies:
       tslib: 2.8.1
+
+  axe-core@4.12.1: {}
 
   balanced-match@1.0.2: {}
 

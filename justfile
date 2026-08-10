@@ -140,6 +140,11 @@ web-e2e:
     just node-lock-check
     pnpm --filter @kanban-tool/web e2e
 
+# Stage09 09A real-host lane；mock/preview specs 仍由 `web-e2e` 单独编排。
+release-proof-09a:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- release check --root .
+    KANBAN_RELEASE_SKIP_RECEIPT=0 scripts/release-proof-09a.sh
+
 web-check:
     just node-lock-check
     just web-contracts-check
@@ -191,6 +196,10 @@ desktop-package-layout:
 desktop-packaged-smoke:
     just desktop-build
     scripts/test-desktop-packaged-smoke.sh
+
+desktop-package-proof:
+    just desktop-build
+    scripts/test-desktop-packaged-smoke.sh --proof
 
 smoke:
     scripts/smoke-v1-local.sh

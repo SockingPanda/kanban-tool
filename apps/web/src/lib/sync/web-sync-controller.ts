@@ -962,7 +962,8 @@ export class WebSyncController {
       const nextState = allowSse ? (this.recoverySawLiveFrame && hasCurrentConnection ? "live" : "connecting") : "circuit-open"
       const wasLive = this.state === "live"
       this.state = nextState
-      if (nextState === "live" && !wasLive) this.emit("connection-live")
+      // 先发布恢复边界，再发布 connection-live；App 会用 recovery-complete
+      // 刷新投影，成功恢复后的最终可见状态必须保持 live。
       this.recovery = null
       this.recoveryBuffer = []
       this.recoveryBufferBytes = 0
@@ -971,6 +972,7 @@ export class WebSyncController {
       if (allowSse) this.armLiveness(this.currentToken())
       else this.schedulePolling()
       this.emit("recovery-complete", { mode, confirmedCursor: result.confirmedCursor })
+      if (nextState === "live" && !wasLive) this.emit("connection-live")
     } catch (error) {
       if (signal.aborted || !this.isRecoveryCurrent(token)) return
       this.emit("recovery-failure", { message: error instanceof Error ? error.message : String(error) })

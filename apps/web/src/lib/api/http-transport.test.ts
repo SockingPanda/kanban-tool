@@ -44,6 +44,7 @@ describe("same-origin Web HTTP transport", () => {
         body: "{}",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
         credentials: "same-origin",
+        referrerPolicy: "same-origin",
       }),
     )
   })
@@ -64,7 +65,7 @@ describe("same-origin Web HTTP transport", () => {
     })
     expect(fetcher).toHaveBeenCalledWith(
       "https://kanban.test/__kb_api__/api/v1/boards",
-      expect.objectContaining({ credentials: "same-origin", method: "GET", mode: "same-origin", redirect: "error" }),
+      expect.objectContaining({ credentials: "same-origin", method: "GET", mode: "same-origin", referrerPolicy: "same-origin", redirect: "error" }),
     )
   })
 
@@ -322,6 +323,7 @@ describe("same-origin Web HTTP transport", () => {
         headers: { Accept: "application/json", "Content-Type": "application/json" },
         credentials: "same-origin",
         mode: "same-origin",
+        referrerPolicy: "same-origin",
         redirect: "error",
       }),
     )
@@ -474,6 +476,7 @@ describe("same-origin Web HTTP transport", () => {
         headers: { Accept: "application/octet-stream", "Accept-Language": "en" },
         credentials: "same-origin",
         mode: "same-origin",
+        referrerPolicy: "same-origin",
         redirect: "error",
         cache: "no-store",
       }),

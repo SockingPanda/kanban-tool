@@ -4600,7 +4600,7 @@
   "sourceHashes": {
     "protocolEndpoints": "sha256:6feba911231500e9b3160dacf112f705fe5bfd8f769beae0be3de7821e5edafc",
     "protocolOperations": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5",
-    "protocolSchemas": "sha256:94bd3c7f1923a5819972f1d7f3023ffb66d784015370ecee95527beb16e8a53b",
+    "protocolSchemas": "sha256:b15ef8ab53cb7d7368020e80d4e518407d58213b4bc19eadc4c72fa467175f72",
     "selection": "sha256:398b2df497a12af785e689c6ec31b341e50938d96198c58191b27dd88eaea95e"
   }
 }

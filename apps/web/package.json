@@ -2,7 +2,7 @@
   "name": "@kanban-tool/web",
   "private": true,
   "license": "Apache-2.0",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "type": "module",
   "astryx": {
     "theme": "@astryxdesign/theme-neutral"

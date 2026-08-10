@@ -2755,7 +2755,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-cli"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -2775,7 +2775,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-client"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "kanban-core",
  "kanban-protocol",
@@ -2787,7 +2787,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-core"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "proptest",
  "serde",
@@ -2799,7 +2799,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-desktop"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "kanban-protocol",
  "ksni",
@@ -2814,7 +2814,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-mcp"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "anyhow",
  "kanban-client",
@@ -2827,7 +2827,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-protocol"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "schemars 1.2.1",
  "serde",
@@ -2837,7 +2837,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-server"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "axum",
  "futures-util",
@@ -2857,7 +2857,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-service"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "kanban-core",
  "rusqlite",
@@ -2872,7 +2872,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-web-artifact"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "kanban-protocol",
  "libc",
@@ -7337,7 +7337,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "fs4",
  "jsonschema",

@@ -70,28 +70,22 @@ async fn read_run_log_file(
     let candidate = resolve_run_log_path(trusted_root, run_id, log_path)?;
     let metadata = tokio::fs::metadata(&candidate)
         .await
-        .map_err(|error| map_file_error(&candidate, error))?;
+        .map_err(|error| map_file_error(run_id, &candidate, error))?;
     if !metadata.is_file() {
-        return Err(KanbanError::InvalidInput(format!(
-            "run log path is not a regular file: {}",
-            candidate.display()
-        )));
+        return Err(run_log_file_not_regular(run_id));
     }
 
     // 打开规范 target，并在 seek 前从已打开的 handle 获取 metadata 快照。这样可以
     // 将读取限制在后缀范围内，而不必把完整日志载入内存。
     let mut file = File::open(&candidate)
         .await
-        .map_err(|error| map_file_error(&candidate, error))?;
+        .map_err(|error| map_file_error(run_id, &candidate, error))?;
     let metadata = file
         .metadata()
         .await
-        .map_err(|error| map_file_error(&candidate, error))?;
+        .map_err(|error| map_file_error(run_id, &candidate, error))?;
     if !metadata.is_file() {
-        return Err(KanbanError::InvalidInput(format!(
-            "run log path is not a regular file: {}",
-            candidate.display()
-        )));
+        return Err(run_log_file_not_regular(run_id));
     }
 
     let file_len = metadata.len();
@@ -156,7 +150,7 @@ fn resolve_run_log_path(trusted_root: &Path, run_id: &str, log_path: &str) -> Re
     }
     let link_metadata = std::fs::symlink_metadata(&candidate).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
-            KanbanError::NotFound(format!("run log file not found: {}", candidate.display()))
+            run_log_file_not_found(run_id)
         } else {
             KanbanError::Storage(format!(
                 "cannot inspect run log path {}: {error}",
@@ -170,15 +164,12 @@ fn resolve_run_log_path(trusted_root: &Path, run_id: &str, log_path: &str) -> Re
         ));
     }
     if !link_metadata.file_type().is_file() {
-        return Err(KanbanError::InvalidInput(format!(
-            "run log path is not a regular file: {}",
-            candidate.display()
-        )));
+        return Err(run_log_file_not_regular(run_id));
     }
     let canonical_root = trusted_root;
     let canonical_candidate = std::fs::canonicalize(&candidate).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
-            KanbanError::NotFound(format!("run log file not found: {}", candidate.display()))
+            run_log_file_not_found(run_id)
         } else {
             KanbanError::Storage(format!(
                 "cannot resolve run log path {}: {error}",
@@ -199,12 +190,22 @@ fn resolve_run_log_path(trusted_root: &Path, run_id: &str, log_path: &str) -> Re
     Ok(canonical_candidate)
 }
 
-fn map_file_error(path: &Path, error: std::io::Error) -> KanbanError {
+fn map_file_error(run_id: &str, path: &Path, error: std::io::Error) -> KanbanError {
     if error.kind() == std::io::ErrorKind::NotFound {
-        KanbanError::NotFound(format!("run log file not found: {}", path.display()))
+        run_log_file_not_found(run_id)
     } else {
         KanbanError::Storage(format!("cannot read run log {}: {error}", path.display()))
     }
+}
+
+fn run_log_file_not_found(run_id: &str) -> KanbanError {
+    KanbanError::NotFound(format!("run log file not found for run {run_id}"))
+}
+
+fn run_log_file_not_regular(run_id: &str) -> KanbanError {
+    KanbanError::InvalidInput(format!(
+        "run log file for run {run_id} is not a regular file"
+    ))
 }
 
 pub(crate) fn application_run(run: crate::domain::TaskRunRecord) -> Result<crate::RunRecord> {
@@ -298,6 +299,21 @@ mod tests {
         ));
     }
 
+    #[tokio::test]
+    async fn missing_run_log_error_keeps_run_id_without_absolute_path() {
+        let root = tempdir().unwrap();
+        let error = read_run_log_file(Some(root.path()), "r_missing", Some("r_missing.log"), 10)
+            .await
+            .unwrap_err();
+        let message = error.to_string();
+        let root_path = root.path().display().to_string();
+
+        assert!(matches!(error, KanbanError::NotFound(_)));
+        assert!(!message.contains(&root_path));
+        assert!(message.contains("r_missing"));
+        assert!(message.contains("run log file not found"));
+    }
+
     #[test]
     fn rejects_path_traversal_root_escape_and_wrong_filename() {
         let root = tempdir().unwrap();
@@ -324,16 +340,20 @@ mod tests {
         let root = tempdir().unwrap();
         let directory_path = root.path().join("r_directory.log");
         fs::create_dir(&directory_path).unwrap();
-        assert!(matches!(
-            read_run_log_file(
-                Some(root.path()),
-                "r_directory",
-                Some("r_directory.log"),
-                10
-            )
-            .await,
-            Err(KanbanError::InvalidInput(_))
-        ));
+        let error = read_run_log_file(
+            Some(root.path()),
+            "r_directory",
+            Some("r_directory.log"),
+            10,
+        )
+        .await
+        .unwrap_err();
+        let message = error.to_string();
+        let root_path = root.path().display().to_string();
+        assert!(matches!(error, KanbanError::InvalidInput(_)));
+        assert!(!message.contains(&root_path));
+        assert!(message.contains("r_directory"));
+        assert!(message.contains("not a regular file"));
 
         #[cfg(unix)]
         {

@@ -114,7 +114,7 @@ start_host() {
     exec env -u KANBAN_DB -u KB_DB -u KANBAN_SERVER_URL \
       "$KANBAN_BIN" \
       --db "$db_path" --actor smoke-host serve \
-      --host 127.0.0.1 --port "$port" "${dispatcher_args[@]}"
+      --host 127.0.0.1 --port "$port" --no-web "${dispatcher_args[@]}"
   ) >"$SMOKE_DIR/serve.log" 2>&1 &
   HOST_PID=$!
   wait_for_health "$HOST_PID" "$port" "$db_path"

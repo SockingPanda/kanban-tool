@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:48e09c90638391c05ce3443fd1cfddb802134e9ca52417e1dd960b1ebcd89cec"
+    "sha256": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5"
   },
   "roots": [
     {
@@ -1651,7 +1651,17 @@
       "invalid_fixture": "schemas/fixtures/api/list-events-response.v1.invalid.json",
       "path": "api/list-events-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-events-response.v1.valid.json",
-      "sha256": "sha256:9ece9933de32d242327d442fb066a4a4910db52885dd5c9c48281811ca66b2f5",
+      "sha256": "sha256:789831b19089ea34c4edb56f88f14fdba350cec0f52a4419a6cae6f4ad7faf51",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "sse.stream-events.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+      "invalid_fixture": "schemas/fixtures/sse/stream-events-headers.v1.invalid.json",
+      "path": "sse/stream-events-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/sse/stream-events-headers.v1.valid.json",
+      "sha256": "sha256:693eee453795817b6a74a07e594df371347b8d135a1c98789333241b925eee62",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1661,7 +1671,7 @@
       "invalid_fixture": "schemas/fixtures/sse/stream-events-query.v1.invalid.json",
       "path": "sse/stream-events-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/sse/stream-events-query.v1.valid.json",
-      "sha256": "sha256:a108e0a37d3a852eaa320a046d9be317af473db21d2bccead0f8819989c9c091",
+      "sha256": "sha256:d4766f504fc765c93700d31e4475a9308d999ee185f9fc3bddb4617fde9a97f9",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1671,7 +1681,17 @@
       "invalid_fixture": "schemas/fixtures/sse/stream-event-data.v1.invalid.json",
       "path": "sse/stream-event-data.v1.schema.json",
       "schema_fixture": "schemas/fixtures/sse/stream-event-data.v1.valid.json",
-      "sha256": "sha256:d206a56f7b845aff3b6ffd4add18222ca151c486101b9a1f4e065c4f437cdd25",
+      "sha256": "sha256:1e37043ab93382ec66b1d00e87c7814a134f17d28d4129087af4c72bf2d52470",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "sse.event.heartbeat",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
+      "invalid_fixture": "schemas/fixtures/sse/event-heartbeat.v1.invalid.json",
+      "path": "sse/event-heartbeat.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/sse/event-heartbeat.v1.valid.json",
+      "sha256": "sha256:5281eca45456b996834574eb0974ba749efff900f8fc4d28a9ca9cf8777dd076",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2281,7 +2301,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-signals-query.v1.invalid.json",
       "path": "api/list-signals-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-signals-query.v1.valid.json",
-      "sha256": "sha256:c3b04f49dde75707b19889c359904761a21354571fcb3464a7d4606f79d4b1f8",
+      "sha256": "sha256:0e7b2e8f0cf41f7fe2ad15e8025f7046659d6e9539d7f1c5ca3475fb82ad642a",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2301,7 +2321,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-signals-response.v1.invalid.json",
       "path": "api/list-signals-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-signals-response.v1.valid.json",
-      "sha256": "sha256:bdf727dba447c49ed6f8a0fc88c4067798af33775f808a105e3f980dec6ee25a",
+      "sha256": "sha256:cb9522c66dd393cdbe7d5067bf0000482f1a950794c22dbbfecf8377a7edc45c",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2321,7 +2341,7 @@
       "invalid_fixture": "schemas/fixtures/api/review-signals-query.v1.invalid.json",
       "path": "api/review-signals-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/review-signals-query.v1.valid.json",
-      "sha256": "sha256:d2b11449f0ffa6405e3f67e65509d3b44ace4166f28fad164789c22165eaf902",
+      "sha256": "sha256:573110a6755b75ee0cb91e681f2aaaaef9b4e3eb1dc0aaccb20097b45b350187",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2341,7 +2361,7 @@
       "invalid_fixture": "schemas/fixtures/api/review-signals-response.v1.invalid.json",
       "path": "api/review-signals-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/review-signals-response.v1.valid.json",
-      "sha256": "sha256:538e1f51e4713291927e3149cdf6ecc944878e87bf84ec2b9c7294aac9c7fa5a",
+      "sha256": "sha256:8079815221511e77b209072dd33ccb4de25d0710062fa20f2c125b7808b5f167",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2751,7 +2771,7 @@
       "invalid_fixture": "schemas/fixtures/api/label-ontology-signal-query.v1.invalid.json",
       "path": "api/label-ontology-signal-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/label-ontology-signal-query.v1.valid.json",
-      "sha256": "sha256:614beb7a8a8f8531cf5b30923233d03ff1eb658c68ec3ffd53654789f8e62597",
+      "sha256": "sha256:d41ebba6f3ced7620afb8cdf937256655fa8023faaa90194064fd303515fdd8f",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2771,7 +2791,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-label-ontology-signals-response.v1.invalid.json",
       "path": "api/list-label-ontology-signals-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-label-ontology-signals-response.v1.valid.json",
-      "sha256": "sha256:f9e0d608fa369710a749be6611e4c90236020024d36d460c403ea75d660eec12",
+      "sha256": "sha256:4f93cd5d02c4d74f0172d48005ecb148e4b099ab04bef9fb61b2c00b21401df1",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2791,7 +2811,7 @@
       "invalid_fixture": "schemas/fixtures/api/label-ontology-review-query.v1.invalid.json",
       "path": "api/label-ontology-review-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/label-ontology-review-query.v1.valid.json",
-      "sha256": "sha256:ed24c6eb5bb9818399f1c99da355e1cd6596ebebbe0c17ca46a3858ba3f24d24",
+      "sha256": "sha256:297523b03204fda54f4b75f66440f48f10f297761c071743765861151152ab18",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2811,7 +2831,7 @@
       "invalid_fixture": "schemas/fixtures/api/review-label-ontology-response.v1.invalid.json",
       "path": "api/review-label-ontology-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/review-label-ontology-response.v1.valid.json",
-      "sha256": "sha256:f3d8a80a1340e242abf1235d682d599124ff02c22cf22ab7fff4063a6f07c1fb",
+      "sha256": "sha256:96e192609223c5fc93ae4d56985726940ec296688ca9bbedb44eb6166303e5fa",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2841,7 +2861,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-label-ontology-action-request.v1.invalid.json",
       "path": "api/create-label-ontology-action-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-label-ontology-action-request.v1.valid.json",
-      "sha256": "sha256:005ebac221e7d9ee9079fd6b248f803a2e2f38fa7cea44d5bdaf0a6af7ff804d",
+      "sha256": "sha256:791c3d166e1ff2268ff96697e460eb8251adca681e085d00b0afdfd3b33b91fe",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -4635,6 +4655,16 @@
       "strictness": "deny_unknown_fields"
     },
     {
+      "contract_id": "runtime.web-config.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:runtime:web-config:v1",
+      "invalid_fixture": "schemas/fixtures/runtime/web-config.v1.invalid.json",
+      "path": "runtime/web-config.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/runtime/web-config.v1.valid.json",
+      "sha256": "sha256:67c75304317f5e45b1237b2dfe4fe3aa99e83a927c491e115e0122f59c5c7283",
+      "strictness": "deny_unknown_fields"
+    },
+    {
       "contract_id": "cli.label-add.output",
       "direction": "serialize",
       "id": "urn:kanban-tool:schema:cli:label-add-output:v1",
@@ -4821,7 +4851,7 @@
       "invalid_fixture": "schemas/fixtures/cli/label-ontology-review-output.v1.invalid.json",
       "path": "cli/label-ontology-review-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/label-ontology-review-output.v1.valid.json",
-      "sha256": "sha256:52571e2bc80360ae6886ee0a50e6c53f8486c94026cd917d527334ea7257177a",
+      "sha256": "sha256:4fae9a564f5830ad8f5dd5f42e66640c959a147ddf395bfefb74f2ba2bbd4e33",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -5808,6 +5838,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:adb9aeb7b2107240309a27753d7ce5ffb797a7ecc44ce1aba8ad9e7f6e7590c6"
+    "sha256": "sha256:f81670bb7282b33ddad301973771c024f4b9ce92db5c2e5668b8d77ac7fd6179"
   }
 }

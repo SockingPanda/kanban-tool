@@ -1129,7 +1129,9 @@
   {
     "contracts": [
       "sse.stream-events.query",
-      "sse.event.data"
+      "sse.stream-events.headers",
+      "sse.event.data",
+      "sse.event.heartbeat"
     ],
     "exclusion": null,
     "key": "GET /api/v1/stream/events",
@@ -1532,6 +1534,14 @@
     ],
     "exclusion": null,
     "key": "selected dispatcher worker profile after TOML decoding",
+    "surface": "config"
+  },
+  {
+    "contracts": [
+      "runtime.web-config.output"
+    ],
+    "exclusion": null,
+    "key": "GET /app/runtime.json",
     "surface": "config"
   },
   {

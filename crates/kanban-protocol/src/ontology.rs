@@ -1,4 +1,4 @@
-use crate::LimitMeta;
+use crate::SignalFilterMeta;
 use serde::{Deserialize, Serialize};
 
 fn deserialize_required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -144,5 +144,5 @@ pub struct LabelOntologySignalWire {
 #[serde(deny_unknown_fields)]
 pub struct LabelOntologySignalsResponse {
     pub data: Vec<LabelOntologySignalWire>,
-    pub meta: LimitMeta,
+    pub meta: SignalFilterMeta,
 }

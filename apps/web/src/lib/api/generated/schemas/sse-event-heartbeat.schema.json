@@ -1,0 +1,8 @@
+{
+  "$id": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "连接保活 frame 的 typed data。它没有业务 cursor 或 envelope 字段。",
+  "title": "Kanban SSE transport heartbeat v1",
+  "type": "object"
+}

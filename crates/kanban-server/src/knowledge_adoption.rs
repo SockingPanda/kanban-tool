@@ -794,7 +794,6 @@ async fn ontology_ledger_routes_consume_observation_and_action_fixtures() {
         kanban_protocol::LabelOntologyReviewGroupByWire::Label => "label",
         kanban_protocol::LabelOntologyReviewGroupByWire::CandidateAtom => "candidate_atom",
         kanban_protocol::LabelOntologyReviewGroupByWire::ProposedLabel => "proposed_label",
-        kanban_protocol::LabelOntologyReviewGroupByWire::Cluster => "cluster",
     };
     let response = router
         .clone()

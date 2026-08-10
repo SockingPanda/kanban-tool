@@ -1,0 +1,1 @@
+{"title":"Contract child","description":"Exact create request","status":"ready","assignee":"worker-a","priority":1,"scheduled_at":null,"due_at":null,"max_retries":2,"metadata":{"extension":{"source":"fixture"}},"labels":["core"],"depends_on":["project#1"],"actor":"alice"}

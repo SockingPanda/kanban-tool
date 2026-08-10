@@ -1,0 +1,29 @@
+{
+  "$defs": {
+    "DeleteResult": {
+      "additionalProperties": false,
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:delete-attachment-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/DeleteResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban API delete attachment response v1",
+  "type": "object"
+}

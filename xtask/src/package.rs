@@ -17,6 +17,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use kanban_protocol::WEB_ARTIFACT_MANIFEST_PATH;
+use kanban_web_artifact::VerifiedWebArtifact;
 use serde::Deserialize;
 use xtask::ToolResult;
 
@@ -26,6 +28,8 @@ const CLI_PACKAGE: &str = "kanban-cli";
 const REVISION: &str = "1";
 const STAGE_PREFIX: &str = ".kanban-cli-deb.";
 const TEMP_PREFIX: &str = ".kanban-cli-package.";
+const WEB_ARTIFACT_RELATIVE_ROOT: &str = "apps/web/dist";
+const WEB_INSTALL_ROOT: &str = "usr/share/kanban-tool/web";
 
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -222,6 +226,9 @@ pub(crate) fn run(arguments: &[String]) -> ToolResult<()> {
         .and_then(|package| package.version.clone())
         .or_else(|| cargo_package_version(&root).ok())
         .ok_or_else(|| error("cargo metadata 缺少 kanban-cli version"))?;
+    // 在任何可写 package staging 之前冻结并验证 Web artifact。后续 package
+    // 流程只消费 snapshot，不会重新打开 apps/web/dist。
+    let web_artifact = verify_web_artifact(&root, &version)?;
     let binary = release.join(BINARY_NAME);
     let dep_info = release.join(format!("{BINARY_NAME}.d"));
     invalidate_workspace_artifacts(&release, &workspace)?;
@@ -236,7 +243,7 @@ pub(crate) fn run(arguments: &[String]) -> ToolResult<()> {
     ensure_directory(&release.join("bundle/cli"), 0o755)?;
     ensure_directory(&output_dir, 0o755)?;
     validate_tree(&release.join("bundle"), "CLI bundle tree")?;
-    let output = build_deb(&root, &temp, &binary, &output_dir, &version)?;
+    let output = build_deb(&root, &temp, &binary, &output_dir, &version, &web_artifact)?;
     println!("{}", output.display());
     Ok(())
 }
@@ -794,6 +801,7 @@ fn build_deb(
     binary: &Path,
     output_dir: &Path,
     version: &str,
+    web_artifact: &VerifiedWebArtifact,
 ) -> ToolResult<PathBuf> {
     if command_missing("dpkg-deb") {
         return Err(error("--format deb 需要 dpkg-deb"));
@@ -803,7 +811,7 @@ fn build_deb(
     temp.verify()?;
     let package_root = temp.path.join("deb-root");
     ensure_directory(&package_root.join("DEBIAN"), 0o755)?;
-    install_payload(root, binary, &package_root)?;
+    install_payload(root, binary, &package_root, web_artifact)?;
     let installed_size = installed_size(&package_root.join("usr"))?;
     let depends = deb_dependencies(&package_root, temp)?;
 
@@ -886,7 +894,12 @@ fn publish_staged(
     Ok(())
 }
 
-fn install_payload(root: &Path, binary: &Path, package_root: &Path) -> ToolResult<()> {
+fn install_payload(
+    root: &Path,
+    binary: &Path,
+    package_root: &Path,
+    web_artifact: &VerifiedWebArtifact,
+) -> ToolResult<()> {
     let bin = package_root.join("usr/bin").join(BINARY_NAME);
     let readme = package_root
         .join("usr/share/doc")
@@ -895,7 +908,45 @@ fn install_payload(root: &Path, binary: &Path, package_root: &Path) -> ToolResul
     ensure_directory(bin.parent().expect("binary parent exists"), 0o755)?;
     ensure_directory(readme.parent().expect("README parent exists"), 0o755)?;
     copy_cargo_artifact(binary, &bin, 0o755)?;
-    copy_regular(&root.join("README.md"), &readme, 0o644)
+    copy_regular(&root.join("README.md"), &readme, 0o644)?;
+    install_web_artifact(web_artifact, package_root)
+}
+
+fn verify_web_artifact(
+    root: &Path,
+    expected_server_version: &str,
+) -> ToolResult<VerifiedWebArtifact> {
+    let web_root = root.join(WEB_ARTIFACT_RELATIVE_ROOT);
+    kanban_web_artifact::verify_directory(&web_root, expected_server_version).map_err(|verification| {
+        error(format!(
+            "CLI package Web artifact 校验失败（root={}，expected serverVersion={}）: {verification}",
+            web_root.display(),
+            expected_server_version
+        ))
+    })
+}
+
+fn install_web_artifact(artifact: &VerifiedWebArtifact, package_root: &Path) -> ToolResult<()> {
+    let install_root = package_root.join(WEB_INSTALL_ROOT);
+    ensure_directory(&install_root, 0o755)?;
+    write_regular_file(
+        &install_root.join(WEB_ARTIFACT_MANIFEST_PATH),
+        artifact.manifest_bytes(),
+        0o644,
+    )?;
+
+    for payload in artifact.payloads() {
+        let destination = install_root.join(payload.path());
+        let parent = destination.parent().ok_or_else(|| {
+            error(format!(
+                "Web artifact payload 无 parent: {}",
+                payload.path()
+            ))
+        })?;
+        ensure_directory(parent, 0o755)?;
+        write_regular_file(&destination, payload.bytes(), 0o644)?;
+    }
+    Ok(())
 }
 
 fn deb_dependencies(package_root: &Path, temp: &OwnedDirectory) -> ToolResult<String> {
@@ -1296,7 +1347,14 @@ fn error_with_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kanban_protocol::{
+        WEB_ARTIFACT_BASE_PATH, WEB_ARTIFACT_ENTRYPOINT, WEB_ARTIFACT_FORMAT_VERSION,
+        WEB_PROTOCOL_VERSION, WebArtifactManifest, web_artifact_build_id_for,
+        web_artifact_file_from_bytes,
+    };
     use std::fs;
+
+    const TEST_SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
     fn fixture(name: &str) -> PathBuf {
         let path = env::temp_dir().join(format!(
@@ -1306,6 +1364,43 @@ mod tests {
         ));
         fs::create_dir_all(&path).expect("fixture root should be creatable");
         path
+    }
+
+    fn test_web_artifact(root: &Path) -> VerifiedWebArtifact {
+        let web_root = root.join(WEB_ARTIFACT_RELATIVE_ROOT);
+        fs::create_dir_all(web_root.join("assets")).expect("Web fixture directories");
+        fs::write(web_root.join("index.html"), b"<main />").expect("Web entrypoint");
+        fs::write(web_root.join("assets/app.js"), b"console.log('app')").expect("Web payload");
+
+        let mut files = vec![
+            web_artifact_file_from_bytes("assets/app.js", b"console.log('app')")
+                .expect("app descriptor"),
+            web_artifact_file_from_bytes("index.html", b"<main />").expect("index descriptor"),
+        ];
+        files.sort_by(|left, right| left.path.cmp(&right.path));
+        let manifest = WebArtifactManifest {
+            format_version: WEB_ARTIFACT_FORMAT_VERSION,
+            base_path: WEB_ARTIFACT_BASE_PATH.to_owned(),
+            entrypoint: WEB_ARTIFACT_ENTRYPOINT.to_owned(),
+            server_version: TEST_SERVER_VERSION.to_owned(),
+            protocol_version: WEB_PROTOCOL_VERSION.to_owned(),
+            build_id: web_artifact_build_id_for(
+                WEB_ARTIFACT_FORMAT_VERSION,
+                WEB_ARTIFACT_BASE_PATH,
+                WEB_ARTIFACT_ENTRYPOINT,
+                TEST_SERVER_VERSION,
+                WEB_PROTOCOL_VERSION,
+                &files,
+            )
+            .expect("build ID"),
+            files,
+        };
+        fs::write(
+            web_root.join(WEB_ARTIFACT_MANIFEST_PATH),
+            serde_json::to_vec(&manifest).expect("manifest JSON"),
+        )
+        .expect("manifest");
+        verify_web_artifact(root, TEST_SERVER_VERSION).expect("fixture Web artifact should verify")
     }
 
     #[test]
@@ -1340,6 +1435,49 @@ mod tests {
                 "--no-default-features"
             ]
         );
+    }
+
+    #[test]
+    fn install_payload_writes_the_frozen_web_snapshot_without_reopening_source() {
+        let root = fixture("web-snapshot-package");
+        fs::write(root.join("README.md"), b"readme").expect("README fixture");
+        let binary = root.join("kanban");
+        fs::write(&binary, b"binary").expect("binary fixture");
+        set_mode(&binary, 0o755).expect("binary mode");
+        let artifact = test_web_artifact(&root);
+        fs::write(
+            root.join(WEB_ARTIFACT_RELATIVE_ROOT).join("index.html"),
+            b"changed after snapshot",
+        )
+        .expect("source mutation");
+
+        let package_root = root.join("package-root");
+        fs::create_dir(&package_root).expect("package root");
+        install_payload(&root, &binary, &package_root, &artifact)
+            .expect("frozen payload should install");
+
+        let installed_root = package_root.join(WEB_INSTALL_ROOT);
+        assert_eq!(
+            fs::read(installed_root.join(WEB_ARTIFACT_MANIFEST_PATH)).expect("manifest bytes"),
+            artifact.manifest_bytes()
+        );
+        assert_eq!(
+            fs::read(installed_root.join("index.html")).expect("entrypoint bytes"),
+            b"<main />"
+        );
+        assert_eq!(
+            fs::read(installed_root.join("assets/app.js")).expect("asset bytes"),
+            b"console.log('app')"
+        );
+        assert_eq!(
+            fs::read(package_root.join("usr/bin/kanban")).unwrap(),
+            b"binary"
+        );
+        assert_eq!(
+            fs::read(package_root.join("usr/share/doc/kanban-tool-cli/README.md")).unwrap(),
+            b"readme"
+        );
+        fs::remove_dir_all(root).expect("fixture should be cleaned");
     }
 
     #[test]

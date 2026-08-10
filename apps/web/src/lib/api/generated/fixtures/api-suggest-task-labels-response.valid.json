@@ -1,0 +1,15 @@
+{
+  "data": {
+    "task_id": "t_fixture",
+    "board_id": "fixture",
+    "selected_labels": [],
+    "candidates": [],
+    "coverage": 0.0,
+    "coverage_cosine": 0.0,
+    "residual_norm": 1.0,
+    "needs_new_label": false,
+    "reason_codes": ["degraded_result", "vector_store_disabled"],
+    "degraded": true,
+    "diagnostics": ["vector_store_disabled"]
+  }
+}

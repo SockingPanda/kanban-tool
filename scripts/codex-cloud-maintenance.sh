@@ -101,11 +101,11 @@ main() {
   if command -v corepack >/dev/null 2>&1; then
     log "Re-activating pnpm through corepack"
     corepack enable
-    corepack prepare pnpm@10 --activate
+    corepack prepare pnpm@11.20.0 --activate
   fi
 
-  log "Refreshing desktop frontend dependencies"
-  pnpm --dir "$ROOT/apps/desktop" install --frozen-lockfile
+  log "Refreshing Node workspace dependencies"
+  pnpm --dir "$ROOT" install --frozen-lockfile
 
   log "Refreshing Rust dependency cache"
   (

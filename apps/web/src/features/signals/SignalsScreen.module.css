@@ -1,0 +1,284 @@
+@layer product {
+  .screen {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .hero {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+    border-block-end: 1px solid var(--color-border);
+    padding-block-end: 1rem;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.45rem;
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .lede,
+  .boardContext {
+    margin: 0.45rem 0 0;
+  }
+
+  .boardContext code,
+  .rowMeta,
+  .facts dd,
+  .evidence pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .filterBar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(10rem, 15rem) minmax(9rem, 13rem);
+    align-items: end;
+    gap: 0.75rem;
+    padding-block: 0.25rem;
+  }
+
+  .statusFilters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .filterField {
+    display: grid;
+    gap: 0.3rem;
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+  }
+
+  .filterField input {
+    min-inline-size: 0;
+    min-block-size: 2.25rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.4rem 0.55rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(18rem, 0.85fr) minmax(22rem, 1.15fr);
+    gap: 1rem;
+    min-block-size: 34rem;
+  }
+
+  .listPanel,
+  .detailPanel {
+    display: grid;
+    align-content: start;
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow: hidden;
+  }
+
+  .panelHeader {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-block-end: 1px solid var(--color-border);
+    padding: 1rem;
+  }
+
+  .panelHeader h2,
+  .panelHeader p {
+    margin: 0;
+  }
+
+  .panelHeader p {
+    margin-block-start: 0.35rem;
+  }
+
+  .signalList {
+    min-block-size: 0;
+    overflow: auto;
+  }
+
+  .signalRow {
+    display: grid;
+    gap: 0.45rem;
+    inline-size: 100%;
+    border: 0;
+    border-block-end: 1px solid var(--color-border);
+    padding: 0.9rem 1rem;
+    background: transparent;
+    color: var(--color-text-primary);
+    text-align: start;
+    cursor: pointer;
+    content-visibility: auto;
+    contain-intrinsic-size: 0 7rem;
+  }
+
+  .signalRow:hover,
+  .signalRow:focus-visible,
+  .signalRowSelected {
+    background: var(--color-background-surface);
+  }
+
+  .rowTitle,
+  .detailBadges {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .rowTitle strong {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rowSummary {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.4;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .rowMeta {
+    overflow: hidden;
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .emptyState {
+    display: grid;
+    min-block-size: 14rem;
+    place-items: center;
+    padding: 1.5rem;
+    color: var(--color-text-secondary);
+    text-align: center;
+  }
+
+  .loadingList,
+  .detailLoading {
+    display: grid;
+    gap: 0.7rem;
+    padding: 1rem;
+  }
+
+  .loadingList span,
+  .detailLoading span {
+    display: block;
+    min-block-size: 4.8rem;
+    border-radius: var(--radius-element);
+    background: var(--color-background-surface);
+    animation: pulse 1.25s ease-in-out infinite alternate;
+  }
+
+  .detailLoading span:nth-child(2) {
+    min-block-size: 1.2rem;
+    inline-size: 70%;
+  }
+
+  .detailLoading span:nth-child(3) {
+    min-block-size: 8rem;
+  }
+
+  .detail {
+    display: grid;
+    align-content: start;
+    gap: 1rem;
+    min-block-size: 0;
+    overflow: auto;
+    padding: 1rem;
+  }
+
+  .detail h3 {
+    margin: 0;
+  }
+
+  .detailSummary {
+    white-space: pre-wrap;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin: 0;
+  }
+
+  .facts div {
+    min-inline-size: 0;
+    border: 1px solid var(--color-border);
+    padding: 0.6rem;
+  }
+
+  .facts dt {
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
+  }
+
+  .facts dd {
+    margin: 0.25rem 0 0;
+    overflow-wrap: anywhere;
+    font-size: 0.75rem;
+  }
+
+  .evidence {
+    display: grid;
+    gap: 0.55rem;
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: 1rem;
+  }
+
+  .evidence h4 {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+
+  .evidence pre {
+    max-block-size: 20rem;
+    overflow: auto;
+    margin: 0;
+    padding: 0.75rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  @keyframes pulse {
+    from { opacity: 0.5; }
+    to { opacity: 1; }
+  }
+
+  @media (max-width: 60rem) {
+    .filterBar,
+    .workspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .workspace {
+      min-block-size: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loadingList span,
+    .detailLoading span {
+      animation: none;
+    }
+  }
+}

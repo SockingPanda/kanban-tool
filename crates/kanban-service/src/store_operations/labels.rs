@@ -321,6 +321,8 @@ impl TursoStore {
                 validation_json: "{}",
                 now: input.now,
                 created_by: &input.actor,
+                actor_type: "user",
+                action_id: None,
                 agent_type: None,
             },
         )
@@ -1110,7 +1112,7 @@ async fn list_task_labels_on_connection(
 async fn labels_from_rows(rows: &mut turso::Rows) -> Result<Vec<LabelRecord>, StoreError> {
     let mut labels = Vec::new();
     while let Some(row) = rows.next().await? {
-        labels.push(label_from_row(row)?);
+        labels.push(label_from_row(&row)?);
     }
     Ok(labels)
 }
@@ -1164,7 +1166,7 @@ async fn label_by_name_in_transaction(
     )
     .await;
     match row {
-        Ok(row) => Ok(Some(label_from_row(row)?)),
+        Ok(row) => Ok(Some(label_from_row(&row)?)),
         Err(turso::Error::QueryReturnedNoRows) => Ok(None),
         Err(error) => Err(StoreError::Turso(error)),
     }
@@ -1185,7 +1187,7 @@ async fn label_by_id_in_transaction(
     )
     .await;
     match row {
-        Ok(row) => Ok(Some(label_from_row(row)?)),
+        Ok(row) => Ok(Some(label_from_row(&row)?)),
         Err(turso::Error::QueryReturnedNoRows) => Ok(None),
         Err(error) => Err(StoreError::Turso(error)),
     }
@@ -1206,7 +1208,7 @@ pub(crate) async fn resolve_label_in_transaction(
     Ok(None)
 }
 
-fn label_from_row(row: Row) -> Result<LabelRecord, StoreError> {
+pub(crate) fn label_from_row(row: &Row) -> Result<LabelRecord, StoreError> {
     Ok(LabelRecord {
         id: text_value(row.get_value(0)?, "labels.id")?,
         board_id: text_value(row.get_value(1)?, "labels.board_id")?,

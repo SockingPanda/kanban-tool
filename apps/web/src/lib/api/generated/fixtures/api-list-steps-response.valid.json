@@ -1,0 +1,32 @@
+{
+  "data": {
+    "task_id": "t_project_parent",
+    "steps": [
+      {
+        "id": "step_fixture",
+        "parent_task_id": "t_project_parent",
+        "title": "Draft checks",
+        "body": "Cover plan guards",
+        "linked_task": null,
+        "position": 2048,
+        "required": true,
+        "status": "todo",
+        "resolution_note": null,
+        "resolved_by": null,
+        "resolved_at": null,
+        "created_by": "codex",
+        "created_at": 1,
+        "updated_by": "codex",
+        "updated_at": 1
+      }
+    ],
+    "execution_plan": {
+      "board_id": "b_project",
+      "task_id": "t_project_parent",
+      "state": "planned",
+      "reason": null,
+      "updated_by": "system",
+      "updated_at": 0
+    }
+  }
+}

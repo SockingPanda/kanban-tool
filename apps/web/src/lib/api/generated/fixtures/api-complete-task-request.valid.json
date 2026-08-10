@@ -1,0 +1,13 @@
+{
+  "actor": "fixture-completer",
+  "claim_token": null,
+  "force": true,
+  "summary": "fixture complete",
+  "result": {
+    "ok": true,
+    "details": [
+      1,
+      "stable"
+    ]
+  }
+}

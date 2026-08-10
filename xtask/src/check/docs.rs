@@ -240,14 +240,14 @@ fn normalize_context_name(value: &str) -> String {
 }
 
 fn finish_context_term(current: &mut Option<ContextTerm>, path: &Path) -> ToolResult<()> {
-    if let Some(term) = current.take() {
-        if !term.has_definition {
-            return context_error(
-                path,
-                term.line,
-                format!("词条定义不能为空: {}", term.display),
-            );
-        }
+    if let Some(term) = current.take()
+        && !term.has_definition
+    {
+        return context_error(
+            path,
+            term.line,
+            format!("词条定义不能为空: {}", term.display),
+        );
     }
     Ok(())
 }

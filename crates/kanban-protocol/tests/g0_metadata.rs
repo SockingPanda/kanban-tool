@@ -2,6 +2,7 @@ use kanban_protocol::{
     ApiErrorCode, CreatedLabelsMeta, DataEnvelope, LabelOntologyReviewMeta, LimitMeta,
     MetadataEnvelope, NextAfterMeta, OffsetPaginationMeta, OptionalMetadataEnvelope,
     SignalFilterMeta, TaskOntologyDetails, TaskOntologyDetailsMeta, TotalPaginationMeta,
+    WebRuntimeConfig,
 };
 use serde_json::json;
 
@@ -193,6 +194,99 @@ fn data_envelope_has_exact_data_only_wire_shape() {
             json!({"data": {}, "extra": true})
         )
         .is_err()
+    );
+}
+
+#[test]
+fn web_runtime_config_uses_the_exact_camel_case_host_wire_shape() {
+    let config = WebRuntimeConfig {
+        api_base_url: String::new(),
+        web_base_path: "/app/".to_owned(),
+        actor: "local".to_owned(),
+        default_board: "default".to_owned(),
+        server_version: "2.1.3".to_owned(),
+        protocol_version: "v1".to_owned(),
+        web_build_id: "dev".to_owned(),
+    };
+    let value = serde_json::to_value(&config).expect("runtime config should serialize");
+    assert_eq!(
+        value,
+        json!({
+            "apiBaseUrl": "",
+            "webBasePath": "/app/",
+            "actor": "local",
+            "defaultBoard": "default",
+            "serverVersion": "2.1.3",
+            "protocolVersion": "v1",
+            "webBuildId": "dev",
+        })
+    );
+    assert_eq!(
+        serde_json::from_value::<WebRuntimeConfig>(value.clone()).unwrap(),
+        config
+    );
+    assert!(
+        serde_json::from_value::<WebRuntimeConfig>(json!({
+            "api_base_url": "",
+            "web_base_path": "/app/",
+            "actor": "local",
+            "default_board": "default",
+            "server_version": "2.1.3",
+            "protocol_version": "v1",
+            "web_build_id": "dev",
+        }))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<WebRuntimeConfig>(json!({
+            "apiBaseUrl": "",
+            "webBasePath": "/app/",
+            "actor": "local",
+            "defaultBoard": "default",
+            "serverVersion": "2.1.3",
+            "protocolVersion": "v1",
+            "webBuildId": "dev",
+            "extra": true,
+        }))
+        .is_err()
+    );
+}
+
+#[cfg(feature = "schema")]
+#[test]
+fn web_runtime_config_is_a_non_api_schema_root() {
+    let root = kanban_protocol::schema_registry()
+        .iter()
+        .find(|root| root.contract_id == "runtime.web-config.output")
+        .expect("runtime config schema root must be registered");
+    assert_eq!(root.id, "urn:kanban-tool:schema:runtime:web-config:v1");
+    assert_eq!(root.artifact_path, "runtime/web-config.v1.schema.json");
+    let schema = kanban_protocol::schema::schema_document(root);
+    assert_eq!(schema["additionalProperties"], json!(false));
+    let required = schema["required"]
+        .as_array()
+        .expect("runtime schema required list")
+        .iter()
+        .map(|field| field.as_str().expect("required field string"))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        required,
+        [
+            "actor",
+            "apiBaseUrl",
+            "defaultBoard",
+            "protocolVersion",
+            "serverVersion",
+            "webBasePath",
+            "webBuildId",
+        ]
+        .into_iter()
+        .collect()
+    );
+    assert!(
+        !kanban_protocol::endpoint_catalog()
+            .iter()
+            .any(|endpoint| endpoint.path == "/app/runtime.json")
     );
 }
 

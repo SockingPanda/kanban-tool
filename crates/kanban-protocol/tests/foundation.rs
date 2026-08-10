@@ -29,12 +29,14 @@ fn exact_request_dtos_reject_legacy_wire_aliases() {
             serde_json::from_value::<kanban_protocol::LabelOntologySignalQuery>(alias).is_err()
         );
     }
-    assert!(
-        serde_json::from_value::<kanban_protocol::LabelOntologyReviewGroupByWire>(
-            serde_json::json!("candidate-atom")
-        )
-        .is_err()
-    );
+    for value in ["candidate-atom", "cluster"] {
+        assert!(
+            serde_json::from_value::<kanban_protocol::LabelOntologyReviewGroupByWire>(
+                serde_json::json!(value)
+            )
+            .is_err()
+        );
+    }
 }
 
 #[test]
@@ -334,6 +336,63 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
 }
 
 #[test]
+fn sse_contract_freezes_cursor_header_heartbeat_and_scope_metadata() {
+    let endpoint = endpoint_descriptor("sse.stream-events").expect("SSE endpoint descriptor");
+    assert_eq!(
+        endpoint.obligations.headers,
+        EndpointObligation::Contract("sse.stream-events.headers")
+    );
+    assert_eq!(
+        endpoint.obligations.sse,
+        EndpointObligation::Contract("sse.event.data")
+    );
+    assert_eq!(endpoint.shared_components, &["sse.event.heartbeat"]);
+
+    let headers = operation_inventory()
+        .iter()
+        .find(|contract| contract.id == "sse.stream-events.headers")
+        .expect("SSE header contract");
+    assert_eq!(headers.binding, ContractBinding::ExactSurface);
+    assert_eq!(headers.direction, ContractDirection::Deserialize);
+    assert_eq!(
+        headers.transport,
+        ContractTransport::Http {
+            operation_key: Some("GET /api/v1/stream/events"),
+            location: HttpTransportLocation::Headers,
+            parameters: &[
+                WireParameter {
+                    name: "Accept-Language",
+                    cardinality: Some(WireParameterCardinality::OptionalOne),
+                },
+                WireParameter {
+                    name: "Last-Event-ID",
+                    cardinality: Some(WireParameterCardinality::OptionalOne),
+                },
+            ],
+        }
+    );
+
+    let heartbeat = operation_inventory()
+        .iter()
+        .find(|contract| contract.id == "sse.event.heartbeat")
+        .expect("SSE heartbeat contract");
+    assert_eq!(heartbeat.binding, ContractBinding::SharedComponent);
+    assert!(matches!(
+        heartbeat.transport,
+        ContractTransport::Http {
+            location: HttpTransportLocation::Sse,
+            ..
+        }
+    ));
+    assert_eq!(kanban_protocol::SSE_HEARTBEAT_EVENT, "kb-heartbeat");
+    assert!(
+        kanban_protocol::TASK_SCOPED_EVENT_KINDS
+            .iter()
+            .all(|kind| kanban_protocol::event_payload::KNOWN_EVENT_KINDS.contains(kind))
+    );
+}
+
+#[test]
 fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
     let specs = api_header_contract_specs();
     let actor_operations = specs
@@ -586,7 +645,7 @@ fn public_operation_inventory_covers_every_public_surface() {
 fn public_catalog_preserves_contract_and_exclusion_counts() {
     assert_eq!(
         operation_inventory().len(),
-        580,
+        583,
         "public contract inventory 不得静默增删"
     );
     let exclusions = surface_operation_catalog()
@@ -943,6 +1002,8 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:vector-sync-response:v1",
         "urn:kanban-tool:schema:api:list-events-query:v1",
         "urn:kanban-tool:schema:sse:stream-events-query:v1",
+        "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+        "urn:kanban-tool:schema:sse:event-heartbeat:v1",
     ]);
     expected.extend(
         kanban_protocol::portable_contract_catalog()
@@ -974,6 +1035,36 @@ fn generated_schema_artifacts_are_non_empty_and_deterministic() {
         "schema registry 必须生成 committed artifact"
     );
     assert_eq!(first, second, "同一 registry 连续生成必须 byte-identical");
+}
+
+#[test]
+fn ontology_review_schema_advertises_only_supported_groupings_and_limits() {
+    let artifacts = generated_artifacts();
+    let query: serde_json::Value = serde_json::from_slice(
+        artifacts
+            .get("api/label-ontology-review-query.v1.schema.json")
+            .expect("ontology review query schema artifact"),
+    )
+    .expect("valid ontology review query schema");
+    let groupings = &query["$defs"]["LabelOntologyReviewGroupByWire"]["enum"];
+    assert_eq!(
+        groupings,
+        &serde_json::json!(["label", "candidate_atom", "proposed_label"])
+    );
+    assert_eq!(query["properties"]["limit"]["default"], 100);
+    assert_eq!(query["properties"]["limit"]["minimum"], 1);
+    assert_eq!(query["properties"]["limit"]["maximum"], 100);
+
+    let response: serde_json::Value = serde_json::from_slice(
+        artifacts
+            .get("api/review-label-ontology-response.v1.schema.json")
+            .expect("ontology review response schema artifact"),
+    )
+    .expect("valid ontology review response schema");
+    assert_eq!(
+        response["$defs"]["LabelOntologyReviewGroupByWire"]["enum"],
+        serde_json::json!(["label", "candidate_atom", "proposed_label"])
+    );
 }
 
 #[test]

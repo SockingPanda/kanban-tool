@@ -1,0 +1,27 @@
+{
+  "$id": "urn:kanban-tool:schema:api:claim-task-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "metadata": true,
+    "ttl_ms": {
+      "default": 300000,
+      "format": "int64",
+      "type": "integer"
+    },
+    "worker_profile": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban claim task request v1",
+  "type": "object"
+}

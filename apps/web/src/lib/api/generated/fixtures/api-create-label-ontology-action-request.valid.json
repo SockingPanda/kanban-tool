@@ -1,0 +1,9 @@
+{
+  "actor": {
+    "name": "fixture",
+    "type": "user"
+  },
+  "action_type": "confirm",
+  "signal_ids": ["los_fixture"],
+  "reason": "fixture"
+}

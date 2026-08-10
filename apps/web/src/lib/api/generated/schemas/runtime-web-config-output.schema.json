@@ -1,0 +1,40 @@
+{
+  "$id": "urn:kanban-tool:schema:runtime:web-config:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "浏览器与 Tauri 加载 `/app/runtime.json` 时消费的 host metadata。",
+  "properties": {
+    "actor": {
+      "type": "string"
+    },
+    "apiBaseUrl": {
+      "type": "string"
+    },
+    "defaultBoard": {
+      "type": "string"
+    },
+    "protocolVersion": {
+      "type": "string"
+    },
+    "serverVersion": {
+      "type": "string"
+    },
+    "webBasePath": {
+      "type": "string"
+    },
+    "webBuildId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "apiBaseUrl",
+    "webBasePath",
+    "actor",
+    "defaultBoard",
+    "serverVersion",
+    "protocolVersion",
+    "webBuildId"
+  ],
+  "title": "Kanban Web runtime config v1",
+  "type": "object"
+}

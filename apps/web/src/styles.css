@@ -1,0 +1,25 @@
+@layer product {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    min-width: 20rem;
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-body);
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  :where(a, button, input, select):focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+}

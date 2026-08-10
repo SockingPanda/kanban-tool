@@ -13,12 +13,12 @@ set shell := ["bash", "-cu"]
 audit-ignore-flags := "--ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0411 --ignore RUSTSEC-2024-0412 --ignore RUSTSEC-2024-0413 --ignore RUSTSEC-2024-0414 --ignore RUSTSEC-2024-0415 --ignore RUSTSEC-2024-0416 --ignore RUSTSEC-2024-0417 --ignore RUSTSEC-2024-0418 --ignore RUSTSEC-2024-0419 --ignore RUSTSEC-2024-0420 --ignore RUSTSEC-2024-0429 --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2025-0075 --ignore RUSTSEC-2025-0080 --ignore RUSTSEC-2025-0081 --ignore RUSTSEC-2025-0098 --ignore RUSTSEC-2025-0100"
 
 fmt:
-    cargo fmt -p kanban-core -p kanban-service -p kanban-protocol -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -- --check
+    cargo fmt -p kanban-core -p kanban-service -p kanban-protocol -p kanban-web-artifact -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -- --check
 
 fmt-check: fmt
 
 fmt-full:
-    cargo fmt -p kanban-core -p kanban-service -p kanban-protocol -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p xtask -- --check
+    cargo fmt -p kanban-core -p kanban-service -p kanban-protocol -p kanban-web-artifact -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p xtask -- --check
 
 fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
@@ -36,13 +36,16 @@ check-core:
         -p kanban-core \
         -p kanban-service \
         -p kanban-protocol \
+        -p kanban-web-artifact \
         -p kanban-client \
         -p kanban-server \
         -p kanban-cli \
         -p kanban-mcp
 
+# 通用 Rust gate 只编译/测试，不复制 Desktop package 的 sidecar/Web 资源；真实打包由
+# `desktop-check` / `desktop-build` 负责。
 check-full:
-    scripts/cargo-build-lock.sh -- cargo check --workspace --tests
+    TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo check --workspace --tests
 
 test *args:
     just test-core "$@"
@@ -67,24 +70,27 @@ test-core *args:
         -p kanban-core \
         -p kanban-service \
         -p kanban-protocol \
+        -p kanban-web-artifact \
         -p kanban-client \
         -p kanban-server \
         -p kanban-cli \
         -p kanban-mcp \
         --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
         -p kanban-core -p kanban-service -p kanban-protocol \
+        -p kanban-web-artifact \
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@"; fi
 
 test-full *args:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace "$@"; fi
+    if cargo nextest --version >/dev/null 2>&1; then TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo nextest run --workspace --no-fail-fast "$@"; else TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo test --workspace "$@"; fi
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
         -p kanban-core -p kanban-service -p kanban-protocol \
+        -p kanban-web-artifact \
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@" -- -D warnings
 
 clippy-full *args:
-    scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets "$@" -- -D warnings
+    TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets "$@" -- -D warnings
 
 rust-full:
     just fmt-full
@@ -102,31 +108,80 @@ tooling-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- tooling check
 
 docs-check:
-    scripts/cargo-build-lock.sh -- cargo doc --workspace --no-deps
-    scripts/cargo-build-lock.sh -- cargo test --doc --workspace
+    TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo doc --workspace --no-deps
+    TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo test --doc --workspace
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- docs check
 
+node-lock-check:
+    pnpm install --frozen-lockfile --lockfile-only --ignore-scripts
+
+web-contracts-generate:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- web-contracts generate
+
+web-contracts-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- web-contracts check
+
 web-test:
-    pnpm --dir apps/desktop test
+    pnpm --filter @kanban-tool/web test
 
 web-typecheck:
-    pnpm --dir apps/desktop typecheck
+    pnpm --filter @kanban-tool/web typecheck
+
+web-lint:
+    pnpm --filter @kanban-tool/web lint
 
 web-build:
-    pnpm --dir apps/desktop build
+    pnpm --filter @kanban-tool/web build
+
+web-artifact-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- web-assets check --root .
+
+web-e2e:
+    just node-lock-check
+    pnpm --filter @kanban-tool/web e2e
+
+# Stage09 09A real-host lane；mock/preview specs 仍由 `web-e2e` 单独编排。
+release-proof-09a:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- release check --root .
+    KANBAN_RELEASE_SKIP_RECEIPT=0 scripts/release-proof-09a.sh
+
+web-check:
+    just node-lock-check
+    just web-contracts-check
+    just web-typecheck
+    just web-lint
+    just web-test
+    just web-build
+    just web-artifact-check
+
+desktop-dev-prep:
+    just web-build
+    just web-artifact-check
+    scripts/cargo-build-lock.sh -- cargo build --locked -p kanban-cli
+    scripts/prepare-desktop-sidecar.sh dev
 
 desktop-check:
-    scripts/cargo-build-lock.sh -- cargo check -p kanban-desktop --tests
-    pnpm --dir apps/desktop typecheck
-    pnpm --dir apps/desktop test
+    just node-lock-check
+    just web-build
+    just web-artifact-check
+    scripts/cargo-build-lock.sh -- cargo build --locked -p kanban-cli --release
+    scripts/prepare-desktop-sidecar.sh
+    scripts/cargo-build-lock.sh -- cargo check --locked -p kanban-desktop --tests
 
 desktop-build:
-    pnpm --dir apps/desktop build
+    just node-lock-check
+    just web-build
+    just web-artifact-check
+    scripts/cargo-build-lock.sh -- cargo build --locked -p kanban-cli --release
+    scripts/prepare-desktop-sidecar.sh
+    scripts/cargo-build-lock.sh -- pnpm --filter @kanban-tool/desktop tauri build
 
 desktop-package:
-    scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
+    just desktop-build
 
 cli-package:
+    just web-build
+    just web-artifact-check
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- package cli --format deb
 
 cli-package-layout:
@@ -137,6 +192,14 @@ desktop-package-config:
 
 desktop-package-layout:
     scripts/test-desktop-package-layout.sh
+
+desktop-packaged-smoke:
+    just desktop-build
+    scripts/test-desktop-packaged-smoke.sh
+
+desktop-package-proof:
+    just desktop-build
+    scripts/test-desktop-packaged-smoke.sh --proof
 
 smoke:
     scripts/smoke-v1-local.sh
@@ -179,7 +242,7 @@ schema-check:
 ci-full:
     just rust-full
     just desktop-check
-    just web-build
+    just web-check
     just docs-check
     just schema-contract
     just deps-check

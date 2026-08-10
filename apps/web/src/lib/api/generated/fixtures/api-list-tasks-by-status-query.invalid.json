@@ -1,0 +1,16 @@
+{
+  "status": [
+    "ready"
+  ],
+  "priority": [],
+  "label": [
+    "　"
+  ],
+  "plan_filter": [],
+  "assignee": null,
+  "q": null,
+  "include_archived": false,
+  "limit": 50,
+  "offset": 0,
+  "sort": "position"
+}

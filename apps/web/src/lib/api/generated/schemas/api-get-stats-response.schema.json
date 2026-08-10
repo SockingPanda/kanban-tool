@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "ApiTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    },
+    "BlockedReasonCount": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "count"
+      ],
+      "type": "object"
+    },
+    "QueueStats": {
+      "additionalProperties": false,
+      "properties": {
+        "active_parents_with_incomplete_required_steps": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "blocked_reasons": {
+          "items": {
+            "$ref": "#/$defs/BlockedReasonCount"
+          },
+          "type": "array"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "generated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "stale_claims": {
+          "items": {
+            "$ref": "#/$defs/StaleClaim"
+          },
+          "type": "array"
+        },
+        "status_counts": {
+          "items": {
+            "$ref": "#/$defs/StatusCount"
+          },
+          "type": "array"
+        },
+        "unplanned_active_tasks": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "board_id",
+        "generated_at",
+        "status_counts",
+        "stale_claims",
+        "blocked_reasons",
+        "unplanned_active_tasks",
+        "active_parents_with_incomplete_required_steps"
+      ],
+      "type": "object"
+    },
+    "StaleClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_expires_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "claim_owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_heartbeat_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_retries": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "retry_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "seq": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "seq",
+        "title",
+        "claim_owner",
+        "claim_expires_at",
+        "last_heartbeat_at",
+        "current_run_id",
+        "retry_count",
+        "max_retries"
+      ],
+      "type": "object"
+    },
+    "StatusCount": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/ApiTaskStatus"
+        }
+      },
+      "required": [
+        "status",
+        "count"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:get-stats-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/QueueStats"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban get stats response v1",
+  "type": "object"
+}

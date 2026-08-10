@@ -23,6 +23,10 @@ path = "tests/foundation.rs"
 name = "g0_metadata"
 path = "tests/g0_metadata.rs"
 
+[[test]]
+name = "web_artifact"
+path = "tests/web_artifact.rs"
+
 [features]
 default = []
 schema = ["dep:schemars"]
@@ -31,3 +35,4 @@ schema = ["dep:schemars"]
 schemars = { workspace = true, default-features = false, features = ["std", "derive"], optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+sha2.workspace = true

@@ -72,7 +72,8 @@ specify、unblock、reopen、reclaim 和 archive 都是显式 service command，
 
 - **CLI**：除 `serve`、配置/init、completion 和 hook 外，通过 `kanban-client` 请求 host；不直接开库。
 - **MCP**：stdio tools 只调用 typed client，不启动 host，也不暴露 host-admin 数据库管理操作。
-- **Desktop**：Tauri/React shell 只调用 loopback API，不直连 Turso、不复制状态机。
+- **Desktop**：Tauri shell 负责 bootstrap、loopback host/sidecar 生命周期与窗口/托盘；加载与 Browser 相同的
+  `apps/web` Web artifact 使用 `/app/`，不直连 Turso、不复制状态机。
 
 ## 深入阅读
 

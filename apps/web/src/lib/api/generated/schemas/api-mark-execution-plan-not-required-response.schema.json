@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "ApiExecutionPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/ApiExecutionPlanState"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "updated_by": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "board_id",
+        "task_id",
+        "state",
+        "reason",
+        "updated_by",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "ApiExecutionPlanState": {
+      "enum": [
+        "unplanned",
+        "planned",
+        "not_required"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:mark-execution-plan-not-required-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/ApiExecutionPlan"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban API mark execution plan not required response v1",
+  "type": "object"
+}

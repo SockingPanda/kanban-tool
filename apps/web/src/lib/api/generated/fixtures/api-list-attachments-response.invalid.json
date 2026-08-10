@@ -1,0 +1,1 @@
+{"data":[{"id":"a_fixture","board_id":"b_project","task_id":"t_fixture","filename":"artifact.txt","rel_path":"b_project/t_fixture/a_fixture-artifact.txt","content_type":"text/plain","size_bytes":2,"sha256":null,"created_by":"tester","created_at":33,"unexpected":true}]}

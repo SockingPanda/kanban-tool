@@ -26,6 +26,7 @@
   provider 和只读 importer；是 canonical persistence crate，也是唯一直接依赖并持有 `turso` persistence 的 owner。
 - `kanban-server`：负责 `kanban serve` host 进程生命周期、database/attachment/run-log 路径准备、Axum router、dispatcher 调度与 graceful/force shutdown 编排；Turso 打开、初始化、迁移与持久化由 `kanban-service` 负责。
 - `kanban-protocol`：当前 active wire DTO、error、schema 和 surface catalog；不承载数据库 row 或 store 规则。
+- `kanban-web-artifact`：复用 `kanban-protocol` value contract，负责绝对 Web dist 的 no-follow filesystem 校验与 immutable snapshot；不提供 HTTP/package 语义。
 - `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。
 - `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：薄入口或 shell；`xtask` 负责离线仓库工具。
 - 依赖 ownership 和模块边界见 [`docs/architecture.md`](docs/architecture.md) 及 `$style`。

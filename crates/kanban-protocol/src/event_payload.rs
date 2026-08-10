@@ -49,6 +49,21 @@ payload!(SignalReviewedPayload {
     status: SignalStatus,
     reason: String,
 });
+payload!(LabelOntologyObservationRecordedPayload {
+    observation_id: String,
+    signal_ids: Vec<String>,
+});
+payload!(LabelOntologyActionCreatedPayload {
+    action_id: String,
+    action_type: String,
+    signal_ids: Vec<String>,
+});
+payload!(LabelOntologySignalReviewedPayload {
+    signal_id: String,
+    action_id: String,
+    status: SignalStatus,
+    reason: String,
+});
 payload!(TaskReasonPayload { reason: String });
 payload!(TaskClaimedPayload {
     claim_owner: String,
@@ -274,6 +289,9 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "dependency.removed",
     "label.created",
     "label.deleted",
+    "label.ontology.action.created",
+    "label.ontology.observation.recorded",
+    "label.ontology.signal.reviewed",
     "signal.recorded",
     "signal.reviewed",
     "task.archived",
@@ -396,6 +414,9 @@ pub enum EventPayload {
     Dependency(DependencyPayload),
     LabelCreated(LabelCreatedPayload),
     LabelDeleted(LabelDeletedPayload),
+    LabelOntologyObservationRecorded(LabelOntologyObservationRecordedPayload),
+    LabelOntologyActionCreated(LabelOntologyActionCreatedPayload),
+    LabelOntologySignalReviewed(LabelOntologySignalReviewedPayload),
     SignalRecorded(SignalRecordedPayload),
     SignalReviewed(SignalReviewedPayload),
     TaskReason(TaskReasonPayload),
@@ -436,6 +457,20 @@ impl EventPayload {
             }
             "label.created" => decode!(LabelCreated, LabelCreatedPayload),
             "label.deleted" => decode!(LabelDeleted, LabelDeletedPayload),
+            "label.ontology.action.created" => {
+                decode!(
+                    LabelOntologyActionCreated,
+                    LabelOntologyActionCreatedPayload
+                )
+            }
+            "label.ontology.observation.recorded" => decode!(
+                LabelOntologyObservationRecorded,
+                LabelOntologyObservationRecordedPayload
+            ),
+            "label.ontology.signal.reviewed" => decode!(
+                LabelOntologySignalReviewed,
+                LabelOntologySignalReviewedPayload
+            ),
             "signal.recorded" => decode!(SignalRecorded, SignalRecordedPayload),
             "signal.reviewed" => decode!(SignalReviewed, SignalReviewedPayload),
             "task.blocked" => serde_json::from_value::<TaskReasonPayload>(value.clone())
@@ -525,6 +560,18 @@ mod tests {
             r#"{"label_id":"l_1","label":"cli","forced":false,"removed_task_bindings":0,"removed_semantics":false,"removed_atoms":0}"#,
         ),
         (
+            "label.ontology.action.created",
+            r#"{"action_id":"loa_1","action_type":"confirm","signal_ids":["los_1"]}"#,
+        ),
+        (
+            "label.ontology.observation.recorded",
+            r#"{"observation_id":"lor_1","signal_ids":["los_1"]}"#,
+        ),
+        (
+            "label.ontology.signal.reviewed",
+            r#"{"signal_id":"los_1","action_id":"loa_1","status":"confirmed","reason":"verified"}"#,
+        ),
+        (
             "signal.recorded",
             r#"{"signal_id":"sig_1","observation_id":"obs_1","kind":"bug","status":"open"}"#,
         ),
@@ -612,8 +659,8 @@ mod tests {
     ];
 
     #[test]
-    fn all_40_real_event_kinds_have_bounded_payloads() {
-        assert_eq!(KNOWN_EVENT_KINDS.len(), 40);
+    fn all_real_event_kinds_have_bounded_payloads() {
+        assert_eq!(KNOWN_EVENT_KINDS.len(), 43);
         assert_eq!(
             KNOWN_EVENT_KINDS
                 .iter()

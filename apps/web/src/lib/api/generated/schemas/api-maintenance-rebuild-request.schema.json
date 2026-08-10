@@ -1,0 +1,21 @@
+{
+  "$id": "urn:kanban-tool:schema:api:maintenance-rebuild-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "owner": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban maintenance rebuild request v1",
+  "type": "object"
+}

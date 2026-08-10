@@ -159,6 +159,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
             <span>{copy.search}</span>
             <input
               data-testid="list-search"
+              name="task-search"
               type="search"
               value={state.query.search}
               placeholder={copy.searchPlaceholder}
@@ -174,6 +175,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
           <span>{copy.status}</span>
           <select
             data-testid="list-status-filter"
+            name="task-status"
             value={state.query.status[0] ?? "all"}
             onChange={(event) => updateQuery(state.query, onQueryChange, { status: event.currentTarget.value === "all" ? [] : [event.currentTarget.value as TaskListStatus] })}
           >
@@ -183,25 +185,25 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
         </label>
         <label>
           <span>{copy.sort}</span>
-          <select data-testid="list-sort" value={state.query.sort} onChange={(event) => updateQuery(state.query, onQueryChange, { sort: event.currentTarget.value as TaskListSort })}>
+          <select data-testid="list-sort" name="task-sort" value={state.query.sort} onChange={(event) => updateQuery(state.query, onQueryChange, { sort: event.currentTarget.value as TaskListSort })}>
             {sorts.map((sort) => <option key={sort} value={sort}>{sort}</option>)}
           </select>
         </label>
         <label>
           <span>{copy.pageSize}</span>
-          <select data-testid="list-limit" value={String(state.query.limit)} onChange={(event) => updateQuery(state.query, onQueryChange, { limit: Number(event.currentTarget.value) })}>
+          <select data-testid="list-limit" name="task-limit" value={String(state.query.limit)} onChange={(event) => updateQuery(state.query, onQueryChange, { limit: Number(event.currentTarget.value) })}>
             {[25, 50, 100, 200].map((limit) => <option key={limit} value={limit}>{limit}</option>)}
           </select>
         </label>
         <label className={styles.archiveToggle}>
-          <input type="checkbox" checked={state.query.includeArchived} onChange={(event) => updateQuery(state.query, onQueryChange, { includeArchived: event.currentTarget.checked })} />
+          <input type="checkbox" name="task-include-archived" checked={state.query.includeArchived} onChange={(event) => updateQuery(state.query, onQueryChange, { includeArchived: event.currentTarget.checked })} />
           <span>{copy.includeArchived}</span>
         </label>
         <fieldset>
           <legend>{copy.priority}</legend>
           {priorities.map((priority) => (
             <label key={priority} className={styles.inlineCheck}>
-              <input type="checkbox" checked={state.query.priority.includes(priority)} onChange={() => updateQuery(state.query, onQueryChange, { priority: toggle(state.query.priority, priority) })} />
+              <input type="checkbox" name="task-priority" value={priority} checked={state.query.priority.includes(priority)} onChange={() => updateQuery(state.query, onQueryChange, { priority: toggle(state.query.priority, priority) })} />
               <span>P{priority}</span>
             </label>
           ))}
@@ -210,7 +212,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
           <legend>{copy.plan}</legend>
           {plans.map((plan) => (
             <label key={plan} className={styles.inlineCheck}>
-              <input type="checkbox" checked={state.query.plan.includes(plan)} onChange={() => updateQuery(state.query, onQueryChange, { plan: toggle(state.query.plan, plan) })} />
+              <input type="checkbox" name="task-plan" value={plan} checked={state.query.plan.includes(plan)} onChange={() => updateQuery(state.query, onQueryChange, { plan: toggle(state.query.plan, plan) })} />
               <span>{copy.planValues[plan]}</span>
             </label>
           ))}

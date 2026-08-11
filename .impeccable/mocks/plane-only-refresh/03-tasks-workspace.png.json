@@ -1,7 +1,9 @@
 {
   "kind": "ui-mockup",
   "surface": "tasks-workspace",
-  "approved": false,
+  "approved": true,
+  "approval_source": "user",
+  "approval_note": "用户批准三张 Plane-only comps 作为同一套实现基准。",
   "prompt_file": "03-tasks-workspace.prompt.txt",
   "source": "built-in-imagegen",
   "product_reference": "Plane-only"

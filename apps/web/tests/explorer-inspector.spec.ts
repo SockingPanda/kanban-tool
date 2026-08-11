@@ -192,6 +192,23 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await expect(search).toBeFocused()
     await page.keyboard.press("Tab")
     await expect(page.getByTestId("task-create")).toBeFocused()
+
+    for (const lens of ["ready", "running", "blocked", "review"]) {
+      await page.keyboard.press("Tab")
+      await expect(page.getByTestId(`attention-lens-${lens}`)).toBeFocused()
+    }
+
+    const readyLens = page.getByTestId("attention-lens-ready")
+    await readyLens.focus()
+    await readyLens.press("Enter")
+    await expect(readyLens).toHaveAttribute("aria-pressed", "true")
+    await expect(page.getByTestId("attention-active-filter")).toBeVisible()
+    for (const lens of ["running", "blocked", "review"]) {
+      await page.keyboard.press("Tab")
+      await expect(page.getByTestId(`attention-lens-${lens}`)).toBeFocused()
+    }
+    await page.keyboard.press("Tab")
+    await expect(page.getByTestId("attention-clear")).toBeFocused()
     await page.keyboard.press("Tab")
     await expect(page.getByTestId("list-status-filter")).toBeFocused()
 

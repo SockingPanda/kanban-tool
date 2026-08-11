@@ -121,6 +121,10 @@ type ExplorerCopy = {
   readonly map: string
   readonly runs: string
   readonly events: string
+  readonly signals: string
+  readonly ontology: string
+  readonly health: string
+  readonly maintenance: string
   readonly syncConnecting: string
   readonly syncRecovering: string
   readonly syncStale: string
@@ -145,6 +149,10 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
     map: "关系图",
     runs: "运行记录",
     events: "事件",
+    signals: "信号",
+    ontology: "本体",
+    health: "健康",
+    maintenance: "维护",
     syncConnecting: "正在连接实时同步…",
     syncRecovering: "正在恢复同步",
     syncStale: "同步暂时中断",
@@ -167,6 +175,10 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
     map: "Map",
     runs: "Runs",
     events: "Events",
+    signals: "Signals",
+    ontology: "Ontology",
+    health: "Health",
+    maintenance: "Maintenance",
     syncConnecting: "Connecting to live sync…",
     syncRecovering: "Recovering sync",
     syncStale: "Sync is temporarily interrupted",
@@ -731,10 +743,12 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     return [
       { id: "runs", label: copy.runs, href: routeTarget(route.boardSlug, "runs", query, runtime.webBasePath) },
       { id: "events", label: copy.events, href: routeTarget(route.boardSlug, "events", query, runtime.webBasePath) },
-      { id: "signals", label: locale === "en" ? "Signals" : "Signals", href: routePath({ kind: "board", boardSlug: route.boardSlug, view: "signals" }, { basePath: runtime.webBasePath }) },
-      { id: "ontology", label: locale === "en" ? "Ontology" : "Ontology", href: routePath({ kind: "board", boardSlug: route.boardSlug, view: "ontology" }, { basePath: runtime.webBasePath }) },
+      { id: "signals", label: copy.signals, href: routePath({ kind: "board", boardSlug: route.boardSlug, view: "signals" }, { basePath: runtime.webBasePath }) },
+      { id: "ontology", label: copy.ontology, href: routePath({ kind: "board", boardSlug: route.boardSlug, view: "ontology" }, { basePath: runtime.webBasePath }) },
+      { id: "health", label: copy.health, href: routePath({ kind: "health", boardSlug: route.boardSlug }, { basePath: runtime.webBasePath }) },
+      { id: "maintenance", label: copy.maintenance, href: routePath({ kind: "maintenance", boardSlug: route.boardSlug }, { basePath: runtime.webBasePath }) },
     ]
-  }, [copy.events, copy.runs, locale, params, route.boardSlug, runtime.webBasePath])
+  }, [copy.events, copy.health, copy.maintenance, copy.ontology, copy.runs, copy.signals, params, route.boardSlug, runtime.webBasePath])
 
   const loadInspectorRuns = useCallback((signal: AbortSignal) => taskId
     ? loadTaskInspectorRuns(runtime, route.boardSlug, taskId, { signal }).then((runs) => runs.map((run) => inspectorRunView(run)))
@@ -805,7 +819,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         inert={isNarrowViewport && showInspector}
       />
       <div className={showInspector ? styles.contentWithInspector : styles.content}>
-        <main className={styles.primaryContent} inert={isNarrowViewport && showInspector ? true : undefined}>
+        <section className={styles.primaryContent} inert={isNarrowViewport && showInspector ? true : undefined}>
           {view === "board" ? (
             boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
               : boardRead.data ? <BoardView state={{ kind: "ready", model: toBoardViewModel(boardRead.data) }} messages={boardMessagesForLocale(locale)} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} />
@@ -869,7 +883,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
               onSelectTask={selectTask}
             />
           ) : null}
-        </main>
+        </section>
         {showInspector ? (
           <div className={styles.inspectorViewport} data-mode={isNarrowViewport ? "sheet" : "side-peek"}>
             {isNarrowViewport ? <button type="button" className={styles.inspectorScrim} data-testid="task-inspector-scrim" aria-label={copy.closeInspector} onClick={closeInspector} /> : null}

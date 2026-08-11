@@ -60,6 +60,11 @@ function activeProjectSlug(route: AppRoute): CanonicalBoardSlug | undefined {
     : undefined
 }
 
+function usesTasksWorkspaceChrome(route: AppRoute): boolean {
+  return route.kind === "board"
+    && (route.view === undefined || route.view === "board" || route.view === "list" || route.view === "map" || route.view === "runs" || route.view === "events")
+}
+
 function routeProject(route: AppRoute, projects: readonly BoardListItem[] | undefined): BoardListItem | undefined {
   const slug = activeProjectSlug(route)
   return slug === undefined ? undefined : projects?.find((project) => project.slug === slug)
@@ -438,7 +443,7 @@ export function ProductShell({
   const actions = route.kind === "project-overview" && project !== undefined && project.archivedAt === null && onNavigate !== undefined
     ? [{ id: "open-tasks", label: t("tasks"), kind: "primary" as const, onSelect: () => void onNavigate({ kind: "board", boardSlug: project.slug, view: "board" }) }]
     : []
-  const headerMoreItems = boardList === undefined || project?.archivedAt === null
+  const headerMoreItems = !usesTasksWorkspaceChrome(route) && (boardList === undefined || project?.archivedAt === null)
     ? moreItems(runtime, slug, t, onNavigate)
     : []
 

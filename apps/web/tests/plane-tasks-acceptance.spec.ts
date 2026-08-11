@@ -1,7 +1,14 @@
+import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
 import { installPlaneAcceptanceFixture } from "./plane-acceptance-fixture"
-import { expectNoPageOverflow, expectTaskUrl } from "./plane-acceptance-support"
+import { expectNoPageOverflow, expectStrictCsp, expectTaskUrl } from "./plane-acceptance-support"
+
+async function expectTasksSurfaceAxeClean(page: import("@playwright/test").Page): Promise<void> {
+  await expect(page.locator("main:visible")).toHaveCount(1)
+  const axe = await new AxeBuilder({ page }).analyze()
+  expect(axe.violations).toEqual([])
+}
 
 test.describe("Plane-only Tasks workspace acceptance", () => {
   test("switches Board, List, Table, and Map without dropping legal q and task URL state", async ({ page }) => {
@@ -28,6 +35,29 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expect(page.getByTestId("board-view")).toBeVisible()
     expectTaskUrl(page, "/app/boards/default/board")
     expect(fixture.apiRequests.every((request) => request.startsWith("GET "))).toBe(true)
+  })
+
+  test("keeps Board, List, Table, and Map strict-CSP, axe-clean, and on one main landmark", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+    const response = await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+    expectStrictCsp(response)
+    await expect(page.getByTestId("board-view")).toBeVisible()
+    await expect(page.locator("[style]")).toHaveCount(0)
+    await expect(page.locator("style")).toHaveCount(0)
+    await expectTasksSurfaceAxeClean(page)
+
+    const views = page.getByRole("group", { name: "任务视图" })
+    await views.getByRole("link", { name: "列表", exact: true }).click()
+    await expect(page.getByTestId("task-list").locator('[data-display-variant="list"]')).toBeVisible()
+    await expectTasksSurfaceAxeClean(page)
+
+    await views.getByRole("link", { name: "表格", exact: true }).click()
+    await expect(page.getByTestId("task-list").locator('[data-display-variant="table"]')).toBeVisible()
+    await expectTasksSurfaceAxeClean(page)
+
+    await views.getByRole("link", { name: "关系图", exact: true }).click()
+    await expect(page.getByTestId("task-map")).toBeVisible()
+    await expectTasksSurfaceAxeClean(page)
   })
 
   test("keeps the 430px shell usable with a drawer, inspector sheet, and no page overflow", async ({ page }) => {
@@ -98,9 +128,10 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "__kanbanSseConnectionCount"))).toBe(1)
     await page.evaluate(() => Reflect.set(window, "__planeSpaSentinel", "retained"))
 
-    const resourceHeader = page.getByTestId("resource-header")
-    await resourceHeader.locator("summary").click()
-    await resourceHeader.locator('a[href="/app/boards/default/health"]').click()
+    const tasksChrome = page.getByTestId("tasks-workspace-chrome")
+    await expect(page.getByText("更多", { exact: true })).toHaveCount(1)
+    await tasksChrome.locator("summary").filter({ hasText: "更多" }).click()
+    await tasksChrome.locator('a[href="/app/boards/default/health"]').click()
     await expect(page).toHaveURL(/\/app\/boards\/default\/health$/)
     await expect(page.getByTestId("health-page")).toBeVisible()
     await expect(page.getByTestId("health-metrics")).toBeVisible()

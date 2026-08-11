@@ -100,8 +100,9 @@ describe("TaskListView", () => {
     )
 
     expect(dense).toContain('data-density="dense"')
-    expect(dense).toContain('role="list"')
-    expect(dense).toContain('role="listitem"')
+    expect(dense).toContain("<ul")
+    expect(dense).toContain("<li")
+    expect(dense).not.toContain('role="listitem"')
     expect(dense).toContain('class="')
     expect(dense).toContain("<dl")
     expect(dense).toContain("优先级")

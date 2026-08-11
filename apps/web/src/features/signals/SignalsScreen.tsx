@@ -234,7 +234,7 @@ export function SignalsScreenView({
     ? list.data.filter((signal) => signal.id !== selectedSignalId)
     : list.data
   return (
-      <main className={styles.screen} aria-labelledby="signals-title" data-testid="signals-screen">
+      <section className={styles.screen} aria-labelledby="signals-title" data-testid="signals-screen">
       <header className={styles.hero}>
         <div>
           <Text as="p" type="supporting" className={styles.eyebrow}>{copy.eyebrow}</Text>
@@ -325,7 +325,7 @@ export function SignalsScreenView({
           <SignalDetailView loading={detail.phase === "loading"} signal={detail.data} error={detail.error} onRetry={onRefreshDetail} locale={locale} copy={copy} />
         </Card>
       </section>
-    </main>
+    </section>
   )
 }
 

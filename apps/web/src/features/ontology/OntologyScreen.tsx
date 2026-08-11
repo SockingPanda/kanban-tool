@@ -402,7 +402,7 @@ export function OntologyScreenView({
     ? signals.data.filter((signal) => signal.id !== selectedSignalId)
     : signals.data
   return (
-    <main className={styles.screen} aria-labelledby="ontology-title" data-testid="ontology-screen">
+    <section className={styles.screen} aria-labelledby="ontology-title" data-testid="ontology-screen">
       <header className={styles.hero}>
         <div>
           <Text as="p" type="supporting" className={styles.eyebrow}>{copy.eyebrow}</Text>
@@ -457,7 +457,7 @@ export function OntologyScreenView({
           </Card>
         </div>
       </section>
-    </main>
+    </section>
   )
 }
 

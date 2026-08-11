@@ -288,19 +288,19 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
         </div>
       ) : null}
       {rows.length > 0 ? displayVariant === "grouped" ? (
-        <div className={styles.groupedList} data-display-variant="list" role="list" aria-label={copy.table}>
+        <ul className={styles.groupedList} data-display-variant="list" aria-label={copy.table}>
           {statuses.map((status) => {
             const group = rows.filter((task) => task.status === status)
             if (group.length === 0) return null
             return (
-              <section className={styles.statusGroup} key={status} role="listitem" aria-labelledby={`task-status-${status}`}>
+              <li className={styles.statusGroup} key={status} aria-labelledby={`task-status-${status}`}>
                 <header className={styles.statusGroupHeader}>
                   <h3 id={`task-status-${status}`}>{copy.statusValues[status]}</h3>
                   <span>{group.length}</span>
                 </header>
-                <div className={styles.statusGroupRows} role="list" aria-labelledby={`task-status-${status}`}>
+                <ul className={styles.statusGroupRows} aria-labelledby={`task-status-${status}`}>
                   {group.map((task) => (
-                    <article className={styles.groupedRow} key={task.id} data-testid="task-row" data-task-id={task.id} role="listitem">
+                    <li className={styles.groupedRow} key={task.id} data-testid="task-row" data-task-id={task.id}>
                       <div className={styles.groupedIdentity}>
                         <span className={styles.mono}>{task.ref}</span>
                         <button type="button" className={styles.taskLink} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>{task.title}</button>
@@ -311,15 +311,15 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
                         {visibleColumns?.plan !== false ? <div><dt className={styles.visuallyHidden}>{copy.headers[5]}</dt><dd>{copy.planState[task.executionPlanState]}</dd></div> : null}
                         {visibleColumns?.steps !== false ? <div><dt className={styles.visuallyHidden}>{copy.headers[6]}</dt><dd>{task.completedRequiredStepCount} / {task.requiredStepCount}{task.optionalStepCount ? ` + ${task.optionalStepCount}` : ""}</dd></div> : null}
                         {visibleColumns?.updated !== false ? <div><dt className={styles.visuallyHidden}>{copy.headers[7]}</dt><dd className={styles.mono}>{task.updatedAt}</dd></div> : null}
-                        {task.dependencyBlocked ? <div><dt className={styles.visuallyHidden}>{copy.statusValues.blocked}</dt><dd className={styles.muted}>{copy.blocked}</dd></div> : null}
+                          {task.dependencyBlocked ? <div><dt className={styles.visuallyHidden}>{copy.statusValues.blocked}</dt><dd className={styles.muted}>{copy.blocked}</dd></div> : null}
                       </dl>
-                    </article>
+                    </li>
                   ))}
-                </div>
-              </section>
+                </ul>
+              </li>
             )
           })}
-        </div>
+        </ul>
       ) : (
         <div className={styles.tableWrap} role="region" aria-label={copy.table} tabIndex={0} data-display-variant="table">
           <table className={styles.table}>

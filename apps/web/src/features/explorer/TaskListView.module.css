@@ -225,6 +225,9 @@
     display: grid;
     gap: 0.9rem;
     min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
   .statusGroup {
@@ -252,6 +255,9 @@
 
   .statusGroupRows {
     display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
   .groupedRow {

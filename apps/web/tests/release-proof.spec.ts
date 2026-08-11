@@ -173,7 +173,7 @@ test("#task.collection #task.create #task.detail #events.view real UI create, pe
     await contextB.setOffline(false)
     // Reconnect/catch-up is observed without page reload or an Events refresh click.
     await expect(pageB.getByTestId("event-row").filter({ hasText: taskId! })).toBeVisible()
-    await pageB.getByTestId("nav-board").click()
+    await pageB.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await expect(pageB).toHaveURL(/\/app\/boards\/default\/board$/)
     await expect(pageB.getByTestId("board-view")).toHaveAttribute("data-state", "ready")
     await expect(pageB.getByTestId("board-task").filter({ hasText: title })).toBeVisible()

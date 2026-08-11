@@ -51,7 +51,7 @@ test.describe("Maintenance operator workflow", () => {
     await expect(page.getByTestId("maintenance-status")).toContainText("db_fixture")
     await expect(page.getByTestId("maintenance-legacy-import-unsupported")).toContainText("legacy")
     await expect(page.getByTestId("maintenance-doctor-submit")).toBeEnabled()
-    await expect(page.getByTestId("nav-maintenance")).toHaveAttribute("aria-current", "page")
+    await expect(page.getByTestId("resource-breadcrumb")).toContainText("维护")
   })
 
   test("confirms backup with keyboard and renders server path plus checksum", async ({ page }) => {

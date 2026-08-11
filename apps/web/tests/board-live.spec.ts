@@ -70,23 +70,20 @@ function assertExpectedOfflineBoardCancellations(failures: readonly RequestFailu
 }
 
 test.describe("BoardLive browser pipeline", () => {
-  test("redirects canonical /app/ home, renders all statuses, and keeps the skip link keyboard reachable", async ({ page }) => {
+  test("renders the Projects collection at canonical /app/ without inventing a board session", async ({ page }) => {
     const fixture = await installBoardFixture(page)
     const errors = trackBrowserErrors(page)
     await page.goto("/app/", { waitUntil: "domcontentloaded" })
 
-    await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
-    await expect(page.getByTestId("board-view")).toBeVisible()
-    await expect(page.getByTestId("board-column")).toHaveCount(8)
-    await expect(page.getByTestId("board-task")).toHaveCount(8)
+    await expect(page).toHaveURL(/\/app\/$/)
+    await expect(page.getByTestId("projects-collection")).toBeVisible()
+    await expect(page.getByTestId("projects-collection-project-default")).toBeVisible()
+    await expect(page.getByTestId("board-view")).toHaveCount(0)
 
-    const skipLink = page.getByRole("link", { name: "跳转到看板列" })
-    await skipLink.focus()
-    await skipLink.press("Enter")
-    await expect(page.locator("#astryx-board-columns")).toBeFocused()
-
-    await page.screenshot({ path: test.info().outputPath("board-live-home-redirect.png"), fullPage: true })
+    await page.screenshot({ path: test.info().outputPath("board-live-projects-collection.png"), fullPage: true })
     expect(fixture.apiRequests.some((request) => request.startsWith("/api/v1/boards?"))).toBe(true)
+    expect(fixture.apiRequests.some((request) => request.includes("/columns"))).toBe(false)
+    expect(fixture.apiRequests.some((request) => request.includes("/tasks/by-status"))).toBe(false)
     expect(errors.consoleErrors).toEqual([])
     expect(errors.pageErrors).toEqual([])
     expect(errors.requestFailures).toEqual([])
@@ -96,8 +93,8 @@ test.describe("BoardLive browser pipeline", () => {
     const fixture = await installBoardFixture(page, { emptyBoards: true })
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
 
-    await expect(page.getByTestId("board-error")).toBeVisible()
-    await expect(page.getByRole("heading", { name: "看板加载失败" })).toBeVisible()
+    await expect(page.getByTestId("shell-project-not-found")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "页面不存在" })).toBeVisible()
     expect(fixture.apiRequests.some((request) => request.includes("/columns"))).toBe(false)
     expect(fixture.apiRequests.some((request) => request.includes("/tasks/by-status"))).toBe(false)
   })
@@ -107,8 +104,8 @@ test.describe("BoardLive browser pipeline", () => {
     await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
-    await expect(page.getByTestId("board-switcher")).toBeVisible()
-    expect(fixture.apiRequests.some((request) => request.startsWith("/api/v1/boards?include_archived=false"))).toBe(true)
+    await expect(page.getByTestId("project-picker")).toBeVisible()
+    expect(fixture.apiRequests.some((request) => request.startsWith("/api/v1/boards?include_archived=true"))).toBe(true)
     expect(fixture.apiRequests.some((request) => request.includes("/columns"))).toBe(false)
     expect(fixture.apiRequests.some((request) => request.includes("/tasks/by-status"))).toBe(false)
   })

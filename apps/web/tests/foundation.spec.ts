@@ -34,13 +34,11 @@ test.describe("kanban-tool product shell", () => {
     await expect(page).toHaveTitle("kanban-tool")
     await expect(page.getByTestId("product-shell")).toBeVisible()
     await expect(page.getByTestId("board-view")).toBeVisible()
-    await expect(page.getByRole("navigation", { name: "侧栏导航" })).toBeVisible()
-    await expect(page.locator("main:visible")).toHaveCount(1)
+    await expect(page.getByRole("navigation", { name: "产品导航", exact: true })).toBeVisible()
+    await expect(page.locator('main[aria-label="kanban-tool"]')).toHaveCount(1)
 
-    const skipLink = page.getByRole("link", { name: "跳转到主要内容" })
-    await skipLink.focus()
-    await skipLink.press("Enter")
-    await expect(page.locator("#astryx-app-shell-main")).toBeFocused()
+    await page.getByTestId("product-rail-settings").focus()
+    await expect(page.getByTestId("product-rail-settings")).toBeFocused()
     await expect(page.locator("[style]")).toHaveCount(0)
     await expect(page.locator("style")).toHaveCount(0)
   })
@@ -65,17 +63,15 @@ test.describe("kanban-tool product shell", () => {
       .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
   })
 
-  test("navigates between board and settings without a router dependency", async ({ page }) => {
+  test("navigates between Tasks and Settings through the fixed product rail", async ({ page }) => {
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("board-view")).toBeVisible()
-    await page.getByTestId("nav-settings").click()
+    await page.getByTestId("product-rail-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
-    await expect(page.getByTestId("nav-board")).toBeEnabled()
-    await page.getByTestId("nav-board").click()
+    await expect(page.getByTestId("settings-page")).toBeVisible()
+    await page.goBack({ waitUntil: "domcontentloaded" })
     await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
     await expect(page.getByTestId("board-view")).toBeVisible()
-    await page.goBack()
-    await expect(page).toHaveURL(/\/app\/settings$/)
   })
 
   test("surfaces a rejected navigation without an unhandled page error", async ({ page }) => {
@@ -89,22 +85,19 @@ test.describe("kanban-tool product shell", () => {
       }
     })
 
-    await page.getByTestId("nav-settings").click()
+    await page.getByTestId("product-rail-settings").click()
     await expect(page.getByTestId("shell-error")).toBeVisible()
     expect(pageErrors).toEqual([])
   })
 
-  test("keeps board and settings entries available in collapsed desktop navigation", async ({ page }) => {
+  test("keeps Projects and Settings entries available in the fixed product rail", async ({ page }) => {
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("board-view")).toBeVisible()
-    await page.getByRole("button", { name: "收起侧栏" }).click()
-    await expect(page.getByRole("button", { name: "展开侧栏" })).toBeVisible()
-    await expect(page.getByTestId("nav-board")).toBeVisible()
-    await expect(page.getByTestId("nav-settings")).toBeVisible()
-    await page.getByTestId("nav-board").hover()
-    await page.getByTestId("nav-settings").focus()
-    await page.getByRole("button", { name: "展开侧栏" }).click()
-    await page.getByRole("button", { name: "收起侧栏" }).click()
+    await expect(page.getByTestId("product-rail-projects")).toBeVisible()
+    await expect(page.getByTestId("product-rail-settings")).toBeVisible()
+    await expect(page.getByTestId("product-rail-projects")).toHaveAttribute("aria-current", "page")
+    await page.getByTestId("product-rail-settings").focus()
+    await page.getByTestId("product-rail-projects").hover()
     await expect(page.locator("[style]")).toHaveCount(0)
   })
 

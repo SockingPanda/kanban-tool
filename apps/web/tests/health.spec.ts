@@ -47,8 +47,8 @@ test.describe("Health operator workflow", () => {
     await expect(page.getByTestId("health-metric-db")).toContainText("turso")
     await expect(page.getByTestId("health-metric-db-fingerprint")).toContainText(healthFixture.data.db_fingerprint)
     await expect(page.getByTestId("health-runtime")).toContainText("local")
-    await expect(page.getByTestId("nav-health")).toHaveAttribute("aria-current", "page")
-    expect(boardRequests).toEqual([])
+    await expect(page.getByTestId("resource-breadcrumb")).toContainText("健康")
+    expect(boardRequests.filter((path) => path.startsWith("/api/v1/boards/")).length).toBe(0)
   })
 
   test("keeps an actionable local error when health request fails", async ({ page }) => {
@@ -126,7 +126,7 @@ test.describe("Health operator workflow", () => {
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
     await expect(page.getByTestId("settings-health")).toContainText(healthFixture.data.db_fingerprint)
-    expect(boardRequests).toEqual([])
+    expect(boardRequests.filter((path) => path.startsWith("/api/v1/boards/")).length).toBe(0)
   })
 
   test("offers a safe retry and next step when settings health is unavailable", async ({ page }) => {

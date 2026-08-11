@@ -228,17 +228,23 @@ test.describe("agent-first Plane shell and board acceptance", () => {
     const fixture = await installAgentFirstFixture(page, { deferAlphaReads: true })
     await page.goto("/app/boards/alpha/board", { waitUntil: "domcontentloaded" })
 
-    await expect(page.getByTestId("board-switcher")).toBeVisible()
+    const picker = page.getByTestId("project-picker")
+    await expect(picker).toBeVisible()
     await fixture.alphaReadStarted
 
-    const switcher = page.getByTestId("board-switcher-select")
-    await expect(switcher).toBeVisible()
-    await expect(page.getByTestId("board-switcher-search")).toBeVisible()
-    await switcher.selectOption("beta")
+    const search = picker.getByRole("combobox")
+    await expect(search).toBeVisible()
+    await search.fill("Beta")
+    const betaOption = picker.getByRole("option", { name: /Beta Board/ })
+    await expect(betaOption).toBeVisible()
+    await betaOption.click()
 
+    await expect(page).toHaveURL(/\/app\/boards\/beta\/overview$/)
+    await expect(page.getByTestId("project-overview")).toBeVisible()
+    await page.getByTestId("project-overview-open-tasks").click()
     await expect(page).toHaveURL(/\/app\/boards\/beta\/board$/)
     await expect(page.getByTestId("board-view")).toBeVisible()
-    await expect(page.getByRole("heading", { name: "Beta Board" })).toBeVisible()
+    await expect(page.getByTestId("board-view").getByRole("heading", { name: "Beta Board" })).toBeVisible()
     await expect(page.getByTestId("board-identity-slug")).toHaveText("beta")
     await expect(page.getByTestId("board-task").filter({ hasText: "Beta ready task" })).toBeVisible()
     fixture.releaseAlphaReads()
@@ -262,7 +268,9 @@ test.describe("agent-first Plane shell and board acceptance", () => {
     await page.goto("/app/boards/alpha/board", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("board-view")).toBeVisible()
-    await expect(page.getByTestId("compact-app-nav")).toBeVisible()
+    await expect(page.getByTestId("resource-header-menu")).toBeVisible()
+    const sidebar = page.getByTestId("projects-sidebar")
+    await expect(sidebar).toHaveAttribute("data-open", "false")
     await expectNoPageOverflow(page)
 
     const boardTrack = page.getByTestId("board-view").locator('[role="region"][tabindex="0"]')
@@ -270,59 +278,74 @@ test.describe("agent-first Plane shell and board acceptance", () => {
     const trackWidths = await boardTrack.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }))
     expect(trackWidths.scroll).toBeGreaterThan(trackWidths.client)
 
+    await page.getByTestId("resource-header-menu").click()
+    await expect(sidebar).toHaveAttribute("data-open", "true")
+    await expect(sidebar.getByTestId("project-tree-tasks")).toBeVisible()
+    await sidebar.getByTestId("project-tree-overview").click()
+    await expect(page.getByTestId("project-overview")).toBeVisible()
+    await expect(sidebar).toHaveAttribute("data-open", "false")
+
     const destinations: readonly [string, string][] = [
-      ["compact-nav-signals", "signals-screen"],
-      ["compact-nav-ontology", "ontology-screen"],
-      ["compact-nav-health", "health-page"],
-      ["compact-nav-maintenance", "maintenance-page"],
-      ["compact-nav-settings", "settings-page"],
+      ["信号", "signals-screen"],
+      ["本体", "ontology-screen"],
+      ["健康", "health-page"],
+      ["维护", "maintenance-page"],
     ]
-    for (const [navTestId, pageTestId] of destinations) {
-      await page.getByTestId(navTestId).click()
+    for (const [label, pageTestId] of destinations) {
+      const more = page.getByTestId("resource-header").locator("details")
+      if (await more.getAttribute("open") === null) await more.locator("summary").click()
+      const item = more.getByRole("link", { name: label, exact: true })
+      await expect(item).toBeVisible()
+      await item.click()
       await expect(page.getByTestId(pageTestId)).toBeVisible()
-      await expect(page.getByTestId("compact-app-nav")).toBeVisible()
+      await expect(page.getByTestId("resource-header-menu")).toBeVisible()
       await expectNoPageOverflow(page)
     }
 
-    await page.getByTestId("compact-nav-board").click()
+    await page.getByTestId("product-rail-settings").click()
+    await expect(page.getByTestId("settings-page")).toBeVisible()
+    await expect(page.getByTestId("product-rail-projects")).toBeVisible()
+    await page.getByTestId("product-rail-projects").click()
+    await expect(page.getByTestId("projects-collection")).toBeVisible()
+    await page.getByTestId("projects-collection-project-alpha").click()
+    await page.getByTestId("project-overview-open-tasks").click()
     await expect(page).toHaveURL(/\/app\/boards\/alpha\/board$/)
     await expect(page.getByTestId("board-view")).toBeVisible()
   })
 
-  test("keeps the global board switcher available on a direct Settings route", async ({ page }) => {
+  test("keeps the global project picker available on a direct Settings route", async ({ page }) => {
     await installAgentFirstFixture(page)
     await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
-    const switcher = page.getByTestId("board-switcher-select")
-    await expect(switcher).toBeVisible()
-    await switcher.selectOption("beta")
+    const picker = page.getByTestId("project-picker")
+    const search = picker.getByRole("combobox")
+    await search.fill("Beta")
+    await picker.getByRole("option", { name: /Beta Board/ }).click()
 
+    await expect(page).toHaveURL(/\/app\/boards\/beta\/overview$/)
+    await page.getByTestId("project-overview-open-tasks").click()
     await expect(page).toHaveURL(/\/app\/boards\/beta\/board$/)
     await expect(page.getByTestId("board-identity-slug")).toHaveText("beta")
     await expect(page.getByTestId("board-task").filter({ hasText: "Beta ready task" })).toBeVisible()
   })
 
-  test("searches and groups current, recent, and all canonical projects from the keyboard", async ({ page }) => {
+  test("searches canonical projects from the keyboard combobox and listbox", async ({ page }) => {
     await installAgentFirstFixture(page)
     await page.goto("/app/boards/alpha/board", { waitUntil: "domcontentloaded" })
 
-    const switcher = page.getByTestId("board-switcher-select")
-    await expect(switcher.locator('optgroup[label="当前项目"]')).toHaveCount(1)
-    await expect(switcher.locator('optgroup[label="所有项目"]')).toHaveCount(1)
-
-    const search = page.getByTestId("board-switcher-search")
+    const picker = page.getByTestId("project-picker")
+    const search = picker.getByRole("combobox")
     await search.focus()
     await search.fill("Beta")
-    await expect(switcher.locator('option[value="beta"]')).toHaveCount(1)
-    await switcher.selectOption("beta")
-    await expect(page).toHaveURL(/\/app\/boards\/beta\/board$/)
+    await expect(picker.getByRole("listbox")).toBeVisible()
+    await expect(picker.getByRole("option", { name: /Beta Board/ })).toHaveCount(1)
+    await search.press("Enter")
+    await expect(page).toHaveURL(/\/app\/boards\/beta\/overview$/)
 
-    await page.getByTestId("board-switcher-search").fill("")
-    await expect(page.getByTestId("board-switcher-select").locator('optgroup[label="最近项目"]')).toHaveCount(0)
-    await page.getByTestId("board-switcher-select").selectOption("alpha")
-    await expect(page).toHaveURL(/\/app\/boards\/alpha\/board$/)
-    await expect(page.getByTestId("board-switcher-select").locator('optgroup[label="最近项目"]')).toHaveCount(1)
+    await page.getByTestId("product-rail-projects").click()
+    await page.getByTestId("projects-collection-project-alpha").click()
+    await expect(page).toHaveURL(/\/app\/boards\/alpha\/overview$/)
   })
 
   test("shows primary task facts first and expands secondary facts from the keyboard", async ({ page }) => {
@@ -346,16 +369,14 @@ test.describe("agent-first Plane shell and board acceptance", () => {
     await expect(secondary.getByTestId("board-task-status-reason")).toBeVisible()
   })
 
-  test("keeps a board-list empty response as a local retryable boundary", async ({ page }) => {
+  test("keeps an empty project snapshot at an explicit project boundary", async ({ page }) => {
     await installAgentFirstFixture(page, { emptyBoards: true })
     await page.goto("/app/boards/alpha/board", { waitUntil: "domcontentloaded" })
 
-    const boundary = page.getByTestId("board-error")
+    const boundary = page.getByTestId("shell-project-not-found")
     await expect(boundary).toBeVisible()
-    await expect(boundary.getByRole("heading", { name: "看板加载失败" })).toBeVisible()
-    await expect(boundary.getByRole("button", { name: "重试" })).toBeVisible()
-    await expect(page.getByTestId("board-switcher-empty")).toBeVisible()
-    await expect(page.getByTestId("board-switcher-retry")).toBeVisible()
+    await expect(boundary.getByRole("heading", { name: "页面不存在" })).toBeVisible()
+    await expect(page.getByTestId("project-picker-empty")).toBeVisible()
     await expect(page.getByTestId("board-view")).toHaveCount(0)
   })
 })

@@ -419,7 +419,7 @@ test.describe("board task mutation DOM behavior", () => {
         body: JSON.stringify({ data: task("todo", typeof body.title === "string" ? body.title : "Created task", "b_default", "default", typeof body.task_id === "string" ? body.task_id : "t_created") }),
       })
     })
-    await page.getByTestId("nav-settings").click()
+    await page.getByTestId("product-rail-settings").click()
     await expect(page.getByTestId("settings-page")).toBeVisible()
     await page.goBack({ waitUntil: "domcontentloaded" })
     await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)

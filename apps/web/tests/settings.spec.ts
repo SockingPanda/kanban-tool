@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 import { installRuntimeFixture } from "./runtime-fixture"
+import { installExplorerFixture } from "./explorer-fixture"
 
 const healthFixture = {
   data: {
@@ -61,8 +62,9 @@ test.describe("Astryx Settings", () => {
   })
 
   test("copies validated diagnostics safely and opens the canonical health route", async ({ page }) => {
+    await installExplorerFixture(page)
     await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
-    await page.getByTestId("nav-settings").click()
+    await page.getByTestId("product-rail-settings").click()
     await page.getByTestId("settings-page").waitFor()
     await page.evaluate(() => {
       Object.defineProperty(navigator, "clipboard", {
@@ -111,6 +113,15 @@ test.describe("Astryx Settings", () => {
   test("retains the canonical board session when moving Board to Settings", async ({ page }) => {
     let streamRequests = 0
     const streamPending = new Promise<void>(() => undefined)
+    await page.route("**/api/v1/boards?include_archived=true", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [{ id: "b_default", slug: "default", name: "Default", description: null, created_at: 1, updated_at: 1, archived_at: null }],
+        }),
+      })
+    })
     await page.route("**/api/v1/boards?include_archived=false", async (route) => {
       await route.fulfill({
         status: 200,
@@ -149,14 +160,14 @@ test.describe("Astryx Settings", () => {
     await expect(page.getByTestId("board-view")).toHaveAttribute("data-state", "ready")
     await expect.poll(() => streamRequests).toBe(1)
 
-    await page.getByTestId("nav-settings").click()
+    await page.getByTestId("product-rail-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
     await expect(page.getByTestId("connection-reconnect")).toBeEnabled()
     await page.getByTestId("connection-reconnect").click()
     await expect(page.getByTestId("connection-feedback")).toContainText("仍在连接")
     await expect.poll(() => streamRequests).toBe(1)
 
-    await page.getByTestId("nav-board").click()
+    await page.goBack({ waitUntil: "domcontentloaded" })
     await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
     await expect(page.getByTestId("board-view")).toHaveAttribute("data-state", "ready")
     expect(streamRequests).toBe(1)

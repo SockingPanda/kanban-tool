@@ -12,19 +12,19 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     expectTaskUrl(page, "/app/boards/default/board")
 
     const viewSwitcher = page.getByRole("group", { name: "任务视图" })
-    await viewSwitcher.getByRole("button", { name: "列表", exact: true }).click()
+    await viewSwitcher.getByRole("link", { name: "列表", exact: true }).click()
     await expect(page.getByTestId("task-list")).toBeVisible()
     expectTaskUrl(page, "/app/boards/default/list")
 
-    await viewSwitcher.getByRole("button", { name: "表格", exact: true }).click()
+    await viewSwitcher.getByRole("link", { name: "表格", exact: true }).click()
     await expect(page.getByTestId("task-list").locator('[data-display-variant="table"]')).toBeVisible()
     expectTaskUrl(page, "/app/boards/default/list", "table")
 
-    await viewSwitcher.getByRole("button", { name: "关系图", exact: true }).click()
+    await viewSwitcher.getByRole("link", { name: "关系图", exact: true }).click()
     await expect(page.getByTestId("task-map")).toBeVisible()
     expectTaskUrl(page, "/app/boards/default/map")
 
-    await viewSwitcher.getByRole("button", { name: "看板", exact: true }).click()
+    await viewSwitcher.getByRole("link", { name: "看板", exact: true }).click()
     await expect(page.getByTestId("board-view")).toBeVisible()
     expectTaskUrl(page, "/app/boards/default/board")
   })
@@ -58,7 +58,7 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await projects.focus()
     await expect(projects).toBeFocused()
     await projects.press("Enter")
-    await expect(page).toHaveURL(/\/app\/boards\/default\/board\?q=agent&task=t_default_ready$/)
+    await expect(page).toHaveURL(/\/app\/$/)
 
     await settings.focus()
     await expect(settings).toBeFocused()
@@ -67,7 +67,7 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
 
     await page.goto("/app/boards/default/board?q=agent&task=t_default_ready", { waitUntil: "domcontentloaded" })
     const viewSwitcher = page.getByRole("group", { name: "任务视图" })
-    const list = viewSwitcher.getByRole("button", { name: "列表", exact: true })
+    const list = viewSwitcher.getByRole("link", { name: "列表", exact: true })
     await list.focus()
     await expect(list).toBeFocused()
     await list.press("Enter")

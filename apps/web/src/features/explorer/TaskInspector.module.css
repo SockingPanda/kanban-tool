@@ -37,6 +37,40 @@
     border-block-end: 1px solid var(--color-border);
   }
 
+  .headerTop {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .mobileCloseButton {
+    display: none;
+    min-height: 2.75rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.45rem 0.7rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .mobileCloseButton:hover {
+    background: var(--color-background-body);
+  }
+
+  .mobileCloseButton:focus-visible {
+    outline: 2px solid var(--color-focus, #2563eb);
+    outline-offset: 2px;
+  }
+
   .actionBar {
     min-width: 0;
     padding: 0 1rem;
@@ -534,6 +568,10 @@
 
     .stickyControls {
       position: sticky;
+    }
+
+    .mobileCloseButton {
+      display: inline-flex;
     }
   }
 }

@@ -103,6 +103,7 @@ export interface ExplorerPageProps {
 }
 
 const MAX_EVENT_KIND_FILTER_LENGTH = 128
+const NARROW_VIEWPORT_QUERY = "(max-width: 56rem)"
 
 type ExplorerCopy = {
   readonly eyebrow: string
@@ -176,6 +177,24 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
 
 function normalizeEventKindFilter(value: string | null | undefined): string {
   return (value ?? "").trim().slice(0, MAX_EVENT_KIND_FILTER_LENGTH)
+}
+
+function useNarrowViewport(): boolean {
+  const [isNarrow, setIsNarrow] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false
+    return window.matchMedia(NARROW_VIEWPORT_QUERY).matches
+  })
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
+    const media = window.matchMedia(NARROW_VIEWPORT_QUERY)
+    const update = () => setIsNarrow(media.matches)
+    update()
+    media.addEventListener("change", update)
+    return () => media.removeEventListener("change", update)
+  }, [])
+
+  return isNarrow
 }
 
 function syncStatusLabel(status: BoardSyncStatus, copy: ExplorerCopy): string {
@@ -446,6 +465,7 @@ function InspectorAssetsReadOnlyFallback({
 
 export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
   const { locale, density, setDensity } = usePreferences()
+  const isNarrowViewport = useNarrowViewport()
   const copy = explorerCopies[locale]
   const view: BoardRouteView = route.view === "signals" || route.view === "ontology" ? "board" : route.view ?? "board"
   const params = queryParams(route)
@@ -496,6 +516,8 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     return () => onVisibleCanonicalReloadChange?.(undefined, reloadVisibleInspector)
   }, [onVisibleCanonicalReloadChange, reloadVisibleInspector, showInspector])
   const inspectorModel = useMemo(() => inspectorRead.data ? inspectorViewModel(inspectorRead.data) : null, [inspectorRead.data])
+  const inspectorReady = inspectorModel !== null
+  const inspectorDialogRef = useRef<HTMLDivElement | null>(null)
   const inspectorRelations = useMemo(() => inspectorRead.data ? inspectorRelationsView(inspectorRead.data) : null, [inspectorRead.data])
   const attachmentDownload = useMemo(() => {
     try {
@@ -607,7 +629,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     nextParams.set("task", nextTaskId)
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
   }
-  const closeInspector = () => {
+  const closeInspector = useCallback(() => {
     if (view === "map") {
       updateMapUrlState({ ...mapUrlState, taskId: null })
       return
@@ -615,7 +637,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     const nextParams = new URLSearchParams(params)
     nextParams.delete("task")
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
-  }
+  }, [mapUrlState, navigate, params, route.boardSlug, runtime.webBasePath, updateMapUrlState, view])
 
   const rememberTaskOpener = useCallback((event: MouseEvent<HTMLElement>) => {
     if (typeof Element === "undefined" || !(event.target instanceof Element)) return
@@ -645,6 +667,53 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     if (previousTaskId !== null && taskId === null) restoreFocus()
     previousTaskIdRef.current = taskId
   }, [restoreFocus, taskId])
+
+  useEffect(() => {
+    if (!isNarrowViewport || !showInspector || !inspectorReady) return
+    const dialog = inspectorDialogRef.current
+    if (dialog === null) return
+    const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+    const focusInitial = () => {
+      const active = document.activeElement
+      if (active instanceof HTMLElement && dialog.contains(active)) return
+      dialog.querySelector<HTMLElement>(focusableSelector)?.focus()
+    }
+    const frame = window.requestAnimationFrame(focusInitial)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const nestedDialog = target?.closest<HTMLElement>('[role="dialog"]')
+      if (event.key === "Escape") {
+        if (nestedDialog !== null && nestedDialog !== dialog) return
+        event.preventDefault()
+        closeInspector()
+        return
+      }
+      if (event.key !== "Tab") return
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      if (focusable.length === 0) {
+        event.preventDefault()
+        dialog.focus()
+        return
+      }
+      const active = document.activeElement
+      const activeInside = active instanceof HTMLElement && dialog.contains(active)
+      if (!activeInside || active === dialog) {
+        event.preventDefault()
+        ;(event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus()
+      } else if (event.shiftKey && active === focusable[0]) {
+        event.preventDefault()
+        focusable[focusable.length - 1]?.focus()
+      } else if (!event.shiftKey && active === focusable[focusable.length - 1]) {
+        event.preventDefault()
+        focusable[0]?.focus()
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [closeInspector, inspectorIdentity, inspectorReady, isNarrowViewport, showInspector])
   const updateEventKindFilter = (nextKind: string) => {
     const nextParams = new URLSearchParams(params)
     const normalizedKind = normalizeEventKindFilter(nextKind)
@@ -730,11 +799,13 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         visibleColumns={visibleColumns}
         onVisibleColumnsChange={(columnId, visible) => setVisibleColumns((current) => ({ ...current, [columnId]: visible }))}
         diagnostics={diagnosticLinks}
+        onNavigate={navigate}
         hasInspector={Boolean(taskId)}
         onCloseInspector={taskId ? closeInspector : undefined}
+        inert={isNarrowViewport && showInspector}
       />
       <div className={showInspector ? styles.contentWithInspector : styles.content}>
-        <main className={styles.primaryContent}>
+        <main className={styles.primaryContent} inert={isNarrowViewport && showInspector ? true : undefined}>
           {view === "board" ? (
             boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
               : boardRead.data ? <BoardView state={{ kind: "ready", model: toBoardViewModel(boardRead.data) }} messages={boardMessagesForLocale(locale)} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} />
@@ -756,6 +827,8 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
                 displayVariant={displayVariant}
                 visibleColumns={visibleColumns}
                 showToolbarSearch={false}
+                showHeading={false}
+                density={density === "compact" ? "dense" : "comfortable"}
               />
               {listMutationController && listMutationController.dialog === null ? <MutationNotice controller={listMutationController} copy={boardMessagesForLocale(locale)} /> : null}
               {listMutationController ? <MutationDialog controller={listMutationController} copy={boardMessagesForLocale(locale)} /> : null}
@@ -798,66 +871,85 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
           ) : null}
         </main>
         {showInspector ? (
-          inspectorModel ? (
-            <aside className={styles.inspectorStack}>
-              <TaskInspector
-                key={inspectorIdentity}
-                identity={inspectorIdentity}
-                refreshRevision={inspectorRevision}
-                model={inspectorModel}
-                refreshError={inspectorRead.error instanceof Error ? inspectorRead.error.message : null}
-                refreshOffline={inspectorRead.error instanceof ExplorerReadError && inspectorRead.error.kind === "offline"}
-                online={online !== false}
-                onRetry={inspectorRead.retry}
-                onSelectTask={selectTask}
-                locale={locale}
-                onLoadRuns={loadInspectorRuns}
-                onLoadEvents={loadInspectorEvents}
-                onLoadNeighborhood={loadInspectorNeighborhood}
-                mutationHandlers={inspectorMutationHandlers}
-                mutationSnapshot={inspectorMutationSnapshot}
-                hideReadOnlyRelations={relationPanelVisible}
-                claimToken={taskId ? taskMutations?.claimTokens?.get(taskId) ?? null : null}
-              />
-              {!relationPanelVisible && inspectorRead.data ? (
-                <InspectorAssetsReadOnlyFallback
-                  data={inspectorRead.data}
-                  attachments={attachmentsRead.data ?? []}
-                  attachmentsLoading={attachmentsRead.loading}
-                  attachmentsError={attachmentsRead.error instanceof Error ? attachmentsRead.error : null}
-                  locale={locale}
-                />
-              ) : null}
-              {relationOwner ? (
-                <>
-                  <TaskInspectorRelationsPanel
-                    taskId={relationOwner.taskId}
-                    comments={relationOwner.relations.comments}
-                    dependencies={relationOwner.relations.dependencies}
-                    steps={relationOwner.relations.steps}
-                    handlers={relationOwner.handlers}
-                    snapshot={relationOwner.snapshot}
-                    onSelectTask={selectTask}
-                    resolveTaskSelector={resolveInspectorTaskSelector}
-                    locale={locale}
-                  />
-                  <TaskInspectorAssetsPanel
-                    taskId={relationOwner.taskId}
-                    labels={relationOwner.data.task.labels as readonly InspectorAssetLabel[]}
-                    attachments={(attachmentsRead.data ?? []) as readonly InspectorAssetAttachment[]}
-                    suggestionResult={null}
-                    suggestionRequested={false}
-                    suggestionLoading={relationOwner.snapshot.pending.has(inspectorMutationKey("suggestLabels", relationOwner.taskId))}
-                    handlers={relationOwner.handlers}
-                    snapshot={relationOwner.snapshot}
-                    attachmentLoading={attachmentsRead.loading}
-                    attachmentError={attachmentsRead.error instanceof Error ? attachmentsRead.error.message : null}
-                    locale={locale}
-                  />
-                </>
-              ) : null}
-            </aside>
-          ) : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />
+          <div className={styles.inspectorViewport} data-mode={isNarrowViewport ? "sheet" : "side-peek"}>
+            {isNarrowViewport ? <button type="button" className={styles.inspectorScrim} data-testid="task-inspector-scrim" aria-label={copy.closeInspector} onClick={closeInspector} /> : null}
+            <div
+              ref={inspectorDialogRef}
+              className={styles.inspectorDialog}
+              data-testid="task-inspector-dialog"
+              data-mode={isNarrowViewport ? "sheet" : "side-peek"}
+              role={isNarrowViewport ? "dialog" : undefined}
+              aria-modal={isNarrowViewport ? true : undefined}
+              aria-label={locale === "en" ? "Task Inspector" : "任务检查器"}
+              tabIndex={isNarrowViewport ? -1 : undefined}
+            >
+              <aside className={styles.inspectorStack}>
+                {inspectorModel ? (
+                  <>
+                    <TaskInspector
+                      key={inspectorIdentity}
+                      identity={inspectorIdentity}
+                      refreshRevision={inspectorRevision}
+                      model={inspectorModel}
+                      mode={isNarrowViewport ? "sheet" : "side-peek"}
+                      refreshError={inspectorRead.error instanceof Error ? inspectorRead.error.message : null}
+                      refreshOffline={inspectorRead.error instanceof ExplorerReadError && inspectorRead.error.kind === "offline"}
+                      online={online !== false}
+                      onRetry={inspectorRead.retry}
+                      onSelectTask={selectTask}
+                      onClose={closeInspector}
+                      closeLabel={copy.closeInspector}
+                      locale={locale}
+                      onLoadRuns={loadInspectorRuns}
+                      onLoadEvents={loadInspectorEvents}
+                      onLoadNeighborhood={loadInspectorNeighborhood}
+                      mutationHandlers={inspectorMutationHandlers}
+                      mutationSnapshot={inspectorMutationSnapshot}
+                      hideReadOnlyRelations={relationPanelVisible}
+                      claimToken={taskId ? taskMutations?.claimTokens?.get(taskId) ?? null : null}
+                    />
+                    {!relationPanelVisible && inspectorRead.data ? (
+                      <InspectorAssetsReadOnlyFallback
+                        data={inspectorRead.data}
+                        attachments={attachmentsRead.data ?? []}
+                        attachmentsLoading={attachmentsRead.loading}
+                        attachmentsError={attachmentsRead.error instanceof Error ? attachmentsRead.error : null}
+                        locale={locale}
+                      />
+                    ) : null}
+                    {relationOwner ? (
+                      <>
+                        <TaskInspectorRelationsPanel
+                          taskId={relationOwner.taskId}
+                          comments={relationOwner.relations.comments}
+                          dependencies={relationOwner.relations.dependencies}
+                          steps={relationOwner.relations.steps}
+                          handlers={relationOwner.handlers}
+                          snapshot={relationOwner.snapshot}
+                          onSelectTask={selectTask}
+                          resolveTaskSelector={resolveInspectorTaskSelector}
+                          locale={locale}
+                        />
+                        <TaskInspectorAssetsPanel
+                          taskId={relationOwner.taskId}
+                          labels={relationOwner.data.task.labels as readonly InspectorAssetLabel[]}
+                          attachments={(attachmentsRead.data ?? []) as readonly InspectorAssetAttachment[]}
+                          suggestionResult={null}
+                          suggestionRequested={false}
+                          suggestionLoading={relationOwner.snapshot.pending.has(inspectorMutationKey("suggestLabels", relationOwner.taskId))}
+                          handlers={relationOwner.handlers}
+                          snapshot={relationOwner.snapshot}
+                          attachmentLoading={attachmentsRead.loading}
+                          attachmentError={attachmentsRead.error instanceof Error ? attachmentsRead.error.message : null}
+                          locale={locale}
+                        />
+                      </>
+                    ) : null}
+                  </>
+                ) : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />}
+              </aside>
+            </div>
+          </div>
         ) : null}
       </div>
     </section>

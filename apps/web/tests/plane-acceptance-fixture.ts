@@ -106,6 +106,14 @@ function tasksFor(project: PlaneAcceptanceProject) {
   return [taskFor(project, "ready", 1), taskFor(project, "todo", 2)]
 }
 
+function taskFixtureForId(taskId: string): { readonly project: PlaneAcceptanceProject; readonly task: ReturnType<typeof taskFor> } | undefined {
+  for (const project of planeAcceptanceProjects) {
+    const task = tasksFor(project).find((candidate) => candidate.id === taskId)
+    if (task !== undefined) return { project, task }
+  }
+  return undefined
+}
+
 async function fulfillJson(route: Route, payload: unknown, status = 200): Promise<void> {
   await route.fulfill({
     status,
@@ -220,28 +228,118 @@ export async function installPlaneAcceptanceFixture(page: Page): Promise<PlaneAc
       return
     }
 
-    if (url.pathname === "/api/v1/events") {
-      await fulfillJson(route, { data: [], meta: { next_after: 0 } })
-      return
-    }
-
     const taskMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)$/)
-    if (taskMatch && route.request().method() === "GET") {
-      const taskId = decodeURIComponent(taskMatch[1] ?? "")
-      const task = planeAcceptanceProjects
-        .flatMap((project) => tasksFor(project))
-        .find((candidate) => candidate.id === taskId)
-      if (task === undefined) {
+    if (taskMatch) {
+      if (route.request().method() !== "GET") {
+        await fulfillJson(route, { error: { code: "method_not_allowed", message: "fixture is read-only" } }, 405)
+        return
+      }
+      const selected = taskFixtureForId(decodeURIComponent(taskMatch[1] ?? ""))
+      if (selected === undefined) {
         await fulfillJson(route, { error: { code: "not_found", message: "fixture task not found" } }, 404)
         return
       }
-      await fulfillJson(route, { data: task })
+      await fulfillJson(route, { data: selected.task })
+      return
+    }
+
+    const labelsMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/labels$/)
+    if (labelsMatch) {
+      if (route.request().method() !== "GET") {
+        await fulfillJson(route, { error: { code: "method_not_allowed", message: "fixture is read-only" } }, 405)
+        return
+      }
+      const selected = taskFixtureForId(decodeURIComponent(labelsMatch[1] ?? ""))
+      if (selected === undefined) {
+        await fulfillJson(route, { error: { code: "not_found", message: "fixture task not found" } }, 404)
+        return
+      }
+      await fulfillJson(route, { data: selected.task.labels })
+      return
+    }
+
+    const dependenciesMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/dependencies$/)
+    if (dependenciesMatch) {
+      if (route.request().method() !== "GET") {
+        await fulfillJson(route, { error: { code: "method_not_allowed", message: "fixture is read-only" } }, 405)
+        return
+      }
+      const selected = taskFixtureForId(decodeURIComponent(dependenciesMatch[1] ?? ""))
+      if (selected === undefined) {
+        await fulfillJson(route, { error: { code: "not_found", message: "fixture task not found" } }, 404)
+        return
+      }
+      await fulfillJson(route, {
+        data: {
+          task: {
+            id: selected.task.id,
+            board_id: selected.task.board_id,
+            board_slug: selected.task.board_slug,
+            ref: selected.task.ref,
+            title: selected.task.title,
+            status: selected.task.status,
+          },
+          parents: [],
+          children: [],
+          edges: [],
+        },
+      })
+      return
+    }
+
+    const stepsMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/steps$/)
+    if (stepsMatch) {
+      if (route.request().method() !== "GET") {
+        await fulfillJson(route, { error: { code: "method_not_allowed", message: "fixture is read-only" } }, 405)
+        return
+      }
+      const selected = taskFixtureForId(decodeURIComponent(stepsMatch[1] ?? ""))
+      if (selected === undefined) {
+        await fulfillJson(route, { error: { code: "not_found", message: "fixture task not found" } }, 404)
+        return
+      }
+      await fulfillJson(route, {
+        data: {
+          task_id: selected.task.id,
+          steps: [],
+          execution_plan: { board_id: selected.project.id, task_id: selected.task.id, state: "planned", reason: null, updated_by: "playwright", updated_at: 2 },
+        },
+      })
       return
     }
 
     const attachmentsMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/attachments$/)
-    if (attachmentsMatch && route.request().method() === "GET") {
+    if (attachmentsMatch) {
+      if (route.request().method() !== "GET") {
+        await fulfillJson(route, { error: { code: "method_not_allowed", message: "fixture is read-only" } }, 405)
+        return
+      }
+      const selected = taskFixtureForId(decodeURIComponent(attachmentsMatch[1] ?? ""))
+      if (selected === undefined) {
+        await fulfillJson(route, { error: { code: "not_found", message: "fixture task not found" } }, 404)
+        return
+      }
       await fulfillJson(route, { data: [] })
+      return
+    }
+
+    const commentsMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/comments$/)
+    if (commentsMatch) {
+      if (route.request().method() !== "GET") {
+        await fulfillJson(route, { error: { code: "method_not_allowed", message: "fixture is read-only" } }, 405)
+        return
+      }
+      const selected = taskFixtureForId(decodeURIComponent(commentsMatch[1] ?? ""))
+      if (selected === undefined) {
+        await fulfillJson(route, { error: { code: "not_found", message: "fixture task not found" } }, 404)
+        return
+      }
+      await fulfillJson(route, { data: [] })
+      return
+    }
+
+    if (url.pathname === "/api/v1/events") {
+      await fulfillJson(route, { data: [], meta: { next_after: 0 } })
       return
     }
 

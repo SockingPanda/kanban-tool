@@ -33,7 +33,7 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
   test("keeps the 430px shell usable with a drawer, inspector sheet, and no page overflow", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
     await page.setViewportSize({ width: 430, height: 900 })
-    await page.goto("/app/boards/default/board?task=t_default_ready", { waitUntil: "domcontentloaded" })
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("resource-header-menu")).toBeVisible()
     await expect(page.getByTestId("projects-sidebar")).toHaveAttribute("data-open", "false")
@@ -45,9 +45,24 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await page.getByTestId("resource-header-menu").click()
     await expect(drawer).toHaveAttribute("data-open", "false")
 
+    const taskOpener = page.getByRole("button", { name: /ready task$/i }).first()
+    await taskOpener.click()
+    const inspectorDialog = page.getByTestId("task-inspector-dialog")
+    await expect(inspectorDialog).toHaveAttribute("role", "dialog")
+    await expect(inspectorDialog).toHaveAttribute("aria-modal", "true")
+    await expect(inspectorDialog).toHaveAttribute("data-mode", "sheet")
+    await expect(page.getByTestId("task-inspector-scrim")).toBeVisible()
     await expect(page.getByTestId("task-inspector")).toBeVisible()
     await expect(page.getByTestId("task-inspector")).toHaveAttribute("data-mode", "sheet")
+    await expect(page.getByTestId("task-inspector-mobile-close")).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect.poll(() => page.evaluate(() => document.activeElement?.closest("[data-testid='task-inspector-dialog']") !== null)).toBe(true)
+    await page.keyboard.press("Shift+Tab")
+    await expect(page.getByTestId("task-inspector-mobile-close")).toBeFocused()
     await expectNoPageOverflow(page)
+    await page.keyboard.press("Escape")
+    await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
+    await expect(taskOpener).toBeFocused()
   })
 
   test("keeps product rail and task view controls keyboard reachable", async ({ page }) => {

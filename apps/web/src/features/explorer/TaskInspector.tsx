@@ -118,6 +118,12 @@ export interface InspectorDependency {
 export interface TaskInspectorProps {
   readonly model: TaskInspectorViewModel
   readonly onSelectTask: (taskId: string) => void
+  /** Explorer owns the canonical URL close path for the mobile sheet. */
+  readonly onClose?: () => void
+  /** Action label supplied by the owning Explorer surface. */
+  readonly closeLabel?: string
+  /** The shell chooses the responsive presentation mode. */
+  readonly mode?: "side-peek" | "sheet"
   readonly locale?: Locale
   /** Runtime/session + task identity used to fence deferred section reads. */
   readonly identity: string
@@ -526,7 +532,7 @@ interface PendingActionDialogSubmission {
   status: "pending" | "preserve"
 }
 
-export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, hideReadOnlyRelations = false, claimToken = null }: TaskInspectorProps) {
+export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode = "side-peek", locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, hideReadOnlyRelations = false, claimToken = null }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
   const requestIdentity = identity
@@ -1011,10 +1017,13 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     startNeighborhoodLoad()
   }
   return (
-    <aside className={styles.inspector} data-testid="task-inspector" aria-label={copy.ariaLabel}>
+    <aside className={styles.inspector} data-testid="task-inspector" data-mode={mode} aria-label={copy.ariaLabel}>
       <div className={styles.stickyControls}>
         <header className={styles.header}>
-          <p className={styles.ref} translate="no">{task.ref}</p>
+          <div className={styles.headerTop}>
+            <p className={styles.ref} translate="no">{task.ref}</p>
+            {onClose ? <button type="button" className={styles.mobileCloseButton} data-testid="task-inspector-mobile-close" onClick={onClose}>{closeLabel ?? copy.ariaLabel}</button> : null}
+          </div>
           <h2 ref={headingRef} tabIndex={-1}>{task.title}</h2>
           <p aria-live="polite" className={styles.announcement}>{copy.openAnnouncement}</p>
           <p className={styles.identity} translate="no">{task.id}</p>

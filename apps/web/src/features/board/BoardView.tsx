@@ -7,6 +7,7 @@ import { Card } from "@astryxdesign/core/Card"
 import { Heading } from "@astryxdesign/core/Heading"
 
 import { taskOpenerKey } from "../../lib/explorer-focus"
+import { attentionCounts, attentionLenses, attentionTasks, type AttentionLens } from "../attention/attention-lens"
 import styles from "./BoardView.module.css"
 import { MutationDialog, MutationNotice } from "./BoardTaskMutations"
 import {
@@ -86,6 +87,31 @@ function taskTimestamp(value: number | null | undefined, locale: string): { read
   const date = new Date(milliseconds)
   if (Number.isNaN(date.getTime())) return { display: String(value), iso: String(value) }
   return { display: taskTimestampFormatter(locale).format(date), iso: date.toISOString() }
+}
+
+function attentionCopy(copy: BoardMessages): {
+  readonly label: string
+  readonly statuses: Readonly<Record<AttentionLens, string>>
+  readonly active: (label: string) => string
+  readonly clear: string
+  readonly noMatches: string
+} {
+  const english = copy.dateLocale.toLowerCase().startsWith("en")
+  return english
+    ? {
+      label: "Attention",
+      statuses: { ready: "Ready", running: "Running", blocked: "Blocked", review: "Review" },
+      active: (label) => `Attention: ${label}`,
+      clear: "Clear attention filter",
+      noMatches: "No tasks match this attention filter.",
+    }
+    : {
+      label: "关注入口",
+      statuses: { ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核" },
+      active: (label) => `当前关注：${label}`,
+      clear: "清除关注筛选",
+      noMatches: "没有任务符合当前关注筛选。",
+    }
 }
 
 function columnAnchorId(rootId: string, index: number) {
@@ -387,6 +413,7 @@ function BoardColumns({
   readonly onSelectTask?: (taskId: string) => void
 }) {
   const [pagesByColumn, setPagesByColumn] = useState<Record<string, number>>({})
+  const [attentionLens, setAttentionLens] = useState<AttentionLens | null>(null)
   const columns = orderedVisibleColumns(model.columns)
 
   if (columns.length === 0) {
@@ -395,26 +422,59 @@ function BoardColumns({
     return <EmptyBoard title={title} description={description} />
   }
 
-  const columnTasks = columns.map((column) => ({ column, tasks: tasksForColumn(model, column) }))
+  const copyForAttention = attentionCopy(copy)
+  const baseColumnTasks = columns.map((column) => ({ column, tasks: tasksForColumn(model, column) }))
+  const allTasks = baseColumnTasks.flatMap(({ tasks }) => tasks)
+  const counts = attentionCounts(allTasks)
+  const columnTasks = baseColumnTasks.map(({ column, tasks }) => ({ column, tasks: attentionTasks(tasks, attentionLens) }))
   const boardTaskTotal = columnTasks.reduce((total, entry) => total + entry.tasks.length, 0)
+  const displayColumns = attentionLens === null ? columnTasks : columnTasks.filter((entry) => entry.tasks.length > 0)
 
   return (
     <>
+      <div className={styles.attentionBar} role="group" aria-label={copyForAttention.label} data-testid="board-attention-lens">
+        <span className={styles.attentionLabel}>{copyForAttention.label}</span>
+        {attentionLenses.map((lens) => (
+          <button
+            key={lens}
+            type="button"
+            className={`${styles.attentionChip} ${attentionLens === lens ? styles.attentionChipActive : ""}`}
+            aria-pressed={attentionLens === lens}
+            data-testid={`board-attention-${lens}`}
+            onClick={() => setAttentionLens(attentionLens === lens ? null : lens)}
+          >
+            <span>{copyForAttention.statuses[lens]}</span>
+            <span className={styles.attentionCount} data-testid={`board-attention-count-${lens}`}>{counts[lens]}</span>
+          </button>
+        ))}
+        {attentionLens !== null ? (
+          <div className={styles.activeFilter} data-testid="board-attention-active-filter">
+            <span>{copyForAttention.active(copyForAttention.statuses[attentionLens])}</span>
+            <button type="button" data-testid="board-attention-clear" onClick={() => setAttentionLens(null)}>{copyForAttention.clear}</button>
+          </div>
+        ) : null}
+      </div>
       <p className={styles.boardTotal} data-testid="board-task-total" data-total={boardTaskTotal}>
         {copy.boardTaskTotal(boardTaskTotal)}
       </p>
-      <nav className={styles.columnNavigation} aria-label={copy.columnNavigationLabel}>
+      {attentionLens !== null && boardTaskTotal === 0 ? (
+        <div className={styles.attentionNoResults} data-testid="board-attention-empty" role="status" aria-live="polite">
+          <strong>{copyForAttention.noMatches}</strong>
+          <span>{copyForAttention.active(copyForAttention.statuses[attentionLens])}</span>
+        </div>
+      ) : null}
+      {boardTaskTotal > 0 || attentionLens === null ? <nav className={styles.columnNavigation} aria-label={copy.columnNavigationLabel}>
         <ul className={styles.columnNavigationList}>
-          {columns.map((column, index) => (
+          {displayColumns.map(({ column }, index) => (
             <li key={column.id}>
               <a href={`#${columnAnchorId(rootId, index)}`}>{column.title}</a>
             </li>
           ))}
         </ul>
-      </nav>
-      <div className={styles.boardColumns} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
+      </nav> : null}
+      {boardTaskTotal > 0 || attentionLens === null ? <div className={styles.boardColumns} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
         <div className={styles.columnsGrid}>
-          {columnTasks.map(({ column, tasks }, index) => {
+          {displayColumns.map(({ column, tasks }, index) => {
             const headingId = `${columnAnchorId(rootId, index)}-heading`
             const requestedPage = pagesByColumn[column.id] ?? 1
             const pageWindow = boardPageWindow(tasks.length, requestedPage)
@@ -505,7 +565,7 @@ function BoardColumns({
             )
           })}
         </div>
-      </div>
+      </div> : null}
     </>
   )
 }

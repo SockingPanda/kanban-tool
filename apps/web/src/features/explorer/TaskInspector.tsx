@@ -148,7 +148,9 @@ export type InspectorCopy = {
     readonly properties: string
     readonly relations: string
     readonly activity: string
-    readonly metadata: string
+    readonly readiness: string
+    readonly execution: string
+    readonly rawMetadata: string
     readonly claim: string
     readonly steps: string
     readonly dependencies: string
@@ -162,6 +164,7 @@ export type InspectorCopy = {
     readonly statusReason: string
     readonly assignee: string
     readonly plan: string
+    readonly readiness: string
     readonly requiredSteps: string
     readonly optionalSteps: string
     readonly createdAt: string
@@ -252,8 +255,8 @@ const copies: Record<Locale, InspectorCopy> = {
     ariaLabel: "任务检查器",
     eyebrow: "任务检查器",
     dependencyBlocked: "依赖阻塞",
-    sections: { overview: "概览", properties: "属性", relations: "关系", activity: "活动", metadata: "任务事实", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
-    facts: { statusReason: "状态原因", assignee: "执行者", plan: "执行计划", requiredSteps: "必需步骤", optionalSteps: "可选步骤", createdAt: "创建时间", updatedAt: "更新时间", claimOwner: "认领者", claimExpires: "认领到期", heartbeat: "最近心跳", currentRun: "当前运行", retry: "重试", blockedParents: "阻塞父任务", actor: "执行者", api: "API", server: "服务版本", protocol: "协议版本", build: "Web 构建" },
+    sections: { overview: "概览", properties: "属性", relations: "关系", activity: "活动", readiness: "就绪摘要", execution: "执行与归属", rawMetadata: "原始元数据", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
+    facts: { statusReason: "状态原因", assignee: "执行者", plan: "执行计划", readiness: "就绪度", requiredSteps: "必需步骤", optionalSteps: "可选步骤", createdAt: "创建时间", updatedAt: "更新时间", claimOwner: "认领者", claimExpires: "认领到期", heartbeat: "最近心跳", currentRun: "当前运行", retry: "重试", blockedParents: "阻塞父任务", actor: "执行者", api: "API", server: "服务版本", protocol: "协议版本", build: "Web 构建" },
     parents: "父任务",
     children: "子任务",
     description: "描述",
@@ -318,8 +321,8 @@ const copies: Record<Locale, InspectorCopy> = {
     ariaLabel: "Task Inspector",
     eyebrow: "TASK INSPECTOR",
     dependencyBlocked: "Blocked by dependencies",
-    sections: { overview: "Overview", properties: "Properties", relations: "Relations", activity: "Activity", metadata: "Task facts", claim: "Runtime / Claim", steps: "Steps", dependencies: "Dependencies", comments: "Comments", runs: "Runs", events: "Events", neighborhood: "Neighborhood / Map", runtime: "Runtime" },
-    facts: { statusReason: "Status reason", assignee: "Assignee", plan: "Execution plan", requiredSteps: "Required steps", optionalSteps: "Optional steps", createdAt: "Created", updatedAt: "Updated", claimOwner: "Claim owner", claimExpires: "Claim expires", heartbeat: "Last heartbeat", currentRun: "Current run", retry: "Retry", blockedParents: "Blocked parents", actor: "Actor", api: "API", server: "Server version", protocol: "Protocol version", build: "Web build" },
+    sections: { overview: "Overview", properties: "Properties", relations: "Relations", activity: "Activity", readiness: "Readiness summary", execution: "Execution & ownership", rawMetadata: "Raw metadata", claim: "Runtime / Claim", steps: "Steps", dependencies: "Dependencies", comments: "Comments", runs: "Runs", events: "Events", neighborhood: "Neighborhood / Map", runtime: "Runtime" },
+    facts: { statusReason: "Status reason", assignee: "Assignee", plan: "Execution plan", readiness: "Readiness", requiredSteps: "Required steps", optionalSteps: "Optional steps", createdAt: "Created", updatedAt: "Updated", claimOwner: "Claim owner", claimExpires: "Claim expires", heartbeat: "Last heartbeat", currentRun: "Current run", retry: "Retry", blockedParents: "Blocked parents", actor: "Actor", api: "API", server: "Server version", protocol: "Protocol version", build: "Web build" },
     parents: "Parents",
     children: "Children",
     description: "Description",
@@ -1033,21 +1036,24 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         {editing && mutationHandlers ? <TaskInspectorEditForm draft={editDraft} dirty={JSON.stringify(editDraft) !== canonicalEditorDraftKey} pending={mutationSavePending} error={saveError?.message ?? null} onRetry={retrySave} retryBlocksSubmit={saveRetryMatches} copy={copy} onChange={setEditDraft} onSave={submitEditor} onCancel={closeEditor} /> : null}
 
         <InspectorGroup id="inspector-overview" title={copy.sections.overview}>
-          <Section id="inspector-metadata" title={copy.sections.metadata} level={3}>
+          <Section id="inspector-metadata" title={copy.sections.readiness} level={3}>
             <DescriptionDisclosure description={task.description} copy={copy} />
             <Facts facts={[
               [copy.facts.statusReason, valueOrDash(task.statusReason)],
+              [copy.facts.readiness, `${copy.planState[task.executionPlanState]} · ${task.completedRequiredStepCount} / ${task.requiredStepCount}`],
+            ]} />
+          </Section>
+        </InspectorGroup>
+
+        <InspectorGroup id="inspector-properties" title={copy.sections.properties}>
+          <Section id="inspector-claim" title={copy.sections.execution} level={3}>
+            <Facts facts={[
               [copy.facts.assignee, valueOrDash(task.assignee)],
               [copy.facts.plan, copy.planState[task.executionPlanState]],
               [copy.facts.requiredSteps, `${task.completedRequiredStepCount} / ${task.requiredStepCount}`],
               [copy.facts.optionalSteps, String(task.optionalStepCount)],
               [copy.facts.createdAt, String(task.createdAt)],
               [copy.facts.updatedAt, String(task.updatedAt)],
-            ]} />
-          </Section>
-
-          <Section id="inspector-claim" title={copy.sections.claim} level={3}>
-            <Facts facts={[
               [copy.facts.claimOwner, valueOrDash(task.claimOwner)],
               [copy.facts.claimExpires, valueOrDash(task.claimExpiresAt)],
               [copy.facts.heartbeat, valueOrDash(task.lastHeartbeatAt)],
@@ -1056,11 +1062,8 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
               [copy.facts.blockedParents, String(task.unfinishedParentCount)],
             ]} />
           </Section>
-        </InspectorGroup>
-
-        <InspectorGroup id="inspector-properties" title={copy.sections.properties}>
           <section className={styles.propertyBlock} id="inspector-raw-metadata" data-testid="inspector-raw-metadata" aria-labelledby="inspector-raw-metadata-heading">
-            <h3 id="inspector-raw-metadata-heading">{copy.sections.metadata}</h3>
+            <h3 id="inspector-raw-metadata-heading">{copy.sections.rawMetadata}</h3>
             <MetadataDisclosure metadata={task.metadata} copy={copy} />
           </section>
           <Section id="inspector-runtime" title={copy.sections.runtime} level={3}>

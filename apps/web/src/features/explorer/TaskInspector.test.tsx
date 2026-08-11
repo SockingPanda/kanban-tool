@@ -269,7 +269,12 @@ describe("TaskInspector", () => {
     expect(markup).toContain("Properties")
     expect(markup).toContain("Relations")
     expect(markup).toContain("Activity")
+    expect(markup).toContain("Readiness summary")
+    expect(markup).toContain("Execution &amp; ownership")
+    expect(markup).toContain("Raw metadata")
+    expect(markup).not.toContain("Task facts")
     expect(markup).toContain('data-testid="inspector-metadata-disclosure"')
+    expect(markup.match(/<h3[^>]*>Raw metadata<\/h3>/g) ?? []).toHaveLength(1)
     expect(markup).not.toMatch(/<details[^>]*data-testid="inspector-metadata-disclosure"[^>]*open/)
   })
 

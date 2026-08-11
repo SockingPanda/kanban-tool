@@ -250,7 +250,7 @@ describe("TaskInspector", () => {
     const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" />)
 
     expect(markup).toContain('data-testid="task-inspector"')
-    for (const id of ["inspector-metadata", "inspector-claim", "inspector-runs", "inspector-events", "inspector-runtime"]) {
+    for (const id of ["inspector-overview", "inspector-properties", "inspector-relations", "inspector-activity", "inspector-metadata", "inspector-claim", "inspector-runs", "inspector-events", "inspector-runtime"]) {
       expect(markup).toContain(`data-testid="${id}"`)
     }
     for (const id of ["inspector-steps", "inspector-dependencies", "inspector-comments"]) expect(markup).toContain(`data-testid="${id}"`)
@@ -260,6 +260,17 @@ describe("TaskInspector", () => {
     expect(markup).toContain("3.0.0")
     expect(markup).not.toContain("Add comment")
     expect(markup).not.toContain("Create step")
+  })
+
+  test("keeps raw metadata behind a secondary disclosure", () => {
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" />)
+
+    expect(markup).toContain("Overview")
+    expect(markup).toContain("Properties")
+    expect(markup).toContain("Relations")
+    expect(markup).toContain("Activity")
+    expect(markup).toContain('data-testid="inspector-metadata-disclosure"')
+    expect(markup).not.toMatch(/<details[^>]*data-testid="inspector-metadata-disclosure"[^>]*open/)
   })
 
   test("hides legacy relation sections only when the mutation relation owner is mounted", () => {

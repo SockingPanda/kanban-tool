@@ -1,20 +1,52 @@
 @layer product {
   .inspector {
     display: grid;
+    grid-template-rows: max-content minmax(0, 1fr);
+    align-content: start;
+    min-width: 0;
+    min-height: 0;
+    max-block-size: calc(100dvh - 11rem);
+    border-inline-start: 1px solid var(--color-border);
+    background: var(--color-background-surface);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .stickyControls {
+    position: sticky;
+    z-index: 4;
+    inset-block-start: 0;
+    display: grid;
+    min-width: 0;
+    background: var(--color-background-surface);
+    box-shadow: 0 1px 0 var(--color-border);
+  }
+
+  .inspectorBody {
+    display: grid;
     gap: 1rem;
     min-width: 0;
     padding: 1rem;
-    border-inline-start: 1px solid var(--color-border);
-    background: var(--color-background-surface);
-    overflow: auto;
   }
 
   .header {
     display: grid;
     gap: 0.35rem;
     min-width: 0;
-    padding-block-end: 0.75rem;
+    padding: 1rem;
     border-block-end: 1px solid var(--color-border);
+  }
+
+  .actionBar {
+    min-width: 0;
+    padding: 0 1rem;
+    border-block-end: 1px solid var(--color-border);
+    background: var(--color-background-surface);
+  }
+
+  .actionBar > section {
+    padding-block: 0.75rem 1rem;
+    border-block-end: 0;
   }
 
   .editButton,
@@ -308,6 +340,24 @@
     white-space: nowrap;
   }
 
+  .group {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+  }
+
+  .group + .group {
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: 1rem;
+  }
+
+  .group > h2 {
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+  }
+
   .section {
     display: grid;
     gap: 0.55rem;
@@ -317,7 +367,19 @@
   }
 
   .section h2,
+  .section h3,
   .dependencyGroup h3 {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+
+  .propertyBlock {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .propertyBlock h3 {
     margin: 0;
     font-size: 0.9rem;
   }
@@ -362,6 +424,7 @@
   }
 
   .descriptionDisclosure,
+  .metadataDisclosure,
   .neighborhood {
     display: grid;
     gap: 0.45rem;
@@ -391,6 +454,22 @@
     color: var(--color-text-primary);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  .metadataDisclosure {
+    border: 1px solid var(--color-border);
+    padding: 0.55rem;
+    background: var(--color-background-body);
+  }
+
+  .metadataDisclosure[open] {
+    gap: 0.65rem;
+  }
+
+  .metadataDisclosure .codeBlock {
+    border: 0;
+    padding: 0;
+    background: transparent;
   }
 
   .compactList {
@@ -446,8 +525,15 @@
 
   @media (max-width: 56rem) {
     .inspector {
+      max-block-size: none;
+      max-height: none;
+      overflow: visible;
       border-block-start: 1px solid var(--color-border);
       border-inline-start: 0;
+    }
+
+    .stickyControls {
+      position: sticky;
     }
   }
 }

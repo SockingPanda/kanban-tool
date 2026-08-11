@@ -144,6 +144,10 @@ export type InspectorCopy = {
   readonly eyebrow: string
   readonly dependencyBlocked: string
   readonly sections: {
+    readonly overview: string
+    readonly properties: string
+    readonly relations: string
+    readonly activity: string
     readonly metadata: string
     readonly claim: string
     readonly steps: string
@@ -178,6 +182,7 @@ export type InspectorCopy = {
   readonly children: string
   readonly description: string
   readonly showDescription: string
+  readonly showMetadata: string
   readonly noDescription: string
   readonly noItems: string
   readonly noSteps: string
@@ -247,12 +252,13 @@ const copies: Record<Locale, InspectorCopy> = {
     ariaLabel: "任务检查器",
     eyebrow: "任务检查器",
     dependencyBlocked: "依赖阻塞",
-    sections: { metadata: "元数据", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
+    sections: { overview: "概览", properties: "属性", relations: "关系", activity: "活动", metadata: "任务事实", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
     facts: { statusReason: "状态原因", assignee: "执行者", plan: "执行计划", requiredSteps: "必需步骤", optionalSteps: "可选步骤", createdAt: "创建时间", updatedAt: "更新时间", claimOwner: "认领者", claimExpires: "认领到期", heartbeat: "最近心跳", currentRun: "当前运行", retry: "重试", blockedParents: "阻塞父任务", actor: "执行者", api: "API", server: "服务版本", protocol: "协议版本", build: "Web 构建" },
     parents: "父任务",
     children: "子任务",
     description: "描述",
     showDescription: "展开描述",
+    showMetadata: "查看原始元数据",
     noDescription: "暂无描述。",
     noItems: "无",
     noSteps: "暂无步骤。",
@@ -312,12 +318,13 @@ const copies: Record<Locale, InspectorCopy> = {
     ariaLabel: "Task Inspector",
     eyebrow: "TASK INSPECTOR",
     dependencyBlocked: "Blocked by dependencies",
-    sections: { metadata: "Metadata", claim: "Runtime / Claim", steps: "Steps", dependencies: "Dependencies", comments: "Comments", runs: "Runs", events: "Events", neighborhood: "Neighborhood / Map", runtime: "Runtime" },
+    sections: { overview: "Overview", properties: "Properties", relations: "Relations", activity: "Activity", metadata: "Task facts", claim: "Runtime / Claim", steps: "Steps", dependencies: "Dependencies", comments: "Comments", runs: "Runs", events: "Events", neighborhood: "Neighborhood / Map", runtime: "Runtime" },
     facts: { statusReason: "Status reason", assignee: "Assignee", plan: "Execution plan", requiredSteps: "Required steps", optionalSteps: "Optional steps", createdAt: "Created", updatedAt: "Updated", claimOwner: "Claim owner", claimExpires: "Claim expires", heartbeat: "Last heartbeat", currentRun: "Current run", retry: "Retry", blockedParents: "Blocked parents", actor: "Actor", api: "API", server: "Server version", protocol: "Protocol version", build: "Web build" },
     parents: "Parents",
     children: "Children",
     description: "Description",
     showDescription: "Show description",
+    showMetadata: "Show raw metadata",
     noDescription: "No description.",
     noItems: "None",
     noSteps: "No steps.",
@@ -388,10 +395,20 @@ function jsonValue(value: unknown): string {
   }
 }
 
-function Section({ id, title, children }: { readonly id: string; readonly title: string; readonly children: ReactNode }) {
+function Section({ id, title, children, level = 2 }: { readonly id: string; readonly title: string; readonly children: ReactNode; readonly level?: 2 | 3 }) {
+  const Heading = level === 3 ? "h3" : "h2"
   return (
     <section className={styles.section} id={id} data-testid={id}>
-      <h2>{title}</h2>
+      <Heading>{title}</Heading>
+      {children}
+    </section>
+  )
+}
+
+function InspectorGroup({ id, title, children }: { readonly id: string; readonly title: string; readonly children: ReactNode }) {
+  return (
+    <section className={styles.group} id={id} data-testid={id} aria-labelledby={`${id}-heading`}>
+      <h2 id={`${id}-heading`}>{title}</h2>
       {children}
     </section>
   )
@@ -454,11 +471,20 @@ function DependencyList({
 }
 
 function DescriptionDisclosure({ description, copy }: { readonly description: string | null; readonly copy: InspectorCopy }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   return (
-    <details className={styles.descriptionDisclosure} onToggle={(event: SyntheticEvent<HTMLDetailsElement>) => setOpen(event.currentTarget.open)}>
+    <details className={styles.descriptionDisclosure} open={open} onToggle={(event: SyntheticEvent<HTMLDetailsElement>) => setOpen(event.currentTarget.open)}>
       <summary>{copy.showDescription}</summary>
       {open ? <p className={styles.description}>{description || copy.noDescription}</p> : null}
+    </details>
+  )
+}
+
+function MetadataDisclosure({ metadata, copy }: { readonly metadata: unknown; readonly copy: InspectorCopy }) {
+  return (
+    <details className={styles.metadataDisclosure} data-testid="inspector-metadata-disclosure">
+      <summary>{copy.showMetadata}</summary>
+      <pre className={styles.codeBlock} translate="no">{jsonValue(metadata)}</pre>
     </details>
   )
 }
@@ -983,94 +1009,116 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   }
   return (
     <aside className={styles.inspector} data-testid="task-inspector" aria-label={copy.ariaLabel}>
-      <header className={styles.header}>
-        <p className={styles.eyebrow}>{copy.eyebrow}</p>
-        <p className={styles.ref} translate="no">{task.ref}</p>
-        <h2 ref={headingRef} tabIndex={-1}>{task.title}</h2>
-        <p aria-live="polite" className={styles.announcement}>{copy.openAnnouncement}</p>
-        <p className={styles.identity} translate="no">{task.id}</p>
-        {refreshError ? <div role={refreshOffline ? "status" : "alert"}><strong>{refreshOffline ? copy.refreshOffline : copy.refreshError}</strong>{!refreshOffline ? <span> {refreshError}</span> : null}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
-        {reloadPending ? <div className={styles.mutationError} data-testid="task-inspector-reload-feedback" role="status" aria-live="polite">{copy.mutationRetrying}</div> : null}
-        {reloadError ? <div className={styles.mutationError} data-testid="task-inspector-reload-feedback" role="status" aria-live="polite"><span>{reloadError.message}</span>{retryReload ? <button type="button" onClick={retryReload}>{copy.retryAction}</button> : null}</div> : null}
-        {!editing && saveError ? <div className={styles.mutationError} role="alert" aria-live="polite"><span>{saveError.message}</span>{retrySave ? <button type="button" onClick={retrySave}>{copy.retryAction}</button> : null}</div> : null}
-        {mutationHandlers ? <button ref={editTriggerRef} type="button" className={styles.editButton} onClick={beginEditor} disabled={editing || mutationSavePending}>{copy.edit}</button> : null}
-        <div className={styles.badges}>
-          <span className={styles.badge}>{copy.status[task.status]}</span>
-          <span className={styles.badge}>P{task.priority}</span>
-          {task.dependencyBlocked ? <span className={styles.badge}>{copy.dependencyBlocked}</span> : null}
-        </div>
-      </header>
+      <div className={styles.stickyControls}>
+        <header className={styles.header}>
+          <p className={styles.ref} translate="no">{task.ref}</p>
+          <h2 ref={headingRef} tabIndex={-1}>{task.title}</h2>
+          <p aria-live="polite" className={styles.announcement}>{copy.openAnnouncement}</p>
+          <p className={styles.identity} translate="no">{task.id}</p>
+          {refreshError ? <div role={refreshOffline ? "status" : "alert"}><strong>{refreshOffline ? copy.refreshOffline : copy.refreshError}</strong>{!refreshOffline ? <span> {refreshError}</span> : null}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
+          {reloadPending ? <div className={styles.mutationError} data-testid="task-inspector-reload-feedback" role="status" aria-live="polite">{copy.mutationRetrying}</div> : null}
+          {reloadError ? <div className={styles.mutationError} data-testid="task-inspector-reload-feedback" role="status" aria-live="polite"><span>{reloadError.message}</span>{retryReload ? <button type="button" onClick={retryReload}>{copy.retryAction}</button> : null}</div> : null}
+          {!editing && saveError ? <div className={styles.mutationError} role="alert" aria-live="polite"><span>{saveError.message}</span>{retrySave ? <button type="button" onClick={retrySave}>{copy.retryAction}</button> : null}</div> : null}
+          {mutationHandlers ? <button ref={editTriggerRef} type="button" className={styles.editButton} onClick={beginEditor} disabled={editing || mutationSavePending}>{copy.edit}</button> : null}
+          <div className={styles.badges}>
+            <span className={styles.badge}>{copy.status[task.status]}</span>
+            <span className={styles.badge}>P{task.priority}</span>
+            {task.dependencyBlocked ? <span className={styles.badge}>{copy.dependencyBlocked}</span> : null}
+          </div>
+        </header>
+        {mutationHandlers ? <div className={styles.actionBar} data-testid="inspector-action-bar"><TaskInspectorActionPanel task={task} claimToken={claimToken} locale={locale} copy={copy} pending={mutationTransitionPending} error={transitionError} onAction={openActionDialog} onRetry={retryTransition} retryAction={retryTransitionAction} /></div> : null}
+      </div>
 
-      {editing && mutationHandlers ? <TaskInspectorEditForm draft={editDraft} dirty={JSON.stringify(editDraft) !== canonicalEditorDraftKey} pending={mutationSavePending} error={saveError?.message ?? null} onRetry={retrySave} retryBlocksSubmit={saveRetryMatches} copy={copy} onChange={setEditDraft} onSave={submitEditor} onCancel={closeEditor} /> : null}
-      {mutationHandlers ? <TaskInspectorActionPanel task={task} claimToken={claimToken} locale={locale} copy={copy} pending={mutationTransitionPending} error={transitionError} onAction={openActionDialog} onRetry={retryTransition} retryAction={retryTransitionAction} /> : null}
+      <div className={styles.inspectorBody}>
+        {editing && mutationHandlers ? <TaskInspectorEditForm draft={editDraft} dirty={JSON.stringify(editDraft) !== canonicalEditorDraftKey} pending={mutationSavePending} error={saveError?.message ?? null} onRetry={retrySave} retryBlocksSubmit={saveRetryMatches} copy={copy} onChange={setEditDraft} onSave={submitEditor} onCancel={closeEditor} /> : null}
 
-      <Section id="inspector-metadata" title={copy.sections.metadata}>
-        <DescriptionDisclosure description={task.description} copy={copy} />
-        <Facts facts={[
-          [copy.facts.statusReason, valueOrDash(task.statusReason)],
-          [copy.facts.assignee, valueOrDash(task.assignee)],
-          [copy.facts.plan, copy.planState[task.executionPlanState]],
-          [copy.facts.requiredSteps, `${task.completedRequiredStepCount} / ${task.requiredStepCount}`],
-          [copy.facts.optionalSteps, String(task.optionalStepCount)],
-          [copy.facts.createdAt, String(task.createdAt)],
-          [copy.facts.updatedAt, String(task.updatedAt)],
-        ]} />
-        <pre className={styles.codeBlock} translate="no">{jsonValue(task.metadata)}</pre>
-      </Section>
-
-      <Section id="inspector-claim" title={copy.sections.claim}>
-        <Facts facts={[
-          [copy.facts.claimOwner, valueOrDash(task.claimOwner)],
-          [copy.facts.claimExpires, valueOrDash(task.claimExpiresAt)],
-          [copy.facts.heartbeat, valueOrDash(task.lastHeartbeatAt)],
-          [copy.facts.currentRun, valueOrDash(task.currentRunId)],
-          [copy.facts.retry, `${task.retryCount} / ${valueOrDash(task.maxRetries)}`],
-          [copy.facts.blockedParents, String(task.unfinishedParentCount)],
-        ]} />
-      </Section>
-
-      {!hideReadOnlyRelations ? (
-        <>
-          <Section id="inspector-steps" title={copy.sections.steps}>
-            {model.steps.length === 0 ? <Empty>{copy.noSteps}</Empty> : (
-              <ol className={styles.compactList}>
-                {model.steps.map((step) => (
-                  <li key={step.id} className={styles.row}>
-                    <div>
-                      <strong>{step.title}</strong>
-                      {step.body ? <p className={styles.muted}>{step.body}</p> : null}
-                    </div>
-                    <span className={styles.badge}>{copy.stepStatus[step.status]}{step.required ? ` · ${copy.required}` : ""}</span>
-                  </li>
-                ))}
-              </ol>
-            )}
+        <InspectorGroup id="inspector-overview" title={copy.sections.overview}>
+          <Section id="inspector-metadata" title={copy.sections.metadata} level={3}>
+            <DescriptionDisclosure description={task.description} copy={copy} />
+            <Facts facts={[
+              [copy.facts.statusReason, valueOrDash(task.statusReason)],
+              [copy.facts.assignee, valueOrDash(task.assignee)],
+              [copy.facts.plan, copy.planState[task.executionPlanState]],
+              [copy.facts.requiredSteps, `${task.completedRequiredStepCount} / ${task.requiredStepCount}`],
+              [copy.facts.optionalSteps, String(task.optionalStepCount)],
+              [copy.facts.createdAt, String(task.createdAt)],
+              [copy.facts.updatedAt, String(task.updatedAt)],
+            ]} />
           </Section>
 
-          <Section id="inspector-dependencies" title={copy.sections.dependencies}>
-            <DependencyList title={copy.parents} tasks={model.parents} onSelectTask={onSelectTask} copy={copy} />
-            <details>
-              <summary>{copy.children}</summary>
-              <DependencyList title={copy.children} tasks={model.children} onSelectTask={onSelectTask} copy={copy} />
-            </details>
+          <Section id="inspector-claim" title={copy.sections.claim} level={3}>
+            <Facts facts={[
+              [copy.facts.claimOwner, valueOrDash(task.claimOwner)],
+              [copy.facts.claimExpires, valueOrDash(task.claimExpiresAt)],
+              [copy.facts.heartbeat, valueOrDash(task.lastHeartbeatAt)],
+              [copy.facts.currentRun, valueOrDash(task.currentRunId)],
+              [copy.facts.retry, `${task.retryCount} / ${valueOrDash(task.maxRetries)}`],
+              [copy.facts.blockedParents, String(task.unfinishedParentCount)],
+            ]} />
           </Section>
+        </InspectorGroup>
 
-          <Section id="inspector-comments" title={copy.sections.comments}>
-            {model.comments.length === 0 ? <Empty>{copy.noComments}</Empty> : (
-              <ul className={styles.compactList}>
-                {model.comments.map((comment) => (
-                  <li key={comment.id} className={styles.row}>
-                    <div><strong>{comment.author}</strong><span className={styles.muted}> · {copy.commentKind[comment.kind]}</span><p>{comment.body}</p></div>
-                    <time dateTime={String(comment.createdAt)}>{comment.createdAt}</time>
-                  </li>
-                ))}
-              </ul>
-            )}
+        <InspectorGroup id="inspector-properties" title={copy.sections.properties}>
+          <section className={styles.propertyBlock} id="inspector-raw-metadata" data-testid="inspector-raw-metadata" aria-labelledby="inspector-raw-metadata-heading">
+            <h3 id="inspector-raw-metadata-heading">{copy.sections.metadata}</h3>
+            <MetadataDisclosure metadata={task.metadata} copy={copy} />
+          </section>
+          <Section id="inspector-runtime" title={copy.sections.runtime} level={3}>
+            <Facts facts={[
+              [copy.facts.actor, model.runtime.actor],
+              [copy.facts.api, model.runtime.apiBaseUrl || "/"],
+              [copy.facts.server, model.runtime.serverVersion],
+              [copy.facts.protocol, model.runtime.protocolVersion],
+              [copy.facts.build, model.runtime.webBuildId],
+            ]} />
           </Section>
-        </>
-      ) : null}
+        </InspectorGroup>
 
-      <Section id="inspector-runs" title={copy.sections.runs}>
+        {!hideReadOnlyRelations ? (
+          <InspectorGroup id="inspector-relations" title={copy.sections.relations}>
+            <Section id="inspector-steps" title={copy.sections.steps} level={3}>
+              {model.steps.length === 0 ? <Empty>{copy.noSteps}</Empty> : (
+                <ol className={styles.compactList}>
+                  {model.steps.map((step) => (
+                    <li key={step.id} className={styles.row}>
+                      <div>
+                        <strong>{step.title}</strong>
+                        {step.body ? <p className={styles.muted}>{step.body}</p> : null}
+                      </div>
+                      <span className={styles.badge}>{copy.stepStatus[step.status]}{step.required ? ` · ${copy.required}` : ""}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Section>
+
+            <Section id="inspector-dependencies" title={copy.sections.dependencies} level={3}>
+              <DependencyList title={copy.parents} tasks={model.parents} onSelectTask={onSelectTask} copy={copy} />
+              <details>
+                <summary>{copy.children}</summary>
+                <DependencyList title={copy.children} tasks={model.children} onSelectTask={onSelectTask} copy={copy} />
+              </details>
+            </Section>
+          </InspectorGroup>
+        ) : null}
+
+        <InspectorGroup id="inspector-activity" title={copy.sections.activity}>
+          {!hideReadOnlyRelations ? (
+            <Section id="inspector-comments" title={copy.sections.comments} level={3}>
+              {model.comments.length === 0 ? <Empty>{copy.noComments}</Empty> : (
+                <ul className={styles.compactList}>
+                  {model.comments.map((comment) => (
+                    <li key={comment.id} className={styles.row}>
+                      <div><strong>{comment.author}</strong><span className={styles.muted}> · {copy.commentKind[comment.kind]}</span><p>{comment.body}</p></div>
+                      <time dateTime={String(comment.createdAt)}>{comment.createdAt}</time>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          ) : null}
+
+          <Section id="inspector-runs" title={copy.sections.runs} level={3}>
         <details ref={runsDetailsRef} onToggle={loadRuns}>
           <summary>{copy.sections.runs}</summary>
           {runs.length === 0 && (runsStatus === "loading" || runsStatus === "error" || runsStatus === "offline") ? <><Empty>{lazySectionNotice(runsStatus, online, copy)}</Empty><button type="button" onClick={() => startRunsLoad(true)}>{copy.retry}</button></> : runs.length === 0 ? <>{runsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noRuns}</Empty></> : (
@@ -1086,7 +1134,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         </details>
       </Section>
 
-      <Section id="inspector-events" title={copy.sections.events}>
+      <Section id="inspector-events" title={copy.sections.events} level={3}>
         <details ref={eventsDetailsRef} onToggle={loadEvents}>
           <summary>{copy.sections.events}</summary>
           {events.length === 0 && (eventsStatus === "loading" || eventsStatus === "error" || eventsStatus === "offline") ? <><Empty>{lazySectionNotice(eventsStatus, online, copy)}</Empty><button type="button" onClick={() => startEventsLoad(true)}>{copy.retry}</button></> : events.length === 0 ? <>{eventsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noEvents}</Empty></> : (
@@ -1102,22 +1150,15 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         </details>
       </Section>
 
-      <Section id="inspector-neighborhood" title={copy.sections.neighborhood}>
+      <Section id="inspector-neighborhood" title={copy.sections.neighborhood} level={3}>
         <details ref={neighborhoodDetailsRef} onToggle={loadNeighborhood}>
           <summary>{copy.sections.neighborhood}</summary>
           {!neighborhood && (neighborhoodStatus === "loading" || neighborhoodStatus === "error" || neighborhoodStatus === "offline") ? <><Empty>{lazySectionNotice(neighborhoodStatus, online, copy)}</Empty><button type="button" onClick={() => startNeighborhoodLoad(true)}>{copy.retry}</button></> : neighborhood ? <>{lazySectionNotice(neighborhoodStatus, online, copy) ? <p className={styles.muted} role={neighborhoodStatus === "error" ? "alert" : "status"}>{lazySectionNotice(neighborhoodStatus, online, copy)}</p> : null}{neighborhoodStatus === "error" || neighborhoodStatus === "offline" ? <button type="button" onClick={() => startNeighborhoodLoad(true)}>{copy.retry}</button> : null}<Neighborhood model={neighborhood} copy={copy} onSelectTask={onSelectTask} /></> : <>{neighborhoodStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noNeighborhood}</Empty></>}
         </details>
       </Section>
 
-      <Section id="inspector-runtime" title={copy.sections.runtime}>
-        <Facts facts={[
-          [copy.facts.actor, model.runtime.actor],
-          [copy.facts.api, model.runtime.apiBaseUrl || "/"],
-          [copy.facts.server, model.runtime.serverVersion],
-          [copy.facts.protocol, model.runtime.protocolVersion],
-          [copy.facts.build, model.runtime.webBuildId],
-        ]} />
-      </Section>
+        </InspectorGroup>
+      </div>
       {actionDialog ? <TaskInspectorActionDialog dialog={actionDialog} locale={locale} copy={copy} pending={mutationTransitionPending} error={transitionError?.message ?? null} onRetry={retryTransition} retryBlocksSubmit={transitionRetryMatches} onDescriptionChange={(description) => setActionDialog((current) => current?.kind === "description" ? { ...current, description } : current)} onReasonChange={(reason) => setActionDialog((current) => current?.kind === "reason" ? { ...current, reason } : current)} onConfirmationChange={(confirmed) => setActionDialog((current) => current?.kind === "reason" ? { ...current, confirmed } : current)} onCancel={closeActionDialog} onSubmit={submitActionDialog} /> : null}
     </aside>
   )

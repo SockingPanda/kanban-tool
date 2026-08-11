@@ -94,7 +94,7 @@
   }
 
   .contentWithInspector {
-    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+    grid-template-columns: minmax(0, 1fr) minmax(26rem, 28rem);
     align-items: start;
   }
 
@@ -107,8 +107,10 @@
   .inspectorStack {
     display: grid;
     min-width: 0;
+    min-height: 0;
     gap: 1rem;
     align-content: start;
+    align-self: start;
   }
 
   .assetsReadOnlyFallback {
@@ -183,13 +185,17 @@
 
   @media (max-width: 68rem) {
     .contentWithInspector {
-      grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+      grid-template-columns: minmax(0, 1fr) minmax(24rem, 26rem);
     }
   }
 
   @media (max-width: 56rem) {
     .contentWithInspector {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .inspectorStack {
+      min-height: auto;
     }
   }
 }

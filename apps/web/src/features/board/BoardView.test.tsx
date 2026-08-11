@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest"
 
 import { BoardView } from "./BoardView"
 import { BOARD_PAGE_SIZE, boardPageWindow } from "./board-pagination"
+import { boardColumnsForAttention } from "./board-attention"
 import { validateBoardViewModel } from "./types"
 import { englishBoardMessages } from "./types"
 import type { BoardTaskViewModel, BoardViewModel } from "./types"
@@ -156,6 +157,14 @@ describe("BoardView", () => {
     expect(markup).toContain("等待审批")
     expect(markup).toContain("界面")
     expect(markup).toContain("需要复核")
+  })
+
+  test("attention lens 只筛选卡片并保留跨列拖放目标", () => {
+    const filtered = boardColumnsForAttention(model, "ready")
+
+    expect(filtered.map(({ column }) => column.status)).toEqual(["ready", "running"])
+    expect(filtered.find(({ column }) => column.status === "ready")?.tasks).toHaveLength(2)
+    expect(filtered.find(({ column }) => column.status === "running")?.tasks).toHaveLength(0)
   })
 
   test("board header keeps slug visible and moves canonical id into a details reveal", () => {

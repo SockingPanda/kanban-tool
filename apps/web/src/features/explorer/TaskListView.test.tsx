@@ -88,4 +88,18 @@ describe("TaskListView", () => {
     expect(markup).toContain('data-testid="task-list-board-empty"')
     expect(markup).not.toContain('data-testid="task-list-filter-empty"')
   })
+
+  test("distinguishes an out-of-range unfiltered page from an empty board", () => {
+    const outOfRangeState: TaskListViewState = {
+      query: { status: [], priority: [], plan: [], search: "", sort: "updated_at", page: 3, limit: 25, includeArchived: false },
+      meta: { offset: 50, limit: 25, total: 26 },
+    }
+    const markup = renderToStaticMarkup(<TaskListView state={outOfRangeState} rows={[]} loading={false} onQueryChange={vi.fn()} onSelectTask={vi.fn()} />)
+
+    expect(markup).toContain('data-empty-kind="page"')
+    expect(markup).toContain('data-testid="task-list-page-empty"')
+    expect(markup).not.toContain('data-testid="task-list-board-empty"')
+    expect(markup).toContain("当前页没有任务")
+    expect(markup).toContain("0 / 26")
+  })
 })

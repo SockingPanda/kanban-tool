@@ -7,12 +7,12 @@ import { Card } from "@astryxdesign/core/Card"
 import { Heading } from "@astryxdesign/core/Heading"
 
 import { taskOpenerKey } from "../../lib/explorer-focus"
-import { attentionCounts, attentionLenses, attentionTasks, type AttentionLens } from "../attention/attention-lens"
+import { attentionCounts, attentionLenses, type AttentionLens } from "../attention/attention-lens"
 import styles from "./BoardView.module.css"
+import { boardColumnsForAttention } from "./board-attention"
 import { MutationDialog, MutationNotice } from "./BoardTaskMutations"
 import {
   defaultBoardMessages,
-  type BoardColumnViewModel,
   type BoardMessages,
   type BoardMessagesOverrides,
   type BoardTaskViewModel,
@@ -116,17 +116,6 @@ function attentionCopy(copy: BoardMessages): {
 
 function columnAnchorId(rootId: string, index: number) {
   return `${rootId}-column-${index}`
-}
-
-function orderedVisibleColumns(columns: readonly BoardColumnViewModel[]) {
-  return columns
-    .filter((column) => !column.hidden)
-    .slice()
-    .sort((left, right) => left.position - right.position)
-}
-
-function tasksForColumn(model: BoardViewModel, column: BoardColumnViewModel) {
-  return (model.tasksByStatus[column.status] ?? []).slice().sort((left, right) => left.position - right.position)
 }
 
 function BoardHeader({
@@ -414,7 +403,8 @@ function BoardColumns({
 }) {
   const [pagesByColumn, setPagesByColumn] = useState<Record<string, number>>({})
   const [attentionLens, setAttentionLens] = useState<AttentionLens | null>(null)
-  const columns = orderedVisibleColumns(model.columns)
+  const baseColumnTasks = boardColumnsForAttention(model, null)
+  const columns = baseColumnTasks.map(({ column }) => column)
 
   if (columns.length === 0) {
     const title = model.columns.length === 0 ? copy.emptyBoardTitle : copy.emptyVisibleColumnsTitle
@@ -423,12 +413,14 @@ function BoardColumns({
   }
 
   const copyForAttention = attentionCopy(copy)
-  const baseColumnTasks = columns.map((column) => ({ column, tasks: tasksForColumn(model, column) }))
   const allTasks = baseColumnTasks.flatMap(({ tasks }) => tasks)
   const counts = attentionCounts(allTasks)
-  const columnTasks = baseColumnTasks.map(({ column, tasks }) => ({ column, tasks: attentionTasks(tasks, attentionLens) }))
+  const columnTasks = boardColumnsForAttention(model, attentionLens)
   const boardTaskTotal = columnTasks.reduce((total, entry) => total + entry.tasks.length, 0)
-  const displayColumns = attentionLens === null ? columnTasks : columnTasks.filter((entry) => entry.tasks.length > 0)
+  // Keep the full visible column set for all lenses. Filtering only the cards
+  // preserves every mutation/drop target and keeps cross-column movement
+  // reachable while still showing per-column empty states.
+  const displayColumns = columnTasks
 
   return (
     <>
@@ -463,7 +455,7 @@ function BoardColumns({
           <span>{copyForAttention.active(copyForAttention.statuses[attentionLens])}</span>
         </div>
       ) : null}
-      {boardTaskTotal > 0 || attentionLens === null ? <nav className={styles.columnNavigation} aria-label={copy.columnNavigationLabel}>
+      <nav className={styles.columnNavigation} aria-label={copy.columnNavigationLabel}>
         <ul className={styles.columnNavigationList}>
           {displayColumns.map(({ column }, index) => (
             <li key={column.id}>
@@ -471,8 +463,8 @@ function BoardColumns({
             </li>
           ))}
         </ul>
-      </nav> : null}
-      {boardTaskTotal > 0 || attentionLens === null ? <div className={styles.boardColumns} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
+      </nav>
+      <div className={styles.boardColumns} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
         <div className={styles.columnsGrid}>
           {displayColumns.map(({ column, tasks }, index) => {
             const headingId = `${columnAnchorId(rootId, index)}-heading`
@@ -565,7 +557,7 @@ function BoardColumns({
             )
           })}
         </div>
-      </div> : null}
+      </div>
     </>
   )
 }

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, type ReactNode } from "react"
 
 import { InternationalizationProvider } from "@astryxdesign/core/i18n"
 import { Theme } from "@astryxdesign/core/theme"
@@ -24,16 +24,34 @@ function themeFor(value: unknown): StorybookTheme {
   return value === "dark" ? "dark" : "light"
 }
 
+// Storybook's preview module is an integration entrypoint, not a refresh boundary.
+// eslint-disable-next-line react-refresh/only-export-components
+function LocaleSynchronizer({ locale }: { readonly locale: StorybookLocale }) {
+  useEffect(() => {
+    const root = document.documentElement
+    const previous = root.lang
+    root.lang = locale
+    return () => {
+      root.lang = previous
+    }
+  }, [locale])
+
+  return null
+}
+
 function withFoundation(Story: () => ReactNode, context: { globals: Record<string, unknown> }) {
   const locale = localeFor(context.globals.locale)
   const mode = themeFor(context.globals.theme)
 
   return (
-    <InternationalizationProvider locale={locale} messages={astryxMessages} overrides={astryxOverrides}>
-      <Theme theme={neutralTheme} mode={mode}>
-        <Story />
-      </Theme>
-    </InternationalizationProvider>
+    <>
+      <LocaleSynchronizer locale={locale} />
+      <InternationalizationProvider locale={locale} messages={astryxMessages} overrides={astryxOverrides}>
+        <Theme theme={neutralTheme} mode={mode}>
+          <Story />
+        </Theme>
+      </InternationalizationProvider>
+    </>
   )
 }
 

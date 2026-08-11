@@ -1,17 +1,24 @@
+import { useState } from "react"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 
-import { FoundationFrame } from "../../ui/foundations"
-import { Badge, Button, IconButton, Inline, SegmentedControl, Stack, Surface, Text, TextField } from "../../ui/primitives"
+import { Badge } from "@astryxdesign/core/Badge"
+import { Button } from "@astryxdesign/core/Button"
+import { Card } from "@astryxdesign/core/Card"
+import { HStack } from "@astryxdesign/core/HStack"
+import { Heading } from "@astryxdesign/core/Heading"
+import { IconButton } from "@astryxdesign/core/IconButton"
+import { Text } from "@astryxdesign/core/Text"
+import { VStack } from "@astryxdesign/core/VStack"
 
 import "./primitives.stories.css"
 
 const meta = {
-  title: "Primitives/Controls",
+  title: "Astryx/Controls",
   parameters: {
     layout: "fullscreen",
     docs: {
       description: {
-        component: "静态 presentational controls。所有状态均为 story fixture，未连接 service 或 persistence。",
+        component: "通用 actions、status、layout 使用 Astryx；TextInput 等 strict-CSP 不适合的 field 仅在 story-local semantic HTML 中演示。",
       },
     },
   },
@@ -21,54 +28,230 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 function SearchIcon() {
-  return <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.4" /><path d="m10.25 10.25 3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.4" />
+      <path d="m10.25 10.25 3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
 }
 
-export const States: Story = {
-  render: (_, context) => {
-    const english = context.globals.locale === "en"
-    return (
-      <FoundationFrame className="primitiveStory">
-        <Surface as="main" tone="surface" padding="comfortable" aria-labelledby="controls-title">
-          <Stack gap="loose">
+function StoryField({
+  id,
+  label,
+  value,
+  placeholder,
+  hint,
+  error,
+  disabled = false,
+  loading = false,
+  startAdornment = false,
+}: {
+  readonly id: string
+  readonly label: string
+  readonly value?: string
+  readonly placeholder?: string
+  readonly hint?: string
+  readonly error?: string
+  readonly disabled?: boolean
+  readonly loading?: boolean
+  readonly startAdornment?: boolean
+}) {
+  const messageId = error ? `${id}-error` : hint ? `${id}-hint` : undefined
+  return (
+    <div className="storyField">
+      <label htmlFor={id}>{label}</label>
+      <div className="fieldFrame" data-invalid={error ? "true" : undefined} data-disabled={disabled ? "true" : undefined}>
+        {startAdornment ? <span className="fieldIcon"><SearchIcon /></span> : null}
+        {loading ? <span className="fieldSpinner" aria-hidden="true" /> : null}
+        <input
+          id={id}
+          type="text"
+          value={value}
+          placeholder={placeholder}
+          readOnly={value !== undefined}
+          disabled={disabled}
+          aria-busy={loading || undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={messageId}
+        />
+      </div>
+      {error ? <small id={messageId} data-error="true">{error}</small> : hint ? <small id={messageId}>{hint}</small> : null}
+    </div>
+  )
+}
+
+function StorySegmented({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  readonly label: string
+  readonly value: string
+  readonly onChange: (value: string) => void
+  readonly options: readonly { readonly value: string; readonly label: string; readonly disabled?: boolean }[]
+}) {
+  return (
+    <div className="storySegmented" role="radiogroup" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={value === option.value}
+          disabled={option.disabled}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ControlsStory({ english }: { readonly english: boolean }) {
+  const [view, setView] = useState("board")
+  const copy = english
+    ? {
+        title: "Astryx controls",
+        description: "Keyboard-ready controls for a dense local observation surface.",
+        actions: "Actions",
+        fields: "Fields",
+        selection: "Selection and status",
+        primary: "Primary",
+        secondary: "Secondary",
+        ghost: "Ghost",
+        danger: "Destructive",
+        loading: "Loading",
+        disabled: "Disabled",
+        search: "Search",
+        projectSearch: "Project search",
+        searchPlaceholder: "Search projects",
+        searchHint: "Search is local to this story.",
+        loadingField: "Loading field",
+        refreshing: "Refreshing",
+        errorField: "Error field",
+        unresolved: "The fixture value cannot be resolved.",
+        disabledField: "Disabled field",
+        unavailable: "Unavailable",
+        disabledHint: "Disabled without losing contrast.",
+        taskView: "Task view",
+        board: "Board",
+        list: "List",
+        table: "Table",
+        map: "Map",
+        timeline: "Timeline",
+        selected: "Selected",
+        ready: "Ready",
+        stale: "Stale",
+        error: "Error",
+      }
+    : {
+        title: "Astryx 控件",
+        description: "为高密度本机观察面准备的键盘可达控件。",
+        actions: "操作",
+        fields: "字段",
+        selection: "选择与状态",
+        primary: "主要操作",
+        secondary: "次要操作",
+        ghost: "幽灵",
+        danger: "危险操作",
+        loading: "加载中",
+        disabled: "禁用",
+        search: "搜索",
+        projectSearch: "项目搜索",
+        searchPlaceholder: "搜索项目",
+        searchHint: "搜索仅作用于此 story。",
+        loadingField: "加载字段",
+        refreshing: "刷新中",
+        errorField: "错误字段",
+        unresolved: "无法解析此 fixture 值。",
+        disabledField: "禁用字段",
+        unavailable: "不可用",
+        disabledHint: "禁用后仍保留对比度。",
+        taskView: "任务视图",
+        board: "看板",
+        list: "列表",
+        table: "表格",
+        map: "映射",
+        timeline: "时间线",
+        selected: "已选择",
+        ready: "就绪",
+        stale: "过期",
+        error: "错误",
+      }
+
+  return (
+    <div className="primitiveStory" data-density="comfortable">
+      <main className="primitiveSurface" aria-labelledby="controls-title">
+        <Card variant="transparent" padding={6}>
+          <VStack gap={6}>
             <header className="storyHeader">
-              <Text as="h1" id="controls-title" size="pageTitle">{english ? "Control primitives" : "控件 primitives"}</Text>
-              <Text tone="secondary">{english ? "Keyboard-ready controls for a dense local observation surface." : "为高密度本机观察面准备的键盘可达控件。"}</Text>
+              <Heading level={1} id="controls-title">{copy.title}</Heading>
+              <Text as="p" type="body" color="secondary">{copy.description}</Text>
             </header>
 
             <section className="controlSection" aria-labelledby="buttons-title">
-              <Text as="h2" id="buttons-title" size="title">{english ? "Actions" : "操作"}</Text>
-              <Inline gap="default">
-                <Button variant="primary">{english ? "Primary" : "主要操作"}</Button>
-                <Button variant="secondary">{english ? "Secondary" : "次要操作"}</Button>
-                <Button variant="ghost">{english ? "Ghost" : "幽灵按钮"}</Button>
-                <Button variant="danger">{english ? "Danger" : "危险操作"}</Button>
-                <Button variant="primary" isLoading>{english ? "Loading" : "加载中"}</Button>
-                <Button variant="secondary" isDisabled>{english ? "Disabled" : "禁用"}</Button>
-                <IconButton aria-label={english ? "Search" : "搜索"}><SearchIcon /></IconButton>
-              </Inline>
+              <Heading level={2} id="buttons-title">{copy.actions}</Heading>
+              <HStack gap={3} align="center" wrap="wrap">
+                <Button type="button" label={copy.primary} variant="primary" />
+                <Button type="button" label={copy.secondary} variant="secondary" />
+                <Button type="button" label={copy.ghost} variant="ghost" />
+                <Button type="button" label={copy.danger} variant="destructive" />
+                <Button
+                  type="button"
+                  label={copy.loading}
+                  variant="primary"
+                  isDisabled
+                  aria-busy="true"
+                  icon={<span className="controlSpinner" aria-hidden="true" />}
+                />
+                <Button type="button" label={copy.disabled} variant="secondary" isDisabled />
+                <IconButton type="button" label={copy.search} variant="ghost" icon={<SearchIcon />} />
+              </HStack>
             </section>
 
             <section className="controlSection" aria-labelledby="fields-title">
-              <Text as="h2" id="fields-title" size="title">{english ? "Fields" : "字段"}</Text>
+              <Heading level={2} id="fields-title">{copy.fields}</Heading>
               <div className="fieldGrid">
-                <TextField label={english ? "Project search" : "项目搜索"} placeholder={english ? "Search projects" : "搜索项目"} startAdornment={<SearchIcon />} hint={english ? "Search is local to this story." : "搜索仅作用于此 story。"} />
-                <TextField label={english ? "Loading field" : "加载字段"} value={english ? "Refreshing" : "刷新中"} readOnly isLoading />
-                <TextField label={english ? "Error field" : "错误字段"} value="board://example" readOnly error={english ? "The fixture value cannot be resolved." : "无法解析此 fixture 值。"} />
-                <TextField label={english ? "Disabled field" : "禁用字段"} placeholder={english ? "Unavailable" : "不可用"} disabled hint={english ? "Disabled without losing contrast." : "禁用后仍保留对比度。"} />
+                <StoryField id="project-search" label={copy.projectSearch} placeholder={copy.searchPlaceholder} startAdornment hint={copy.searchHint} />
+                <StoryField id="loading-field" label={copy.loadingField} value={copy.refreshing} loading />
+                <StoryField id="error-field" label={copy.errorField} value="board://example" error={copy.unresolved} />
+                <StoryField id="disabled-field" label={copy.disabledField} placeholder={copy.unavailable} disabled hint={copy.disabledHint} />
               </div>
             </section>
 
             <section className="controlSection" aria-labelledby="selection-title">
-              <Text as="h2" id="selection-title" size="title">{english ? "Selection and status" : "选择与状态"}</Text>
-              <Inline justify="between" align="center" gap="loose">
-                <SegmentedControl label={english ? "Task view" : "任务视图"} value="Board" options={[{ value: "Board", label: english ? "Board" : "看板" }, { value: "List", label: english ? "List" : "列表" }, { value: "Table", label: english ? "Table" : "表格" }, { value: "Map", label: english ? "Map" : "映射" }, { value: "Timeline", label: english ? "Timeline" : "时间线", disabled: true }]} />
-                <Inline gap="tight"><Badge tone="accent">{english ? "Selected" : "已选择"}</Badge><Badge tone="success">{english ? "Ready" : "就绪"}</Badge><Badge tone="warning">{english ? "Stale" : "过期"}</Badge><Badge tone="danger">{english ? "Error" : "错误"}</Badge></Inline>
-              </Inline>
+              <Heading level={2} id="selection-title">{copy.selection}</Heading>
+              <HStack gap={4} align="center" justify="between" wrap="wrap">
+                <StorySegmented
+                  label={copy.taskView}
+                  value={view}
+                  onChange={setView}
+                  options={[
+                    { value: "board", label: copy.board },
+                    { value: "list", label: copy.list },
+                    { value: "table", label: copy.table },
+                    { value: "map", label: copy.map },
+                    { value: "timeline", label: copy.timeline, disabled: true },
+                  ]}
+                />
+                <HStack gap={2} align="center" wrap="wrap">
+                  <Badge variant="info" label={copy.selected} />
+                  <Badge variant="success" label={copy.ready} />
+                  <Badge variant="warning" label={copy.stale} />
+                  <span className="storyStatusError" role="status">{copy.error}</span>
+                </HStack>
+              </HStack>
             </section>
-          </Stack>
-        </Surface>
-      </FoundationFrame>
-    )
-  },
+          </VStack>
+        </Card>
+      </main>
+    </div>
+  )
+}
+
+export const States: Story = {
+  render: (_, context) => <ControlsStory english={context.globals.locale === "en"} />,
 }

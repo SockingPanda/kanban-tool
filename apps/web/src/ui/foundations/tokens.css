@@ -14,10 +14,12 @@
 
     --kb-color-text-primary: light-dark(#15181c, #f4f6f8);
     --kb-color-text-secondary: light-dark(#59616a, #a7afb8);
-    --kb-color-text-tertiary: light-dark(#747d87, #858f99);
+    /* Tertiary text remains regular-text compliant on the light surface. */
+    --kb-color-text-tertiary: light-dark(#68727c, #858f99);
     --kb-color-text-disabled: light-dark(#9ca4ac, #626b75);
 
-    --kb-color-accent: light-dark(#0877bd, #4ba9e8);
+    /* The dark filled action uses a blue that keeps white on-color text above 4.5:1. */
+    --kb-color-accent: light-dark(#0877bd, #0d6fa8);
     --kb-color-accent-strong: light-dark(#075d93, #83c9f5);
     --kb-color-accent-muted: light-dark(#e4f3fc, #123247);
     --kb-color-on-accent: #ffffff;
@@ -84,13 +86,17 @@
     color-scheme: dark;
   }
 
-  [data-kb-density="compact"] {
+  /* Production settings persist density on html[data-density]. Story-local scopes
+     may override it with the same attribute without creating another contract. */
+  html[data-density="compact"],
+  [data-density="compact"] {
     --kb-density-row-height: var(--kb-height-row-compact);
     --kb-density-control-height: var(--kb-height-control-sm);
     --kb-density-gap: var(--kb-space-2);
   }
 
-  [data-kb-density="comfortable"] {
+  html[data-density="comfortable"],
+  [data-density="comfortable"] {
     --kb-density-row-height: var(--kb-height-row-comfortable);
     --kb-density-control-height: var(--kb-height-control);
     --kb-density-gap: var(--kb-space-3);

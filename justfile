@@ -140,6 +140,11 @@ web-e2e:
     just node-lock-check
     pnpm --filter @kanban-tool/web e2e
 
+# Plane-only Projects/Tasks browser contract on an isolated preview port.
+web-plane-e2e:
+    just node-lock-check
+    pnpm --filter @kanban-tool/web e2e:plane
+
 # Stage09 09A real-host lane；mock/preview specs 仍由 `web-e2e` 单独编排。
 release-proof-09a:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- release check --root .

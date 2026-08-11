@@ -12,11 +12,11 @@ test.describe("Plane-only Projects navigation acceptance", () => {
 
     await expect(page).toHaveURL(/\/app\/$/)
     await expect(page.getByTestId("projects-collection")).toBeVisible()
-    await expect(page.getByTestId("project-card-default")).toBeVisible()
-    await expect(page.getByTestId("project-card-agent-first")).toBeVisible()
+    await expect(page.getByTestId("projects-collection-project-default")).toBeVisible()
+    await expect(page.getByTestId("projects-collection-project-agent-first")).toBeVisible()
     expect(page.url()).not.toContain("/app/home")
 
-    const defaultProject = page.getByTestId("project-card-default")
+    const defaultProject = page.getByTestId("projects-collection-project-default")
     await expect(defaultProject).toHaveAttribute("href", "/app/boards/default/overview")
     await defaultProject.click()
     await expect(page).toHaveURL(/\/app\/boards\/default\/overview$/)
@@ -35,8 +35,8 @@ test.describe("Plane-only Projects navigation acceptance", () => {
     await expect(rail).toBeVisible()
     await expect(rail.getByTestId("product-rail-projects")).toBeVisible()
     await expect(rail.getByTestId("product-rail-settings")).toBeVisible()
-    await expect(rail.getByRole("button")).toHaveCount(2)
-    await expect(rail.getByRole("button", { name: "Projects", exact: true })).toHaveAttribute("aria-current", "page")
+    await expect(rail.getByRole("link")).toHaveCount(2)
+    await expect(rail.getByTestId("product-rail-projects")).toHaveAttribute("aria-current", "page")
   })
 
   test("keeps the overview surface strict-CSP, axe-clean, and free of runtime style tags", async ({ page }) => {

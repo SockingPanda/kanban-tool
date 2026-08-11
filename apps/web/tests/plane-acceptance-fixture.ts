@@ -8,6 +8,9 @@ import { installPersistentSse } from "./runtime-fixture"
 const runtime = JSON.parse(
   readFileSync(new URL("../src/lib/api/generated/fixtures/runtime-web-config-output.valid.json", import.meta.url), "utf8"),
 ) as WebRuntimeConfig
+const health = JSON.parse(
+  readFileSync(new URL("../src/lib/api/generated/fixtures/api-health-response.valid.json", import.meta.url), "utf8"),
+) as unknown
 
 const statuses = ["triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done", "archived"] as const
 type TaskStatus = (typeof statuses)[number]
@@ -120,6 +123,13 @@ export async function installPlaneAcceptanceFixture(page: Page): Promise<PlaneAc
   await page.route("**/app/runtime.json", async (route) => {
     await fulfillJson(route, { ...runtime, defaultBoard: "default" })
   })
+  await page.route("**/health", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/health") {
+      await route.fallback()
+      return
+    }
+    await fulfillJson(route, health)
+  })
   await installPersistentSse(page)
 
   const apiRequests: string[] = []
@@ -212,6 +222,26 @@ export async function installPlaneAcceptanceFixture(page: Page): Promise<PlaneAc
 
     if (url.pathname === "/api/v1/events") {
       await fulfillJson(route, { data: [], meta: { next_after: 0 } })
+      return
+    }
+
+    const taskMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)$/)
+    if (taskMatch && route.request().method() === "GET") {
+      const taskId = decodeURIComponent(taskMatch[1] ?? "")
+      const task = planeAcceptanceProjects
+        .flatMap((project) => tasksFor(project))
+        .find((candidate) => candidate.id === taskId)
+      if (task === undefined) {
+        await fulfillJson(route, { error: { code: "not_found", message: "fixture task not found" } }, 404)
+        return
+      }
+      await fulfillJson(route, { data: task })
+      return
+    }
+
+    const attachmentsMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/attachments$/)
+    if (attachmentsMatch && route.request().method() === "GET") {
+      await fulfillJson(route, { data: [] })
       return
     }
 

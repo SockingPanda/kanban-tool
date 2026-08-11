@@ -14,6 +14,7 @@
     "astryx:doctor": "astryx --json doctor",
     "astryx:templates": "astryx --json template --list",
     "e2e": "playwright test",
+    "e2e:plane": "playwright test --config playwright.plane.config.ts",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build --output-dir ../../output/storybook",
     "test": "vitest run src build --passWithNoTests",

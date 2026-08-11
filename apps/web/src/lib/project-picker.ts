@@ -1,5 +1,6 @@
 import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "./board-slug"
 import type { BoardListItem } from "./api/board-list-read-model"
+import type { AppRoute } from "./router"
 
 const RECENT_PROJECTS_STORAGE_KEY = "kb:web:recent-boards:v1"
 const RECENT_PROJECTS_STORAGE_EVENT = "kb:web:recent-boards-changed"
@@ -62,6 +63,20 @@ export function rememberRecentProject(slug: CanonicalBoardSlug): readonly Canoni
     // Private browsing and disabled storage should not make the picker unusable.
   }
   return next
+}
+
+/**
+ * 只有 router 明确返回目标 canonical board route 后，项目才会进入 recent。
+ * void、过期/当前 route、畸形对象或导航异常都不得写入 recent。
+ */
+export function isSuccessfulProjectNavigation(
+  result: unknown,
+  targetSlug: CanonicalBoardSlug,
+  activeSlug?: CanonicalBoardSlug,
+): result is Extract<AppRoute, { kind: "board" }> {
+  if (activeSlug === targetSlug || typeof result !== "object" || result === null) return false
+  const route = result as Partial<Extract<AppRoute, { kind: "board" }>>
+  return route.kind === "board" && route.boardSlug === targetSlug && typeof route.pathname === "string"
 }
 
 export const recentProjectsStorageEvent = RECENT_PROJECTS_STORAGE_EVENT

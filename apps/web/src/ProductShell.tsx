@@ -17,6 +17,7 @@ import { usePreferences } from "./lib/use-preferences"
 import { createTranslator } from "./lib/i18n"
 import {
   projectPickerGroups,
+  isSuccessfulProjectNavigation,
   readRecentProjectSlugs,
   recentProjectsStorageKey,
   recentProjectsStorageEvent,
@@ -48,7 +49,7 @@ export type ProductShellProps = {
   children?: ReactNode
   boundary?: ShellBoundary
   error?: ReactNode
-  onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
+  onNavigate?: (target: AppNavigationTarget, options?: { readonly replace?: boolean }) => AppRoute | Promise<AppRoute>
   onReconnect?: () => BoardReconnectResult | boolean | void | Promise<BoardReconnectResult | boolean | void>
   onRetry?: () => void
   /** 现有 persistent SSE integration 的可选只读 seam。 */
@@ -203,11 +204,10 @@ function ProjectPicker({
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const slug = parseCanonicalBoardSlug(event.currentTarget.value)
     if (slug === null || onNavigate === undefined) return
-    void Promise.resolve(onNavigate({ kind: "board", boardSlug: slug }))
+    void Promise.resolve()
+      .then(() => onNavigate({ kind: "board", boardSlug: slug }))
       .then((result) => {
-        const reachedProject = result === undefined
-          || (result !== null && typeof result === "object" && "kind" in result && result.kind === "board" && "boardSlug" in result && result.boardSlug === slug)
-        if (reachedProject) setRecentSlugs(rememberRecentProject(slug))
+        if (isSuccessfulProjectNavigation(result, slug, activeBoardSlug)) setRecentSlugs(rememberRecentProject(slug))
       })
       .catch(() => undefined)
   }
@@ -589,6 +589,11 @@ function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, 
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
   const effectiveBoundary = boundary ?? (isOnline ? "ready" : "offline")
+  const childNavigate = onNavigate === undefined
+    ? undefined
+    : async (target: AppNavigationTarget, options?: { readonly replace?: boolean }): Promise<void> => {
+        await onNavigate(target, options)
+      }
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -673,13 +678,13 @@ function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, 
     )
   }
   const hiddenSession = children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null
-  if (route.kind === "settings") return <>{hiddenSession}<OperatorSettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} /></>
+  if (route.kind === "settings") return <>{hiddenSession}<OperatorSettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={childNavigate} onReconnect={onReconnect} /></>
   if (route.kind === "health") return <>{hiddenSession}<HealthPage runtime={runtime} /></>
   if (route.kind === "maintenance") return <>{hiddenSession}<MaintenancePage runtime={runtime} boardSlug={route.boardSlug} /></>
   if (route.kind === "board") return (
     <>
       {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
-      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />
+      <ExplorerPage runtime={runtime} route={route} onNavigate={childNavigate} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />
     </>
   )
 

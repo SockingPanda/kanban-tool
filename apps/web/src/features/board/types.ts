@@ -323,7 +323,7 @@ export type BoardMessagesOverrides = Omit<Partial<BoardMessages>, "planState"> &
 }
 
 export const defaultBoardMessages: BoardMessages = {
-  boardEyebrow: "ASTRYX BOARD",
+  boardEyebrow: "KANBAN-TOOL BOARD",
   boardTitle: "看板",
   boardIdentityLabel: "看板标识",
   boardColumnsLabel: "看板列内容",
@@ -434,7 +434,7 @@ export const defaultBoardMessages: BoardMessages = {
 }
 
 export const englishBoardMessages: BoardMessages = {
-  boardEyebrow: "ASTRYX BOARD",
+  boardEyebrow: "KANBAN-TOOL BOARD",
   boardTitle: "Board",
   boardIdentityLabel: "Board identity",
   boardColumnsLabel: "Board columns",

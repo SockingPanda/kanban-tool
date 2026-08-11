@@ -124,7 +124,7 @@ type ExplorerCopy = {
 
 const explorerCopies: Record<Locale, ExplorerCopy> = {
   zh: {
-    eyebrow: "ASTRYX EXPLORER",
+    eyebrow: "KANBAN-TOOL EXPLORER",
     tabsLabel: "看板浏览视图",
     closeInspector: "关闭任务检查器",
     boardLoading: "正在加载看板…",
@@ -146,7 +146,7 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
     syncOffline: "当前离线",
   },
   en: {
-    eyebrow: "ASTRYX EXPLORER",
+    eyebrow: "KANBAN-TOOL EXPLORER",
     tabsLabel: "Board explorer views",
     closeInspector: "Close Inspector",
     boardLoading: "Loading board…",

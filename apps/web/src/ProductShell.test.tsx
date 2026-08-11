@@ -10,7 +10,7 @@ import { parseAppRoute } from "./lib/router"
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { BoardListReadError, type BoardListItem } from "./lib/api/board-list-read-model"
 import { asCanonicalBoardId } from "./lib/sync/contracts"
-import { parseRecentProjectSlugs, projectPickerGroups } from "./lib/project-picker"
+import { isSuccessfulProjectNavigation, parseRecentProjectSlugs, projectPickerGroups } from "./lib/project-picker"
 
 const runtime: WebRuntimeConfig = {
   apiBaseUrl: "",
@@ -96,6 +96,20 @@ describe("ProductShell route offline boundary", () => {
     expect(filtered.current.map((item) => item.slug)).toEqual(["default"])
     expect(filtered.recent).toEqual([])
     expect(filtered.all).toEqual([])
+  })
+
+  test("remembers a project only after an explicit non-current board route", () => {
+    const targetSlug = assertCanonicalBoardSlug("other")
+    const reachedTarget = parseAppRoute("http://kanban.test/app/boards/other/board")
+    const currentRoute = parseAppRoute("http://kanban.test/app/boards/default/board")
+
+    expect(isSuccessfulProjectNavigation(reachedTarget, targetSlug, assertCanonicalBoardSlug("default"))).toBe(true)
+    expect(isSuccessfulProjectNavigation(undefined, targetSlug, assertCanonicalBoardSlug("default"))).toBe(false)
+    expect(isSuccessfulProjectNavigation(currentRoute, targetSlug, assertCanonicalBoardSlug("default"))).toBe(false)
+    expect(isSuccessfulProjectNavigation(reachedTarget, targetSlug, targetSlug)).toBe(false)
+    expect(isSuccessfulProjectNavigation({ kind: "board", boardSlug: targetSlug }, targetSlug)).toBe(false)
+    expect(isSuccessfulProjectNavigation({ kind: "not-found", pathname: "/app/missing" }, targetSlug)).toBe(false)
+    expect(isSuccessfulProjectNavigation(new Error("navigation failed"), targetSlug)).toBe(false)
   })
 
   test("keeps Events mounted so its own offline snapshot can render", () => {

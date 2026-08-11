@@ -1,0 +1,120 @@
+@layer product {
+  .chrome {
+    display: grid;
+    min-width: 0;
+    gap: 0.65rem;
+    color: var(--kb-color-text-primary);
+  }
+
+  .header {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    border-block-end: 1px solid var(--kb-color-border);
+    padding-block-end: 0.65rem;
+  }
+
+  .identity,
+  .actions,
+  .more nav {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .identity h1 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .scope {
+    color: var(--kb-color-text-tertiary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .more {
+    position: relative;
+  }
+
+  .more summary {
+    min-height: 2rem;
+    border: 1px solid var(--kb-color-border-strong);
+    border-radius: var(--kb-radius-control);
+    padding: 0.35rem 0.7rem;
+    color: var(--kb-color-text-primary);
+    background: var(--kb-color-surface);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .closeInspector {
+    min-height: 2rem;
+    border: 1px solid var(--kb-color-border-strong);
+    border-radius: var(--kb-radius-control);
+    padding: 0.35rem 0.7rem;
+    color: var(--kb-color-text-primary);
+    background: var(--kb-color-surface);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .closeInspector:hover {
+    background: var(--kb-color-layer);
+  }
+
+  .more summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .more nav {
+    position: absolute;
+    z-index: 3;
+    inset-block-start: calc(100% + 0.35rem);
+    inset-inline-end: 0;
+    display: grid;
+    min-width: 10rem;
+    align-items: stretch;
+    gap: 0.15rem;
+    border: 1px solid var(--kb-color-border-strong);
+    border-radius: var(--kb-radius-card);
+    padding: 0.35rem;
+    background: var(--kb-color-surface);
+    box-shadow: 0 0.7rem 1.8rem rgb(0 0 0 / 0.16);
+  }
+
+  .more a {
+    padding: 0.35rem 0.5rem;
+    color: var(--kb-color-text-secondary);
+    text-decoration: none;
+  }
+
+  .more a:hover,
+  .more a:focus-visible {
+    color: var(--kb-color-text-primary);
+    background: var(--kb-color-layer);
+  }
+
+  @media (max-width: 56rem) {
+    .header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+  }
+}

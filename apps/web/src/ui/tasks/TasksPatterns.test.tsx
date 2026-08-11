@@ -144,4 +144,9 @@ describe("Tasks interaction grammar", () => {
     expect(staticCard).not.toContain('data-task-opener="t_1"')
     expect(staticCard).toContain("运行中")
   })
+
+  test("marks a filter search disabled when its projection has no query handler", () => {
+    const markup = renderToStaticMarkup(<FilterBar defaultSearch="local" disabled />)
+    expect(markup).toContain('disabled=""')
+  })
 })

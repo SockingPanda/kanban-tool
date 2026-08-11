@@ -298,7 +298,7 @@ export function ActiveFilter({ label, onRemove, removeLabel = "移除筛选" }: 
 }
 
 export function FilterBar(props: TaskFilterBarProps) {
-  const { placeholder, filters = [], onRemoveFilter, onClearFilters, onOpenFilters, filterButtonLabel, clearButtonLabel, locale = "zh" } = props
+  const { placeholder, disabled = false, filters = [], onRemoveFilter, onClearFilters, onOpenFilters, filterButtonLabel, clearButtonLabel, locale = "zh" } = props
   const copy = copyFor(locale)
   const [uncontrolledSearch, setUncontrolledSearch] = useState(props.defaultSearch ?? "")
   const search = props.search ?? uncontrolledSearch
@@ -317,9 +317,9 @@ export function FilterBar(props: TaskFilterBarProps) {
     <div className={`${styles.root} ${styles.filterBar}`} role="search" aria-label={copy.searchLabel}>
       <label className={styles.searchField} htmlFor={labelId}>
         <span>{copy.searchLabel}</span>
-        <input id={labelId} type="search" value={search} placeholder={placeholder ?? copy.searchPlaceholder} onChange={(event) => handleSearchChange(event.currentTarget.value)} />
+        <input id={labelId} type="search" value={search} placeholder={placeholder ?? copy.searchPlaceholder} disabled={disabled} onChange={(event) => handleSearchChange(event.currentTarget.value)} />
       </label>
-      <button type="button" className={styles.filterButton} disabled={!onOpenFilters} onClick={onOpenFilters}>
+      <button type="button" className={styles.filterButton} disabled={disabled || !onOpenFilters} onClick={onOpenFilters}>
         {filterButtonLabel ?? copy.filterLabel}
       </button>
       {filters.length > 0 ? (

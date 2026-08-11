@@ -8,6 +8,37 @@ import type {
   TaskInspectorStepView,
 } from "./TaskInspectorRelationsPanel"
 
+/** List display is a projection of the canonical `/list` read, never a route. */
+export type TaskListDisplay = "list" | "table"
+
+function displayParams(input: string | URLSearchParams): URLSearchParams {
+  return typeof input === "string"
+    ? new URLSearchParams(input.startsWith("?") ? input.slice(1) : input)
+    : new URLSearchParams(input)
+}
+
+/** Parse only the supported display token; unknown values intentionally fall back to List. */
+export function parseTaskDisplay(input: string | URLSearchParams): TaskListDisplay {
+  return displayParams(input).get("display") === "table" ? "table" : "list"
+}
+
+/** Serialize the display token without dropping unrelated URL state. */
+export function serializeTaskDisplay(display: TaskListDisplay): string {
+  return display === "table" ? "display=table" : ""
+}
+
+/** Clone URL state and update only the List display token. */
+export function withTaskDisplay(input: string | URLSearchParams, display: TaskListDisplay): URLSearchParams {
+  const params = displayParams(input)
+  if (display === "table") params.set("display", "table")
+  else params.delete("display")
+  return params
+}
+
+// Keep names discoverable for route-level tests and callers that use the plural Tasks vocabulary.
+export const parseTasksDisplay = parseTaskDisplay
+export const serializeTasksDisplay = serializeTaskDisplay
+
 export type AsyncReadState<T> = {
   readonly data: T | null
   readonly error: ExplorerReadError | Error | null

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import type { ExplorerReadError, TaskListPlanFilter, TaskListQueryState, TaskListSort, TaskListStatus } from "../../lib/api/explorer-read-model"
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { Locale } from "../../lib/preferences"
@@ -35,6 +37,11 @@ export interface TaskListViewProps {
   readonly onCreate?: (trigger?: HTMLElement | null) => void
   readonly isMutationPending?: boolean
   readonly locale?: Locale
+  /** The List and Table projections share the same canonical page read. */
+  readonly displayVariant?: "grouped" | "table"
+  /** View-local presentation choices; never serialized as canonical task state. */
+  readonly visibleColumns?: Readonly<Record<string, boolean>>
+  readonly showToolbarSearch?: boolean
 }
 
 type ListCopy = {
@@ -139,7 +146,7 @@ function listRange(meta: TaskListViewState["meta"]): string {
   return `${meta.offset + 1}–${Math.min(meta.offset + meta.limit, meta.total)} / ${meta.total}`
 }
 
-export function TaskListView({ state, rows, loading, error, onQueryChange, onSelectTask, onRetry, onCreate, isMutationPending = false, locale = "zh" }: TaskListViewProps) {
+export function TaskListView({ state, rows, loading, error, onQueryChange, onSelectTask, onRetry, onCreate, isMutationPending = false, locale = "zh", displayVariant = "table", visibleColumns, showToolbarSearch = true }: TaskListViewProps) {
   const copy = copies[locale]
   const attentionCountsByStatus = attentionCounts(rows)
   const selectedAttention = activeAttentionLens(state.query.status)
@@ -171,7 +178,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
           <p className={styles.muted}>{loading ? copy.refreshing : listRange(state.meta)}</p>
         </div>
         <div className={styles.toolbarActions}>
-          <label className={styles.searchField}>
+          {showToolbarSearch ? <label className={styles.searchField}>
             <span>{copy.search}</span>
             <input
               data-testid="list-search"
@@ -181,7 +188,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
               placeholder={copy.searchPlaceholder}
               onChange={(event) => updateQuery(state.query, onQueryChange, { search: event.currentTarget.value })}
             />
-          </label>
+          </label> : null}
           {onCreate ? <button type="button" className={styles.createButton} disabled={isMutationPending} onClick={(event) => onCreate(event.currentTarget)} data-testid="task-create">{copy.createTask}</button> : null}
         </div>
       </header>
@@ -210,7 +217,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
         ) : null}
       </div>
 
-      <div className={styles.controls} role="group" aria-label={copy.filters}>
+      <div id="task-list-controls" className={styles.controls} role="group" aria-label={copy.filters} tabIndex={-1}>
         <label>
           <span>{copy.status}</span>
           <select
@@ -275,24 +282,66 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
           </p>
         </div>
       ) : null}
-      {rows.length > 0 ? (
-        <div className={styles.tableWrap} role="region" aria-label={copy.table} tabIndex={0}>
+      {rows.length > 0 ? displayVariant === "grouped" ? (
+        <div className={styles.groupedList} data-display-variant="list" role="list" aria-label={copy.table}>
+          {statuses.map((status) => {
+            const group = rows.filter((task) => task.status === status)
+            if (group.length === 0) return null
+            return (
+              <section className={styles.statusGroup} key={status} aria-labelledby={`task-status-${status}`}>
+                <header className={styles.statusGroupHeader}>
+                  <h3 id={`task-status-${status}`}>{copy.statusValues[status]}</h3>
+                  <span>{group.length}</span>
+                </header>
+                <div className={styles.statusGroupRows}>
+                  {group.map((task) => (
+                    <article className={styles.groupedRow} key={task.id} data-testid="task-row" data-task-id={task.id} role="listitem">
+                      <div className={styles.groupedIdentity}>
+                        <span className={styles.mono}>{task.ref}</span>
+                        <button type="button" className={styles.taskLink} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>{task.title}</button>
+                      </div>
+                      <div className={styles.groupedFacts}>
+                        {visibleColumns?.priority !== false ? <span>P{task.priority}</span> : null}
+                        {visibleColumns?.assignee !== false ? <span>{task.assignee || "—"}</span> : null}
+                        {visibleColumns?.plan !== false ? <span>{copy.planState[task.executionPlanState]}</span> : null}
+                        {visibleColumns?.steps !== false ? <span>{task.completedRequiredStepCount} / {task.requiredStepCount}{task.optionalStepCount ? ` + ${task.optionalStepCount}` : ""}</span> : null}
+                        {task.dependencyBlocked ? <span className={styles.muted}>{copy.blocked}</span> : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      ) : (
+        <div className={styles.tableWrap} role="region" aria-label={copy.table} tabIndex={0} data-display-variant="table">
           <table className={styles.table}>
             <caption className={styles.visuallyHidden}>{copy.table}</caption>
-            <thead><tr>{copy.headers.map((header) => <th key={header} scope="col">{header}</th>)}</tr></thead>
+            <thead><tr>{[
+              ["ref", copy.headers[0]],
+              ["title", copy.headers[1]],
+              ["status", copy.headers[2]],
+              ["priority", copy.headers[3]],
+              ["assignee", copy.headers[4]],
+              ["plan", copy.headers[5]],
+              ["steps", copy.headers[6]],
+              ["updated", copy.headers[7]],
+            ].filter(([id]) => id === "ref" || id === "title" || id === "status" || visibleColumns?.[id] !== false).map(([id, header]) => <th key={id} scope="col">{header}</th>)}</tr></thead>
             <tbody>
-              {rows.map((task) => (
-                <tr key={task.id} data-testid="task-row" data-task-id={task.id}>
-                  <td className={styles.mono}>{task.ref}</td>
-                  <td><button type="button" className={styles.taskLink} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>{task.title}</button></td>
-                  <td><span className={styles.badge}>{copy.statusValues[task.status]}</span>{task.dependencyBlocked ? <span className={styles.muted}> {copy.blocked}</span> : null}</td>
-                  <td>P{task.priority}</td>
-                  <td>{task.assignee || "—"}</td>
-                  <td>{copy.planState[task.executionPlanState]}</td>
-                  <td>{task.completedRequiredStepCount} / {task.requiredStepCount}{task.optionalStepCount ? ` + ${task.optionalStepCount}` : ""}</td>
-                  <td className={styles.mono}>{task.updatedAt}</td>
-                </tr>
-              ))}
+              {rows.map((task) => {
+                const cells: readonly [string, ReactNode][] = [
+                  ["ref", <span className={styles.mono} key="ref">{task.ref}</span>],
+                  ["title", <button type="button" className={styles.taskLink} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)} key="title">{task.title}</button>],
+                  ["status", <span key="status"><span className={styles.badge}>{copy.statusValues[task.status]}</span>{task.dependencyBlocked ? <span className={styles.muted}> {copy.blocked}</span> : null}</span>],
+                  ["priority", <span key="priority">P{task.priority}</span>],
+                  ["assignee", <span key="assignee">{task.assignee || "—"}</span>],
+                  ["plan", <span key="plan">{copy.planState[task.executionPlanState]}</span>],
+                  ["steps", <span key="steps">{task.completedRequiredStepCount} / {task.requiredStepCount}{task.optionalStepCount ? ` + ${task.optionalStepCount}` : ""}</span>],
+                  ["updated", <span className={styles.mono} key="updated">{task.updatedAt}</span>],
+                ]
+                return <tr key={task.id} data-testid="task-row" data-task-id={task.id}>{cells.filter(([id]) => id === "ref" || id === "title" || id === "status" || visibleColumns?.[id] !== false).map(([id, cell]) => <td key={id}>{cell}</td>)}</tr>
+              })}
             </tbody>
           </table>
         </div>

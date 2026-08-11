@@ -221,6 +221,77 @@
     border-block: 1px solid var(--color-border);
   }
 
+  .groupedList {
+    display: grid;
+    gap: 0.9rem;
+    min-width: 0;
+  }
+
+  .statusGroup {
+    min-width: 0;
+    border-block: 1px solid var(--color-border);
+    background: var(--color-background-surface);
+  }
+
+  .statusGroupHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.55rem 0.65rem;
+    background: var(--color-background-body);
+    color: var(--color-text-secondary);
+  }
+
+  .statusGroupHeader h3,
+  .statusGroupHeader span {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 650;
+  }
+
+  .statusGroupRows {
+    display: grid;
+  }
+
+  .groupedRow {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(12rem, auto);
+    gap: 0.75rem;
+    min-width: 0;
+    align-items: center;
+    border-block-end: 1px solid var(--color-border);
+    padding: 0.6rem 0.65rem;
+  }
+
+  .groupedRow:last-child {
+    border-block-end: 0;
+  }
+
+  .groupedRow:hover {
+    background: var(--color-background-body);
+  }
+
+  .groupedIdentity,
+  .groupedFacts {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+
+  .groupedIdentity {
+    flex-wrap: wrap;
+  }
+
+  .groupedFacts {
+    justify-content: flex-end;
+    color: var(--color-text-secondary);
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
   .visuallyHidden {
     position: absolute;
     width: 1px;
@@ -355,6 +426,16 @@
 
     .searchField {
       min-width: 0;
+    }
+
+    .groupedRow {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.35rem;
+    }
+
+    .groupedFacts {
+      justify-content: flex-start;
+      text-align: start;
     }
   }
 }

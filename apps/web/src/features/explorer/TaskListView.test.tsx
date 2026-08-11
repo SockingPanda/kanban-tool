@@ -78,6 +78,19 @@ describe("TaskListView", () => {
     expect(empty).not.toContain('data-testid="task-row"')
   })
 
+  test("renders List and Table as distinct projections over the same rows", () => {
+    const list = renderToStaticMarkup(<TaskListView state={state} rows={rows} loading={false} displayVariant="grouped" onQueryChange={vi.fn()} onSelectTask={vi.fn()} />)
+    const table = renderToStaticMarkup(<TaskListView state={state} rows={rows} loading={false} displayVariant="table" onQueryChange={vi.fn()} onSelectTask={vi.fn()} />)
+
+    expect(list).toContain('data-display-variant="list"')
+    expect(list).toContain('data-testid="task-row"')
+    expect(list).toContain("运行中")
+    expect(list).not.toContain("<table")
+    expect(table).toContain('data-display-variant="table"')
+    expect(table).toContain("<table")
+    expect(table).toContain("First task")
+  })
+
   test("distinguishes an empty board from a filtered no-result list", () => {
     const emptyBoardState: TaskListViewState = {
       query: { status: [], priority: [], plan: [], search: "", sort: "updated_at", page: 1, limit: 100, includeArchived: false },

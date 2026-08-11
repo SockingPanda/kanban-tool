@@ -1,7 +1,24 @@
 import { describe, expect, test } from "vitest"
 
 import { ExplorerReadError } from "../../lib/api/explorer-read-model"
-import { asyncReadToken, inspectorRelationsView, shouldClearMapTaskFromInspector, visibleAsyncReadState } from "./ExplorerPage.logic"
+import { asyncReadToken, inspectorRelationsView, parseTaskDisplay, serializeTaskDisplay, shouldClearMapTaskFromInspector, visibleAsyncReadState, withTaskDisplay } from "./ExplorerPage.logic"
+
+describe("Tasks list display URL contract", () => {
+  test("uses list as the canonical default and recognizes only table", () => {
+    expect(parseTaskDisplay("task=t_1&display=table&unknown=keep")).toBe("table")
+    expect(parseTaskDisplay("display=grouped")).toBe("list")
+    expect(parseTaskDisplay("")).toBe("list")
+    expect(serializeTaskDisplay("list")).toBe("")
+    expect(serializeTaskDisplay("table")).toBe("display=table")
+  })
+
+  test("clones display changes without dropping task, map controls, or unknown query", () => {
+    const table = withTaskDisplay("task=t_1&filter=blocked&zoom=1.2&unknown=keep", "table")
+    expect(table.toString()).toBe("task=t_1&filter=blocked&zoom=1.2&unknown=keep&display=table")
+    const list = withTaskDisplay(table, "list")
+    expect(list.toString()).toBe("task=t_1&filter=blocked&zoom=1.2&unknown=keep")
+  })
+})
 
 describe("ExplorerPage task URL authority", () => {
   test("clears only a typed task-not-found for the current map selection", () => {

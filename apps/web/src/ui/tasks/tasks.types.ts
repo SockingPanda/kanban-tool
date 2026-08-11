@@ -24,6 +24,8 @@ export interface TaskFilterValue {
 
 interface TaskFilterBarCommonProps {
   readonly placeholder?: string
+  /** Disable the search control when the active projection has no query-backed handler. */
+  readonly disabled?: boolean
   readonly filters?: readonly TaskFilterValue[]
   readonly onRemoveFilter?: (id: string) => void
   readonly onClearFilters?: () => void

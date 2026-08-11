@@ -12,7 +12,7 @@ export type WebPreferences = {
 }
 
 export const DEFAULT_PREFERENCES: WebPreferences = {
-  theme: "system",
+  theme: "dark",
   locale: "zh",
   sidebarExpanded: true,
   density: "comfortable",

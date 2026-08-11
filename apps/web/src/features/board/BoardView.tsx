@@ -45,6 +45,8 @@ export interface BoardViewProps {
   readonly taskMutations?: BoardTaskMutationSurface
   /** Explorer nests the live board under its page heading. */
   readonly headingLevel?: 1 | 2 | 3
+  /** Canonical Tasks uses a compact projection; standalone consumers keep the full board header. */
+  readonly presentation?: "standalone" | "embedded"
 }
 
 function mergeMessages(overrides?: BoardMessagesOverrides): BoardMessages {
@@ -292,7 +294,7 @@ function TaskCard({
       <dl className={styles.taskSummary} data-testid="board-task-summary">
         <div className={styles.taskDetailsRow}>
           <dt>{copy.statusLabel}</dt>
-          <dd translate="no">{task.status}</dd>
+          <dd translate="no" data-status={task.status}>{task.status}</dd>
         </div>
         <div className={styles.taskDetailsRow}>
           <dt>{copy.assigneeLabel}</dt>
@@ -562,7 +564,7 @@ function BoardColumns({
   )
 }
 
-export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, syncStatus, id = "astryx-board", className, headingLevel = 1, taskMutations }: BoardViewProps) {
+export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, syncStatus, id = "astryx-board", className, headingLevel = 1, taskMutations, presentation = "standalone" }: BoardViewProps) {
   const copy = mergeMessages(messageOverrides)
   const baseModel = state.kind === "ready" ? state.model : null
   const mutationColumns = baseModel !== null && Array.isArray(baseModel.columns) ? baseModel.columns : []
@@ -576,7 +578,8 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
     displayModel !== null && !validation.valid
       ? { kind: "error", message: copy.invalidModelDescription }
       : state
-  const rootClassName = className ? `${styles.board} ${className}` : styles.board
+  const presentationClassName = presentation === "embedded" ? styles.boardEmbedded : ""
+  const rootClassName = [styles.board, presentationClassName, className].filter(Boolean).join(" ")
 
   return (
     <section
@@ -586,11 +589,32 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       data-testid="board-view"
       data-state={renderedState.kind}
       data-anomaly={displayModel !== null && !validation.valid ? "board-model" : undefined}
+      data-presentation={presentation}
     >
       <a className={styles.skipLink} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
-      <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />
+      {presentation === "embedded" ? (
+        <>
+          <Heading level={headingLevel} id={titleId} className={styles.visuallyHidden}>
+            {board?.name ?? copy.boardTitle}
+          </Heading>
+          {controller?.openCreate ? (
+            <div className={styles.embeddedActionRow}>
+              <Button
+                label={copy.createTask}
+                variant="primary"
+                size="sm"
+                isDisabled={controller.isMutationPending}
+                onClick={(event) => controller.openCreate?.(event.currentTarget)}
+                data-testid="task-create"
+              />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />
+      )}
       {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
       {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
       {controller?.isMutationPending ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</p> : null}

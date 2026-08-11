@@ -22,6 +22,11 @@ function storage(values: Record<string, string> = {}) {
 }
 
 describe("Web preferences", () => {
+  test("defaults new users to the committed dark observation theme", () => {
+    expect(DEFAULT_PREFERENCES.theme).toBe("dark")
+    expect(readStoredPreferences(storage())).toMatchObject({ theme: "dark" })
+  })
+
   test("reads only the kb:web namespace and falls back for invalid values", () => {
     const source = storage({
       [PREFERENCE_STORAGE_KEYS.theme]: "dark",

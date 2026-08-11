@@ -47,7 +47,7 @@ test.describe("kanban-tool product shell", () => {
     await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
-    await expect(page.locator("html")).not.toHaveAttribute("data-theme")
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
     await page.getByTestId("appearance-theme").selectOption("dark")
     await page.getByTestId("appearance-density").selectOption("compact")

@@ -175,6 +175,15 @@ describe("BoardView", () => {
     expect(markup).toMatch(/<details[^>]*data-testid="board-identity-details"[\s\S]*b-1[\s\S]*<\/details>/)
   })
 
+  test("embedded presentation keeps an accessible heading without repeating board identity chrome", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} presentation="embedded" />)
+
+    expect(markup).toContain('data-presentation="embedded"')
+    expect(markup).toMatch(/<h[1-3][^>]*class="[^"]*visuallyHidden[^"]*"[^>]*>产品路线图<\/h[1-3]>/)
+    expect(markup).not.toContain('data-testid="board-identity-slug"')
+    expect(markup).not.toContain('data-testid="board-identity-details"')
+  })
+
   test("task card keeps agent summary facts and places low-frequency facts in a details reveal", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
 

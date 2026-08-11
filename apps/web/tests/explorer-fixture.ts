@@ -27,12 +27,18 @@ export type ExplorerFixtureOptions = {
 
 export type ExplorerFixture = {
   readonly apiRequests: string[]
+  readonly apiRequestLog: ExplorerApiRequest[]
   readonly getSseConnectionCount: () => Promise<number>
   readonly waitForSseConnection: (afterCount: number) => Promise<void>
   readonly emitHeartbeat: () => Promise<void>
   readonly emitTaskUpdated: () => Promise<void>
   readonly releaseList: () => void
   readonly failNextInspectorReads: (count?: number) => void
+}
+
+type ExplorerApiRequest = {
+  readonly method: string
+  readonly path: string
 }
 
 type FixtureEvent = {
@@ -150,6 +156,7 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
   await installRuntimeFixture(page)
   await installPersistentSse(page)
   const apiRequests: string[] = []
+  const apiRequestLog: ExplorerApiRequest[] = []
   const readyTask = fixtureTask("ready", 1, "Ready task", TASK_ID)
   const listTasks = [readyTask, fixtureTask("todo", 2, "Todo task")]
   const attachments: Record<string, unknown>[] = options.withAssets
@@ -171,7 +178,9 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
 
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url())
-    apiRequests.push(`${url.pathname}${url.search}`)
+    const path = `${url.pathname}${url.search}`
+    apiRequests.push(path)
+    apiRequestLog.push({ method: route.request().method(), path })
 
     if (url.pathname === "/api/v1/boards") {
       await fulfillJson(route, options.emptyBoards ? { data: [] } : {
@@ -563,6 +572,7 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
 
   return {
     apiRequests,
+    apiRequestLog,
     getSseConnectionCount: () => page.evaluate(() => (window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0),
     waitForSseConnection: (afterCount) => page.waitForFunction((count) => ((window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0) > count, afterCount),
     releaseList: () => releaseList(),

@@ -63,7 +63,9 @@ test.describe("Inspector integration seam", () => {
     await page.getByTestId("label-add").click()
     await expect(page.getByTestId("inspector-labels")).toContainText("fresh-label")
     await expect(page.getByTestId("inspector-labels")).not.toContainText("first-label")
-    expect(fixture.apiRequests.filter((request) => request === `/api/v1/tasks/${taskId}/labels`)).toHaveLength(2)
+    expect(fixture.apiRequestLog.filter(({ method, path }) =>
+      method === "POST" && path === `/api/v1/tasks/${taskId}/labels`
+    )).toHaveLength(2)
 
     const downloadRequests = () => fixture.apiRequests.filter((request) => request.endsWith("/attachments/a_fixture"))
     await page.getByTestId("attachment-download").click()

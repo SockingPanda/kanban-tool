@@ -62,6 +62,8 @@
   }
 
   .viewButton {
+    display: inline-flex;
+    align-items: center;
     min-height: 2rem;
     border: 0;
     border-inline-end: 1px solid var(--tasks-border);
@@ -70,9 +72,14 @@
     color: var(--tasks-muted);
     font: inherit;
     cursor: pointer;
+    text-decoration: none;
   }
 
-  .viewButton:last-child {
+  .viewControl {
+    display: contents;
+  }
+
+  .viewControl:last-child .viewButton {
     border-inline-end: 0;
   }
 
@@ -81,7 +88,8 @@
     color: var(--tasks-text);
   }
 
-  .viewButton[aria-pressed="true"] {
+  .viewButton[aria-pressed="true"],
+  .viewButton[aria-current="page"] {
     background: var(--tasks-accent-muted);
     color: var(--tasks-accent-strong);
   }

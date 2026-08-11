@@ -226,6 +226,8 @@ interface ViewSwitcherCommonProps {
   readonly onViewChange?: (view: TasksView) => void
   /** Atomic route/display seam for product surfaces; avoids two history writes for List/Table. */
   readonly onSelectionChange?: (view: TasksView, display: TasksListDisplay) => void
+  /** Optional progressive-enhancement hrefs; product routes remain `/list?display=table`. */
+  readonly hrefForView?: (view: TasksView, display: TasksListDisplay) => string | undefined
   readonly includeTableDisplay?: boolean
   readonly displayVariant?: TasksListDisplay
   readonly onDisplayChange?: (display: TasksListDisplay) => void
@@ -239,7 +241,7 @@ export type ViewSwitcherProps = ViewSwitcherCommonProps &
     | { readonly activeView: TasksView | UnsupportedTasksView; readonly includeUnsupportedTimeline: true }
   )
 
-export function ViewSwitcher({ activeView, onViewChange, onSelectionChange, includeTableDisplay = false, displayVariant = "grouped", onDisplayChange, includeUnsupportedTimeline = false, label, locale = "zh" }: ViewSwitcherProps) {
+export function ViewSwitcher({ activeView, onViewChange, onSelectionChange, hrefForView, includeTableDisplay = false, displayVariant = "grouped", onDisplayChange, includeUnsupportedTimeline = false, label, locale = "zh" }: ViewSwitcherProps) {
   const copy = copyFor(locale)
   const views: readonly { readonly id: TasksView | UnsupportedTasksView | "table"; readonly label: string; readonly unsupported?: boolean }[] = [
     { id: "board", label: copy.board },
@@ -262,32 +264,41 @@ export function ViewSwitcher({ activeView, onViewChange, onSelectionChange, incl
             : Boolean(onViewChange) && (!listNeedsDisplayChange || Boolean(onDisplayChange))
         const inert = unavailable || !canChange
         const selected = isTableDisplay ? activeView === "list" && displayVariant === "table" : activeView === view.id && (!isTableDisplay && view.id === "list" ? displayVariant !== "table" : true)
-        return (
+        const href = !unavailable && canChange ? hrefForView?.(isTableDisplay ? "list" : view.id as TasksView, isTableDisplay ? "table" : "grouped") : undefined
+        const handleClick = (event?: { preventDefault: () => void }) => {
+          if (href !== undefined && onSelectionChange) event?.preventDefault()
+          if (onSelectionChange) {
+            onSelectionChange(isTableDisplay ? "list" : view.id as TasksView, isTableDisplay ? "table" : "grouped")
+            return
+          }
+          if (isTableDisplay) {
+            onViewChange?.("list")
+            onDisplayChange?.("table")
+          } else {
+            onViewChange?.(view.id as TasksView)
+            if (view.id === "list") onDisplayChange?.("grouped")
+          }
+        }
+        const control = href !== undefined ? (
+          <a href={href} className={styles.viewButton} aria-current={selected ? "page" : undefined} aria-disabled={inert ? true : undefined} onClick={handleClick}>
+            {view.label}
+          </a>
+        ) : (
           <button
-            key={view.id}
             type="button"
             className={styles.viewButton}
             aria-pressed={selected}
             aria-disabled={inert ? true : undefined}
             disabled={inert}
             title={unavailable ? copy.timelineUnavailable : undefined}
-            onClick={canChange && !unavailable ? () => {
-              if (onSelectionChange) {
-                onSelectionChange(isTableDisplay ? "list" : view.id as TasksView, isTableDisplay ? "table" : "grouped")
-                return
-              }
-              if (isTableDisplay) {
-                onViewChange?.("list")
-                onDisplayChange?.("table")
-              } else {
-                onViewChange?.(view.id as TasksView)
-                if (view.id === "list") onDisplayChange?.("grouped")
-              }
-            } : undefined}
+            onClick={canChange && !unavailable ? handleClick : undefined}
           >
             {view.label}
             {unavailable ? `（${locale === "en" ? "unavailable" : "不可用"}）` : ""}
           </button>
+        )
+        return (
+          <span key={view.id} className={styles.viewControl}>{control}</span>
         )
       })}
     </div>

@@ -155,7 +155,9 @@ describe("Tasks interaction grammar", () => {
     const onSelectionChange = vi.fn()
     const root = ViewSwitcher({ activeView: "list", includeTableDisplay: true, displayVariant: "grouped", onSelectionChange }) as ReactElement<{ readonly children: readonly ReactElement[] }>
     const buttons = root.props.children
-    buttons[2]?.props.onClick?.()
+    const tableWrapper = buttons[2] as ReactElement<{ readonly children: ReactElement<{ readonly onClick?: () => void }> }>
+    const tableControl = tableWrapper.props.children
+    tableControl.props.onClick?.()
     expect(onSelectionChange).toHaveBeenCalledTimes(1)
     expect(onSelectionChange).toHaveBeenCalledWith("list", "table")
   })

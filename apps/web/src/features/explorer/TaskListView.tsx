@@ -305,6 +305,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
                         {visibleColumns?.assignee !== false ? <span>{task.assignee || "—"}</span> : null}
                         {visibleColumns?.plan !== false ? <span>{copy.planState[task.executionPlanState]}</span> : null}
                         {visibleColumns?.steps !== false ? <span>{task.completedRequiredStepCount} / {task.requiredStepCount}{task.optionalStepCount ? ` + ${task.optionalStepCount}` : ""}</span> : null}
+                        {visibleColumns?.updated !== false ? <span className={styles.mono}>{task.updatedAt}</span> : null}
                         {task.dependencyBlocked ? <span className={styles.muted}>{copy.blocked}</span> : null}
                       </div>
                     </article>

@@ -13,6 +13,7 @@ export interface TasksDiagnosticLink {
 export interface TasksWorkspaceChromeProps {
   readonly locale: Locale
   readonly scope: string
+  readonly hrefForView?: (view: "board" | "list" | "map", display: TasksListDisplay) => string | undefined
   readonly activeView: TasksView
   readonly displayVariant: TasksListDisplay
   readonly density: DensityMode
@@ -63,10 +64,10 @@ function listFilters(query: TaskListQueryState | undefined, locale: Locale): rea
   ]
 }
 
-export function TasksWorkspaceChrome({ locale, scope, activeView, displayVariant, density, listQuery, onViewChange, onSearchChange, onOpenFilters, onRemoveFilter, onClearFilters, onDensityChange, visibleColumns, onVisibleColumnsChange, diagnostics, hasInspector, onCloseInspector }: TasksWorkspaceChromeProps) {
+export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, displayVariant, density, listQuery, onViewChange, onSearchChange, onOpenFilters, onRemoveFilter, onClearFilters, onDensityChange, visibleColumns, onVisibleColumnsChange, diagnostics, hasInspector, onCloseInspector }: TasksWorkspaceChromeProps) {
   const copy = locale === "en"
-    ? { title: "Tasks", views: "Task views", search: "Search tasks", filters: "Filters", display: "Display", more: "More", diagnostics: "Diagnostics", close: "Close Inspector" }
-    : { title: "任务", views: "任务视图", search: "搜索任务", filters: "筛选", display: "显示", more: "更多", diagnostics: "诊断", close: "关闭任务检查器" }
+    ? { title: "Tasks", views: "Board explorer views", search: "Search tasks", filters: "Filters", display: "Display", more: "More", diagnostics: "Diagnostics", close: "Close Inspector" }
+    : { title: "任务", views: "看板浏览视图", search: "搜索任务", filters: "筛选", display: "显示", more: "更多", diagnostics: "诊断", close: "关闭任务检查器" }
   const columns = Object.values(locale === "en" ? displayColumnsEnglish : displayColumns)
   const filters = activeView === "list" ? listFilters(listQuery, locale) : []
   const querySearch = activeView === "list" ? listQuery?.search ?? "" : ""
@@ -77,7 +78,7 @@ export function TasksWorkspaceChrome({ locale, scope, activeView, displayVariant
     <section className={styles.chrome} aria-labelledby="tasks-workspace-heading" data-testid="tasks-workspace-chrome">
       <header className={styles.header}>
         <div className={styles.identity}>
-          <h1 id="tasks-workspace-heading">{copy.title}</h1>
+          <h1 id="tasks-workspace-heading" tabIndex={-1} data-explorer-focus-fallback>{copy.title}</h1>
           <span className={styles.scope} translate="no">{scope}</span>
         </div>
         <div className={styles.actions}>
@@ -86,6 +87,7 @@ export function TasksWorkspaceChrome({ locale, scope, activeView, displayVariant
             displayVariant={display}
             includeTableDisplay
             onSelectionChange={(view, nextDisplay) => onViewChange(view, nextDisplay)}
+            hrefForView={hrefForView}
             label={copy.views}
             locale={locale}
           />

@@ -713,6 +713,10 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
       <TasksWorkspaceChrome
         locale={locale}
         scope={route.boardSlug}
+        hrefForView={(nextView, nextDisplay) => {
+          const nextParams = withTaskDisplay(params, nextView === "list" && nextDisplay === "table" ? "table" : "list")
+          return routeTarget(route.boardSlug, nextView, nextParams, runtime.webBasePath)
+        }}
         activeView={workspaceView}
         displayVariant={displayVariant}
         density={density}

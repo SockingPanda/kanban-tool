@@ -233,6 +233,7 @@ test.describe("agent-first Plane shell and board acceptance", () => {
 
     const switcher = page.getByTestId("board-switcher-select")
     await expect(switcher).toBeVisible()
+    await expect(page.getByTestId("board-switcher-search")).toBeVisible()
     await switcher.selectOption("beta")
 
     await expect(page).toHaveURL(/\/app\/boards\/beta\/board$/)
@@ -300,6 +301,28 @@ test.describe("agent-first Plane shell and board acceptance", () => {
     await expect(page).toHaveURL(/\/app\/boards\/beta\/board$/)
     await expect(page.getByTestId("board-identity-slug")).toHaveText("beta")
     await expect(page.getByTestId("board-task").filter({ hasText: "Beta ready task" })).toBeVisible()
+  })
+
+  test("searches and groups current, recent, and all canonical projects from the keyboard", async ({ page }) => {
+    await installAgentFirstFixture(page)
+    await page.goto("/app/boards/alpha/board", { waitUntil: "domcontentloaded" })
+
+    const switcher = page.getByTestId("board-switcher-select")
+    await expect(switcher.locator("optgroup").filter({ hasText: "当前项目" })).toHaveCount(1)
+    await expect(switcher.locator("optgroup").filter({ hasText: "所有项目" })).toHaveCount(1)
+
+    const search = page.getByTestId("board-switcher-search")
+    await search.focus()
+    await search.fill("Beta")
+    await expect(switcher.locator('option[value="beta"]')).toHaveCount(1)
+    await switcher.selectOption("beta")
+    await expect(page).toHaveURL(/\/app\/boards\/beta\/board$/)
+
+    await page.getByTestId("board-switcher-search").fill("")
+    await expect(page.getByTestId("board-switcher-select").locator("optgroup").filter({ hasText: "最近项目" })).toHaveCount(0)
+    await page.getByTestId("board-switcher-select").selectOption("alpha")
+    await expect(page).toHaveURL(/\/app\/boards\/alpha\/board$/)
+    await expect(page.getByTestId("board-switcher-select").locator("optgroup").filter({ hasText: "最近项目" })).toHaveCount(1)
   })
 
   test("shows primary task facts first and expands secondary facts from the keyboard", async ({ page }) => {

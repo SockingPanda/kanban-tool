@@ -31,7 +31,7 @@ test.describe("同源 Web runtime bootstrap", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1b1b1b")
-    await expect(page.locator("#bootstrap-loading-copy")).toHaveText("Loading Astryx workspace…")
+    await expect(page.locator("#bootstrap-loading-copy")).toHaveText("Loading kanban-tool…")
     releaseRuntime()
     await navigation
   })

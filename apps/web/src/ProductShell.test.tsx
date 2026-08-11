@@ -10,6 +10,7 @@ import { parseAppRoute } from "./lib/router"
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { BoardListReadError, type BoardListItem } from "./lib/api/board-list-read-model"
 import { asCanonicalBoardId } from "./lib/sync/contracts"
+import { parseRecentProjectSlugs, projectPickerGroups } from "./lib/project-picker"
 
 const runtime: WebRuntimeConfig = {
   apiBaseUrl: "",
@@ -66,6 +67,37 @@ function boardListSurface(overrides: Partial<BoardListSurface> = {}): BoardListS
 }
 
 describe("ProductShell route offline boundary", () => {
+  test("parses only versioned, bounded canonical recent project slugs", () => {
+    const recent = parseRecentProjectSlugs(JSON.stringify({ version: 1, slugs: ["other", "default", "other", "b_invalid!", "third", "fourth", "fifth", "sixth"] }))
+    expect(recent).toEqual([assertCanonicalBoardSlug("other"), assertCanonicalBoardSlug("default"), assertCanonicalBoardSlug("third"), assertCanonicalBoardSlug("fourth"), assertCanonicalBoardSlug("fifth")])
+    expect(parseRecentProjectSlugs(JSON.stringify({ version: 2, slugs: ["other"] }))).toEqual([])
+    expect(parseRecentProjectSlugs("not-json")).toEqual([])
+  })
+
+  test("keeps current and recent projects out of the all-projects group", () => {
+    const groups = projectPickerGroups(
+      boardListItems,
+      assertCanonicalBoardSlug("default"),
+      [assertCanonicalBoardSlug("other")],
+      "",
+      "zh",
+    )
+    expect(groups.current.map((item) => item.slug)).toEqual(["default"])
+    expect(groups.recent.map((item) => item.slug)).toEqual(["other"])
+    expect(groups.all).toEqual([])
+
+    const filtered = projectPickerGroups(
+      boardListItems,
+      assertCanonicalBoardSlug("default"),
+      [assertCanonicalBoardSlug("other")],
+      "default",
+      "zh",
+    )
+    expect(filtered.current.map((item) => item.slug)).toEqual(["default"])
+    expect(filtered.recent).toEqual([])
+    expect(filtered.all).toEqual([])
+  })
+
   test("keeps Events mounted so its own offline snapshot can render", () => {
     setOffline()
     const markup = render(parseAppRoute("http://kanban.test/app/boards/default/events"))
@@ -191,8 +223,11 @@ describe("ProductShell route offline boundary", () => {
     )
 
     expect(markup).toContain('data-testid="board-switcher"')
+    expect(markup).toContain('data-testid="board-switcher-search"')
     expect(markup).toContain('data-testid="board-switcher-option-default"')
     expect(markup).toContain('data-testid="board-switcher-option-other"')
+    expect(markup).toContain('<optgroup label="当前项目">')
+    expect(markup).toContain('<optgroup label="所有项目">')
     expect(markup).toContain('data-testid="compact-app-nav"')
     expect(markup).toContain('data-testid="compact-nav-settings"')
     expect(markup).toContain('data-testid="compact-nav-maintenance"')

@@ -22,7 +22,7 @@ function expectStrictCsp(response: Pick<Response, "headers"> | null) {
   for (const directive of strictCspDirectives) expect(csp).toContain(directive)
 }
 
-test.describe("Astryx product shell", () => {
+test.describe("kanban-tool product shell", () => {
   test.beforeEach(async ({ page }) => {
     await installExplorerFixture(page)
   })
@@ -31,7 +31,7 @@ test.describe("Astryx product shell", () => {
     const response = await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     expectStrictCsp(response)
 
-    await expect(page).toHaveTitle("Astryx Kanban · Workspace")
+    await expect(page).toHaveTitle("kanban-tool")
     await expect(page.getByTestId("product-shell")).toBeVisible()
     await expect(page.getByTestId("board-view")).toBeVisible()
     await expect(page.getByRole("navigation", { name: "侧栏导航" })).toBeVisible()

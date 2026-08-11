@@ -124,7 +124,7 @@ export function themeColorForMode(mode: ThemeMode, prefersDark = false): string 
 }
 
 export function loadingCopyForLocale(locale: Locale): string {
-  return locale === "en" ? "Loading Astryx workspace…" : "正在加载 Astryx 工作区…"
+  return locale === "en" ? "Loading kanban-tool…" : "正在加载 kanban-tool…"
 }
 
 type PreferenceDocument = Pick<Document, "documentElement" | "querySelector">

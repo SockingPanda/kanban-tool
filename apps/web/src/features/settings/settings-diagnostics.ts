@@ -26,7 +26,7 @@ function reported(value: string | null | undefined, fallback: string): string {
 /** A stable, server-safe diagnostics payload. Database paths and raw error text are intentionally omitted. */
 export function diagnosticsText(runtime: WebRuntimeConfig, health: HealthReport | null, baseURI?: string): string {
   const lines = [
-    "Astryx Web diagnostics",
+    "kanban-tool Web diagnostics",
     `apiOrigin=${apiOriginForRuntime(runtime, baseURI)}`,
     `serverVersion=${reported(runtime.serverVersion, "not-reported")}`,
     `protocolVersion=${reported(runtime.protocolVersion, "not-reported")}`,

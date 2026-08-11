@@ -15,6 +15,13 @@ import type { WebRuntimeConfig } from "./lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router"
 import { usePreferences } from "./lib/use-preferences"
 import { createTranslator } from "./lib/i18n"
+import {
+  projectPickerGroups,
+  readRecentProjectSlugs,
+  recentProjectsStorageKey,
+  recentProjectsStorageEvent,
+  rememberRecentProject,
+} from "./lib/project-picker"
 import { BrowserConnectivityProvider } from "./lib/browser-connectivity-provider"
 import { ExplorerPage } from "./features/explorer/ExplorerPage"
 import { HealthPage } from "./features/health/HealthPage"
@@ -155,7 +162,7 @@ function CompactNavItem({
   )
 }
 
-function BoardSwitcher({
+function ProjectPicker({
   surface,
   activeBoardSlug,
   onNavigate,
@@ -168,16 +175,41 @@ function BoardSwitcher({
 }) {
   const { locale } = usePreferences()
   const t = createTranslator(locale)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [recentSlugs, setRecentSlugs] = useState<readonly CanonicalBoardSlug[]>(() => readRecentProjectSlugs())
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const syncRecentProjects = (event: Event) => {
+      const storageKey = event.type === "storage" ? (event as StorageEvent).key : null
+      if (storageKey !== null && storageKey !== recentProjectsStorageKey) return
+      setRecentSlugs(readRecentProjectSlugs())
+    }
+    window.addEventListener(recentProjectsStorageEvent, syncRecentProjects)
+    window.addEventListener("storage", syncRecentProjects)
+    return () => {
+      window.removeEventListener(recentProjectsStorageEvent, syncRecentProjects)
+      window.removeEventListener("storage", syncRecentProjects)
+    }
+  }, [])
+
   if (surface === undefined) return null
 
-  const selectedSlug = activeBoardSlug !== undefined && surface.items.some((item) => item.slug === activeBoardSlug)
+  const groups = projectPickerGroups(surface.items, activeBoardSlug, recentSlugs, searchQuery, locale)
+  const groupedItems = [...groups.current, ...groups.recent, ...groups.all]
+  const selectedSlug = activeBoardSlug !== undefined && groupedItems.some((item) => item.slug === activeBoardSlug)
     ? activeBoardSlug
     : ""
   const disabled = onNavigate === undefined || surface.status === "loading" || surface.items.length === 0
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const slug = parseCanonicalBoardSlug(event.currentTarget.value)
     if (slug === null || onNavigate === undefined) return
-    void Promise.resolve(onNavigate({ kind: "board", boardSlug: slug })).catch(() => undefined)
+    void Promise.resolve(onNavigate({ kind: "board", boardSlug: slug }))
+      .then((result) => {
+        const reachedProject = result === undefined
+          || (result !== null && typeof result === "object" && "kind" in result && result.kind === "board" && "boardSlug" in result && result.boardSlug === slug)
+        if (reachedProject) setRecentSlugs(rememberRecentProject(slug))
+      })
+      .catch(() => undefined)
   }
   const boundaryMessage = surface.status === "offline"
     ? t("boardOfflineDescription")
@@ -189,23 +221,57 @@ function BoardSwitcher({
 
   return (
     <div className={`${styles.boardSwitcher} ${compact ? styles.boardSwitcherCompact : ""}`} data-testid={compact ? "compact-board-switcher" : "board-switcher"}>
-      <label className={styles.boardSwitcherLabel} htmlFor={compact ? "compact-board-switcher-select" : "board-switcher-select"}>{t("board")}</label>
+      <label className={styles.boardSwitcherLabel} htmlFor={compact ? "compact-board-switcher-select" : "board-switcher-select"}>{t("project")}</label>
+      <input
+        id={compact ? "compact-board-switcher-search" : "board-switcher-search"}
+        className={styles.boardSwitcherSearch}
+        type="search"
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.currentTarget.value)}
+        placeholder={t("projectSearchPlaceholder")}
+        aria-label={t("projectSearch")}
+        disabled={disabled}
+        data-testid={compact ? "compact-board-switcher-search" : "board-switcher-search"}
+      />
       <select
         id={compact ? "compact-board-switcher-select" : "board-switcher-select"}
         className={styles.boardSwitcherSelect}
-        aria-label={t("board")}
+        aria-label={t("projectSwitcher")}
         value={selectedSlug}
         disabled={disabled}
         onChange={handleChange}
         data-testid={compact ? "compact-board-switcher-select" : "board-switcher-select"}
       >
         {surface.items.length === 0 ? <option value="">{surface.status === "loading" ? t("loading") : surface.status === "offline" ? t("offline") : surface.status === "error" ? t("error") : t("none")}</option> : null}
-        {surface.items.length > 0 && selectedSlug === "" ? <option value="" disabled>{t("none")}</option> : null}
-        {surface.items.map((item) => (
-          <option key={item.slug} value={item.slug} data-testid={`${compact ? "compact-" : ""}board-switcher-option-${item.slug}`}>
-            {item.name} · {item.slug}
-          </option>
-        ))}
+        {surface.items.length > 0 && groupedItems.length === 0 ? <option value="" disabled>{t("projectSearchEmpty")}</option> : null}
+        {surface.items.length > 0 && groupedItems.length > 0 && selectedSlug === "" ? <option value="" disabled>{searchQuery.trim().length > 0 ? t("projectSearchPrompt") : t("none")}</option> : null}
+        {groups.current.length > 0 ? (
+          <optgroup label={t("currentProject")}>
+            {groups.current.map((item) => (
+              <option key={item.slug} value={item.slug} data-testid={`${compact ? "compact-" : ""}board-switcher-option-${item.slug}`}>
+                {item.name} · {item.slug}
+              </option>
+            ))}
+          </optgroup>
+        ) : null}
+        {groups.recent.length > 0 ? (
+          <optgroup label={t("recentProjects")}>
+            {groups.recent.map((item) => (
+              <option key={item.slug} value={item.slug} data-testid={`${compact ? "compact-" : ""}board-switcher-option-${item.slug}`}>
+                {item.name} · {item.slug}
+              </option>
+            ))}
+          </optgroup>
+        ) : null}
+        {groups.all.length > 0 ? (
+          <optgroup label={t("allProjects")}>
+            {groups.all.map((item) => (
+              <option key={item.slug} value={item.slug} data-testid={`${compact ? "compact-" : ""}board-switcher-option-${item.slug}`}>
+                {item.name} · {item.slug}
+              </option>
+            ))}
+          </optgroup>
+        ) : null}
       </select>
       {surface.isRefreshing && surface.items.length > 0 ? <span className={styles.boardSwitcherStatus} role="status" aria-live="polite">{t("loading")}</span> : null}
       {boundaryMessage !== null ? (
@@ -321,7 +387,7 @@ function CompactAppBar({
     <div className={styles.compactAppBar} data-testid="compact-app-nav">
       <div className={styles.compactAppBarHeader}>
         <span className={styles.compactAppBarBrand}>{t("productName")}</span>
-        <BoardSwitcher surface={boardList} activeBoardSlug={activeBoardSlug} onNavigate={onNavigate} compact />
+        <ProjectPicker surface={boardList} activeBoardSlug={activeBoardSlug} onNavigate={onNavigate} compact />
       </div>
       <nav className={styles.compactAppBarNav} aria-label={t("navigation")}>
         {items.map((item) => <CompactAppBarItem key={item.testId} {...item} />)}
@@ -351,7 +417,7 @@ function ShellNav({ runtime, route, canonicalBoardSlug, boardList, onNavigate }:
     ? routePath({ kind: "maintenance", boardSlug: activeBoardSlug }, { basePath: runtime.webBasePath })
     : boardPath
   const switcherTopContent = sidebarExpanded ? (
-    <BoardSwitcher surface={boardList} activeBoardSlug={activeBoardSlug} onNavigate={onNavigate} />
+    <ProjectPicker surface={boardList} activeBoardSlug={activeBoardSlug} onNavigate={onNavigate} />
   ) : boardList !== undefined ? (
     <div className={styles.compactNavItemWrapper}>
       <button
@@ -387,7 +453,7 @@ function ShellNav({ runtime, route, canonicalBoardSlug, boardList, onNavigate }:
     >
       {sidebarExpanded ? (
         <>
-          <SideNavSection title={t("workspace")}>
+          <SideNavSection title={t("projects")}>
             <SideNavItem
               label={t("board")}
               icon={<BoardIcon />}

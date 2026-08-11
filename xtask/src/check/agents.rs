@@ -16,8 +16,9 @@ pub(crate) fn run(root: &Path) -> ToolResult<()> {
     check_agents_document_contract(root, &text)?;
     check_workspace_map(root, &text)?;
     check_skill_packages(root)?;
+    check_impeccable_hook_manifest(root)?;
     check_active_maps(root)?;
-    println!("ok: AGENTS.md、技能包结构和 active recipe/package map 已通过");
+    println!("ok: AGENTS.md、技能包结构、Impeccable Hook 和 active recipe/package map 已通过");
     Ok(())
 }
 
@@ -33,7 +34,16 @@ const REQUIRED_AGENT_SECTIONS: &[&str] = &[
     "## 9. 维护",
 ];
 
-const REQUIRED_SKILL_ROUTES: &[&str] = &["$style", "$prose", "$docs", "$check", "$commit"];
+const REQUIRED_SKILL_ROUTES: &[&str] = &[
+    "$style",
+    "$prose",
+    "$docs",
+    "$check",
+    "$commit",
+    "$impeccable",
+];
+const REQUIRED_SKILL_PACKAGES: &[&str] =
+    &["prose", "docs", "check", "commit", "style", "impeccable"];
 
 pub(crate) fn check_agents_document_contract(_root: &Path, text: &str) -> ToolResult<()> {
     for heading in REQUIRED_AGENT_SECTIONS {
@@ -77,12 +87,14 @@ pub(crate) fn check_workspace_map(root: &Path, agents_text: &str) -> ToolResult<
 fn check_skill_packages(root: &Path) -> ToolResult<()> {
     let agents_dir = required_directory(root.join(".agents"), ".agents")?;
     let skills_dir = required_directory(agents_dir.join("skills"), ".agents/skills")?;
-    let expected = ["prose", "docs", "check", "commit", "style"];
     let mut actual = fs::read_dir(&skills_dir)?
         .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
         .collect::<Result<Vec<_>, _>>()?;
     actual.sort_unstable();
-    let mut expected_sorted = expected.map(str::to_owned).to_vec();
+    let mut expected_sorted = REQUIRED_SKILL_PACKAGES
+        .iter()
+        .map(|skill| (*skill).to_owned())
+        .collect::<Vec<_>>();
     expected_sorted.sort_unstable();
     if actual != expected_sorted {
         return Err(std::io::Error::other(format!(
@@ -90,7 +102,7 @@ fn check_skill_packages(root: &Path) -> ToolResult<()> {
         ))
         .into());
     }
-    for skill in expected {
+    for &skill in REQUIRED_SKILL_PACKAGES {
         let path = skills_dir.join(skill);
         ensure_regular_directory(&path, "技能包目录")?;
         let skill_file = path.join("SKILL.md");
@@ -102,6 +114,48 @@ fn check_skill_packages(root: &Path) -> ToolResult<()> {
         let openai = agents.join("openai.yaml");
         ensure_regular_file(&openai, "技能包 agents/openai.yaml")?;
         check_openai_contract(skill, &openai)?;
+    }
+    Ok(())
+}
+
+fn check_impeccable_hook_manifest(root: &Path) -> ToolResult<()> {
+    let path = root.join(".codex/hooks.json");
+    ensure_regular_file(&path, "Impeccable Hook manifest")?;
+    let text = fs::read_to_string(&path)?;
+    let actual: serde_json::Value = serde_json::from_str(&text).map_err(|error| {
+        std::io::Error::other(format!(
+            "Impeccable Hook manifest 不是有效 JSON（{}）：{error}",
+            path.display()
+        ))
+    })?;
+    let command = "[ ! -f \".agents/skills/impeccable/scripts/hook.mjs\" ] || node \".agents/skills/impeccable/scripts/hook.mjs\"";
+    let expected = serde_json::json!({
+        "hooks": {
+            "PostToolUse": [{
+                "matcher": "Edit|Write|apply_patch",
+                "hooks": [{
+                    "type": "command",
+                    "command": command,
+                    "timeout": 5,
+                    "statusMessage": "Checking UI changes"
+                }]
+            }],
+            "Stop": [{
+                "hooks": [{
+                    "type": "command",
+                    "command": command,
+                    "timeout": 30,
+                    "statusMessage": "Design deep pass"
+                }]
+            }]
+        }
+    });
+    if actual != expected {
+        return Err(std::io::Error::other(format!(
+            "Impeccable Hook manifest 必须保持 project-local 推荐结构：{}",
+            path.display()
+        ))
+        .into());
     }
     Ok(())
 }
@@ -275,6 +329,37 @@ mod tests {
         }
     }
 
+    fn write_impeccable_hooks(root: &Path) {
+        let hooks = root.join(".codex/hooks.json");
+        fs::create_dir_all(hooks.parent().expect("hooks path should have a parent"))
+            .expect("hooks directory should be creatable");
+        fs::write(
+            hooks,
+            r#"{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "Edit|Write|apply_patch",
+      "hooks": [{
+        "type": "command",
+        "command": "[ ! -f \".agents/skills/impeccable/scripts/hook.mjs\" ] || node \".agents/skills/impeccable/scripts/hook.mjs\"",
+        "timeout": 5,
+        "statusMessage": "Checking UI changes"
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "[ ! -f \".agents/skills/impeccable/scripts/hook.mjs\" ] || node \".agents/skills/impeccable/scripts/hook.mjs\"",
+        "timeout": 30,
+        "statusMessage": "Design deep pass"
+      }]
+    }]
+  }
+}"#,
+        )
+        .expect("hooks manifest should be writable");
+    }
+
     #[test]
     fn skill_contract_requires_frontmatter_and_trigger_description_but_not_headings() {
         assert!(
@@ -305,10 +390,19 @@ mod tests {
         let root = temp_root("agents");
         write_agents(&root);
 
-        for skill in ["prose", "docs", "check", "commit", "style"] {
+        for &skill in REQUIRED_SKILL_PACKAGES {
             write_skill(&root, skill);
         }
+        write_impeccable_hooks(&root);
         assert!(run(&root).is_ok());
+
+        fs::write(
+            root.join(".codex/hooks.json"),
+            r#"{"hooks":{"PostToolUse":[],"Stop":[]}}"#,
+        )
+        .expect("hooks manifest should be writable");
+        assert!(run(&root).is_err());
+        write_impeccable_hooks(&root);
 
         let agents_path = root.join("AGENTS.md");
         let canonical = fs::read_to_string(&agents_path).expect("AGENTS should be readable");

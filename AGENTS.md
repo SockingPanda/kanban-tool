@@ -54,6 +54,8 @@
 - `$domain-modeling`：维护领域术语、`CONTEXT.md` 和需要记录的长期决策。
 - `$check`：根据当前 `justfile` 选择并报告最小充分验证。
 - `$commit`：仅在用户明确授权后创建本地 Conventional Commit。
+- `$impeccable`：`apps/web` 的产品与设计上下文、UI 方案、设计审查和收敛；不得重新定义领域语义、
+  绕过 Astryx 或放宽 strict CSP。
 
 ## 6. 文档地图
 

@@ -574,7 +574,7 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
     apiRequests,
     apiRequestLog,
     getSseConnectionCount: () => page.evaluate(() => (window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0),
-    waitForSseConnection: (afterCount) => page.waitForFunction((count) => ((window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0) > count, afterCount),
+    waitForSseConnection: (afterCount) => page.waitForFunction((count) => ((window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0) > count, afterCount).then(() => undefined),
     releaseList: () => releaseList(),
     emitHeartbeat: () => emit(sseFrame("kb-heartbeat", {})),
     emitTaskUpdated: async () => {

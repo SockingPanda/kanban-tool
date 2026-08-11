@@ -251,7 +251,7 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
       return page.evaluate(() => (window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0)
     },
     waitForSseConnection(afterCount) {
-      return page.waitForFunction((count) => ((window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0) > count, afterCount)
+      return page.waitForFunction((count) => ((window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0) > count, afterCount).then(() => undefined)
     },
     cancelSseConnection(connectionCount) {
       return page.evaluate((count) => {

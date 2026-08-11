@@ -155,6 +155,7 @@ function RuntimeThemedShell() {
     ? sessionCandidateSlug
     : null
   const boardList = useBoardListSurface(runtime, true)
+  const reloadProjects = boardList.onRetry
   const boardListReady = boardList.status === "ready"
   const boardRouteCandidate = router.route.kind === "board"
     ? router.route
@@ -201,7 +202,7 @@ function RuntimeThemedShell() {
   const pendingBoardIdRef = useRef<CanonicalBoardId | null>(null)
   const pendingBoundaryRef = useRef(false)
   const pendingBoundaryTypesRef = useRef<Set<string>>(new Set())
-  const pendingEventInvalidationRef = useRef({ board: false, inspector: false, runs: false, fullRefetch: false })
+  const pendingEventInvalidationRef = useRef({ projects: false, board: false, inspector: false, runs: false, fullRefetch: false })
   const pendingEventBoundarySourceRef = useRef(false)
 
   const bumpExplorerRevision = useCallback((targets: { readonly board?: boolean; readonly inspector?: boolean; readonly runs?: boolean; readonly events?: boolean }) => {
@@ -271,7 +272,7 @@ function RuntimeThemedShell() {
     const boundarySource = pendingEventBoundarySourceRef.current
     pendingEventsRef.current = []
     pendingBoardIdRef.current = null
-    pendingEventInvalidationRef.current = { board: false, inspector: false, runs: false, fullRefetch: false }
+    pendingEventInvalidationRef.current = { projects: false, board: false, inspector: false, runs: false, fullRefetch: false }
     pendingEventBoundarySourceRef.current = false
     if (pending.length === 0 || boardId === null) return
     try {
@@ -279,6 +280,7 @@ function RuntimeThemedShell() {
       const last = events.at(-1)
       if (!last) return
       setEventsBatchState({ key: sessionKeyRef.current, batch: { boardId, events, nextAfter: last.id } })
+      if (invalidation.projects) reloadProjects()
       if (!pendingBoundaryRef.current && !boundarySource && !invalidation.fullRefetch) {
         bumpExplorerRevision(invalidation)
       }
@@ -299,7 +301,7 @@ function RuntimeThemedShell() {
         }, 0)
       }
     }
-  }, [bumpExplorerRevision])
+  }, [bumpExplorerRevision, reloadProjects])
 
   const scheduleBoundaryRefresh = useCallback((type = "poll-complete") => {
     pendingBoundaryRef.current = true
@@ -339,7 +341,7 @@ function RuntimeThemedShell() {
     pendingBoardIdRef.current = null
     pendingBoundaryRef.current = false
     pendingBoundaryTypesRef.current.clear()
-    pendingEventInvalidationRef.current = { board: false, inspector: false, runs: false, fullRefetch: false }
+    pendingEventInvalidationRef.current = { projects: false, board: false, inspector: false, runs: false, fullRefetch: false }
     pendingEventBoundarySourceRef.current = false
     setSyncStatus("connecting")
     setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, boardRevision: 0, inspectorRevision: 0, runsRevision: 0, eventsRefreshRevision: 0 })
@@ -365,6 +367,7 @@ function RuntimeThemedShell() {
       }
       const invalidation = explorerEventInvalidation(event, entry.boardId)
       pendingEventInvalidationRef.current = {
+        projects: pendingEventInvalidationRef.current.projects || invalidation.projects,
         board: pendingEventInvalidationRef.current.board || invalidation.board,
         inspector: pendingEventInvalidationRef.current.inspector || invalidation.inspector,
         runs: pendingEventInvalidationRef.current.runs || invalidation.runs,

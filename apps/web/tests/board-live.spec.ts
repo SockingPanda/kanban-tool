@@ -129,6 +129,21 @@ test.describe("BoardLive browser pipeline", () => {
     expect(errors.requestFailures).toEqual([])
   })
 
+  test("refreshes Projects and releases the active session when board.archived arrives", async ({ page }) => {
+    const fixture = await installBoardFixture(page)
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("board-view")).toBeVisible()
+    const initialBoardListReads = fixture.apiRequests.filter((request) => request.startsWith("/api/v1/boards?")).length
+
+    await fixture.emitBoardArchived()
+
+    await expect.poll(() => fixture.apiRequests.filter((request) => request.startsWith("/api/v1/boards?")).length).toBeGreaterThan(initialBoardListReads)
+    await expect(page.getByTestId("shell-project-archived")).toBeVisible()
+    await expect(page.getByTestId("board-view")).toHaveCount(0)
+    await expect(page.getByTestId("board-live-session")).toHaveCount(0)
+    await expect(page.getByTestId("project-tree-tasks")).toHaveCount(0)
+  })
+
   test("retains the ready board while offline and recovers the live stream", async ({ page }) => {
     const fixture = await installBoardFixture(page)
     const errors = trackBrowserErrors(page)

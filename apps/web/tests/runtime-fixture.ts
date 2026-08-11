@@ -31,6 +31,7 @@ export interface BoardFixture {
   cancelSseConnection(connectionCount: number): Promise<void>
   closeSse(): Promise<void>
   emitHeartbeat(): Promise<void>
+  emitBoardArchived(): Promise<void>
   emitTaskUpdated(): Promise<void>
 }
 
@@ -173,6 +174,7 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
   await installPersistentSse(page)
   const apiRequests: string[] = []
   let readyTaskTitle = "Ready task"
+  let boardArchived = false
 
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url())
@@ -187,7 +189,7 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
           description: null,
           created_at: 1,
           updated_at: 2,
-          archived_at: null,
+          archived_at: boardArchived ? 4 : null,
         }],
       })
       return
@@ -269,6 +271,20 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
     },
     emitHeartbeat() {
       return emit(sseFrame("kb-heartbeat", {}))
+    },
+    emitBoardArchived() {
+      boardArchived = true
+      return emit(sseFrame("board.archived", {
+        id: 2,
+        event_id: "evt-playwright-2",
+        board_id: BOARD_ID,
+        task_id: null,
+        run_id: null,
+        kind: "board.archived",
+        actor: "playwright",
+        payload: {},
+        created_at: 4,
+      }, 2))
     },
     emitTaskUpdated() {
       return emit(sseFrame("task.updated", {

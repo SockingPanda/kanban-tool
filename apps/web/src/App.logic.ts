@@ -21,12 +21,14 @@ const explorerBoundaryTelemetry = new Set([
 ])
 
 export interface ExplorerEventInvalidation {
+  readonly projects: boolean
   readonly board: boolean
   readonly inspector: boolean
   readonly runs: boolean
   readonly fullRefetch: boolean
 }
 
+const projectRoots = new Set<QueryRoot>(["boards"])
 const boardRoots = new Set<QueryRoot>(["columns", "tasks", "stats", "board-task-map"])
 const inspectorRoots = new Set<QueryRoot>([
   "task-detail",
@@ -43,6 +45,7 @@ const generatedStreamAdapter = createGeneratedStreamContractAdapter()
 function projectExplorerInvalidation(plan: InvalidationPlan): ExplorerEventInvalidation {
   const roots = new Set(plan.targets.map((target) => target.root))
   return {
+    projects: plan.fullRefetch || [...projectRoots].some((root) => roots.has(root)),
     board: plan.fullRefetch || [...boardRoots].some((root) => roots.has(root)),
     inspector: plan.fullRefetch || [...inspectorRoots].some((root) => roots.has(root)),
     runs: plan.fullRefetch || [...runRoots].some((root) => roots.has(root)),

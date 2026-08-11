@@ -55,8 +55,21 @@ describe("Explorer invalidation boundary", () => {
       payload: { comment_id: "comment-3", kind: "note", author_type: "user", agent_type: null },
     }, asCanonicalBoardId("b_default"))
     expect(comment.board).toBe(false)
+    expect(comment.projects).toBe(false)
     expect(comment.inspector).toBe(true)
     expect(comment.runs).toBe(false)
+  })
+
+  test("projects board.archived onto the canonical Projects list", () => {
+    const archived = explorerEventInvalidation({
+      ...event(7),
+      kind: "board.archived",
+      payload: {},
+    }, asCanonicalBoardId("b_default"))
+
+    expect(archived.projects).toBe(true)
+    expect(archived.board).toBe(true)
+    expect(archived.fullRefetch).toBe(false)
   })
 
   test("derives dependency parent scope through the generated adapter", () => {

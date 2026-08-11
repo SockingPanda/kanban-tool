@@ -1,0 +1,720 @@
+.storyFrame {
+  inline-size: 100%;
+  min-block-size: 100vh;
+  min-inline-size: 0;
+  overflow: auto;
+  background: var(--nav-canvas, #0f1113);
+}
+
+.storyFrame[data-viewport="narrow"] {
+  inline-size: min(100%, 42rem);
+}
+
+.storyCanvas {
+  display: grid;
+  grid-template-columns: var(--nav-rail-width, 3.5rem) var(--nav-sidebar-width, 15.5rem) minmax(0, 1fr);
+  min-block-size: max(42rem, 100vh);
+}
+
+.storyMainSurface {
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--nav-canvas, #0f1113);
+}
+
+.storySurfaceContent {
+  min-inline-size: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 1.45rem 1.6rem 2.5rem;
+}
+
+.storySurfaceHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  min-inline-size: 0;
+  margin-block-end: 1.25rem;
+}
+
+.storySurfaceHeading h1,
+.storySurfaceHeading h2 {
+  min-inline-size: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--nav-text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storySurfaceHeading p,
+.storySurfaceMeta {
+  margin: 0;
+  color: var(--nav-text-secondary);
+  font-size: 0.75rem;
+}
+
+.storyCollectionToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-end: 1rem;
+}
+
+.storyCollectionSearch {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  inline-size: min(19rem, 100%);
+  min-block-size: 2rem;
+  border: 1px solid var(--nav-border-strong);
+  border-radius: var(--nav-control-radius);
+  padding-inline: 0.6rem;
+  color: var(--nav-text-secondary);
+  background: var(--nav-surface);
+}
+
+.storyCollectionSearch input {
+  min-inline-size: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  color: var(--nav-text);
+  background: transparent;
+  font: inherit;
+}
+
+.storyDensityControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-block-size: 2rem;
+  border: 1px solid var(--nav-border-strong);
+  border-radius: var(--nav-control-radius);
+  padding: 0.35rem 0.6rem;
+  color: var(--nav-text-secondary);
+  background: var(--nav-surface);
+  font: inherit;
+}
+
+.storyProjectRows {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.storyProjectRow {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, 18rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  min-inline-size: 0;
+  min-block-size: 5.3rem;
+  border: 1px solid var(--nav-border);
+  border-radius: var(--nav-card-radius);
+  padding: 0.9rem 1.1rem;
+  background: var(--nav-surface);
+}
+
+.storyProjectRow:hover {
+  border-color: var(--nav-border-strong);
+  background: var(--nav-layer);
+}
+
+.storyProjectRowButton {
+  display: contents;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.storyProjectRowIcon {
+  color: var(--nav-text-secondary);
+}
+
+.storyProjectRowCopy {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.2rem;
+}
+
+.storyProjectRowName {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--nav-text);
+  font-size: 1rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storyProjectRowSlug {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--nav-text-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storyProjectRowDescription {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--nav-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storyFixtureNote {
+  margin: 1.25rem 0 0;
+  color: var(--nav-text-tertiary);
+  font-size: 0.72rem;
+}
+
+.storyOverviewLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14rem;
+  min-inline-size: 0;
+  margin: -1.45rem -1.6rem -2.5rem;
+}
+
+.storyOverviewMain {
+  min-inline-size: 0;
+  padding: 1.45rem 3rem 2.5rem;
+}
+
+.storyOverviewTitle {
+  margin: 0 0 0.4rem;
+  color: var(--nav-text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.storyOverviewDescription {
+  max-inline-size: 58ch;
+  margin: 0 0 1.4rem;
+  color: var(--nav-text-secondary);
+  font-size: 1rem;
+}
+
+.storyIdentityRows {
+  display: grid;
+  margin: 0;
+  border-block: 1px solid var(--nav-border);
+}
+
+.storyIdentityRow {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(0, 2fr);
+  align-items: center;
+  gap: 1rem;
+  min-block-size: 3.5rem;
+  border-block-end: 1px solid var(--nav-border);
+}
+
+.storyIdentityRow:last-child {
+  border-block-end: 0;
+}
+
+.storyIdentityRow dt {
+  color: var(--nav-text-secondary);
+}
+
+.storyIdentityRow dd {
+  min-inline-size: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--nav-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storyIdentityRow dd code {
+  display: block;
+  min-inline-size: 0;
+  overflow: hidden;
+  border: 1px solid var(--nav-border);
+  border-radius: var(--nav-control-radius);
+  padding: 0.55rem 0.7rem;
+  color: var(--nav-text);
+  background: var(--nav-surface);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+}
+
+.storyExplore {
+  margin-block-start: 1.6rem;
+}
+
+.storyExplore h2,
+.storyDiagnostics h2 {
+  margin: 0 0 0.5rem;
+  color: var(--nav-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.storyExploreButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  inline-size: 100%;
+  min-block-size: 3.5rem;
+  border-block: 1px solid var(--nav-border);
+  border-inline: 0;
+  padding: 0.55rem 0;
+  color: var(--nav-text);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.storyExploreButton:hover {
+  color: var(--nav-accent);
+}
+
+.storyExploreButtonCopy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.storyDiagnostics {
+  min-inline-size: 0;
+  border-inline-start: 1px solid var(--nav-border);
+  padding: 1.45rem 1.2rem;
+}
+
+.storyDiagnosticsList {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0.7rem 0 0;
+  border-block-start: 1px solid var(--nav-border);
+  list-style: none;
+}
+
+.storyDiagnosticsItem {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-block-size: 2.65rem;
+  border: 0;
+  border-radius: var(--nav-control-radius);
+  padding: 0.45rem 0.2rem;
+  color: var(--nav-text-secondary);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+}
+
+.storyDiagnosticsItem:hover {
+  color: var(--nav-text);
+  background: var(--nav-layer);
+}
+
+.storyTaskWorkspace {
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.storyTaskToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  min-inline-size: 0;
+  min-block-size: 3rem;
+  border-block-end: 1px solid var(--nav-border);
+  padding: 0.45rem 1.2rem;
+  overflow: auto;
+}
+
+.storyTaskToolbarGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+}
+
+.storyViewSwitch {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--nav-border-strong);
+  border-radius: var(--nav-control-radius);
+  overflow: hidden;
+}
+
+.storyViewButton,
+.storyToolbarButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-block-size: 2rem;
+  border: 0;
+  border-inline-end: 1px solid var(--nav-border);
+  padding: 0.35rem 0.7rem;
+  color: var(--nav-text-secondary);
+  background: var(--nav-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.storyViewButton:last-child {
+  border-inline-end: 0;
+}
+
+.storyViewButton:hover,
+.storyToolbarButton:hover {
+  color: var(--nav-text);
+  background: var(--nav-layer);
+}
+
+.storyViewButtonActive {
+  color: #fff;
+  background: var(--nav-accent);
+}
+
+.storyTaskFilterBar {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-block-size: 3rem;
+  border-block-end: 1px solid var(--nav-border);
+  padding: 0.45rem 1.2rem;
+  overflow: auto;
+}
+
+.storyFilterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-block-size: 2rem;
+  border: 1px solid var(--nav-border);
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  color: var(--nav-text);
+  background: var(--nav-layer);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.storyTaskBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 23rem;
+  min-block-size: 0;
+  flex: 1;
+}
+
+.storyBoardScroller {
+  min-inline-size: 0;
+  overflow: auto;
+  padding: 0.85rem 0.45rem 1rem 1.2rem;
+}
+
+.storyBoardColumns {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(9rem, 1fr));
+  gap: 0.35rem;
+  min-inline-size: 58rem;
+  block-size: 100%;
+}
+
+.storyBoardColumn {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-inline: 1px solid var(--nav-border);
+  padding: 0.55rem 0.45rem;
+  background: color-mix(in srgb, var(--nav-layer) 75%, transparent);
+}
+
+.storyBoardColumnHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0 0.2rem;
+  color: var(--nav-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.storyBoardColumnCount {
+  color: var(--nav-text-tertiary);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.storyTaskCard {
+  display: grid;
+  gap: 0.45rem;
+  min-inline-size: 0;
+  border: 1px solid var(--nav-border-strong);
+  border-radius: var(--nav-card-radius);
+  padding: 0.65rem;
+  color: var(--nav-text);
+  background: var(--nav-surface);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.storyTaskCard:hover {
+  background: var(--nav-layer);
+}
+
+.storyTaskCardSelected {
+  border-color: var(--nav-accent);
+  box-shadow: inset 0 0 0 1px var(--nav-accent);
+}
+
+.storyTaskRef {
+  color: var(--nav-text-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.72rem;
+}
+
+.storyTaskTitle {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--nav-text);
+  font-size: 0.875rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+}
+
+.storyTaskBadge {
+  justify-self: start;
+  border: 1px solid var(--nav-border-strong);
+  border-radius: var(--nav-control-radius);
+  padding: 0.2rem 0.4rem;
+  color: var(--nav-text-secondary);
+  font-size: 0.75rem;
+}
+
+.storyTaskBadgeReady {
+  border-color: color-mix(in srgb, var(--nav-warning) 60%, var(--nav-border));
+  color: var(--nav-warning);
+}
+
+.storyTaskBadgeRunning {
+  border-color: color-mix(in srgb, var(--nav-success) 60%, var(--nav-border));
+  color: var(--nav-success);
+}
+
+.storyTaskMeta {
+  color: var(--nav-text-secondary);
+  font-size: 0.72rem;
+}
+
+.storyTaskInspector {
+  min-inline-size: 0;
+  border-inline-start: 1px solid var(--nav-border);
+  padding: 1rem 1.1rem;
+  overflow: auto;
+  background: var(--nav-surface);
+}
+
+.storyTaskInspectorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-block-end: 1rem;
+}
+
+.storyTaskInspectorHeader h2 {
+  min-inline-size: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--nav-text);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.storyInspectorClose {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border: 1px solid transparent;
+  border-radius: var(--nav-control-radius);
+  color: var(--nav-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.storyInspectorClose:hover {
+  border-color: var(--nav-border-strong);
+  color: var(--nav-text);
+  background: var(--nav-layer);
+}
+
+.storyInspectorRows {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+}
+
+.storyInspectorRow {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-block-end: 0.9rem;
+  border-block-end: 1px solid var(--nav-border);
+}
+
+.storyInspectorRow dt {
+  color: var(--nav-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.storyInspectorRow dd {
+  min-inline-size: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--nav-text);
+}
+
+.storyInspectorRun {
+  display: block;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--nav-border-strong);
+  border-radius: var(--nav-control-radius);
+  padding: 0.55rem;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.storyInspectorButton {
+  min-block-size: 2rem;
+  border: 1px solid var(--nav-border-strong);
+  border-radius: var(--nav-control-radius);
+  padding: 0.35rem 0.65rem;
+  color: var(--nav-text);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.storyInspectorButton:hover {
+  border-color: var(--nav-accent);
+  background: var(--nav-layer);
+}
+
+.storyEmptyNotice {
+  display: grid;
+  place-items: center;
+  min-block-size: 12rem;
+  border: 1px dashed var(--nav-border-strong);
+  color: var(--nav-text-secondary);
+}
+
+@container navigation-shell (max-width: 42rem) {
+  .storyFrame {
+    min-block-size: 46rem;
+  }
+
+  .storyCanvas {
+    grid-template-columns: var(--nav-rail-width, 3rem) minmax(0, 1fr);
+    min-block-size: 46rem;
+  }
+
+  .storySurfaceContent {
+    padding-inline: 0.9rem;
+  }
+
+  .storyCollectionToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .storyCollectionSearch {
+    inline-size: 100%;
+  }
+
+  .storyProjectRow {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.7rem;
+  }
+
+  .storyProjectRowDescription {
+    grid-column: 2;
+  }
+
+  .storyOverviewLayout {
+    display: block;
+    margin: -0.9rem -0.9rem -2.5rem;
+  }
+
+  .storyOverviewMain {
+    padding: 1rem 0.9rem 1.6rem;
+  }
+
+  .storyDiagnostics {
+    border-block-start: 1px solid var(--nav-border);
+    border-inline-start: 0;
+    padding: 1rem 0.9rem;
+  }
+
+  .storyTaskToolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-inline: 0.8rem;
+  }
+
+  .storyTaskToolbarGroup {
+    max-inline-size: 100%;
+    overflow: auto;
+  }
+
+  .storyTaskBody {
+    display: block;
+  }
+
+  .storyBoardScroller {
+    min-block-size: 21rem;
+    padding-inline-start: 0.8rem;
+  }
+
+  .storyTaskInspector {
+    position: fixed;
+    z-index: 5;
+    inset-block-start: 7.5rem;
+    inset-inline-start: var(--nav-rail-width, 3rem);
+    inline-size: min(calc(100vw - var(--nav-rail-width, 3rem)), 42rem);
+    block-size: calc(100vh - 7.5rem);
+    border-block-start: 1px solid var(--nav-border);
+    border-inline-start: 0;
+    box-shadow: -0.8rem 0 2rem rgb(0 0 0 / 0.24);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storyTaskCard,
+  .storyProjectRow {
+    transition: none;
+  }
+}

@@ -64,7 +64,7 @@ function useBoardListSurface(runtime: WebRuntimeConfig, enabled: boolean): Board
   const queryRef = useRef<{ readonly key: string; readonly query: BoardListReadQuery } | null>(null)
   let queryState = queryRef.current
   if (queryState === null || queryState.key !== runtimeKey) {
-    queryState = { key: runtimeKey, query: createBoardListQuery(runtime) }
+    queryState = { key: runtimeKey, query: createBoardListQuery(runtime, { includeArchived: true }) }
     queryRef.current = queryState
   }
   const query = queryState.query
@@ -140,24 +140,39 @@ function RuntimeThemedShell() {
   const routeRef = useRef(router.route)
   routeRef.current = router.route
   const lastBoardSlugRef = useRef<CanonicalBoardSlug | null>(null)
-  const routeBoardSlug = router.route.kind === "board" || router.route.kind === "health" || router.route.kind === "maintenance"
+  const routeBoardSlug = router.route.kind === "board" || router.route.kind === "project-overview" || router.route.kind === "health" || router.route.kind === "maintenance"
     ? router.route.boardSlug
     : null
-  if (routeBoardSlug !== null) lastBoardSlugRef.current = routeBoardSlug
-  const retainedBoardSlug = routeBoardSlug ?? lastBoardSlugRef.current
-  const retainedSessionSlug = retainedBoardSlug !== null && hasActiveBoardSession(runtime, retainedBoardSlug)
-    ? retainedBoardSlug
+  if (router.route.kind === "board" || router.route.kind === "health" || router.route.kind === "maintenance") {
+    lastBoardSlugRef.current = router.route.boardSlug
+  }
+  const sessionCandidateSlug = router.route.kind === "board" || router.route.kind === "health" || router.route.kind === "maintenance"
+    ? router.route.boardSlug
+    : router.route.kind === "settings"
+      ? lastBoardSlugRef.current
+      : null
+  const retainedSessionSlug = sessionCandidateSlug !== null && hasActiveBoardSession(runtime, sessionCandidateSlug)
+    ? sessionCandidateSlug
+    : null
+  const boardList = useBoardListSurface(runtime, true)
+  const boardListReady = boardList.status === "ready"
+  const boardRouteCandidate = router.route.kind === "board"
+    ? router.route
+    : router.route.kind === "health" || router.route.kind === "maintenance"
+      ? { kind: "board" as const, boardSlug: router.route.boardSlug, pathname: routePath({ kind: "board", boardSlug: router.route.boardSlug }, { basePath: runtime.webBasePath }) }
+      : router.route.kind === "settings" && retainedSessionSlug !== null
+        ? { kind: "board" as const, boardSlug: retainedSessionSlug, pathname: routePath({ kind: "board", boardSlug: retainedSessionSlug }, { basePath: runtime.webBasePath }) }
+        : null
+  const boardRoute = boardRouteCandidate !== null && (
+    !boardListReady
+    || boardList.items.some((item) => item.slug === boardRouteCandidate.boardSlug)
+  )
+    ? boardRouteCandidate
     : null
   const retainedSessionAvailable = retainedSessionSlug !== null
-  const boardRoute = router.route.kind === "home" || router.route.kind === "board"
-    ? router.route
-    : retainedSessionSlug !== null
-      ? { kind: "board" as const, boardSlug: retainedSessionSlug, pathname: routePath({ kind: "board", boardSlug: retainedSessionSlug }, { basePath: runtime.webBasePath }) }
-      : null
-  const boardList = useBoardListSurface(runtime, true)
   // The canonical BoardLive remains mounted for every board route as the
   // single session/SSE owner, while Explorer owns the visible board view.
-  const liveBoardVisible = router.route.kind === "home"
+  const liveBoardVisible = router.route.kind === "board"
   const sessionKey = boardRoute === null
     ? "none"
     : `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${boardRoute.kind === "board" ? boardRoute.boardSlug : ""}`
@@ -379,7 +394,7 @@ function RuntimeThemedShell() {
         <ProductShell
           runtime={runtime}
           route={router.route}
-          canonicalBoardSlug={retainedBoardSlug ?? undefined}
+          canonicalBoardSlug={routeBoardSlug ?? undefined}
           boardList={boardList}
           boundary={router.error ? "error" : undefined}
           error={router.error instanceof Error ? router.error.message : undefined}

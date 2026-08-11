@@ -38,7 +38,7 @@ import {
   type BoardSessionHandle,
 } from "./board-session-registry"
 
-type BoardRoute = Extract<AppRoute, { kind: "home" | "board" }>
+type BoardRoute = Extract<AppRoute, { kind: "board" }>
 
 export interface BoardLiveProps {
   readonly runtime: WebRuntimeConfig
@@ -127,14 +127,14 @@ function retainResourceKey(resources: Map<string, BoardReadResource>, resource: 
   resources.set(resource.identityKey, resource)
 }
 
-export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload }: BoardLiveProps) {
+export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload }: BoardLiveProps) {
   const preferences = usePreferences()
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
-  const selector = route.kind === "board" ? route.boardSlug : runtime.defaultBoard
+  const selector = route.boardSlug
   const runtimeKey = runtimeIdentityKey(runtime)
-  const contextKey = routeResourceContextKey(runtime, selector, route.kind, route.kind === "board" ? route.boardSlug : "")
-  const routeBoardSlug = route.kind === "board" ? route.boardSlug : ""
+  const contextKey = routeResourceContextKey(runtime, selector, route.kind, route.boardSlug)
+  const routeBoardSlug = route.boardSlug
   const resourcesRef = useRef(new Map<string, BoardReadResource>())
   const modelRef = useRef<BoardViewModel | null>(null)
   const resourceRef = useRef<BoardReadResource | null>(null)
@@ -144,7 +144,6 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   const activeContextRef = useRef(contextKey)
   const stateContextKeyRef = useRef(contextKey)
   const readyResourceKeyRef = useRef<string | null>(null)
-  const redirectedBoardRef = useRef<string | null>(null)
   const sessionHandleRef = useRef<BoardSessionHandle | null>(null)
   const sessionRetryRef = useRef<(() => void) | null>(null)
   const claimTokenStoreRef = useRef(createBoardTaskClaimTokenStore())
@@ -175,10 +174,6 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
       resources.clear()
     }
   }, [])
-
-  useEffect(() => {
-    if (route.kind !== "home") redirectedBoardRef.current = null
-  }, [route.kind, runtimeKey])
 
   useEffect(() => {
     const contextAtStart = contextKey
@@ -337,17 +332,6 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
     onTaskMutationsChange?.(taskMutations)
     return () => onTaskMutationsChange?.(undefined, taskMutations)
   }, [onTaskMutationsChange, taskMutations])
-
-  useEffect(() => {
-    if (route.kind !== "home" || visibleStateKind !== "ready" || stateContextKeyRef.current !== contextKey || visibleBoardSlug === null) return
-    const slug = parseCanonicalBoardSlug(visibleBoardSlug)
-    if (slug === null) return
-    if (redirectedBoardRef.current === slug) return
-    redirectedBoardRef.current = slug
-    void Promise.resolve(onNavigate({ kind: "board", boardSlug: slug }, { replace: true })).catch(() => {
-      redirectedBoardRef.current = null
-    })
-  }, [contextKey, onNavigate, route.kind, visibleBoardSlug, visibleStateKind])
 
   const canonicalBoardId = visibleState.kind === "ready" ? visibleState.model.board.id : null
   useEffect(() => {

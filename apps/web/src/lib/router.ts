@@ -36,6 +36,7 @@ export type BoardRouteFilters = SignalsRouteFilters | OntologyRouteFilters
 export type AppRoute =
   | { kind: "home"; pathname: string }
   | { kind: "board"; boardSlug: CanonicalBoardSlug; pathname: string; view?: BoardView; query?: string; filters?: BoardRouteFilters }
+  | { kind: "project-overview"; boardSlug: CanonicalBoardSlug; pathname: string }
   | { kind: "health"; boardSlug: CanonicalBoardSlug; pathname: string }
   | { kind: "maintenance"; boardSlug: CanonicalBoardSlug; pathname: string }
   | { kind: "settings"; pathname: string }
@@ -52,6 +53,7 @@ export type AppNavigationTarget =
       query?: string
       filters?: BoardRouteFilters
     }
+  | { kind: "project-overview"; boardSlug: CanonicalBoardSlug }
   | { kind: "health"; boardSlug: CanonicalBoardSlug }
   | { kind: "maintenance"; boardSlug: CanonicalBoardSlug }
   | { kind: "settings" }
@@ -219,8 +221,17 @@ export function parseAppRoute(
       }
       return { ...boardSlug, pathname }
     }
-    if (!(["board", "list", "map", "runs", "events", "signals", "ontology"] as const).includes(view as BoardView)) {
+    if (!(["board", "list", "map", "runs", "events", "signals", "ontology", "overview"] as const).includes(view as BoardView)) {
       return { kind: "not-found", pathname }
+    }
+    if (view === "overview") {
+      const slug = separator > 0 ? tail.slice(0, separator) : tail
+      const boardSlug = decodeBoardSlug(slug, pathname)
+      if (typeof boardSlug === "string") {
+        const target = { kind: "project-overview" as const, boardSlug }
+        return { kind: target.kind, boardSlug, pathname: routePath(target, options) }
+      }
+      return { ...boardSlug, pathname }
     }
     const slug = separator > 0 ? tail.slice(0, separator) : tail
     const boardSlug = decodeBoardSlug(slug, pathname)
@@ -246,6 +257,7 @@ type RoutePathInput =
   | AppRoute
   | { kind: "home" }
   | { kind: "board"; boardSlug: CanonicalBoardSlug; view?: BoardView; query?: string; filters?: BoardRouteFilters }
+  | { kind: "project-overview"; boardSlug: CanonicalBoardSlug }
   | { kind: "health"; boardSlug: CanonicalBoardSlug }
   | { kind: "maintenance"; boardSlug: CanonicalBoardSlug }
   | { kind: "settings" }
@@ -267,6 +279,9 @@ function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOpt
         ...("query" in target && target.query ? { query: target.query } : {}),
         ...("filters" in target && target.filters !== undefined ? { filters: target.filters } : {}),
       }
+    case "project-overview":
+      if (!parseCanonicalBoardSlug(target.boardSlug)) return invalidBoardRoute(routePath({ kind: "home" }, options), target.boardSlug)
+      return { kind: "project-overview", boardSlug: target.boardSlug, pathname: routePath(target, options) }
     case "health":
       if (!parseCanonicalBoardSlug(target.boardSlug)) return invalidBoardRoute(routePath({ kind: "home" }, options), target.boardSlug)
       return { kind: "health", boardSlug: target.boardSlug, pathname: routePath(target, options) }
@@ -303,6 +318,13 @@ export function routePath(route: RoutePathInput, options: { basePath?: string } 
       }
       return route.query ? `${pathname}?${route.query.replace(/^\?/, "")}` : pathname
     }
+    case "project-overview": {
+      const boardSlug = parseCanonicalBoardSlug(route.boardSlug)
+      if (!boardSlug) {
+        throw validateCanonicalBoardSlug(route.boardSlug) ?? new CanonicalBoardSlugError(route.boardSlug, "invalid-character")
+      }
+      return `${basePath}boards/${encodeURIComponent(boardSlug)}/overview`
+    }
     case "health":
     case "maintenance": {
       const boardSlug = parseCanonicalBoardSlug(route.boardSlug)
@@ -318,17 +340,7 @@ export function routePath(route: RoutePathInput, options: { basePath?: string } 
 }
 
 async function resolveTarget(target: AppNavigationTarget, options: AppNavigationOptions): Promise<AppRoute> {
-  const route = normalizedTarget(target, options)
-  if (route.kind !== "home" || !options.defaultBoard || !options.resolveBoard) return route
-
-  const resolved = await options.resolveBoard(options.defaultBoard)
-  const boardSlug = parseCanonicalBoardSlug(resolved)
-  if (!boardSlug) return invalidBoardRoute(route.pathname, resolved)
-  return {
-    kind: "board",
-    boardSlug,
-    pathname: routePath({ kind: "board", boardSlug }, options),
-  }
+  return normalizedTarget(target, options)
 }
 
 export async function resolveAppRoute(target: AppNavigationTarget, options: AppNavigationOptions = {}): Promise<AppRoute> {
@@ -336,7 +348,6 @@ export async function resolveAppRoute(target: AppNavigationTarget, options: AppN
 }
 
 function commitAppRoute(route: AppRoute, options: AppNavigationOptions): void {
-  if (route.kind === "home" && options.defaultBoard) return
   if (route.kind === "error") return
   const history = options.history ?? (typeof window === "undefined" ? null : window.history)
   if (!history) return
@@ -346,7 +357,6 @@ function commitAppRoute(route: AppRoute, options: AppNavigationOptions): void {
 export async function navigateApp(target: AppNavigationTarget, options: AppNavigationOptions = {}): Promise<AppRoute> {
   const route = await resolveTarget(target, options)
   const originalRoute = normalizedTarget(target, options)
-  if (originalRoute.kind === "home" && options.defaultBoard && route.kind === "home") return route
   commitAppRoute(route, { ...options, replace: options.replace ?? (route.kind === "board" && originalRoute.kind === "home") })
   return route
 }
@@ -373,16 +383,11 @@ function currentAppRoute(basePath: string): AppRoute | null {
 
 export function useAppRouter(options: AppRouterOptions = {}) {
   const basePath = options.basePath ?? DEFAULT_BASE_PATH
-  const defaultBoard = options.defaultBoard
-  const resolveBoard = options.resolveBoard
   const location = options.location ?? (typeof window === "undefined" ? DEFAULT_BASE_PATH : window.location.href)
   const [route, setRoute] = useState<AppRoute>(() => parseAppRoute(location, { basePath }))
   const [error, setError] = useState<unknown>(null)
   const routeRef = useRef(route)
   const epochRef = useRef(0)
-  const resolutionKeyRef = useRef<string | null>(null)
-  const resolverRef = useRef(resolveBoard)
-  const resolutionCacheRef = useRef<{ key: string; promise: Promise<AppRoute> } | null>(null)
 
   const setCurrentRoute = useCallback((nextRoute: AppRoute) => {
     routeRef.current = nextRoute
@@ -402,52 +407,6 @@ export function useAppRouter(options: AppRouterOptions = {}) {
     }
   }, [basePath, setCurrentRoute])
 
-  useEffect(() => {
-    const resolutionKey = `${basePath}|${defaultBoard ?? ""}`
-    if (resolverRef.current !== resolveBoard) {
-      resolverRef.current = resolveBoard
-      resolutionCacheRef.current = null
-      epochRef.current += 1
-    }
-    if (resolutionKeyRef.current !== resolutionKey) {
-      resolutionKeyRef.current = resolutionKey
-      resolutionCacheRef.current = null
-      epochRef.current += 1
-    }
-    if (route.kind !== "home" || !defaultBoard || !resolveBoard) return
-
-    const requestEpoch = epochRef.current
-    const expectedPathname = route.pathname
-    const cache =
-      resolutionCacheRef.current?.key === resolutionKey
-        ? resolutionCacheRef.current
-        : {
-            key: resolutionKey,
-            promise: resolveAppRoute(route, { basePath, defaultBoard, resolveBoard }),
-          }
-    resolutionCacheRef.current = cache
-    let active = true
-    void cache.promise
-      .then((nextRoute) => {
-        const stillCurrent =
-          active &&
-          requestEpoch === epochRef.current &&
-          routeRef.current.kind === "home" &&
-          routeRef.current.pathname === expectedPathname &&
-          currentAppRoute(basePath)?.kind === "home" &&
-          currentAppRoute(basePath)?.pathname === expectedPathname
-        if (!stillCurrent) return
-        commitAppRoute(nextRoute, { basePath, replace: true })
-        setCurrentRoute(nextRoute)
-      })
-      .catch((reason: unknown) => {
-        if (active && requestEpoch === epochRef.current) setError(reason)
-      })
-    return () => {
-      active = false
-    }
-  }, [basePath, defaultBoard, resolveBoard, route, setCurrentRoute])
-
   const navigate = useCallback(
     async (
       target: AppNavigationTarget,
@@ -460,8 +419,6 @@ export function useAppRouter(options: AppRouterOptions = {}) {
         const nextRoute = await resolveAppRoute(target, {
           ...navigationOptions,
           basePath,
-          defaultBoard,
-          resolveBoard,
         })
         const browserRoute = currentAppRoute(basePath)
         if (requestEpoch !== epochRef.current || (browserRoute && browserRoute.pathname !== expectedPathname && routeRef.current.pathname === expectedPathname)) {
@@ -470,7 +427,6 @@ export function useAppRouter(options: AppRouterOptions = {}) {
         commitAppRoute(nextRoute, {
           ...navigationOptions,
           basePath,
-          defaultBoard,
           replace: navigationOptions.replace ?? (nextRoute.kind === "board" && routeRef.current.kind === "home"),
         })
         setCurrentRoute(nextRoute)
@@ -480,7 +436,7 @@ export function useAppRouter(options: AppRouterOptions = {}) {
         return routeRef.current
       }
     },
-    [basePath, defaultBoard, resolveBoard, setCurrentRoute],
+    [basePath, setCurrentRoute],
   )
 
   return { route, navigate, error }

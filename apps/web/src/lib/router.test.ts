@@ -47,6 +47,16 @@ describe("App route parser", () => {
     })
   })
 
+  test("round-trips the identity-only project overview route", () => {
+    const route = parseAppRoute("/app/boards/default/overview")
+    expect(route).toEqual({
+      kind: "project-overview",
+      boardSlug: "default",
+      pathname: "/app/boards/default/overview",
+    })
+    expect(routePath(route)).toBe("/app/boards/default/overview")
+  })
+
   test("parses independent board-scoped health and maintenance routes", () => {
     expect(parseAppRoute("/app/boards/default/health")).toEqual({
       kind: "health",
@@ -160,7 +170,7 @@ describe("App route parser", () => {
 })
 
 describe("History API navigation", () => {
-  test("resolves a runtime board selector before replacing the home URL", async () => {
+  test("keeps the Projects collection at home even when runtime has a board selector", async () => {
     const history = {
       pushState: vi.fn(),
       replaceState: vi.fn(),
@@ -168,28 +178,21 @@ describe("History API navigation", () => {
 
     const route = await navigateApp("/app/", {
       defaultBoard: "selector:active",
-      resolveBoard: async (selector) => {
-        expect(selector).toBe("selector:active")
-        return "canonical-board"
-      },
+      resolveBoard: async () => "canonical-board",
       history,
     })
 
-    expect(route).toEqual({
-      kind: "board",
-      boardSlug: "canonical-board",
-      pathname: "/app/boards/canonical-board/board",
-    })
-    expect(history.replaceState).toHaveBeenCalledWith({}, "", "/app/boards/canonical-board/board")
-    expect(history.pushState).not.toHaveBeenCalled()
+    expect(route).toEqual({ kind: "home", pathname: "/app/" })
+    expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/")
+    expect(history.replaceState).not.toHaveBeenCalled()
   })
 
-  test("does not put an unresolved runtime selector into the URL", async () => {
+  test("does not call a resolver for an unresolved runtime selector", async () => {
     const history = { pushState: vi.fn(), replaceState: vi.fn() }
     const route = await navigateApp("/app/", { defaultBoard: "selector:active", history })
 
     expect(route).toEqual({ kind: "home", pathname: "/app/" })
-    expect(history.pushState).not.toHaveBeenCalled()
+    expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/")
     expect(history.replaceState).not.toHaveBeenCalled()
   })
 
@@ -229,7 +232,7 @@ describe("History API navigation", () => {
     expect(history.replaceState).not.toHaveBeenCalled()
   })
 
-  test("renders an invalid resolver result as an error without history", async () => {
+  test("ignores invalid resolver results because home never resolves defaultBoard", async () => {
     const history = { pushState: vi.fn(), replaceState: vi.fn() }
     const route = await navigateApp("/app/", {
       defaultBoard: "selector:active",
@@ -237,8 +240,8 @@ describe("History API navigation", () => {
       history,
     })
 
-    expect(route).toMatchObject({ kind: "error", code: "invalid-board-slug" })
-    expect(history.pushState).not.toHaveBeenCalled()
+    expect(route).toEqual({ kind: "home", pathname: "/app/" })
+    expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/")
     expect(history.replaceState).not.toHaveBeenCalled()
   })
 })

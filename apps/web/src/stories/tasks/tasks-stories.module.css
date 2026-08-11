@@ -2,15 +2,15 @@
   .surface {
     min-height: 100vh;
     padding: 1rem;
-    background: var(--color-background-body, #f6f7f8);
-    color: var(--color-text-primary, #15181c);
+    background: var(--color-background-body, var(--kb-color-canvas, #f6f7f8));
+    color: var(--color-text-primary, var(--kb-color-text-primary, #15181c));
   }
 
   .surfaceNarrow {
     min-height: 100vh;
     padding: 0.75rem;
-    background: var(--color-background-body, #f6f7f8);
-    color: var(--color-text-primary, #15181c);
+    background: var(--color-background-body, var(--kb-color-canvas, #f6f7f8));
+    color: var(--color-text-primary, var(--kb-color-text-primary, #15181c));
   }
 
   .surfaceContent {
@@ -41,7 +41,7 @@
 
   .surfaceEyebrow {
     margin: 0;
-    color: var(--color-text-secondary, #59616a);
+    color: var(--color-text-secondary, var(--kb-color-text-secondary, #59616a));
     font-size: 0.78rem;
   }
 
@@ -71,7 +71,7 @@
 
   .demoNote {
     margin: 0;
-    color: var(--color-text-secondary, #59616a);
+    color: var(--color-text-secondary, var(--kb-color-text-secondary, #59616a));
     font-size: 0.78rem;
   }
 

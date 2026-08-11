@@ -22,5 +22,8 @@ export type {
   TaskTableProps,
   TaskDisplayOptions,
   TasksDensity,
+  TasksLocale,
+  TasksListDisplay,
   TasksView,
+  UnsupportedTasksView,
 } from "./tasks.types"

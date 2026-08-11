@@ -1,21 +1,24 @@
 @layer product {
   .root {
-    --tasks-canvas: var(--color-background-body, #f6f7f8);
-    --tasks-surface: var(--color-background-surface, #ffffff);
-    --tasks-layer: var(--color-background-layer, #f0f2f4);
-    --tasks-layer-active: var(--color-background-layer-active, #e7edf3);
-    --tasks-border: var(--color-border, #dfe3e7);
-    --tasks-border-strong: var(--color-border-emphasized, #c6cdd4);
-    --tasks-text: var(--color-text-primary, #15181c);
-    --tasks-muted: var(--color-text-secondary, #59616a);
-    --tasks-faint: var(--color-text-tertiary, #747d87);
-    --tasks-accent: var(--color-accent, #0877bd);
-    --tasks-accent-muted: var(--color-accent-subtle, #e4f3fc);
-    --tasks-success: var(--color-status-success, #147a3d);
-    --tasks-warning: var(--color-status-warning, #9a6500);
-    --tasks-danger: var(--color-status-error, #b42332);
-    --tasks-control-radius: var(--radius-element, 0.375rem);
-    --tasks-card-radius: var(--radius-container, 0.5rem);
+    /* Astryx neutral tokens are the first source. kb aliases keep each pattern
+       renderable in isolation in Storybook and in a host without the preview. */
+    --tasks-canvas: var(--color-background-body, var(--kb-color-canvas, #f6f7f8));
+    --tasks-surface: var(--color-background-surface, var(--kb-color-surface, #ffffff));
+    --tasks-layer: var(--color-background-muted, var(--kb-color-layer, #f0f2f4));
+    --tasks-layer-active: var(--color-accent-muted, var(--kb-color-accent-muted, #e4f3fc));
+    --tasks-border: var(--color-border, var(--kb-color-border, #dfe3e7));
+    --tasks-border-strong: var(--color-border-emphasized, var(--kb-color-border-strong, #c6cdd4));
+    --tasks-text: var(--color-text-primary, var(--kb-color-text-primary, #15181c));
+    --tasks-muted: var(--color-text-secondary, var(--kb-color-text-secondary, #59616a));
+    --tasks-faint: var(--color-text-tertiary, var(--kb-color-text-tertiary, #747d87));
+    --tasks-accent: var(--color-accent, var(--kb-color-accent, #0877bd));
+    --tasks-accent-muted: var(--color-accent-muted, var(--kb-color-accent-muted, #e4f3fc));
+    --tasks-on-accent: var(--color-on-accent, var(--kb-color-on-accent, #ffffff));
+    --tasks-success: var(--color-success, var(--kb-color-success, #147a3d));
+    --tasks-warning: var(--color-warning, var(--kb-color-warning, #9a6500));
+    --tasks-danger: var(--color-error, var(--kb-color-danger, #b42332));
+    --tasks-control-radius: var(--radius-element, var(--kb-radius-control, 0.375rem));
+    --tasks-card-radius: var(--radius-container, var(--kb-radius-card, 0.5rem));
 
     color: var(--tasks-text);
     font-size: 0.875rem;
@@ -80,8 +83,8 @@
   }
 
   .viewButton[aria-pressed="true"] {
-    background: var(--tasks-accent);
-    color: #fff;
+    background: var(--tasks-accent-muted);
+    color: var(--tasks-accent);
   }
 
   .viewButton:disabled,
@@ -89,6 +92,13 @@
     cursor: not-allowed;
     color: var(--tasks-faint);
     opacity: 0.7;
+  }
+
+  .filterButton:disabled,
+  .densityButton:disabled,
+  .columnToggle input:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
   }
 
   .filterBar {
@@ -128,6 +138,12 @@
     background: transparent;
     color: var(--tasks-text);
     font: inherit;
+  }
+
+  .searchField:focus-within {
+    border-color: var(--tasks-accent);
+    outline: 2px solid var(--tasks-accent);
+    outline-offset: 2px;
   }
 
   .searchField input::placeholder {
@@ -301,15 +317,18 @@
 
   .board {
     display: grid;
-    grid-template-columns: repeat(6, minmax(12rem, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(12rem, 1fr);
     gap: 0.45rem;
-    min-width: 52rem;
+    min-width: max(52rem, 100%);
     align-items: start;
   }
 
   .boardScroll {
+    min-width: 0;
     max-width: 100%;
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
     padding: 0.75rem;
     background: var(--tasks-canvas);
   }
@@ -317,6 +336,8 @@
   .workspace,
   .workspaceWithPeek {
     display: grid;
+    min-width: 0;
+    min-height: 0;
     min-height: 30rem;
   }
 
@@ -395,7 +416,11 @@
     cursor: pointer;
   }
 
-  .card:hover {
+  .cardStatic {
+    cursor: default;
+  }
+
+  .card:not(.cardStatic):hover {
     border-color: var(--tasks-accent);
     background: var(--tasks-layer-active);
   }
@@ -483,8 +508,10 @@
   }
 
   .tableWrap {
+    min-width: 0;
     max-width: 100%;
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
     border-block: 1px solid var(--tasks-border);
     background: var(--tasks-surface);
   }
@@ -525,7 +552,9 @@
 
   .tableTask {
     display: block;
+    min-width: 0;
     max-width: 26rem;
+    overflow-wrap: anywhere;
     border: 0;
     padding: 0;
     background: transparent;
@@ -540,6 +569,19 @@
     color: var(--tasks-accent);
     text-decoration: underline;
     text-underline-offset: 0.15em;
+  }
+
+  .tableTaskStatic {
+    display: block;
+    min-width: 0;
+    max-width: 26rem;
+    overflow-wrap: anywhere;
+    color: var(--tasks-text);
+  }
+
+  .tableEmpty {
+    color: var(--tasks-muted);
+    text-align: center;
   }
 
   .tableDense th,
@@ -601,8 +643,18 @@
     cursor: pointer;
   }
 
+  .stateAction:not(:disabled) {
+    border-color: var(--tasks-accent);
+    background: var(--tasks-accent);
+    color: var(--tasks-on-accent);
+  }
+
   .stateAction:hover {
     background: var(--tasks-layer);
+  }
+
+  .stateAction:not(:disabled):hover {
+    background: color-mix(in srgb, var(--tasks-accent) 86%, var(--tasks-text));
   }
 
   .peek {
@@ -611,6 +663,9 @@
     min-width: min(22rem, 100%);
     max-width: 26rem;
     min-height: 25rem;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: contain;
     border-inline-start: 1px solid var(--tasks-border);
     background: var(--tasks-surface);
     box-shadow: -0.7rem 0 1.6rem rgb(0 0 0 / 0.1);
@@ -656,7 +711,9 @@
     align-content: start;
     gap: 0.9rem;
     min-width: 0;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 1rem;
   }
 
@@ -707,15 +764,57 @@
     width: 100%;
   }
 
+  .peekLayer {
+    display: contents;
+  }
+
+  .peekScrim {
+    display: none;
+  }
+
   @media (max-width: 48rem) {
     .workspaceWithPeek {
       grid-template-columns: minmax(0, 1fr);
     }
 
     .peek {
+      position: relative;
+      z-index: 1;
+      width: min(100%, 32rem);
+      max-height: 100dvh;
       max-width: none;
       border-inline-start: 0;
       box-shadow: 0 -0.7rem 1.6rem rgb(0 0 0 / 0.1);
+    }
+
+    .peekLayer[data-mode="sheet"] {
+      position: fixed;
+      z-index: 20;
+      inset: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: stretch;
+      justify-items: end;
+      overflow: hidden;
+      overscroll-behavior: contain;
+      background: transparent;
+    }
+
+    .peekLayer[data-mode="sheet"] .peek {
+      width: min(100%, 32rem);
+      max-height: 100dvh;
+      border: 0;
+    }
+
+    .peekLayer[data-mode="sheet"] .peekScrim {
+      display: block;
+      position: absolute;
+      z-index: 0;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: color-mix(in srgb, var(--tasks-canvas) 72%, transparent);
     }
 
     .filterBar {

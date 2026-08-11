@@ -81,29 +81,34 @@ const inspector: TaskInspectorViewModel = {
 describe("Tasks interaction grammar", () => {
   test("keeps Timeline out of the product switcher unless an unsupported story opts in", () => {
     const product = renderToStaticMarkup(<ViewSwitcher activeView="board" />)
-    expect(product).toContain("Board")
-    expect(product).not.toContain("Timeline")
+    expect(product).toContain("看板")
+    expect(product).not.toContain("时间线")
 
     const unsupported = renderToStaticMarkup(<ViewSwitcher activeView="timeline" includeUnsupportedTimeline />)
-    expect(unsupported).toContain("Timeline（不可用）")
+    expect(unsupported).toContain("时间线（不可用）")
     expect(unsupported).toContain('disabled=""')
   })
 
   test("renders active filters, canonical card facts, and table semantics", () => {
     const filter = renderToStaticMarkup(<FilterBar filters={[{ id: "status", label: "Status: Running" }]} onRemoveFilter={vi.fn()} />)
     expect(filter).toContain("Status: Running")
-    expect(filter).toContain("Active filters")
+    expect(filter).toContain("当前筛选")
 
     const card = renderToStaticMarkup(<TaskCard task={task} selected onSelect={vi.fn()} />)
     expect(card).toContain("#1")
     expect(card).toContain("A canonical task")
     expect(card).toContain("运行中")
     expect(card).toContain("0/1")
+    expect(card).toContain('data-task-opener="t_1"')
 
-    const table = renderToStaticMarkup(<TaskTable tasks={[task]} onSelectTask={vi.fn()} />)
+    const table = renderToStaticMarkup(<TaskTable tasks={[task]} onSelectTask={vi.fn()} visibleColumns={{ assignee: false }} />)
     expect(table).toContain("任务表格")
     expect(table).toContain('scope="col"')
     expect(table).toContain("A canonical task")
+    expect(table).not.toContain("执行者")
+
+    const emptyTable = renderToStaticMarkup(<TaskTable tasks={[]} locale="en" />)
+    expect(emptyTable).toContain("No tasks")
   })
 
   test("supports empty columns and each recovery boundary state", () => {
@@ -118,18 +123,25 @@ describe("Tasks interaction grammar", () => {
   })
 
   test("keeps selected side-peek read model scoped to task, required step, and run", () => {
-    const markup = renderToStaticMarkup(<SidePeekFrame model={inspector} onClose={vi.fn()} onOpenDetails={vi.fn()} />)
+    const markup = renderToStaticMarkup(<SidePeekFrame model={inspector} mode="sheet" onClose={vi.fn()} onRestoreFocus={vi.fn()} onOpenDetails={vi.fn()} />)
     expect(markup).toContain("#1")
     expect(markup).toContain("Build a static Storybook")
     expect(markup).toContain("r_demo")
+    expect(markup).toContain('role="dialog"')
+    expect(markup).toContain('aria-modal="true"')
     expect(markup).not.toContain("avatar")
     expect(markup).not.toContain("progress")
   })
 
   test("keeps display controls keyboard-addressable", () => {
     const markup = renderToStaticMarkup(<DisplayMenu options={{ density: "dense" }} columns={[{ id: "priority", label: "优先级" }]} />)
-    expect(markup).toContain("Density")
+    expect(markup).toContain("密度")
     expect(markup).toContain('type="checkbox"')
     expect(markup).toContain("优先级")
+    expect(markup).toContain('disabled=""')
+
+    const staticCard = renderToStaticMarkup(<TaskCard task={task} />)
+    expect(staticCard).not.toContain('data-task-opener="t_1"')
+    expect(staticCard).toContain("运行中")
   })
 })

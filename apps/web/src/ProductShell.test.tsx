@@ -50,6 +50,16 @@ function renderWithLiveChild(route: ReturnType<typeof parseAppRoute>) {
   )
 }
 
+function renderWithBoardList(route: ReturnType<typeof parseAppRoute>, surface: BoardListSurface = boardListSurface()) {
+  return renderToStaticMarkup(
+    <PreferencesProvider>
+      <ProductShell runtime={runtime} route={route} boardList={surface}>
+        <div data-testid="live-board-child">live session</div>
+      </ProductShell>
+    </PreferencesProvider>,
+  )
+}
+
 const boardListItems: readonly BoardListItem[] = [
   Object.freeze({ id: asCanonicalBoardId("b_default"), slug: assertCanonicalBoardSlug("default"), name: "Default Board", description: null, archivedAt: null }),
   Object.freeze({ id: asCanonicalBoardId("b_other"), slug: assertCanonicalBoardSlug("other"), name: "Other Board", description: null, archivedAt: null }),
@@ -67,6 +77,63 @@ function boardListSurface(overrides: Partial<BoardListSurface> = {}): BoardListS
 }
 
 describe("ProductShell route offline boundary", () => {
+  test("keeps /app/ as the Projects collection and never mounts the live child", () => {
+    const markup = renderWithBoardList(parseAppRoute("http://kanban.test/app/"))
+
+    expect(markup).toContain('data-testid="projects-collection"')
+    expect(markup).not.toContain('data-testid="live-board-child"')
+    expect(markup).not.toContain('data-testid="board-live-session"')
+  })
+
+  test("renders an archived overview from the same board-list snapshot", () => {
+    const archived = Object.freeze({
+      id: asCanonicalBoardId("b_archived"),
+      slug: assertCanonicalBoardSlug("archived"),
+      name: "Archived Board",
+      description: "Retained identity",
+      archivedAt: 1,
+    })
+    const markup = renderWithBoardList(
+      parseAppRoute("http://kanban.test/app/boards/archived/overview"),
+      boardListSurface({ items: [...boardListItems, archived] }),
+    )
+
+    expect(markup).toContain('data-testid="project-overview"')
+    expect(markup).toContain('data-archived="true"')
+    expect(markup).not.toContain('data-testid="board-live-session"')
+  })
+
+  test("turns a ready snapshot miss into typed not-found instead of fetching a project", () => {
+    const markup = renderWithBoardList(parseAppRoute("http://kanban.test/app/boards/missing/overview"))
+
+    expect(markup).toContain('data-testid="shell-project-not-found"')
+    expect(markup).not.toContain('data-testid="project-overview"')
+    expect(markup).not.toContain('data-testid="board-live-session"')
+  })
+
+  test("does not keep an overview in loading when the list is offline without a snapshot", () => {
+    const markup = renderWithBoardList(
+      parseAppRoute("http://kanban.test/app/boards/missing/overview"),
+      boardListSurface({ status: "offline", items: [] }),
+    )
+
+    expect(markup).toContain('data-testid="project-overview-unavailable"')
+    expect(markup).toContain('data-status="offline"')
+    expect(markup).not.toContain('data-testid="project-overview-loading"')
+  })
+
+  test("keeps an overview identity snapshot visible while the list is stale", () => {
+    const markup = renderWithBoardList(
+      parseAppRoute("http://kanban.test/app/boards/default/overview"),
+      boardListSurface({ status: "stale" }),
+    )
+
+    expect(markup).toContain('data-testid="project-overview"')
+    expect(markup).toContain('data-testid="project-overview-status"')
+    expect(markup).toContain('data-status="stale"')
+    expect(markup).not.toContain('data-testid="project-overview-loading"')
+  })
+
   test("parses only versioned, bounded canonical recent project slugs", () => {
     const recent = parseRecentProjectSlugs(JSON.stringify({ version: 1, slugs: ["other", "default", "other", "b_invalid!", "third", "fourth", "fifth", "sixth"] }))
     expect(recent).toEqual([assertCanonicalBoardSlug("other"), assertCanonicalBoardSlug("default"), assertCanonicalBoardSlug("third"), assertCanonicalBoardSlug("fourth"), assertCanonicalBoardSlug("fifth")])
@@ -173,7 +240,17 @@ describe("ProductShell route offline boundary", () => {
     expect(maintenanceMarkup).not.toContain('data-testid="shell-offline"')
   })
 
-  test("orders collapsed navigation as Board, Signals, Ontology, Health, Maintenance, Settings", () => {
+  test("does not invent a BoardLive child for direct operator deep links", () => {
+    const healthMarkup = render(parseAppRoute("http://kanban.test/app/boards/default/health"))
+    const maintenanceMarkup = render(parseAppRoute("http://kanban.test/app/boards/default/maintenance"))
+
+    expect(healthMarkup).toContain('data-testid="health-page"')
+    expect(healthMarkup).not.toContain('data-testid="board-live-session"')
+    expect(maintenanceMarkup).toContain('data-testid="maintenance-page"')
+    expect(maintenanceMarkup).not.toContain('data-testid="board-live-session"')
+  })
+
+  test("uses the Plane-only rail, project sidebar and current project surfaces", () => {
     const markup = renderToStaticMarkup(
       <PreferencesContext.Provider value={{
         theme: "light",
@@ -196,20 +273,19 @@ describe("ProductShell route offline boundary", () => {
         />
       </PreferencesContext.Provider>,
     )
-    const positions = ["nav-board", "nav-signals", "nav-ontology", "nav-health", "nav-maintenance", "nav-settings"].map((testId) => markup.indexOf(`data-testid="${testId}"`))
+    const positions = ["product-rail-projects", "projects-sidebar-projects", "project-tree-overview", "project-tree-tasks", "product-rail-settings"].map((testId) => markup.indexOf(`data-testid="${testId}"`))
     expect(positions.every((position) => position >= 0)).toBe(true)
-    expect(positions).toEqual([...positions].sort((left, right) => left - right))
-    expect(markup).toContain('data-testid="board-switcher-collapsed-trigger"')
+    expect(markup).toContain('data-testid="projects-sidebar"')
   })
 
-  test("marks operator navigation as the current page", () => {
+  test("keeps operator routes as real diagnostics deep links", () => {
     const markup = renderToStaticMarkup(
       <PreferencesProvider>
         <ProductShell runtime={runtime} canonicalBoardSlug={assertCanonicalBoardSlug("default")} route={parseAppRoute("http://kanban.test/app/boards/default/maintenance")} />
       </PreferencesProvider>,
     )
-    const nav = markup.slice(markup.indexOf('data-testid="nav-maintenance"') - 240, markup.indexOf('data-testid="nav-maintenance"') + 80)
-    expect(nav).toContain('aria-current="page"')
+    expect(markup).toContain('data-testid="maintenance-page"')
+    expect(markup).toContain('href="/app/boards/default/maintenance"')
   })
 
   test("renders a canonical board switcher without inventing a second selection state", () => {
@@ -236,15 +312,11 @@ describe("ProductShell route offline boundary", () => {
       </PreferencesContext.Provider>,
     )
 
-    expect(markup).toContain('data-testid="board-switcher"')
-    expect(markup).toContain('data-testid="board-switcher-search"')
-    expect(markup).toContain('data-testid="board-switcher-option-default"')
-    expect(markup).toContain('data-testid="board-switcher-option-other"')
-    expect(markup).toContain('<optgroup label="当前项目">')
-    expect(markup).toContain('<optgroup label="所有项目">')
-    expect(markup).toContain('data-testid="compact-app-nav"')
-    expect(markup).toContain('data-testid="compact-nav-settings"')
-    expect(markup).toContain('data-testid="compact-nav-maintenance"')
+    expect(markup).toContain('data-testid="project-picker"')
+    expect(markup).toContain('data-testid="project-picker-options"')
+    expect(markup).toContain('data-project-picker-input="true"')
+    expect(markup).toContain('data-testid="projects-sidebar"')
+    expect(markup).toContain('data-testid="product-rail-settings"')
   })
 
   test("keeps list failures local and actionable", () => {
@@ -259,8 +331,8 @@ describe("ProductShell route offline boundary", () => {
       </PreferencesProvider>,
     )
 
-    expect(markup).toContain('data-testid="board-switcher-error"')
-    expect(markup).toContain('data-testid="board-switcher-retry"')
+    expect(markup).toContain('data-testid="project-picker-error"')
+    expect(markup).toContain('>重新加载</button>')
     expect(markup).toContain('data-testid="explorer-page"')
   })
 })

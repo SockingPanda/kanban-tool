@@ -31,10 +31,10 @@ function board(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function transport(payload: unknown): { get(path: string, signal?: AbortSignal): Promise<HttpTransportResponse> } {
+function transport(payload: unknown, expectedPath = "/api/v1/boards?include_archived=false"): { get(path: string, signal?: AbortSignal): Promise<HttpTransportResponse> } {
   return {
     async get(path) {
-      expect(path).toBe("/api/v1/boards?include_archived=false")
+      expect(path).toBe(expectedPath)
       return { payload, bytes: 1 }
     },
   }
@@ -55,6 +55,15 @@ describe("global board list read model", () => {
     }])
     expect(Object.isFrozen(result)).toBe(true)
     expect(Object.isFrozen(result[0])).toBe(true)
+  })
+
+  test("can include archived identities for the global Projects collection", async () => {
+    const result = await loadBoardList(runtime, {
+      includeArchived: true,
+      transport: transport({ data: [board({ archived_at: 1 })] }, "/api/v1/boards?include_archived=true"),
+    })
+
+    expect(result[0]?.archivedAt).toBe(1)
   })
 
   test.each([

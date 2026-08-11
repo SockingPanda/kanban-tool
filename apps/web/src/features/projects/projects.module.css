@@ -1,0 +1,295 @@
+@layer product {
+  .projectsSurface {
+    display: grid;
+    gap: 1.25rem;
+    min-inline-size: 0;
+    max-inline-size: 72rem;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .projectsHeading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    min-inline-size: 0;
+    padding-block-end: 0.75rem;
+    border-block-end: 1px solid var(--kb-color-border);
+  }
+
+  .projectsHeading h1,
+  .overviewMain h1 {
+    margin: 0;
+    color: var(--kb-color-text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+  }
+
+  .projectsHeading p,
+  .overviewDescription {
+    max-inline-size: 58ch;
+    margin: 0.4rem 0 0;
+    color: var(--kb-color-text-secondary);
+    line-height: 1.5;
+  }
+
+  .projectsSearch {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: 0 1 18rem;
+    min-inline-size: 12rem;
+    min-block-size: 2rem;
+    border: 1px solid var(--kb-color-border-strong);
+    border-radius: var(--kb-radius-control);
+    padding-inline: 0.65rem;
+    color: var(--kb-color-text-secondary);
+    background: var(--kb-color-layer);
+  }
+
+  .projectsSearch:focus-within {
+    border-color: var(--kb-color-accent-strong);
+  }
+
+  .projectsSearch input {
+    min-inline-size: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    color: var(--kb-color-text-primary);
+    background: transparent;
+  }
+
+  .projectsSearch input::placeholder {
+    color: var(--kb-color-text-tertiary);
+  }
+
+  .projectRows {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .projectRow {
+    display: grid;
+    grid-template-columns: auto minmax(12rem, 0.6fr) minmax(10rem, 1fr) auto;
+    align-items: center;
+    gap: 0.8rem;
+    inline-size: 100%;
+    min-block-size: 3.5rem;
+    border: 1px solid var(--kb-color-border);
+    border-radius: var(--kb-radius-control);
+    padding: 0.6rem 0.75rem;
+    color: var(--kb-color-text-primary);
+    background: var(--kb-color-surface);
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .projectRow:hover {
+    border-color: var(--kb-color-border-strong);
+    background: var(--kb-color-layer);
+  }
+
+  .projectRow:focus-visible,
+  .overviewTasksButton:focus-visible {
+    outline: 2px solid var(--kb-color-accent-strong);
+    outline-offset: 2px;
+  }
+
+  .projectRowCopy {
+    display: grid;
+    min-inline-size: 0;
+    gap: 0.15rem;
+  }
+
+  .projectRowName,
+  .projectRowSlug,
+  .projectRowDescription {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .projectRowName {
+    font-weight: 600;
+  }
+
+  .projectRowSlug {
+    color: var(--kb-color-text-tertiary);
+    font-family: var(--kb-font-family-code);
+    font-size: 0.75rem;
+  }
+
+  .projectRowDescription {
+    color: var(--kb-color-text-secondary);
+  }
+
+  .projectsBoundary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--kb-color-warning) 52%, var(--kb-color-border));
+    border-radius: var(--kb-radius-control);
+    padding: 0.7rem 0.8rem;
+    color: var(--kb-color-text-secondary);
+    background: var(--kb-color-layer);
+  }
+
+  .projectsBoundaryEmpty {
+    border-color: var(--kb-color-border);
+  }
+
+  .projectsBoundary button {
+    min-block-size: 2rem;
+    border: 1px solid var(--kb-color-border-strong);
+    border-radius: var(--kb-radius-control);
+    padding-inline: 0.7rem;
+    color: var(--kb-color-text-primary);
+    background: var(--kb-color-surface);
+    cursor: pointer;
+  }
+
+  .projectsRefreshing {
+    margin: 0;
+    color: var(--kb-color-text-secondary);
+    font-size: 0.8125rem;
+  }
+
+  .overviewBoundary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--kb-color-warning) 52%, var(--kb-color-border));
+    border-radius: var(--kb-radius-control);
+    padding: 0.7rem 0.8rem;
+    color: var(--kb-color-text-secondary);
+    background: var(--kb-color-layer);
+  }
+
+  .overviewBoundary button {
+    min-block-size: 2rem;
+    border: 1px solid var(--kb-color-border-strong);
+    border-radius: var(--kb-radius-control);
+    padding-inline: 0.7rem;
+    color: var(--kb-color-text-primary);
+    background: var(--kb-color-surface);
+    cursor: pointer;
+  }
+
+  .overviewLayout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    max-inline-size: 58rem;
+  }
+
+  .overviewMain {
+    display: grid;
+    align-content: start;
+    gap: 1rem;
+    min-inline-size: 0;
+  }
+
+  .identityRows {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+  }
+
+  .identityRow {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.3fr) minmax(0, 1fr);
+    gap: 1rem;
+    padding-block: 0.55rem;
+    border-block-end: 1px solid var(--kb-color-border);
+  }
+
+  .identityRow dt {
+    color: var(--kb-color-text-secondary);
+  }
+
+  .identityRow dd {
+    margin: 0;
+    color: var(--kb-color-text-primary);
+  }
+
+  .identityRow code {
+    color: inherit;
+    font-family: var(--kb-font-family-code);
+    font-size: 0.8125rem;
+  }
+
+  .overviewTasksButton {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    inline-size: min(100%, 28rem);
+    min-block-size: 2.75rem;
+    border: 1px solid var(--kb-color-border-strong);
+    border-radius: var(--kb-radius-control);
+    padding: 0.55rem 0.75rem;
+    color: var(--kb-color-text-primary);
+    background: var(--kb-color-surface);
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .overviewTasksButton:hover:not(:disabled) {
+    border-color: var(--kb-color-accent-strong);
+    background: var(--kb-color-layer);
+  }
+
+  .overviewTasksButton > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .visuallyHidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 48rem) {
+    .projectsSurface {
+      padding: 1rem;
+    }
+
+    .projectsHeading {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .projectsSearch {
+      flex-basis: auto;
+      inline-size: 100%;
+    }
+
+    .projectRow {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    .projectRowDescription {
+      display: none;
+    }
+  }
+}

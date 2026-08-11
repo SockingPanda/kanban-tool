@@ -132,7 +132,6 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
   const selector = route.boardSlug
-  const runtimeKey = runtimeIdentityKey(runtime)
   const contextKey = routeResourceContextKey(runtime, selector, route.kind, route.boardSlug)
   const routeBoardSlug = route.boardSlug
   const resourcesRef = useRef(new Map<string, BoardReadResource>())

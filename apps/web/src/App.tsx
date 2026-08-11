@@ -95,7 +95,7 @@ function useBoardListSurface(runtime: WebRuntimeConfig, enabled: boolean): Board
       const error = boardListError(reason)
       setSurface((current) => ({
         ...current,
-        status: error.kind === "offline" ? "offline" : "error",
+        status: error.kind === "offline" ? "offline" : current.items.length > 0 ? "stale" : "error",
         error,
         isRefreshing: false,
       }))
@@ -158,7 +158,7 @@ function RuntimeThemedShell() {
   const boardListReady = boardList.status === "ready"
   const boardRouteCandidate = router.route.kind === "board"
     ? router.route
-    : router.route.kind === "health" || router.route.kind === "maintenance"
+    : (router.route.kind === "health" || router.route.kind === "maintenance") && retainedSessionSlug !== null
       ? { kind: "board" as const, boardSlug: router.route.boardSlug, pathname: routePath({ kind: "board", boardSlug: router.route.boardSlug }, { basePath: runtime.webBasePath }) }
       : router.route.kind === "settings" && retainedSessionSlug !== null
         ? { kind: "board" as const, boardSlug: retainedSessionSlug, pathname: routePath({ kind: "board", boardSlug: retainedSessionSlug }, { basePath: runtime.webBasePath }) }
@@ -172,7 +172,7 @@ function RuntimeThemedShell() {
   const retainedSessionAvailable = retainedSessionSlug !== null
   // The canonical BoardLive remains mounted for every board route as the
   // single session/SSE owner, while Explorer owns the visible board view.
-  const liveBoardVisible = router.route.kind === "board"
+  const liveBoardVisible = false
   const sessionKey = boardRoute === null
     ? "none"
     : `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${boardRoute.kind === "board" ? boardRoute.boardSlug : ""}`

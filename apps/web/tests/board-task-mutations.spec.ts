@@ -157,9 +157,32 @@ async function wireBoard(page: Page, options: {
   await expect(page.getByTestId("board-task").first()).toBeVisible()
 }
 
+async function openTaskActions(page: Page, taskId: string, expectInitiallyClosed = true): Promise<void> {
+  const actions = page.locator(`[data-testid="board-task"][data-task-id="${taskId}"]`).getByTestId("board-task-actions")
+  await expect(actions).toBeVisible()
+  if (expectInitiallyClosed) {
+    await expect(actions).not.toHaveAttribute("open", "")
+  }
+  if (await actions.getAttribute("open") === null) {
+    await actions.locator("summary").press("Enter")
+  }
+  await expect(actions).toHaveAttribute("open", "")
+}
+
+async function expectBoardIdentity(page: Page, boardId: string, boardSlug: string): Promise<void> {
+  await expect(page.getByTestId("board-identity-slug")).toHaveText(boardSlug)
+  const details = page.getByTestId("board-identity-details")
+  if (await details.getAttribute("open") === null) {
+    await details.locator("summary").press("Enter")
+  }
+  await expect(details).toHaveAttribute("open", "")
+  await expect(details).toContainText(boardId)
+}
+
 test.describe("board task mutation DOM behavior", () => {
   test("uses a native modal dialog, Escape, focus return, and does not let buttons steal card keys", async ({ page }) => {
     await wireBoard(page)
+    await openTaskActions(page, "t_todo")
     const edit = page.getByTestId("task-edit-t_todo")
     await edit.click()
     const dialog = page.getByRole("dialog")
@@ -207,6 +230,7 @@ test.describe("board task mutation DOM behavior", () => {
       }
       await route.fallback()
     })
+    await openTaskActions(page, "t_todo")
     const edit = page.getByTestId("task-edit-t_todo")
     await edit.click()
     await page.getByTestId("task-title-input").fill("Changed")
@@ -249,6 +273,7 @@ test.describe("board task mutation DOM behavior", () => {
       }
       await route.fallback()
     })
+    await openTaskActions(page, "t_todo")
     await page.getByTestId("task-edit-t_todo").click()
     await page.getByTestId("task-title-input").fill("Changed")
     await page.getByRole("button", { name: "保存" }).click()
@@ -290,6 +315,8 @@ test.describe("board task mutation DOM behavior", () => {
       requestSettledResolve()
     })
 
+    await openTaskActions(page, "t_todo")
+    await openTaskActions(page, "t_other")
     await page.getByTestId("task-edit-t_todo").click()
     await page.getByTestId("task-title-input").fill("Pending")
     await page.getByRole("button", { name: "保存" }).click()
@@ -305,6 +332,7 @@ test.describe("board task mutation DOM behavior", () => {
     release()
     await requestSettled
     await expect(page.getByRole("dialog")).not.toBeVisible()
+    await openTaskActions(page, "t_other", false)
     await secondEdit.click()
     await expect(page.getByTestId("task-title-input")).toHaveValue("Second task")
   })
@@ -322,11 +350,12 @@ test.describe("board task mutation DOM behavior", () => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(claimResponse()) })
       claimSettledResolve()
     })
+    await openTaskActions(page, "t_todo")
     await page.getByTestId("task-transition-claim-t_todo").click()
     await claimStartedPromise
 
     await page.goto("/app/boards/other/board", { waitUntil: "domcontentloaded" })
-    await expect(page.getByText("b_other · other")).toBeVisible()
+    await expectBoardIdentity(page, "b_other", "other")
     if (releaseClaim === null) throw new Error("claim request did not expose a release gate")
     releaseClaim()
     await claimSettledPromise
@@ -365,7 +394,7 @@ test.describe("board task mutation DOM behavior", () => {
       window.history.pushState({}, "", "/app/boards/other/board")
       window.dispatchEvent(new PopStateEvent("popstate"))
     })
-    await expect(page.getByText("b_other · other")).toBeVisible()
+    await expectBoardIdentity(page, "b_other", "other")
     await expect(page).toHaveURL(/\/app\/boards\/other\/board$/)
     if (releaseCreate === null) throw new Error("create request did not expose a release gate")
     releaseCreate()
@@ -409,6 +438,7 @@ test.describe("board task mutation DOM behavior", () => {
         updateBodies.push(JSON.parse(request.postData() ?? "{}") as Record<string, unknown>)
       }
     })
+    await openTaskActions(page, "t_todo")
     const edit = page.getByTestId("task-edit-t_todo")
     await edit.click()
     await page.getByTestId("task-title-input").fill("Concurrent edit")

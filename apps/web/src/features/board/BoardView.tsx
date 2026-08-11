@@ -5,7 +5,6 @@ import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Card } from "@astryxdesign/core/Card"
 import { Heading } from "@astryxdesign/core/Heading"
-import { Text } from "@astryxdesign/core/Text"
 
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import styles from "./BoardView.module.css"
@@ -121,20 +120,21 @@ function BoardHeader({
 }) {
   return (
     <header className={styles.header}>
-      <div>
-        <Text as="p" type="supporting" className={styles.eyebrow}>
-          {copy.boardEyebrow}
-        </Text>
+      <div className={styles.headerIdentity}>
         <Heading level={headingLevel} id={titleId}>
           {board?.name ?? copy.boardTitle}
         </Heading>
         {board ? (
-          <p className={styles.identity}>
+          <div className={styles.identity}>
             <span className={styles.identityLabel}>{copy.boardIdentityLabel}</span>
-            <code translate="no">
-              {board.id} · {board.slug}
+            <code translate="no" data-testid="board-identity-slug">
+              {board.slug}
             </code>
-          </p>
+            <details className={styles.identityDetails} data-testid="board-identity-details">
+              <summary onKeyDown={(event) => event.stopPropagation()}>ID</summary>
+              <code translate="no">{board.id}</code>
+            </details>
+          </div>
         ) : null}
       </div>
       {onCreate ? <Button label={copy.createTask} variant="primary" isDisabled={isMutationPending} onClick={(event) => onCreate(event.currentTarget)} data-testid="task-create" /> : null}
@@ -274,7 +274,7 @@ function TaskCard({
           </button>
         ) : task.title}
       </Heading>
-      <dl className={styles.taskDetails}>
+      <dl className={styles.taskSummary} data-testid="board-task-summary">
         <div className={styles.taskDetailsRow}>
           <dt>{copy.statusLabel}</dt>
           <dd translate="no">{task.status}</dd>
@@ -282,36 +282,6 @@ function TaskCard({
         <div className={styles.taskDetailsRow}>
           <dt>{copy.assigneeLabel}</dt>
           <dd>{task.assignee ?? copy.unassigned}</dd>
-        </div>
-        <div className={styles.taskDetailsRow}>
-          <dt>{copy.statusReasonLabel}</dt>
-          <dd data-testid="board-task-status-reason">{statusReason}</dd>
-        </div>
-        <div className={styles.taskDetailsRow}>
-          <dt>{copy.scheduledLabel}</dt>
-          <dd data-testid="board-task-scheduled">
-            {scheduledAt ? <time dateTime={scheduledAt.iso}>{scheduledAt.display}</time> : copy.notAvailable}
-          </dd>
-        </div>
-        <div className={styles.taskDetailsRow}>
-          <dt>{copy.dueLabel}</dt>
-          <dd data-testid="board-task-due">
-            {dueAt ? <time dateTime={dueAt.iso}>{dueAt.display}</time> : copy.notAvailable}
-          </dd>
-        </div>
-        <div className={styles.taskDetailsRow}>
-          <dt>{copy.lastHeartbeatLabel}</dt>
-          <dd data-testid="board-task-heartbeat">
-            {lastHeartbeatAt ? <time dateTime={lastHeartbeatAt.iso}>{lastHeartbeatAt.display}</time> : copy.notAvailable}
-          </dd>
-        </div>
-        <div className={styles.taskDetailsRow}>
-          <dt>{copy.labelsLabel}</dt>
-          <dd className={styles.taskLabels} data-testid="board-task-labels">
-            {labels.length === 0 ? copy.noLabels : labels.map((label) => (
-              <span className={styles.taskLabel} key={label.id} data-label-id={label.id}>{label.name}</span>
-            ))}
-          </dd>
         </div>
         <div className={styles.taskDetailsRow}>
           <dt>{copy.readinessLabel}</dt>
@@ -325,38 +295,79 @@ function TaskCard({
             <span className={styles.readinessFact}>
               {copy.requiredStepsLabel}：{task.readiness.completedRequiredStepCount} / {task.readiness.requiredStepCount}
             </span>
-            <span className={styles.readinessFact}>
-              {copy.optionalStepsLabel}：{task.readiness.optionalStepCount}
-            </span>
           </dd>
         </div>
       </dl>
+      <details className={styles.taskDetailsDisclosure} data-testid="board-task-secondary">
+        <summary onKeyDown={(event) => event.stopPropagation()}>
+          {copy.statusReasonLabel} · {copy.scheduledLabel} · {copy.labelsLabel}
+        </summary>
+        <dl className={styles.taskDetails}>
+          <div className={styles.taskDetailsRow}>
+            <dt>{copy.statusReasonLabel}</dt>
+            <dd data-testid="board-task-status-reason">{statusReason}</dd>
+          </div>
+          <div className={styles.taskDetailsRow}>
+            <dt>{copy.scheduledLabel}</dt>
+            <dd data-testid="board-task-scheduled">
+              {scheduledAt ? <time dateTime={scheduledAt.iso}>{scheduledAt.display}</time> : copy.notAvailable}
+            </dd>
+          </div>
+          <div className={styles.taskDetailsRow}>
+            <dt>{copy.dueLabel}</dt>
+            <dd data-testid="board-task-due">
+              {dueAt ? <time dateTime={dueAt.iso}>{dueAt.display}</time> : copy.notAvailable}
+            </dd>
+          </div>
+          <div className={styles.taskDetailsRow}>
+            <dt>{copy.lastHeartbeatLabel}</dt>
+            <dd data-testid="board-task-heartbeat">
+              {lastHeartbeatAt ? <time dateTime={lastHeartbeatAt.iso}>{lastHeartbeatAt.display}</time> : copy.notAvailable}
+            </dd>
+          </div>
+          <div className={styles.taskDetailsRow}>
+            <dt>{copy.labelsLabel}</dt>
+            <dd className={styles.taskLabels} data-testid="board-task-labels">
+              {labels.length === 0 ? copy.noLabels : labels.map((label) => (
+                <span className={styles.taskLabel} key={label.id} data-label-id={label.id}>{label.name}</span>
+              ))}
+            </dd>
+          </div>
+          <div className={styles.taskDetailsRow}>
+            <dt>{copy.optionalStepsLabel}</dt>
+            <dd>{task.readiness.optionalStepCount}</dd>
+          </div>
+        </dl>
+      </details>
       {controller ? (
-        <div className={styles.taskActions} role="group" aria-label={copy.transitionLabel} aria-busy={pending || undefined}>
-          <Button
-            label={copy.editTask}
-            variant="secondary"
-            size="sm"
-            isDisabled={pending}
-            onClick={(event) => controller.openEdit(task, event.currentTarget)}
-            data-testid={`task-edit-${task.id}`}
-          />
-          {transitionOptions.map((option) => (
+        <details className={styles.taskActionsDisclosure} data-testid="board-task-actions">
+          <summary onKeyDown={(event) => event.stopPropagation()}>{copy.transitionLabel}</summary>
+          <div className={styles.taskActions} role="group" aria-label={copy.transitionLabel} aria-busy={pending || undefined}>
             <Button
-              key={option.action}
-              label={pending ? copy.mutationPending : copy.transitionNames[option.action] ?? option.action}
+              label={copy.editTask}
               variant="secondary"
               size="sm"
               isDisabled={pending}
-              isLoading={pending}
-              onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
-              data-testid={`task-transition-${option.action}-${task.id}`}
+              onClick={(event) => controller.openEdit(task, event.currentTarget)}
+              data-testid={`task-edit-${task.id}`}
             />
-          ))}
-          {promoteNotReady ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.promoteNotReady}</span> : null}
-          {requiredStepsIncomplete ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.requiredStepsIncomplete}</span> : null}
-          {pending ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.mutationPending}</span> : null}
-        </div>
+            {transitionOptions.map((option) => (
+              <Button
+                key={option.action}
+                label={pending ? copy.mutationPending : copy.transitionNames[option.action] ?? option.action}
+                variant="secondary"
+                size="sm"
+                isDisabled={pending}
+                isLoading={pending}
+                onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
+                data-testid={`task-transition-${option.action}-${task.id}`}
+              />
+            ))}
+            {promoteNotReady ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.promoteNotReady}</span> : null}
+            {requiredStepsIncomplete ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.requiredStepsIncomplete}</span> : null}
+            {pending ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.mutationPending}</span> : null}
+          </div>
+        </details>
       ) : null}
     </Card>
   )

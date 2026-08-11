@@ -154,6 +154,24 @@ describe("BoardView", () => {
     expect(markup).toContain("需要复核")
   })
 
+  test("board header keeps slug visible and moves canonical id into a details reveal", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+
+    expect(markup).toContain('data-testid="board-identity-slug"')
+    expect(markup).toContain('data-testid="board-identity-details"')
+    expect(markup).toMatch(/<details[^>]*data-testid="board-identity-details"[\s\S]*b-1[\s\S]*<\/details>/)
+  })
+
+  test("task card keeps agent summary facts and places low-frequency facts in a details reveal", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+
+    expect(markup).toContain('data-testid="board-task-summary"')
+    const secondaryTag = markup.match(/<details[^>]*data-testid="board-task-secondary"[^>]*>/)?.[0]
+    expect(secondaryTag).toBeDefined()
+    expect(secondaryTag).not.toContain(" open")
+    expect(markup).toMatch(/<details[^>]*data-testid="board-task-secondary"[\s\S]*截止时间[\s\S]*标签[\s\S]*可选步骤[\s\S]*<\/details>/)
+  })
+
   test("卡片在排期、截止、心跳、状态原因和标签为空时使用简洁占位", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
 

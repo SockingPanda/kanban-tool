@@ -3,6 +3,7 @@
     display: grid;
     gap: 1.25rem;
     min-width: 0;
+    max-width: 100%;
     color: var(--color-text-primary);
   }
 
@@ -30,6 +31,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 2rem;
     min-width: 0;
     border-bottom: 1px solid var(--color-border);
@@ -40,11 +42,16 @@
     min-width: 0;
   }
 
-  .boardContent {
-    min-width: 0;
+  .headerIdentity {
+    flex: 1 1 min(100%, 28rem);
   }
 
-  .header h1,
+  .boardContent {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .header :where(h1, h2, h3),
   .column h2,
   .emptyBoard h2 {
     min-width: 0;
@@ -83,6 +90,42 @@
     font-weight: 650;
   }
 
+  .identityDetails {
+    display: inline-flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 0.35rem;
+  }
+
+  .identityDetails summary,
+  .taskDetailsDisclosure summary,
+  .taskActionsDisclosure summary {
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+    font-weight: 650;
+  }
+
+  .identityDetails summary:hover,
+  .identityDetails summary:focus-visible,
+  .taskDetailsDisclosure summary:hover,
+  .taskDetailsDisclosure summary:focus-visible,
+  .taskActionsDisclosure summary:hover,
+  .taskActionsDisclosure summary:focus-visible {
+    color: var(--color-text-primary);
+  }
+
+  .identityDetails summary:focus-visible,
+  .taskDetailsDisclosure summary:focus-visible,
+  .taskActionsDisclosure summary:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .identityDetails > code {
+    min-width: 0;
+  }
+
   .columnNavigation {
     min-width: 0;
     overflow-x: auto;
@@ -92,7 +135,7 @@
 
   .columnNavigationList {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.4rem 0.75rem;
     min-width: max-content;
     margin: 0;
@@ -123,10 +166,14 @@
 
   .boardColumns {
     min-width: 0;
+    max-width: 100%;
     overflow-x: auto;
     padding-block-end: 0.5rem;
     overscroll-behavior-inline: contain;
+    scroll-padding-inline: 0.25rem;
+    scroll-snap-type: inline proximity;
     scrollbar-width: thin;
+    touch-action: pan-x pan-y;
   }
 
   .boardColumns:focus-visible {
@@ -147,6 +194,7 @@
     display: grid;
     gap: 0.75rem;
     min-width: 18rem;
+    scroll-snap-align: start;
     scroll-margin-top: 1.5rem;
   }
 
@@ -308,25 +356,48 @@
     outline-offset: 0.15rem;
   }
 
+  .taskSummary,
   .taskDetails {
     display: grid;
     gap: 0.35rem;
-    margin: 0.85rem 0 0;
+    min-width: 0;
     color: var(--color-text-secondary);
     font-size: 0.78rem;
   }
 
+  .taskSummary {
+    margin: 0.85rem 0 0;
+  }
+
+  .taskDetailsDisclosure,
+  .taskActionsDisclosure {
+    min-width: 0;
+    margin-block-start: 0.8rem;
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: 0.65rem;
+  }
+
+  .taskDetailsDisclosure summary,
+  .taskActionsDisclosure summary {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .taskDetailsRow {
     display: grid;
-    grid-template-columns: minmax(5.25rem, auto) minmax(0, 1fr);
+    grid-template-columns: minmax(4.75rem, 0.42fr) minmax(0, 1fr);
     gap: 0.65rem;
     min-width: 0;
   }
 
+  .taskSummary dt,
   .taskDetails dt {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-weight: 650;
   }
 
+  .taskSummary dd,
   .taskDetails dd {
     min-width: 0;
     margin: 0;
@@ -369,6 +440,16 @@
     margin-block-start: 0.9rem;
     padding-block-start: 0.75rem;
     border-block-start: 1px solid var(--color-border);
+  }
+
+  .taskActionsDisclosure {
+    margin-block-start: 0.9rem;
+  }
+
+  .taskActionsDisclosure .taskActions {
+    margin-block-start: 0.65rem;
+    padding-block-start: 0;
+    border-block-start: 0;
   }
 
   .mutedAction {
@@ -602,6 +683,61 @@
   @media (prefers-reduced-motion: reduce) {
     .loadingMarker::before {
       animation: none;
+    }
+  }
+
+  @media (max-width: 56rem) {
+    .board {
+      gap: 1rem;
+    }
+
+    .header {
+      gap: 0.8rem;
+      padding-block-end: 1rem;
+    }
+
+    .headerIdentity {
+      flex-basis: 100%;
+    }
+
+    .identity {
+      margin-block-start: 0.55rem;
+    }
+
+    .columnsGrid {
+      gap: 0.75rem;
+    }
+
+    .columnNavigationList {
+      gap: 0.4rem 0.65rem;
+    }
+  }
+
+  @media (max-width: 28rem) {
+    .header {
+      gap: 0.65rem;
+    }
+
+    .columnsGrid {
+      grid-auto-columns: minmax(0, min(24rem, calc(100vw - 3rem)));
+    }
+
+    .column {
+      min-width: 0;
+    }
+
+    .identity {
+      column-gap: 0.55rem;
+      font-size: 0.75rem;
+    }
+
+    .taskDetailsRow {
+      grid-template-columns: minmax(4.25rem, 0.36fr) minmax(0, 1fr);
+      gap: 0.5rem;
+    }
+
+    .taskActions {
+      gap: 0.35rem;
     }
   }
 }

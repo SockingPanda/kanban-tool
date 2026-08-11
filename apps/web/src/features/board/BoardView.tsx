@@ -590,6 +590,8 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       data-state={renderedState.kind}
       data-anomaly={displayModel !== null && !validation.valid ? "board-model" : undefined}
       data-presentation={presentation}
+      data-board-id={board?.id}
+      data-board-slug={board?.slug}
     >
       <a className={styles.skipLink} href={`#${id}-columns`}>
         {copy.skipToColumns}

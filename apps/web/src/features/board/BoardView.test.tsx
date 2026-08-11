@@ -179,6 +179,8 @@ describe("BoardView", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} presentation="embedded" />)
 
     expect(markup).toContain('data-presentation="embedded"')
+    expect(markup).toContain('data-board-id="b-1"')
+    expect(markup).toContain('data-board-slug="roadmap"')
     expect(markup).toMatch(/<h[1-3][^>]*class="[^"]*visuallyHidden[^"]*"[^>]*>产品路线图<\/h[1-3]>/)
     expect(markup).not.toContain('data-testid="board-identity-slug"')
     expect(markup).not.toContain('data-testid="board-identity-details"')

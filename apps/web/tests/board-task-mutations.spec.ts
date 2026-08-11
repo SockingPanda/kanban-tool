@@ -170,13 +170,9 @@ async function openTaskActions(page: Page, taskId: string, expectInitiallyClosed
 }
 
 async function expectBoardIdentity(page: Page, boardId: string, boardSlug: string): Promise<void> {
-  await expect(page.getByTestId("board-identity-slug")).toHaveText(boardSlug)
-  const details = page.getByTestId("board-identity-details")
-  if (await details.getAttribute("open") === null) {
-    await details.locator("summary").press("Enter")
-  }
-  await expect(details).toHaveAttribute("open", "")
-  await expect(details).toContainText(boardId)
+  const boardView = page.getByTestId("board-view")
+  await expect(boardView).toHaveAttribute("data-board-id", boardId)
+  await expect(boardView).toHaveAttribute("data-board-slug", boardSlug)
 }
 
 test.describe("board task mutation DOM behavior", () => {

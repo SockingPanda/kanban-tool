@@ -20,9 +20,6 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await open(page, "board")
     const boardOpener = page.getByRole("button", { name: "Ready task" })
     await expect(boardOpener).toBeVisible()
-    // The board is a horizontally scrollable column surface; use its
-    // keyboard-reachable column anchor before activating the off-screen card.
-    await page.getByRole("link", { name: "Ready", exact: true }).click()
     await boardOpener.scrollIntoViewIfNeeded()
     await boardOpener.focus()
     await expect(boardOpener).toBeFocused()

@@ -224,6 +224,8 @@ function CloseIcon() {
 
 interface ViewSwitcherCommonProps {
   readonly onViewChange?: (view: TasksView) => void
+  /** Atomic route/display seam for product surfaces; avoids two history writes for List/Table. */
+  readonly onSelectionChange?: (view: TasksView, display: TasksListDisplay) => void
   readonly includeTableDisplay?: boolean
   readonly displayVariant?: TasksListDisplay
   readonly onDisplayChange?: (display: TasksListDisplay) => void
@@ -237,7 +239,7 @@ export type ViewSwitcherProps = ViewSwitcherCommonProps &
     | { readonly activeView: TasksView | UnsupportedTasksView; readonly includeUnsupportedTimeline: true }
   )
 
-export function ViewSwitcher({ activeView, onViewChange, includeTableDisplay = false, displayVariant = "grouped", onDisplayChange, includeUnsupportedTimeline = false, label, locale = "zh" }: ViewSwitcherProps) {
+export function ViewSwitcher({ activeView, onViewChange, onSelectionChange, includeTableDisplay = false, displayVariant = "grouped", onDisplayChange, includeUnsupportedTimeline = false, label, locale = "zh" }: ViewSwitcherProps) {
   const copy = copyFor(locale)
   const views: readonly { readonly id: TasksView | UnsupportedTasksView | "table"; readonly label: string; readonly unsupported?: boolean }[] = [
     { id: "board", label: copy.board },
@@ -253,7 +255,11 @@ export function ViewSwitcher({ activeView, onViewChange, includeTableDisplay = f
         const unavailable = view.unsupported === true
         const isTableDisplay = view.id === "table"
         const listNeedsDisplayChange = view.id === "list" && includeTableDisplay && displayVariant === "table"
-        const canChange = isTableDisplay ? Boolean(onDisplayChange && onViewChange) : Boolean(onViewChange) && (!listNeedsDisplayChange || Boolean(onDisplayChange))
+        const canChange = onSelectionChange
+          ? true
+          : isTableDisplay
+            ? Boolean(onDisplayChange && onViewChange)
+            : Boolean(onViewChange) && (!listNeedsDisplayChange || Boolean(onDisplayChange))
         const inert = unavailable || !canChange
         const selected = isTableDisplay ? activeView === "list" && displayVariant === "table" : activeView === view.id && (!isTableDisplay && view.id === "list" ? displayVariant !== "table" : true)
         return (
@@ -266,6 +272,10 @@ export function ViewSwitcher({ activeView, onViewChange, includeTableDisplay = f
             disabled={inert}
             title={unavailable ? copy.timelineUnavailable : undefined}
             onClick={canChange && !unavailable ? () => {
+              if (onSelectionChange) {
+                onSelectionChange(isTableDisplay ? "list" : view.id as TasksView, isTableDisplay ? "table" : "grouped")
+                return
+              }
               if (isTableDisplay) {
                 onViewChange?.("list")
                 onDisplayChange?.("table")

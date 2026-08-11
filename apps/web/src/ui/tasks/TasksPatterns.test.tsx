@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server"
+import type { ReactElement } from "react"
 import { describe, expect, test, vi } from "vitest"
 
 import type { BoardTaskViewModel } from "../../features/board/types"
@@ -148,5 +149,14 @@ describe("Tasks interaction grammar", () => {
   test("marks a filter search disabled when its projection has no query handler", () => {
     const markup = renderToStaticMarkup(<FilterBar defaultSearch="local" disabled />)
     expect(markup).toContain('disabled=""')
+  })
+
+  test("uses one atomic selection callback for the Table projection", () => {
+    const onSelectionChange = vi.fn()
+    const root = ViewSwitcher({ activeView: "list", includeTableDisplay: true, displayVariant: "grouped", onSelectionChange }) as ReactElement<{ readonly children: readonly ReactElement[] }>
+    const buttons = root.props.children
+    buttons[2]?.props.onClick?.()
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+    expect(onSelectionChange).toHaveBeenCalledWith("list", "table")
   })
 })

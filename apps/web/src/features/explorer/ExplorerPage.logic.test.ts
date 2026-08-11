@@ -17,6 +17,10 @@ describe("Tasks list display URL contract", () => {
     expect(table.toString()).toBe("task=t_1&filter=blocked&zoom=1.2&unknown=keep&display=table")
     const list = withTaskDisplay(table, "list")
     expect(list.toString()).toBe("task=t_1&filter=blocked&zoom=1.2&unknown=keep")
+
+    const repeated = withTaskDisplay("status=ready&status=blocked&priority=1&priority=3", "table")
+    expect(repeated.getAll("status")).toEqual(["ready", "blocked"])
+    expect(repeated.getAll("priority")).toEqual(["1", "3"])
   })
 })
 

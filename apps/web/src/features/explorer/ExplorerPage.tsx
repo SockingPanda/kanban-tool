@@ -593,15 +593,9 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   }
   const clearListFilters = () => updateListQuery({ ...listQuery, status: [], priority: [], plan: [], search: "", includeArchived: false })
   const updateWorkspaceView = (nextView: TasksView, nextDisplay: TasksListDisplay) => {
-    const nextParams = new URLSearchParams(params)
-    if (nextView === "list") {
-      const display = nextDisplay === "table" ? "table" : "list"
-      const displayParams = withTaskDisplay(nextParams, display)
-      nextParams.delete("display")
-      displayParams.forEach((value, key) => nextParams.set(key, value))
-    } else {
-      nextParams.delete("display")
-    }
+    const nextParams = nextView === "list"
+      ? withTaskDisplay(params, nextDisplay === "table" ? "table" : "list")
+      : withTaskDisplay(params, "list")
     navigate(routeTarget(route.boardSlug, nextView, nextParams, runtime.webBasePath))
   }
   const selectTask = (nextTaskId: string) => {

@@ -85,8 +85,7 @@ export function TasksWorkspaceChrome({ locale, scope, activeView, displayVariant
             activeView={activeView}
             displayVariant={display}
             includeTableDisplay
-            onViewChange={(view) => onViewChange(view, view === "list" ? "grouped" : displayVariant)}
-            onDisplayChange={(nextDisplay) => onViewChange("list", nextDisplay === "table" ? "table" : "grouped")}
+            onSelectionChange={(view, nextDisplay) => onViewChange(view, nextDisplay)}
             label={copy.views}
             locale={locale}
           />

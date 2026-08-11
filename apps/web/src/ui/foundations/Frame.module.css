@@ -1,0 +1,17 @@
+@import "./tokens.css";
+
+@layer product {
+  .frame {
+    box-sizing: border-box;
+    width: min(100%, 72rem);
+    color: var(--kb-color-text-primary);
+    background: var(--kb-color-canvas);
+    font-family: var(--kb-font-family-body);
+    font-size: var(--kb-font-size-md);
+    line-height: var(--kb-line-height-body);
+  }
+
+  .frame :where(*, *::before, *::after) {
+    box-sizing: border-box;
+  }
+}

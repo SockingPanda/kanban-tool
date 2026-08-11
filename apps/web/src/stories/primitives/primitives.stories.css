@@ -1,0 +1,27 @@
+@import "../../ui/foundations/tokens.css";
+
+@layer product {
+  .primitiveStory {
+    min-height: 100vh;
+    padding: var(--kb-space-8);
+  }
+
+  .primitiveStory > * {
+    max-width: 72rem;
+    margin-inline: auto;
+  }
+
+  .storyHeader { display: grid; gap: var(--kb-space-2); max-width: 48rem; }
+  .controlSection { display: grid; gap: var(--kb-space-3); padding-top: var(--kb-space-5); border-top: 1px solid var(--kb-color-border); }
+  .fieldGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--kb-space-5); max-width: 56rem; }
+  .stateGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--kb-space-4); }
+  .storyLink { padding: 0; border: 0; background: transparent; color: var(--kb-color-accent-strong); cursor: pointer; font: inherit; font-size: var(--kb-font-size-sm); }
+  .storyLink:focus-visible { outline: none; box-shadow: var(--kb-focus-ring); }
+  .storyLink:hover { color: var(--kb-color-accent); text-decoration: underline; text-underline-offset: 0.2em; }
+
+  @media (max-width: 48rem) {
+    .primitiveStory { padding: var(--kb-space-4); }
+    .fieldGrid,
+    .stateGrid { grid-template-columns: 1fr; }
+  }
+}

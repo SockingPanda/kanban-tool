@@ -2,11 +2,14 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, test } from "vitest"
 
 import { ProductShell } from "./ProductShell"
+import type { BoardListSurface } from "./ProductShell"
 import { PreferencesProvider } from "./lib/preferences-provider"
 import { PreferencesContext } from "./lib/preferences-context"
 import { assertCanonicalBoardSlug } from "./lib/board-slug"
 import { parseAppRoute } from "./lib/router"
 import type { WebRuntimeConfig } from "./lib/runtime"
+import { BoardListReadError, type BoardListItem } from "./lib/api/board-list-read-model"
+import { asCanonicalBoardId } from "./lib/sync/contracts"
 
 const runtime: WebRuntimeConfig = {
   apiBaseUrl: "",
@@ -44,6 +47,22 @@ function renderWithLiveChild(route: ReturnType<typeof parseAppRoute>) {
       </ProductShell>
     </PreferencesProvider>,
   )
+}
+
+const boardListItems: readonly BoardListItem[] = [
+  Object.freeze({ id: asCanonicalBoardId("b_default"), slug: assertCanonicalBoardSlug("default"), name: "Default Board", description: null, archivedAt: null }),
+  Object.freeze({ id: asCanonicalBoardId("b_other"), slug: assertCanonicalBoardSlug("other"), name: "Other Board", description: null, archivedAt: null }),
+]
+
+function boardListSurface(overrides: Partial<BoardListSurface> = {}): BoardListSurface {
+  return {
+    status: "ready",
+    items: boardListItems,
+    error: null,
+    isRefreshing: false,
+    onRetry: () => undefined,
+    ...overrides,
+  }
 }
 
 describe("ProductShell route offline boundary", () => {
@@ -123,12 +142,18 @@ describe("ProductShell route offline boundary", () => {
         setSidebarExpanded: () => undefined,
         toggleSidebar: () => undefined,
       }}>
-        <ProductShell runtime={runtime} canonicalBoardSlug={assertCanonicalBoardSlug("default")} route={parseAppRoute("http://kanban.test/app/boards/default/board")} />
+        <ProductShell
+          runtime={runtime}
+          canonicalBoardSlug={assertCanonicalBoardSlug("default")}
+          route={parseAppRoute("http://kanban.test/app/boards/default/board")}
+          boardList={boardListSurface()}
+        />
       </PreferencesContext.Provider>,
     )
     const positions = ["nav-board", "nav-signals", "nav-ontology", "nav-health", "nav-maintenance", "nav-settings"].map((testId) => markup.indexOf(`data-testid="${testId}"`))
     expect(positions.every((position) => position >= 0)).toBe(true)
     expect(positions).toEqual([...positions].sort((left, right) => left - right))
+    expect(markup).toContain('data-testid="board-switcher-collapsed-trigger"')
   })
 
   test("marks operator navigation as the current page", () => {
@@ -139,5 +164,54 @@ describe("ProductShell route offline boundary", () => {
     )
     const nav = markup.slice(markup.indexOf('data-testid="nav-maintenance"') - 240, markup.indexOf('data-testid="nav-maintenance"') + 80)
     expect(nav).toContain('aria-current="page"')
+  })
+
+  test("renders a canonical board switcher without inventing a second selection state", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesContext.Provider value={{
+        theme: "light",
+        locale: "zh",
+        sidebarExpanded: true,
+        density: "comfortable",
+        actor: "",
+        setTheme: () => undefined,
+        setLocale: () => undefined,
+        setDensity: () => undefined,
+        setActor: () => undefined,
+        setSidebarExpanded: () => undefined,
+        toggleSidebar: () => undefined,
+      }}>
+        <ProductShell
+          runtime={runtime}
+          canonicalBoardSlug={assertCanonicalBoardSlug("other")}
+          route={parseAppRoute("http://kanban.test/app/boards/other/board")}
+          boardList={boardListSurface()}
+        />
+      </PreferencesContext.Provider>,
+    )
+
+    expect(markup).toContain('data-testid="board-switcher"')
+    expect(markup).toContain('data-testid="board-switcher-option-default"')
+    expect(markup).toContain('data-testid="board-switcher-option-other"')
+    expect(markup).toContain('data-testid="compact-app-nav"')
+    expect(markup).toContain('data-testid="compact-nav-settings"')
+    expect(markup).toContain('data-testid="compact-nav-maintenance"')
+  })
+
+  test("keeps list failures local and actionable", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <ProductShell
+          runtime={runtime}
+          canonicalBoardSlug={assertCanonicalBoardSlug("default")}
+          route={parseAppRoute("http://kanban.test/app/boards/default/board")}
+          boardList={boardListSurface({ status: "error", error: new BoardListReadError("http", "hidden detail") })}
+        />
+      </PreferencesProvider>,
+    )
+
+    expect(markup).toContain('data-testid="board-switcher-error"')
+    expect(markup).toContain('data-testid="board-switcher-retry"')
+    expect(markup).toContain('data-testid="explorer-page"')
   })
 })

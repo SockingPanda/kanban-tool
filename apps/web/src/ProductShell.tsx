@@ -4,10 +4,11 @@ import { Layout } from "@astryxdesign/core/Layout"
 import { LayoutContent } from "@astryxdesign/core/Layout"
 import { SideNav } from "@astryxdesign/core/SideNav"
 import { SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav"
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
+import { useEffect, useState, type ChangeEvent, type MouseEvent, type ReactNode } from "react"
 
-import type { CanonicalBoardSlug } from "./lib/board-slug"
+import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "./lib/board-slug"
 import type { BoardEventsBatch } from "./lib/api/explorer-read-model"
+import type { BoardListItem, BoardListReadError } from "./lib/api/board-list-read-model"
 import type { BoardTaskCanonicalReloadHandler, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
 import type { BoardSyncStatus } from "./features/board/types"
 import type { WebRuntimeConfig } from "./lib/runtime"
@@ -24,10 +25,19 @@ import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
 
+export type BoardListSurface = {
+  readonly status: "loading" | "ready" | "error" | "offline"
+  readonly items: readonly BoardListItem[]
+  readonly error: BoardListReadError | null
+  readonly isRefreshing: boolean
+  readonly onRetry: () => void
+}
+
 export type ProductShellProps = {
   runtime: WebRuntimeConfig
   route: AppRoute
   canonicalBoardSlug?: CanonicalBoardSlug
+  boardList?: BoardListSurface
   children?: ReactNode
   boundary?: ShellBoundary
   error?: ReactNode
@@ -145,7 +155,182 @@ function CompactNavItem({
   )
 }
 
-function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<ProductShellProps, "runtime" | "route" | "canonicalBoardSlug" | "onNavigate">) {
+function BoardSwitcher({
+  surface,
+  activeBoardSlug,
+  onNavigate,
+  compact = false,
+}: {
+  readonly surface?: BoardListSurface
+  readonly activeBoardSlug?: CanonicalBoardSlug
+  readonly onNavigate?: ProductShellProps["onNavigate"]
+  readonly compact?: boolean
+}) {
+  const { locale } = usePreferences()
+  const t = createTranslator(locale)
+  if (surface === undefined) return null
+
+  const selectedSlug = activeBoardSlug !== undefined && surface.items.some((item) => item.slug === activeBoardSlug)
+    ? activeBoardSlug
+    : ""
+  const disabled = onNavigate === undefined || surface.status === "loading" || surface.items.length === 0
+  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const slug = parseCanonicalBoardSlug(event.currentTarget.value)
+    if (slug === null || onNavigate === undefined) return
+    void Promise.resolve(onNavigate({ kind: "board", boardSlug: slug })).catch(() => undefined)
+  }
+  const boundaryMessage = surface.status === "offline"
+    ? t("boardOfflineDescription")
+    : surface.status === "error"
+      ? t("boardLoadErrorDescription")
+      : surface.status === "ready" && surface.items.length === 0
+        ? t("boardNoBoardsDescription")
+        : null
+
+  return (
+    <div className={`${styles.boardSwitcher} ${compact ? styles.boardSwitcherCompact : ""}`} data-testid={compact ? "compact-board-switcher" : "board-switcher"}>
+      <label className={styles.boardSwitcherLabel} htmlFor={compact ? "compact-board-switcher-select" : "board-switcher-select"}>{t("board")}</label>
+      <select
+        id={compact ? "compact-board-switcher-select" : "board-switcher-select"}
+        className={styles.boardSwitcherSelect}
+        aria-label={t("board")}
+        value={selectedSlug}
+        disabled={disabled}
+        onChange={handleChange}
+        data-testid={compact ? "compact-board-switcher-select" : "board-switcher-select"}
+      >
+        {surface.items.length === 0 ? <option value="">{surface.status === "loading" ? t("loading") : surface.status === "offline" ? t("offline") : surface.status === "error" ? t("error") : t("none")}</option> : null}
+        {surface.items.length > 0 && selectedSlug === "" ? <option value="" disabled>{t("none")}</option> : null}
+        {surface.items.map((item) => (
+          <option key={item.slug} value={item.slug} data-testid={`${compact ? "compact-" : ""}board-switcher-option-${item.slug}`}>
+            {item.name} · {item.slug}
+          </option>
+        ))}
+      </select>
+      {surface.isRefreshing && surface.items.length > 0 ? <span className={styles.boardSwitcherStatus} role="status" aria-live="polite">{t("loading")}</span> : null}
+      {boundaryMessage !== null ? (
+        <div className={styles.boardSwitcherBoundary} role={surface.status === "error" ? "alert" : "status"} aria-live="polite" data-testid={compact ? "compact-board-switcher-boundary" : surface.status === "ready" ? "board-switcher-empty" : "board-switcher-error"}>
+          <span>{boundaryMessage}</span>
+          <button type="button" className={styles.boardSwitcherRetry} onClick={surface.onRetry} disabled={surface.isRefreshing} data-testid={compact ? "compact-board-switcher-retry" : "board-switcher-retry"}>{t("retry")}</button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+type CompactAppBarItemProps = {
+  readonly label: string
+  readonly href: string
+  readonly icon: ReactNode
+  readonly isSelected: boolean
+  readonly isDisabled: boolean
+  readonly onClick: (event: MouseEvent) => void
+  readonly testId: string
+}
+
+function CompactAppBarItem({ label, href, icon, isSelected, isDisabled, onClick, testId }: CompactAppBarItemProps) {
+  const props = {
+    "aria-current": isSelected ? "page" as const : undefined,
+    "aria-label": label,
+    "aria-disabled": isDisabled ? true : undefined,
+    "data-testid": testId,
+    title: label,
+  }
+  return isDisabled ? (
+    <span className={styles.compactAppBarItem} {...props}>{icon}<span className={styles.compactAppBarLabel}>{label}</span></span>
+  ) : (
+    <a className={styles.compactAppBarItem} href={href} onClick={onClick} {...props}>{icon}<span className={styles.compactAppBarLabel}>{label}</span></a>
+  )
+}
+
+function CompactAppBar({
+  runtime,
+  route,
+  activeBoardSlug,
+  boardList,
+  onNavigate,
+}: Pick<ProductShellProps, "runtime" | "route" | "canonicalBoardSlug" | "boardList" | "onNavigate"> & { readonly activeBoardSlug?: CanonicalBoardSlug }) {
+  const { locale } = usePreferences()
+  const t = createTranslator(locale)
+  const handleNavigate = (target: string) => (event: MouseEvent) => {
+    if (!onNavigate) return
+    event.preventDefault()
+    void Promise.resolve(onNavigate(target)).catch(() => undefined)
+  }
+  const boardPath = navPath(runtime, activeBoardSlug)
+  const healthPath = activeBoardSlug ? routePath({ kind: "health", boardSlug: activeBoardSlug }, { basePath: runtime.webBasePath }) : boardPath
+  const maintenancePath = activeBoardSlug ? routePath({ kind: "maintenance", boardSlug: activeBoardSlug }, { basePath: runtime.webBasePath }) : boardPath
+  const items: readonly CompactAppBarItemProps[] = [
+    {
+      label: t("board"),
+      href: boardPath,
+      icon: <BoardIcon />,
+      isSelected: route.kind === "board" && route.view !== "signals" && route.view !== "ontology",
+      isDisabled: activeBoardSlug === undefined,
+      onClick: handleNavigate(boardPath),
+      testId: "compact-nav-board",
+    },
+    {
+      label: t("signals"),
+      href: activeBoardSlug ? featureNavPath(runtime, activeBoardSlug, "signals") : boardPath,
+      icon: <BoardIcon />,
+      isSelected: route.kind === "board" && route.view === "signals",
+      isDisabled: activeBoardSlug === undefined,
+      onClick: handleNavigate(activeBoardSlug ? featureNavPath(runtime, activeBoardSlug, "signals") : boardPath),
+      testId: "compact-nav-signals",
+    },
+    {
+      label: t("ontology"),
+      href: activeBoardSlug ? featureNavPath(runtime, activeBoardSlug, "ontology") : boardPath,
+      icon: <BoardIcon />,
+      isSelected: route.kind === "board" && route.view === "ontology",
+      isDisabled: activeBoardSlug === undefined,
+      onClick: handleNavigate(activeBoardSlug ? featureNavPath(runtime, activeBoardSlug, "ontology") : boardPath),
+      testId: "compact-nav-ontology",
+    },
+    {
+      label: t("health"),
+      href: healthPath,
+      icon: <HealthIcon />,
+      isSelected: route.kind === "health",
+      isDisabled: activeBoardSlug === undefined,
+      onClick: handleNavigate(healthPath),
+      testId: "compact-nav-health",
+    },
+    {
+      label: t("maintenance"),
+      href: maintenancePath,
+      icon: <MaintenanceIcon />,
+      isSelected: route.kind === "maintenance",
+      isDisabled: activeBoardSlug === undefined,
+      onClick: handleNavigate(maintenancePath),
+      testId: "compact-nav-maintenance",
+    },
+    {
+      label: t("settings"),
+      href: routePath({ kind: "settings" }, { basePath: runtime.webBasePath }),
+      icon: <SettingsIcon />,
+      isSelected: route.kind === "settings",
+      isDisabled: false,
+      onClick: handleNavigate(routePath({ kind: "settings" }, { basePath: runtime.webBasePath })),
+      testId: "compact-nav-settings",
+    },
+  ]
+
+  return (
+    <div className={styles.compactAppBar} data-testid="compact-app-nav">
+      <div className={styles.compactAppBarHeader}>
+        <span className={styles.compactAppBarBrand}>{t("productName")}</span>
+        <BoardSwitcher surface={boardList} activeBoardSlug={activeBoardSlug} onNavigate={onNavigate} compact />
+      </div>
+      <nav className={styles.compactAppBarNav} aria-label={t("navigation")}>
+        {items.map((item) => <CompactAppBarItem key={item.testId} {...item} />)}
+      </nav>
+    </div>
+  )
+}
+
+function ShellNav({ runtime, route, canonicalBoardSlug, boardList, onNavigate }: Pick<ProductShellProps, "runtime" | "route" | "canonicalBoardSlug" | "boardList" | "onNavigate">) {
   const { sidebarExpanded, setSidebarExpanded, locale } = usePreferences()
   const t = createTranslator(locale)
   const handleNavigate = (target: string) => (event: MouseEvent) => {
@@ -165,6 +350,22 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
   const maintenancePath = activeBoardSlug
     ? routePath({ kind: "maintenance", boardSlug: activeBoardSlug }, { basePath: runtime.webBasePath })
     : boardPath
+  const switcherTopContent = sidebarExpanded ? (
+    <BoardSwitcher surface={boardList} activeBoardSlug={activeBoardSlug} onNavigate={onNavigate} />
+  ) : boardList !== undefined ? (
+    <div className={styles.compactNavItemWrapper}>
+      <button
+        type="button"
+        className={styles.compactNavItem}
+        aria-label={`${t("board")} · ${activeBoardSlug ?? t("none")}`}
+        title={t("board")}
+        data-testid="board-switcher-collapsed-trigger"
+        onClick={() => setSidebarExpanded(true)}
+      >
+        <BoardIcon />
+      </button>
+    </div>
+  ) : null
 
   return (
     <SideNav
@@ -177,6 +378,7 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
           onClick={handleNavigate(runtime.webBasePath)}
         />
       }
+      topContent={switcherTopContent}
       collapsible={{
         isCollapsed: !sidebarExpanded,
         onCollapsedChange: (isCollapsed) => setSidebarExpanded(!isCollapsed),
@@ -427,7 +629,7 @@ function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, 
   )
 }
 
-export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onReconnect, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
+export function ProductShell({ runtime, route, canonicalBoardSlug, boardList, children, boundary, error, onNavigate, onReconnect, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
 
@@ -437,13 +639,14 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
         height="fill"
         contentPadding={0}
         mobileNav={false}
-        sideNav={<ShellNav runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} onNavigate={onNavigate} />}
+        sideNav={<ShellNav runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} boardList={boardList} onNavigate={onNavigate} />}
         data-testid="product-shell"
       >
         <Layout
           height="auto"
           content={
             <LayoutContent isScrollable={false} padding={6} role="region" label={t("productName")}>
+              <CompactAppBar runtime={runtime} route={route} activeBoardSlug={canonicalBoardSlug} boardList={boardList} onNavigate={onNavigate} />
               <div
                 className={styles.mainFrame}
                 data-runtime-api-base-url={runtime.apiBaseUrl}

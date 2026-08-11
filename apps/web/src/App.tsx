@@ -3,7 +3,7 @@ import { InternationalizationProvider } from "@astryxdesign/core/i18n"
 import { Theme } from "@astryxdesign/core/theme"
 import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 
-import { ProductShell } from "./ProductShell"
+import { ProductShell, type BoardListSurface } from "./ProductShell"
 import { BoardFeatureRoute, type FeatureRoute } from "./features/BoardFeatureRoute"
 import { BoardLive } from "./features/board/BoardLive"
 import { boardSyncStatusForTelemetry } from "./features/board/board-live-state"
@@ -18,8 +18,10 @@ import { usePreferences } from "./lib/use-preferences"
 import { PreferencesProvider } from "./lib/preferences-provider"
 import { routePath, useAppRouter } from "./lib/router"
 import { useWebRuntime } from "./lib/runtime-context"
+import type { WebRuntimeConfig } from "./lib/runtime"
 import { astryxMessages, astryxOverrides } from "./lib/i18n"
 import { boardSessionRevision, hasActiveBoardSession, reconnectActiveBoardSession, subscribeBoardSessions } from "./features/board/board-session-registry"
+import { BoardListReadError, createBoardListQuery, type BoardListReadQuery } from "./lib/api/board-list-read-model"
 
 const explorerInvalidationTelemetry = new Set([
   "connection-live",
@@ -43,6 +45,88 @@ const explorerInvalidationTelemetry = new Set([
 ])
 
 const EVENT_APPLIED_DEBOUNCE_MS = 200
+
+function boardListRuntimeKey(runtime: WebRuntimeConfig): string {
+  return [runtime.apiBaseUrl, runtime.webBasePath, runtime.webBuildId, runtime.serverVersion, runtime.protocolVersion].join("\u0000")
+}
+
+function boardListError(reason: unknown): BoardListReadError {
+  if (reason instanceof BoardListReadError) return reason
+  return new BoardListReadError("anomaly", "看板列表读取失败。", { cause: reason })
+}
+
+function isAbortError(reason: unknown): boolean {
+  return reason instanceof Error && reason.name === "AbortError"
+}
+
+function useBoardListSurface(runtime: WebRuntimeConfig, enabled: boolean): BoardListSurface {
+  const runtimeKey = boardListRuntimeKey(runtime)
+  const queryRef = useRef<{ readonly key: string; readonly query: BoardListReadQuery } | null>(null)
+  let queryState = queryRef.current
+  if (queryState === null || queryState.key !== runtimeKey) {
+    queryState = { key: runtimeKey, query: createBoardListQuery(runtime) }
+    queryRef.current = queryState
+  }
+  const query = queryState.query
+  const requestRef = useRef(0)
+  const [surface, setSurface] = useState<BoardListSurface>(() => ({
+    status: enabled ? "loading" : "ready",
+    items: [],
+    error: null,
+    isRefreshing: false,
+    onRetry: () => undefined,
+  }))
+
+  const load = useCallback((reload: boolean) => {
+    if (!enabled) return
+    const requestId = ++requestRef.current
+    setSurface((current) => ({
+      ...current,
+      status: current.items.length > 0 ? "ready" : "loading",
+      error: null,
+      isRefreshing: true,
+    }))
+    const promise = reload ? query.reload() : query.load()
+    void promise.then((items) => {
+      if (requestRef.current !== requestId) return
+      setSurface((current) => ({ ...current, status: "ready", items, error: null, isRefreshing: false }))
+    }).catch((reason: unknown) => {
+      if (requestRef.current !== requestId || isAbortError(reason)) return
+      const error = boardListError(reason)
+      setSurface((current) => ({
+        ...current,
+        status: error.kind === "offline" ? "offline" : "error",
+        error,
+        isRefreshing: false,
+      }))
+    })
+  }, [enabled, query])
+
+  const retry = useCallback(() => load(true), [load])
+
+  useEffect(() => {
+    if (!enabled) {
+      requestRef.current += 1
+      query.invalidate()
+      setSurface({ status: "ready", items: [], error: null, isRefreshing: false, onRetry: retry })
+      return
+    }
+    load(false)
+    return () => {
+      requestRef.current += 1
+      query.invalidate()
+    }
+  }, [enabled, load, query, retry, runtimeKey])
+
+  useEffect(() => {
+    if (!enabled || typeof window === "undefined") return
+    const onFocus = () => load(true)
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+  }, [enabled, load])
+
+  return { ...surface, onRetry: retry }
+}
 
 function RuntimeThemedShell() {
   const runtime = useWebRuntime()
@@ -70,6 +154,7 @@ function RuntimeThemedShell() {
     : retainedSessionSlug !== null
       ? { kind: "board" as const, boardSlug: retainedSessionSlug, pathname: routePath({ kind: "board", boardSlug: retainedSessionSlug }, { basePath: runtime.webBasePath }) }
       : null
+  const boardList = useBoardListSurface(runtime, true)
   // The canonical BoardLive remains mounted for every board route as the
   // single session/SSE owner, while Explorer owns the visible board view.
   const liveBoardVisible = router.route.kind === "home"
@@ -295,6 +380,7 @@ function RuntimeThemedShell() {
           runtime={runtime}
           route={router.route}
           canonicalBoardSlug={retainedBoardSlug ?? undefined}
+          boardList={boardList}
           boundary={router.error ? "error" : undefined}
           error={router.error instanceof Error ? router.error.message : undefined}
           onNavigate={router.navigate}

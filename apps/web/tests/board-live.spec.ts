@@ -102,12 +102,15 @@ test.describe("BoardLive browser pipeline", () => {
     expect(fixture.apiRequests.some((request) => request.includes("/tasks/by-status"))).toBe(false)
   })
 
-  test("does not issue board API requests on Settings", async ({ page }) => {
+  test("only reads the global board list on a direct Settings route", async ({ page }) => {
     const fixture = await installBoardFixture(page)
     await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
-    expect(fixture.apiRequests.filter((request) => request.includes("/api/v1/boards")).length).toBe(0)
+    await expect(page.getByTestId("board-switcher")).toBeVisible()
+    expect(fixture.apiRequests.some((request) => request.startsWith("/api/v1/boards?include_archived=false"))).toBe(true)
+    expect(fixture.apiRequests.some((request) => request.includes("/columns"))).toBe(false)
+    expect(fixture.apiRequests.some((request) => request.includes("/tasks/by-status"))).toBe(false)
   })
 
   test("uses the real Fetch SSE pipeline for heartbeat and task.updated refresh", async ({ page }) => {

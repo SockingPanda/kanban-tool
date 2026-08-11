@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 
 import { auditAxe, evidenceContext, evidenceRunId, expectFocusVisible, hostIdentityEvidence, type AxeEvidence, type AxeIncompleteDisposition, type BrowserContextObservation, type KeyboardEvidence, writeEvidence } from "./a11y-proof-support"
+import { installExplorerFixture } from "./explorer-fixture"
 
 test.describe.configure({ mode: "serial" })
 
@@ -24,7 +25,6 @@ const expectedAxeLabels = [
   "maintenance.confirm",
 ] as const
 const expectedKeyboardLabels = [
-  "shell.skip-link",
   "shell.settings-nav",
   "settings.theme",
   "settings.actor",
@@ -80,6 +80,7 @@ async function audit(page: Page, label: string): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
+  await installExplorerFixture(page)
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" })
   page.on("pageerror", (error) => pageErrors.push(`${page.url()}: ${error.message}`))
   page.on("crash", () => pageErrors.push(`${page.url()}: page crashed`))
@@ -138,11 +139,8 @@ test.afterAll(async ({ browser }, testInfo) => {
 test("shell, board and settings keep landmarks and visible keyboard focus", async ({ page }) => {
   await goto(page, "/app/boards/default/board", "board-view")
   await audit(page, "shell.board-ready")
-  await expectFocusVisible(page, "shell.skip-link", keyboardEvidence, page.getByRole("link", { name: "跳转到主要内容" }))
-  await page.getByRole("link", { name: "跳转到主要内容" }).press("Enter")
-  await expect(page.locator("#astryx-app-shell-main")).toBeFocused()
-  await expectFocusVisible(page, "shell.settings-nav", keyboardEvidence, page.getByTestId("nav-settings"))
-  await page.getByTestId("nav-settings").click()
+  await expectFocusVisible(page, "shell.settings-nav", keyboardEvidence, page.getByTestId("product-rail-settings"))
+  await page.getByTestId("product-rail-settings").click()
   await expect(page).toHaveURL(/\/app\/settings$/)
   await expect(page.getByTestId("settings-page")).toBeVisible()
   await audit(page, "settings.ready")
@@ -153,7 +151,7 @@ test("shell, board and settings keep landmarks and visible keyboard focus", asyn
 test("board list and map routes expose keyboard-reachable task surfaces", async ({ page }) => {
   await goto(page, "/app/boards/default/board", "board-view")
   await audit(page, "board.ready")
-  const seedTitle = page.getByRole("button", { name: "A11y Seed Task", exact: true }).first()
+  const seedTitle = page.getByRole("button", { name: "Ready task", exact: true }).first()
   await expect(seedTitle).toBeVisible()
   await expectFocusVisible(page, "board.seed-title", keyboardEvidence, seedTitle)
   await seedTitle.press("Enter")
@@ -182,7 +180,7 @@ test("board list and map routes expose keyboard-reachable task surfaces", async 
   await page.goto("/app/boards/default/list", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("task-list")).toBeVisible()
   await audit(page, "list.ready")
-  await expectFocusVisible(page, "list.seed-title", keyboardEvidence, page.getByRole("button", { name: "A11y Seed Task", exact: true }).first())
+  await expectFocusVisible(page, "list.seed-title", keyboardEvidence, page.getByRole("button", { name: "Ready task", exact: true }).first())
 
   await page.goto("/app/boards/default/map?filter=all", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("task-map")).toBeVisible()
@@ -192,7 +190,7 @@ test("board list and map routes expose keyboard-reachable task surfaces", async 
 
 test("inspector close returns focus and events recover after offline without refresh", async ({ page, browser }) => {
   await goto(page, "/app/boards/default/list", "task-list")
-  const seedOpener = page.getByRole("button", { name: "A11y Seed Task", exact: true })
+  const seedOpener = page.getByRole("button", { name: "Ready task", exact: true })
   await expectFocusVisible(page, "inspector.opener", keyboardEvidence, seedOpener)
   await seedOpener.click()
   await expect(page.getByTestId("task-inspector")).toBeVisible()

@@ -199,6 +199,16 @@
     }
   }
 
+  @media (min-width: 57rem) {
+    .inspectorDialog {
+      max-block-size: calc(100dvh - 11rem);
+      min-block-size: 0;
+      align-self: start;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+  }
+
   @media (max-width: 56rem) {
     .contentWithInspector {
       grid-template-columns: minmax(0, 1fr);

@@ -68,7 +68,7 @@
   }
 
   .fieldFrame:focus-within {
-    border-color: var(--kb-color-accent);
+    border-color: var(--kb-color-accent-strong);
     box-shadow: var(--kb-focus-ring);
   }
 
@@ -191,7 +191,7 @@
 
   .stateCard[data-state="loading"],
   .stateCard[data-state="recovering"],
-  .stateCard[data-state="empty"] { border-color: var(--kb-color-accent); }
+  .stateCard[data-state="empty"] { border-color: var(--kb-color-accent-strong); }
   .stateCard[data-state="offline"],
   .stateCard[data-state="stale"] { border-color: var(--kb-color-warning); }
   .stateCard[data-state="error"] { border-color: var(--kb-color-danger); }
@@ -206,7 +206,7 @@
 
   .stateCard[data-state="loading"] .stateMarker,
   .stateCard[data-state="recovering"] .stateMarker,
-  .stateCard[data-state="empty"] .stateMarker { background: var(--kb-color-accent); }
+  .stateCard[data-state="empty"] .stateMarker { background: var(--kb-color-accent-strong); }
   .stateCard[data-state="offline"] .stateMarker,
   .stateCard[data-state="stale"] .stateMarker { background: var(--kb-color-warning); }
   .stateCard[data-state="error"] .stateMarker { background: var(--kb-color-danger); }

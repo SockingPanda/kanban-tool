@@ -69,6 +69,11 @@
   margin-block-end: 1rem;
 }
 
+.storyCollectionToolbar .storySurfaceHeading {
+  flex: 1 1 auto;
+  margin-block-end: 0;
+}
+
 .storyCollectionSearch {
   display: flex;
   align-items: center;
@@ -136,10 +141,14 @@
   gap: 1rem;
   min-inline-size: 0;
   min-block-size: 5.3rem;
+  inline-size: 100%;
   border: 1px solid var(--nav-border);
   border-radius: var(--nav-card-radius);
   padding: 0.9rem 1.1rem;
   background: var(--nav-surface);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 
 .storyProjectRow:hover {
@@ -194,7 +203,7 @@
 
 .storyFixtureNote {
   margin: 1.25rem 0 0;
-  color: var(--nav-text-tertiary);
+  color: var(--nav-text-secondary);
   font-size: 0.72rem;
 }
 
@@ -301,7 +310,7 @@
 }
 
 .storyExploreButton:hover {
-  color: var(--nav-accent);
+  color: var(--nav-accent-strong);
 }
 
 .storyExploreButtonCopy {
@@ -342,6 +351,15 @@
 .storyDiagnosticsItem:hover {
   color: var(--nav-text);
   background: var(--nav-layer);
+}
+
+.storyDiagnosticsItem:disabled,
+.storyToolbarButton:disabled,
+.storyViewButton:disabled,
+.storyInspectorButton:disabled {
+  color: var(--nav-text-disabled);
+  cursor: not-allowed;
+  opacity: 0.8;
 }
 
 .storyTaskWorkspace {
@@ -405,7 +423,7 @@
 }
 
 .storyViewButtonActive {
-  color: #fff;
+  color: var(--nav-on-accent);
   background: var(--nav-accent);
 }
 
@@ -500,8 +518,8 @@
 }
 
 .storyTaskCardSelected {
-  border-color: var(--nav-accent);
-  box-shadow: inset 0 0 0 1px var(--nav-accent);
+  border-color: var(--nav-accent-strong);
+  box-shadow: inset 0 0 0 1px var(--nav-accent-strong);
 }
 
 .storyTaskRef {
@@ -636,7 +654,7 @@
 }
 
 .storyInspectorButton:hover {
-  border-color: var(--nav-accent);
+  border-color: var(--nav-accent-strong);
   background: var(--nav-layer);
 }
 

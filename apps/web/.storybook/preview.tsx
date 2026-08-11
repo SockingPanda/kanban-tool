@@ -15,6 +15,7 @@ import { astryxMessages, astryxOverrides } from "../src/lib/i18n"
 
 type StorybookLocale = "zh" | "en"
 type StorybookTheme = "light" | "dark"
+type StorybookDensity = "compact" | "comfortable"
 
 function localeFor(value: unknown): StorybookLocale {
   return value === "en" ? "en" : "zh"
@@ -22,6 +23,10 @@ function localeFor(value: unknown): StorybookLocale {
 
 function themeFor(value: unknown): StorybookTheme {
   return value === "dark" ? "dark" : "light"
+}
+
+function densityFor(value: unknown): StorybookDensity {
+  return value === "compact" ? "compact" : "comfortable"
 }
 
 // Storybook's preview module is an integration entrypoint, not a refresh boundary.
@@ -39,13 +44,30 @@ function LocaleSynchronizer({ locale }: { readonly locale: StorybookLocale }) {
   return null
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+function DensitySynchronizer({ density }: { readonly density: StorybookDensity }) {
+  useEffect(() => {
+    const root = document.documentElement
+    const previous = root.dataset.density
+    root.dataset.density = density
+    return () => {
+      if (previous === undefined) delete root.dataset.density
+      else root.dataset.density = previous
+    }
+  }, [density])
+
+  return null
+}
+
 function withFoundation(Story: () => ReactNode, context: { globals: Record<string, unknown> }) {
   const locale = localeFor(context.globals.locale)
   const mode = themeFor(context.globals.theme)
+  const density = densityFor(context.globals.density)
 
   return (
     <>
       <LocaleSynchronizer locale={locale} />
+      <DensitySynchronizer density={density} />
       <InternationalizationProvider locale={locale} messages={astryxMessages} overrides={astryxOverrides}>
         <Theme theme={neutralTheme} mode={mode}>
           <Story />
@@ -78,6 +100,18 @@ const preview: Preview = {
         items: [
           { value: "light", title: "浅色" },
           { value: "dark", title: "深色" },
+        ],
+      },
+    },
+    density: {
+      description: "Storybook density",
+      defaultValue: "comfortable",
+      toolbar: {
+        title: "密度",
+        icon: "sidebaralt",
+        items: [
+          { value: "compact", title: "紧凑" },
+          { value: "comfortable", title: "舒适" },
         ],
       },
     },

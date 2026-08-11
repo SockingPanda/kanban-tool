@@ -2,15 +2,15 @@
   .surface {
     min-height: 100vh;
     padding: 1rem;
-    background: var(--color-background-body, var(--kb-color-canvas, #f6f7f8));
-    color: var(--color-text-primary, var(--kb-color-text-primary, #15181c));
+    background: var(--kb-color-canvas);
+    color: var(--kb-color-text-primary);
   }
 
   .surfaceNarrow {
     min-height: 100vh;
     padding: 0.75rem;
-    background: var(--color-background-body, var(--kb-color-canvas, #f6f7f8));
-    color: var(--color-text-primary, var(--kb-color-text-primary, #15181c));
+    background: var(--kb-color-canvas);
+    color: var(--kb-color-text-primary);
   }
 
   .surfaceContent {
@@ -41,7 +41,7 @@
 
   .surfaceEyebrow {
     margin: 0;
-    color: var(--color-text-secondary, var(--kb-color-text-secondary, #59616a));
+    color: var(--kb-color-text-secondary);
     font-size: 0.78rem;
   }
 
@@ -71,7 +71,7 @@
 
   .demoNote {
     margin: 0;
-    color: var(--color-text-secondary, var(--kb-color-text-secondary, #59616a));
+    color: var(--kb-color-text-secondary);
     font-size: 0.78rem;
   }
 
@@ -79,5 +79,54 @@
     .workspaceWithPeek {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+
+  .projectionNotice {
+    display: grid;
+    min-height: 12rem;
+    align-content: center;
+    gap: 0.4rem;
+    border: 1px dashed var(--kb-color-border-strong);
+    padding: 1rem;
+    background: var(--kb-color-surface);
+  }
+
+  .projectionNotice h2,
+  .projectionNotice p {
+    margin: 0;
+  }
+
+  .projectionNotice p {
+    color: var(--kb-color-text-secondary);
+  }
+
+  .projectionList {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .projectionListItem {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    min-width: 0;
+    align-items: center;
+    border-block: 1px solid var(--kb-color-border);
+    padding: 0.7rem 0.35rem;
+    background: var(--kb-color-surface);
+  }
+
+  .projectionListTitle {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-weight: 600;
+  }
+
+  .projectionListMeta {
+    color: var(--kb-color-text-secondary);
+    font-size: 0.78rem;
   }
 }

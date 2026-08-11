@@ -53,7 +53,7 @@ function StateCard({
   } satisfies Record<StateMode, string>)[mode]
 
   return (
-    <article className="stateCard" data-state={mode} role={mode === "error" ? "alert" : "status"} aria-label={stateLabel}>
+    <div className="stateCard" data-state={mode} role={mode === "error" ? "alert" : "status"} aria-live={mode === "error" ? "assertive" : "polite"} aria-label={stateLabel}>
       <span className="stateMarker" aria-hidden="true" />
       <div className="stateContent">
         <Text as="h2" type="label">{title}</Text>
@@ -71,7 +71,7 @@ function StateCard({
           </div>
         ) : null}
       </div>
-    </article>
+    </div>
   )
 }
 
@@ -127,7 +127,7 @@ function StatesStory({ english }: { readonly english: boolean }) {
       }
 
   return (
-    <div className="primitiveStory" data-density="comfortable">
+    <div className="primitiveStory">
       <main className="primitiveSurface" aria-labelledby="states-title">
         <Card variant="transparent" padding={6}>
           <VStack gap={6}>

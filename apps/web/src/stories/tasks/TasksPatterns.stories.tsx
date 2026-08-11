@@ -45,6 +45,57 @@ function themeFor(value: unknown): "light" | "dark" {
   return value === "dark" ? "dark" : "light"
 }
 
+const STORY_COPY = {
+  zh: {
+    filterAll: "全部任务",
+    statusRunning: "状态：运行中",
+    planHasSteps: "计划：有步骤",
+    footer: "仅 Storybook fixture；tasks.status 仍是唯一事实。",
+    listTitle: "列表投影（Storybook）",
+    listDescription: "列表只展示 canonical task 字段，不连接 API。",
+    mapTitle: "关系图不可用",
+    mapDescription: "Storybook 隔离层不模拟关系图；生产 Map 使用 canonical typed read model。",
+    ref: "Ref",
+    status: "状态",
+    steps: "步骤",
+    displayColumns: { assignee: "执行者", priority: "优先级" },
+    sheetTitle: "窄屏详情 sheet",
+  },
+  en: {
+    filterAll: "All tasks",
+    statusRunning: "Status: Running",
+    planHasSteps: "Plan: Has steps",
+    footer: "Storybook fixture only; tasks.status remains the sole fact.",
+    listTitle: "List projection (Storybook)",
+    listDescription: "The list shows canonical task fields only; it does not connect to the API.",
+    mapTitle: "Map unavailable",
+    mapDescription: "Storybook keeps the relation graph isolated; production Map uses the canonical typed read model.",
+    ref: "Ref",
+    status: "Status",
+    steps: "Steps",
+    displayColumns: { assignee: "Assignee", priority: "Priority" },
+    sheetTitle: "Narrow details sheet",
+  },
+} as const
+
+function storyCopy(locale: TasksLocale) {
+  return STORY_COPY[locale]
+}
+
+function displayColumns(locale: TasksLocale) {
+  const copy = storyCopy(locale)
+  return [{ id: "assignee", label: copy.displayColumns.assignee }, { id: "priority", label: copy.displayColumns.priority }] as const
+}
+
+const storyStatusLabels = {
+  zh: { todo: "待办", ready: "就绪", running: "运行中", review: "待审核" },
+  en: { todo: "To do", ready: "Ready", running: "Running", review: "Review" },
+} as const
+
+function storyStatusLabel(status: "todo" | "ready" | "running" | "review", locale: TasksLocale): string {
+  return storyStatusLabels[locale][status]
+}
+
 /**
  * Demo-only fixture：字段与值均来自 canonical board/task read model 的允许范围。
  * Storybook 不把这些值当作生产数据，也不构造 owner、avatar、progress、risk 或 timeline date。
@@ -96,7 +147,62 @@ const columns: readonly BoardColumnProps[] = [
   { id: "blocked", status: "blocked", title: "Blocked", tasks: [] },
 ]
 
+const columnLabels = {
+  zh: { todo: "待办", ready: "就绪", running: "运行中", review: "待审核", done: "已完成", blocked: "已阻塞" },
+  en: { todo: "To do", ready: "Ready", running: "Running", review: "Review", done: "Done", blocked: "Blocked" },
+} as const
+
+function columnsFor(locale: TasksLocale): readonly BoardColumnProps[] {
+  const labels = columnLabels[locale]
+  return columns.map((column) => ({ ...column, title: labels[column.id as keyof typeof labels] ?? column.title }))
+}
+
 const selectedTask = tasks.find((task) => task.id === "t_504") ?? tasks[0]
+
+function ListProjection({ locale }: { readonly locale: TasksLocale }) {
+  const copy = storyCopy(locale)
+  return (
+    <section className={storyStyles.projectionNotice} aria-labelledby="tasks-list-projection-title">
+      <div>
+        <h2 id="tasks-list-projection-title">{copy.listTitle}</h2>
+        <p>{copy.listDescription}</p>
+      </div>
+      <ul className={storyStyles.projectionList} aria-label={copy.listTitle}>
+        {tasks.map((task) => (
+          <li key={task.id} className={storyStyles.projectionListItem}>
+            <span className={storyStyles.projectionListMeta} translate="no">{task.ref}</span>
+            <span className={storyStyles.projectionListTitle}>{task.title}</span>
+            <span className={storyStyles.projectionListMeta}>{storyStatusLabel(task.status as "todo" | "ready" | "running" | "review", locale)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function MapProjectionNotice({ locale }: { readonly locale: TasksLocale }) {
+  const copy = storyCopy(locale)
+  return (
+    <section className={storyStyles.projectionNotice} aria-labelledby="tasks-map-projection-title">
+      <h2 id="tasks-map-projection-title">{copy.mapTitle}</h2>
+      <p>{copy.mapDescription}</p>
+    </section>
+  )
+}
+
+function TasksProjection({ view, displayVariant, locale, density, selectedId, onSelectTask }: {
+  readonly view: TasksView
+  readonly displayVariant: "grouped" | "table"
+  readonly locale: TasksLocale
+  readonly density?: TasksDensity
+  readonly selectedId?: string | null
+  readonly onSelectTask?: (task: BoardTaskViewModel) => void
+}) {
+  if (view === "board") return <BoardColumns columns={columnsFor(locale)} density={density} locale={locale} selectedTaskId={selectedId} onSelectTask={onSelectTask} />
+  if (view === "list" && displayVariant === "table") return <TaskTable tasks={tasks} density={density} locale={locale} selectedTaskId={selectedId} onSelectTask={onSelectTask} />
+  if (view === "list") return <ListProjection locale={locale} />
+  return <MapProjectionNotice locale={locale} />
+}
 
 /** Demo-only inspector fixture; values use only canonical inspector fields. */
 const inspector: TaskInspectorViewModel = {
@@ -137,8 +243,6 @@ const inspector: TaskInspectorViewModel = {
   runtime: { actor: "storybook", apiBaseUrl: "/", serverVersion: "demo-only", protocolVersion: "demo-only", webBuildId: "demo-only" },
 }
 
-const displayColumns = [{ id: "assignee", label: "执行者" }, { id: "priority", label: "优先级" }] as const
-
 function Surface({ children, narrow = false, locale = "zh", theme = "light" }: { readonly children: ReactNode; readonly narrow?: boolean; readonly locale?: TasksLocale; readonly theme?: "light" | "dark" }) {
   return (
     <main className={narrow ? storyStyles.surfaceNarrow : storyStyles.surface} data-locale={locale} data-theme={theme}>
@@ -148,35 +252,52 @@ function Surface({ children, narrow = false, locale = "zh", theme = "light" }: {
 }
 
 function WorkspaceBoardStory({ locale, theme }: { readonly locale: TasksLocale; readonly theme: "light" | "dark" }) {
+  const copy = storyCopy(locale)
   const [view, setView] = useState<TasksView>("board")
   const [density, setDensity] = useState<TasksDensity>("dense")
   const [displayVariant, setDisplayVariant] = useState<"grouped" | "table">("grouped")
   const [selectedId, setSelectedId] = useState<string | null>("t_504")
   const [query, setQuery] = useState("")
-  const [filters, setFilters] = useState([{ id: "all", label: "All tasks", removable: false }])
+  const [activeFilterIds, setActiveFilterIds] = useState(["all"])
+  const filters = activeFilterIds.map((id) => ({ id, label: copy.filterAll, removable: false }))
   return (
     <Surface locale={locale} theme={theme}>
       <header className={storyStyles.surfaceHeader}>
         <div className={storyStyles.surfaceHeaderText}><p className={storyStyles.surfaceEyebrow}>kanban-tool / Tasks</p><h1 className={storyStyles.surfaceTitle}>{locale === "en" ? "Tasks workspace" : "任务工作区"}</h1></div>
-        <div className={storyStyles.controlsRight}><ViewSwitcher activeView={view} displayVariant={displayVariant} includeTableDisplay onViewChange={setView} onDisplayChange={setDisplayVariant} locale={locale} /><DisplayMenu options={{ density }} onDensityChange={setDensity} columns={displayColumns} locale={locale} /></div>
+        <div className={storyStyles.controlsRight}><ViewSwitcher activeView={view} displayVariant={displayVariant} includeTableDisplay onViewChange={setView} onDisplayChange={setDisplayVariant} locale={locale} /><DisplayMenu options={{ density }} onDensityChange={setDensity} columns={displayColumns(locale)} locale={locale} /></div>
       </header>
-      <FilterBar search={query} onSearchChange={setQuery} filters={filters} locale={locale} onRemoveFilter={(id) => setFilters((current) => current.filter((filter) => filter.id !== id))} onClearFilters={() => setFilters([])} />
-      {displayVariant === "table" ? <TaskTable tasks={tasks} density={density} locale={locale} selectedTaskId={selectedId} onSelectTask={(task) => setSelectedId(task.id)} /> : <BoardColumns columns={columns} density={density} locale={locale} selectedTaskId={selectedId} onSelectTask={(task) => setSelectedId(task.id)} />}
-      <p role="status" className={storyStyles.demoNote}>Demo-only fixture · tasks.status remains the sole fact.</p>
+      <FilterBar search={query} onSearchChange={setQuery} filters={filters} locale={locale} onRemoveFilter={(id) => setActiveFilterIds((current) => current.filter((filterId) => filterId !== id))} onClearFilters={() => setActiveFilterIds([])} />
+      <div className={storyStyles.workspace}>
+        <TasksProjection view={view} displayVariant={displayVariant} locale={locale} density={density} selectedId={selectedId} onSelectTask={(task) => setSelectedId(task.id)} />
+      </div>
+      <p role="status" className={storyStyles.demoNote}>{copy.footer}</p>
     </Surface>
   )
 }
 
 function SidePeekSelectedStory({ locale, theme }: { readonly locale: TasksLocale; readonly theme: "light" | "dark" }) {
   const [open, setOpen] = useState(true)
-  return <Surface locale={locale} theme={theme}><div className={open ? storyStyles.workspaceWithPeek : storyStyles.workspace}><BoardColumns columns={columns} locale={locale} selectedTaskId={open ? "t_504" : null} onSelectTask={() => setOpen(true)} />{open ? <SidePeekFrame mode="sheet" model={inspector} locale={locale} onClose={() => setOpen(false)} onOpenDetails={() => setOpen(false)} /> : null}</div></Surface>
+  return <Surface locale={locale} theme={theme}><div className={open ? storyStyles.workspaceWithPeek : storyStyles.workspace}><BoardColumns columns={columnsFor(locale)} locale={locale} selectedTaskId={open ? "t_504" : null} onSelectTask={() => setOpen(true)} />{open ? <SidePeekFrame mode="side-peek" model={inspector} locale={locale} onClose={() => setOpen(false)} onOpenDetails={() => setOpen(false)} /> : null}</div></Surface>
+}
+
+function SidePeekNarrowSheetStory({ locale, theme }: { readonly locale: TasksLocale; readonly theme: "light" | "dark" }) {
+  const [open, setOpen] = useState(true)
+  const copy = storyCopy(locale)
+  return (
+    <Surface narrow locale={locale} theme={theme}>
+      <div className={storyStyles.workspace}>
+        <BoardColumns columns={columnsFor(locale)} locale={locale} selectedTaskId={open ? "t_504" : null} onSelectTask={() => setOpen(true)} />
+        {open ? <SidePeekFrame mode="sheet" model={inspector} locale={locale} onClose={() => setOpen(false)} onOpenDetails={() => setOpen(false)} /> : <p role="status" className={storyStyles.demoNote}>{copy.sheetTitle}</p>}
+      </div>
+    </Surface>
+  )
 }
 
 function TableProjectionStory({ locale, theme }: { readonly locale: TasksLocale; readonly theme: "light" | "dark" }) {
   const [view, setView] = useState<TasksView>("list")
   const [displayVariant, setDisplayVariant] = useState<"grouped" | "table">("table")
   const [selectedId, setSelectedId] = useState("t_504")
-  return <Surface locale={locale} theme={theme}><ViewSwitcher activeView={view} displayVariant={displayVariant} includeTableDisplay onViewChange={setView} onDisplayChange={setDisplayVariant} locale={locale} />{displayVariant === "table" ? <TaskTable tasks={tasks} locale={locale} selectedTaskId={selectedId} onSelectTask={(task) => setSelectedId(task.id)} /> : <BoardColumns columns={columns} locale={locale} selectedTaskId={selectedId} onSelectTask={(task) => setSelectedId(task.id)} />}</Surface>
+  return <Surface locale={locale} theme={theme}><ViewSwitcher activeView={view} displayVariant={displayVariant} includeTableDisplay onViewChange={setView} onDisplayChange={setDisplayVariant} locale={locale} /><TasksProjection view={view} displayVariant={displayVariant} locale={locale} selectedId={selectedId} onSelectTask={(task) => setSelectedId(task.id)} /></Surface>
 }
 
 function BoundaryActionStory({ state, locale }: { readonly state: "empty" | "offline" | "stale" | "error"; readonly locale: TasksLocale }) {
@@ -198,7 +319,8 @@ export const TableProjection: Story = {
 export const EnglishLabels: Story = {
   render: (_args, context: StoryContext) => {
     const locale = localeFor(context.globals.locale)
-    return <Surface locale={locale} theme={themeFor(context.globals.theme)}><div className={storyStyles.surfaceHeader}><div className={storyStyles.surfaceHeaderText}><p className={storyStyles.surfaceEyebrow}>kanban-tool / Tasks</p><h1 className={storyStyles.surfaceTitle}>{locale === "en" ? "Locale interaction grammar" : "本地化交互语法"}</h1></div><ViewSwitcher activeView="board" label={locale === "en" ? "Task views" : "任务视图"} locale={locale} /></div><FilterBar defaultSearch="storybook" locale={locale} filters={[{ id: "status", label: locale === "en" ? "Status: Running" : "状态：运行中" }]} /><TaskCard task={selectedTask} locale={locale} selected /><TaskTable tasks={[selectedTask]} locale={locale} /><SidePeekFrame model={inspector} locale={locale} /></Surface>
+    const copy = storyCopy(locale)
+    return <Surface locale={locale} theme={themeFor(context.globals.theme)}><div className={storyStyles.surfaceHeader}><div className={storyStyles.surfaceHeaderText}><p className={storyStyles.surfaceEyebrow}>kanban-tool / Tasks</p><h1 className={storyStyles.surfaceTitle}>{locale === "en" ? "Locale interaction grammar" : "本地化交互语法"}</h1></div><ViewSwitcher activeView="board" label={locale === "en" ? "Task views" : "任务视图"} locale={locale} /></div><FilterBar defaultSearch="storybook" locale={locale} filters={[{ id: "status", label: copy.statusRunning }]} /><TaskCard task={selectedTask} locale={locale} selected /><TaskTable tasks={[selectedTask]} locale={locale} /><SidePeekFrame model={inspector} locale={locale} /></Surface>
   },
 }
 
@@ -206,12 +328,16 @@ export const SidePeekSelected: Story = {
   render: (_args, context: StoryContext) => <SidePeekSelectedStory locale={localeFor(context.globals.locale)} theme={themeFor(context.globals.theme)} />,
 }
 
+export const SidePeekNarrowSheet: Story = {
+  render: (_args, context: StoryContext) => <SidePeekNarrowSheetStory locale={localeFor(context.globals.locale)} theme={themeFor(context.globals.theme)} />,
+}
+
 export const FilterBarActive: Story = {
-  render: (_args, context: StoryContext) => { const locale = localeFor(context.globals.locale); return <Surface narrow locale={locale} theme={themeFor(context.globals.theme)}><FilterBar defaultSearch="storybook" locale={locale} filters={[{ id: "status", label: locale === "en" ? "Status: Running" : "状态：运行中" }, { id: "plan", label: locale === "en" ? "Plan: Has steps" : "计划：有步骤" }]} /></Surface> },
+  render: (_args, context: StoryContext) => { const locale = localeFor(context.globals.locale); const copy = storyCopy(locale); return <Surface narrow locale={locale} theme={themeFor(context.globals.theme)}><FilterBar defaultSearch="storybook" locale={locale} filters={[{ id: "status", label: copy.statusRunning }, { id: "plan", label: copy.planHasSteps }]} /></Surface> },
 }
 
 export const DisplayMenuOpen: Story = {
-  render: (_args, context: StoryContext) => { const locale = localeFor(context.globals.locale); return <Surface narrow locale={locale} theme={themeFor(context.globals.theme)}><div className={storyStyles.controlsRight}><DisplayMenu defaultOpen locale={locale} options={{ density: "comfortable", visibleColumns: { assignee: true, priority: false } }} columns={[{ id: "assignee", label: locale === "en" ? "Assignee" : "执行者" }, { id: "priority", label: locale === "en" ? "Priority" : "优先级" }]} /></div></Surface> },
+  render: (_args, context: StoryContext) => { const locale = localeFor(context.globals.locale); return <Surface narrow locale={locale} theme={themeFor(context.globals.theme)}><div className={storyStyles.controlsRight}><DisplayMenu defaultOpen locale={locale} options={{ density: "comfortable", visibleColumns: { assignee: true, priority: false } }} columns={displayColumns(locale)} /></div></Surface> },
 }
 
 export const TimelineUnsupported: Story = {
@@ -229,7 +355,7 @@ export const LongTextNarrow: Story = {
   parameters: { viewport: { defaultViewport: "mobile1" } },
   render: (_args, context: StoryContext) => {
     const locale = localeFor(context.globals.locale)
-    const longTask = taskFixture({ id: "t_long", ref: "#509", title: "A task title that remains readable when the board is narrow and the canonical description contains a long unbroken ref", status: "review", readiness: { ...taskFixture().readiness, requiredStepCount: 2, completedRequiredStepCount: 1 } })
+    const longTask = taskFixture({ id: "t_long", ref: "plane-only-observability-control-surface-with-a-very-long-project-slug#509", title: "A task title that remains readable when the board is narrow and the canonical description contains a long unbroken ref", status: "review", readiness: { ...taskFixture().readiness, requiredStepCount: 2, completedRequiredStepCount: 1 } })
     return <Surface narrow locale={locale} theme={themeFor(context.globals.theme)}><TaskCard task={longTask} locale={locale} density="comfortable" selected /><TaskTable tasks={[longTask]} locale={locale} density="comfortable" /></Surface>
   },
 }

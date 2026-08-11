@@ -35,8 +35,9 @@ const colorTokens = [
   { key: "borderStrong", variable: "--kb-color-border-strong", value: "light #c6cdd4 / dark #3a424a" },
   { key: "textPrimary", variable: "--kb-color-text-primary", value: "light #15181c / dark #f4f6f8" },
   { key: "textSecondary", variable: "--kb-color-text-secondary", value: "light #59616a / dark #a7afb8" },
-  { key: "textTertiary", variable: "--kb-color-text-tertiary", value: "light #68727c / dark #858f99" },
+  { key: "textTertiary", variable: "--kb-color-text-tertiary", value: "light #626c76 / dark #858f99" },
   { key: "accent", variable: "--kb-color-accent", value: "light #0877bd / dark #0d6fa8" },
+  { key: "accentStrong", variable: "--kb-color-accent-strong", value: "light #075d93 / dark #83c9f5" },
   { key: "success", variable: "--kb-color-success", value: "light #147a3d / dark #46c878" },
   { key: "warning", variable: "--kb-color-warning", value: "light #9a6500 / dark #e9ac38" },
   { key: "danger", variable: "--kb-color-danger", value: "light #b42332 / dark #ef6570" },
@@ -134,6 +135,7 @@ const labels = {
     textSecondary: "次要文本",
     textTertiary: "三级文本",
     accent: "强调色",
+    accentStrong: "可读强调色",
     success: "成功",
     warning: "警告",
     danger: "危险",
@@ -153,6 +155,7 @@ const labels = {
     textSecondary: "Secondary text",
     textTertiary: "Tertiary text",
     accent: "Accent",
+    accentStrong: "Readable accent",
     success: "Success",
     warning: "Warning",
     danger: "Danger",
@@ -169,7 +172,7 @@ function TokenReferenceStory({ english }: { readonly english: boolean }) {
   const localizedLabels = labels[language]
 
   return (
-    <div className="foundationStory" data-density="comfortable">
+    <div className="foundationStory">
       <main className="storySurface" aria-labelledby="tokens-title">
         <Card variant="transparent" padding={6}>
           <VStack gap={6}>

@@ -84,6 +84,7 @@
   .swatch-textSecondary { background: var(--kb-color-text-secondary); }
   .swatch-textTertiary { background: var(--kb-color-text-tertiary); }
   .swatch-accent { background: var(--kb-color-accent); }
+  .swatch-accentStrong { background: var(--kb-color-accent-strong); }
   .swatch-success { background: var(--kb-color-success); }
   .swatch-warning { background: var(--kb-color-warning); }
   .swatch-danger { background: var(--kb-color-danger); }

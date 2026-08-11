@@ -71,7 +71,7 @@ export const defaultNavigationLabels: NavigationLabels = {
   productNavigation: "Product navigation",
   projects: "Projects",
   settings: "Settings",
-  home: "Home",
+  home: "Home (planned)",
   projectSearch: "Search projects",
   projectSearchPlaceholder: "Search projects",
   clearSearch: "Clear project search",

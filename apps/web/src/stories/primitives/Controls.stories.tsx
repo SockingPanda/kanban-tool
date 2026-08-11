@@ -183,7 +183,7 @@ function ControlsStory({ english }: { readonly english: boolean }) {
       }
 
   return (
-    <div className="primitiveStory" data-density="comfortable">
+    <div className="primitiveStory">
       <main className="primitiveSurface" aria-labelledby="controls-title">
         <Card variant="transparent" padding={6}>
           <VStack gap={6}>

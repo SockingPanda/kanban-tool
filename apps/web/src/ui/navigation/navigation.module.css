@@ -1,22 +1,24 @@
 @layer product {
   .navigationRoot {
-    --nav-canvas: var(--color-background-body, #0f1113);
-    --nav-surface: var(--color-background-surface, #14171a);
-    --nav-layer: var(--color-background-muted, #191d21);
-    --nav-layer-active: var(--color-background-layer-active, #20262c);
-    --nav-border: var(--color-border, #2a2f35);
-    --nav-border-strong: var(--color-border-emphasized, #3a424a);
-    --nav-text: var(--color-text-primary, #f4f6f8);
-    --nav-text-secondary: var(--color-text-secondary, #a7afb8);
-    --nav-text-tertiary: var(--color-text-tertiary, #858f99);
-    --nav-text-disabled: var(--color-text-disabled, #6c747d);
-    --nav-accent: var(--color-accent, #4ba9e8);
-    --nav-accent-muted: var(--color-accent-muted, #123247);
-    --nav-success: var(--color-success, #46c878);
-    --nav-warning: var(--color-warning, #e9ac38);
-    --nav-danger: var(--color-danger, #ef6570);
-    --nav-control-radius: 0.375rem;
-    --nav-card-radius: 0.5rem;
+    --nav-canvas: var(--kb-color-canvas);
+    --nav-surface: var(--kb-color-surface);
+    --nav-layer: var(--kb-color-layer);
+    --nav-layer-active: var(--kb-color-layer-active);
+    --nav-border: var(--kb-color-border);
+    --nav-border-strong: var(--kb-color-border-strong);
+    --nav-text: var(--kb-color-text-primary);
+    --nav-text-secondary: var(--kb-color-text-secondary);
+    --nav-text-tertiary: var(--kb-color-text-tertiary);
+    --nav-text-disabled: var(--kb-color-text-disabled);
+    --nav-accent: var(--kb-color-accent);
+    --nav-accent-strong: var(--kb-color-accent-strong);
+    --nav-accent-muted: var(--kb-color-accent-muted);
+    --nav-on-accent: var(--kb-color-on-accent);
+    --nav-success: var(--kb-color-success);
+    --nav-warning: var(--kb-color-warning);
+    --nav-danger: var(--kb-color-danger);
+    --nav-control-radius: var(--kb-radius-control);
+    --nav-card-radius: var(--kb-radius-card);
     --nav-rail-width: 3.5rem;
     --nav-sidebar-width: 15.5rem;
     --nav-header-height: 2.75rem;
@@ -25,46 +27,16 @@
     container: navigation-shell / inline-size;
     color: var(--nav-text);
     background: var(--nav-canvas);
-    font-family: var(--font-family-body, Figtree, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    font-family: var(--kb-font-family-body);
     font-size: 0.875rem;
     line-height: 1.4;
   }
 
   .navigationRoot[data-theme="dark"] {
-    --nav-canvas: #0f1113;
-    --nav-surface: #14171a;
-    --nav-layer: #191d21;
-    --nav-layer-active: #20262c;
-    --nav-border: #2a2f35;
-    --nav-border-strong: #3a424a;
-    --nav-text: #f4f6f8;
-    --nav-text-secondary: #a7afb8;
-    --nav-text-tertiary: #858f99;
-    --nav-text-disabled: #6c747d;
-    --nav-accent: #4ba9e8;
-    --nav-accent-muted: #123247;
-    --nav-success: #46c878;
-    --nav-warning: #e9ac38;
-    --nav-danger: #ef6570;
     color-scheme: dark;
   }
 
   .navigationRoot[data-theme="light"] {
-    --nav-canvas: #f1f1f1;
-    --nav-surface: #ffffff;
-    --nav-layer: #f1f1f1;
-    --nav-layer-active: #e5e5e5;
-    --nav-border: rgb(0 0 0 / 0.12);
-    --nav-border-strong: rgb(0 0 0 / 0.22);
-    --nav-text: #171717;
-    --nav-text-secondary: #525252;
-    --nav-text-tertiary: #737373;
-    --nav-text-disabled: #a3a3a3;
-    --nav-accent: #262626;
-    --nav-accent-muted: #e5e5e5;
-    --nav-success: #007004;
-    --nav-warning: #745b00;
-    --nav-danger: #a50c25;
     color-scheme: light;
   }
 
@@ -74,7 +46,7 @@
   }
 
   .navigationRoot :where(a, button, input):focus-visible {
-    outline: 0.15rem solid var(--nav-accent);
+    outline: var(--kb-focus-ring-width) solid var(--nav-accent-strong);
     outline-offset: 0.15rem;
   }
 
@@ -105,9 +77,8 @@
     inline-size: 2.15rem;
     block-size: 2.15rem;
     margin: 0.75rem auto 1rem;
-    border: 1px solid var(--nav-accent);
+    border: 1px solid var(--nav-accent-strong);
     border-radius: var(--nav-control-radius);
-    color: var(--nav-text);
     color: var(--nav-text);
   }
 
@@ -150,15 +121,15 @@
 
   .railItemActive,
   .railItem[aria-current="page"] {
-    border-color: color-mix(in srgb, var(--nav-accent) 75%, transparent);
-    color: var(--nav-accent);
+    border-color: color-mix(in srgb, var(--nav-accent-strong) 75%, transparent);
+    color: var(--nav-accent-strong);
     background: var(--nav-accent-muted);
   }
 
   .railItemLabel {
     max-inline-size: 100%;
     overflow: hidden;
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     line-height: 1.1;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -272,10 +243,17 @@
     background: var(--nav-layer);
   }
 
+  .sidebarNavItem:disabled,
+  .sidebarSectionButton:disabled {
+    color: var(--nav-text-disabled);
+    cursor: not-allowed;
+    opacity: 0.8;
+  }
+
   .sidebarNavItemActive,
   .sidebarNavItem[aria-current="page"] {
     border-color: transparent;
-    color: var(--nav-accent);
+    color: var(--nav-accent-strong);
     background: var(--nav-accent-muted);
   }
 
@@ -312,7 +290,7 @@
   }
 
   .projectPickerSearch:focus-within {
-    border-color: var(--nav-accent);
+    border-color: var(--nav-accent-strong);
   }
 
   .projectPickerSearchInput {
@@ -459,7 +437,7 @@
   }
 
   .projectPickerRetry:hover {
-    border-color: var(--nav-accent);
+    border-color: var(--nav-accent-strong);
   }
 
   .projectTree {
@@ -571,14 +549,14 @@
 
   .projectTreeChildButtonActive,
   .projectTreeChildButton[aria-current="page"] {
-    border-color: color-mix(in srgb, var(--nav-accent) 65%, transparent);
+    border-color: color-mix(in srgb, var(--nav-accent-strong) 65%, transparent);
     color: var(--nav-text);
     background: var(--nav-accent-muted);
   }
 
   .projectTreeChildButtonActive svg,
   .projectTreeChildButton[aria-current="page"] svg {
-    color: var(--nav-accent);
+    color: var(--nav-accent-strong);
   }
 
   .resourceHeader {
@@ -643,7 +621,7 @@
   }
 
   .breadcrumbItem a:hover {
-    color: var(--nav-accent);
+    color: var(--nav-accent-strong);
   }
 
   .breadcrumbSeparator {
@@ -691,20 +669,20 @@
   .resourceHeaderProjectSwitch:hover,
   .resourceHeaderAction:hover,
   .resourceHeaderMoreTrigger:hover {
-    border-color: var(--nav-accent);
+    border-color: var(--nav-accent-strong);
     background: var(--nav-layer);
   }
 
   .resourceHeaderActionPrimary {
     border-color: var(--nav-accent);
-    color: #fff;
+    color: var(--nav-on-accent);
     background: var(--nav-accent);
   }
 
   .resourceHeaderActionPrimary:hover {
     border-color: var(--nav-accent);
-    color: #fff;
-    background: color-mix(in srgb, var(--nav-accent) 86%, #000);
+    color: var(--nav-on-accent);
+    background: color-mix(in srgb, var(--nav-accent) 86%, var(--nav-text));
   }
 
   .resourceHeaderActionGhost {

@@ -109,4 +109,21 @@ describe("navigation accessibility contracts", () => {
     expect(more).not.toContain('href="/should-not-navigate"')
     expect(more).toContain('disabled=""')
   })
+
+  test("marks planned Home and callback-less header actions as deferred", () => {
+    const sidebar = renderToStaticMarkup(<ProjectsSidebar projects={[project]} />)
+    const header = renderToStaticMarkup(
+      <ResourceHeader
+        breadcrumbs={[{ label: "Projects" }]}
+        actions={[{ id: "diagnostics", label: "Diagnostics" }]}
+        moreItems={[{ id: "future", label: "Future" }]}
+      />,
+    )
+
+    expect(sidebar).toContain("Home (planned)")
+    expect(sidebar).toContain('data-testid="projects-sidebar-home"')
+    expect(sidebar).toContain('disabled=""')
+    expect(header).toContain('data-testid="resource-header-action-diagnostics"')
+    expect((header.match(/disabled=""/g) ?? []).length).toBe(2)
+  })
 })

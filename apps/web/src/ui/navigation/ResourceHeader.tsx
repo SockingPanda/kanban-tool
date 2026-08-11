@@ -56,12 +56,13 @@ function actionClassName(action: ResourceHeaderAction): string {
 }
 
 function HeaderAction({ action }: { readonly action: ResourceHeaderAction }) {
+  const disabled = action.disabled === true || action.onSelect === undefined
   return (
     <button
       type="button"
       className={actionClassName(action)}
-      disabled={action.disabled}
-      onClick={action.onSelect}
+      disabled={disabled}
+      onClick={disabled ? undefined : action.onSelect}
       data-testid={`resource-header-action-${action.id}`}
     >
       {action.icon}
@@ -71,13 +72,14 @@ function HeaderAction({ action }: { readonly action: ResourceHeaderAction }) {
 }
 
 function MoreItem({ item }: { readonly item: ResourceHeaderMoreItem }) {
+  const disabled = item.disabled === true || (item.href === undefined && item.onSelect === undefined)
   const content = (
     <>
       {item.icon}
       <span className={styles.resourceHeaderMoreItemLabel}>{item.label}</span>
     </>
   )
-  if (item.href !== undefined && !item.disabled) {
+  if (item.href !== undefined && !disabled) {
     return (
       <a className={styles.resourceHeaderMoreItem} href={item.href} onClick={item.onSelect}>
         {content}
@@ -85,7 +87,7 @@ function MoreItem({ item }: { readonly item: ResourceHeaderMoreItem }) {
     )
   }
   return (
-    <button type="button" className={styles.resourceHeaderMoreItem} disabled={item.disabled} onClick={item.onSelect}>
+    <button type="button" className={styles.resourceHeaderMoreItem} disabled={disabled} onClick={disabled ? undefined : item.onSelect}>
       {content}
     </button>
   )

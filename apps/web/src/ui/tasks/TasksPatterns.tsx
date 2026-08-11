@@ -62,6 +62,7 @@ interface TaskMessages {
   readonly dense: string
   readonly comfortable: string
   readonly visibleFields: string
+  readonly ref: string
   readonly boardLabel: string
   readonly taskCount: (count: number) => string
   readonly emptyColumn: string
@@ -110,6 +111,7 @@ const messages: Readonly<Record<TasksLocale, TaskMessages>> = {
     dense: "紧凑",
     comfortable: "舒适",
     visibleFields: "可见字段",
+    ref: "引用",
     boardLabel: "任务看板",
     taskCount: (count) => `${count} 个任务`,
     emptyColumn: "暂无任务",
@@ -156,6 +158,7 @@ const messages: Readonly<Record<TasksLocale, TaskMessages>> = {
     dense: "Dense",
     comfortable: "Comfortable",
     visibleFields: "Visible fields",
+    ref: "Ref",
     boardLabel: "Task board",
     taskCount: (count) => `${count} tasks`,
     emptyColumn: "No tasks",
@@ -450,7 +453,7 @@ export function TaskTable({ tasks, selectedTaskId = null, density = "dense", loc
   const tableClass = density === "comfortable" ? styles.tableComfortable : styles.tableDense
   const tableCaption = caption ?? copy.tableCaption
   const allColumns: readonly TaskTableColumn[] = [
-    { id: "ref", label: "Ref", render: (task) => <span className={styles.tableRef} translate="no">{task.ref}</span> },
+    { id: "ref", label: copy.ref, render: (task) => <span className={styles.tableRef} translate="no">{task.ref}</span> },
     {
       id: "title",
       label: locale === "en" ? "Title" : "标题",
@@ -519,7 +522,7 @@ export function SidePeekFrame({ model, locale = "zh", mode = "side-peek", onClos
   const copy = copyFor(locale)
   const task = model.task
   const titleId = useId()
-  const peekRef = useRef<HTMLElement>(null)
+  const peekRef = useRef<HTMLDivElement>(null)
   const requiredStep = model.steps.find((step) => step.required)
 
   useEffect(() => {
@@ -568,7 +571,7 @@ export function SidePeekFrame({ model, locale = "zh", mode = "side-peek", onClos
   return (
     <div className={`${styles.root} ${styles.peekLayer}`} data-mode={mode}>
       {sheet && onClose ? <button type="button" className={styles.peekScrim} aria-label={closeLabel ?? copy.closeDetails} onClick={close} /> : null}
-      <aside ref={peekRef} className={styles.peek} role={sheet ? "dialog" : "complementary"} aria-modal={sheet ? true : undefined} aria-labelledby={titleId} data-task-id={task.id} data-mode={mode} tabIndex={sheet ? -1 : undefined}>
+      <div ref={peekRef} className={styles.peek} role={sheet ? "dialog" : "complementary"} aria-modal={sheet ? true : undefined} aria-labelledby={titleId} data-task-id={task.id} data-mode={mode} tabIndex={sheet ? -1 : undefined}>
         <header className={styles.peekHeader}>
           <div className={styles.peekHeading}>
             <span className={styles.peekRef} translate="no">{task.ref}</span>
@@ -587,7 +590,7 @@ export function SidePeekFrame({ model, locale = "zh", mode = "side-peek", onClos
         <footer className={styles.peekFooter}>
           {onOpenDetails ? <button type="button" className={styles.detailsButton} onClick={() => onOpenDetails(task.id)}>{detailsLabel ?? copy.openDetails}</button> : null}
         </footer>
-      </aside>
+      </div>
     </div>
   )
 }

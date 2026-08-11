@@ -79,7 +79,7 @@ function EnvironmentStory({ english }: { readonly english: boolean }) {
       }
 
   return (
-    <div className="foundationStory" data-density="comfortable">
+    <div className="foundationStory">
       <main className="storySurface" aria-labelledby="environment-title">
         <Card variant="transparent" padding={6}>
           <VStack gap={6}>
@@ -118,14 +118,14 @@ function EnvironmentStory({ english }: { readonly english: boolean }) {
           <section className="storySplit" aria-labelledby="environment-states-title">
             <div className="storySection">
               <Heading level={2} id="environment-states-title">{english ? "State boundary" : "状态边界"}</Heading>
-              <article className="environmentState" role="status">
+              <div className="environmentState" aria-live="polite">
                 <div className="environmentStateHeader">
                   <span className="environmentStateMarker" aria-hidden="true" />
                   <Text as="h3" type="label">{copy.stateTitle}</Text>
                 </div>
                 <Text as="p" type="supporting" color="secondary">{copy.stateDescription}</Text>
                 <Button type="button" label={copy.reconnect} variant="secondary" />
-              </article>
+              </div>
             </div>
             <div className="storySection">
               <Heading level={2}>{english ? "Focus and status" : "焦点与状态"}</Heading>

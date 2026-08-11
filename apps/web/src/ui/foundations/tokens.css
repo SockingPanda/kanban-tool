@@ -15,7 +15,7 @@
     --kb-color-text-primary: light-dark(#15181c, #f4f6f8);
     --kb-color-text-secondary: light-dark(#59616a, #a7afb8);
     /* Tertiary text remains regular-text compliant on the light surface. */
-    --kb-color-text-tertiary: light-dark(#68727c, #858f99);
+    --kb-color-text-tertiary: light-dark(#626c76, #858f99);
     --kb-color-text-disabled: light-dark(#9ca4ac, #626b75);
 
     /* The dark filled action uses a blue that keeps white on-color text above 4.5:1. */
@@ -69,7 +69,7 @@
     --kb-focus-ring-width: 0.125rem;
     --kb-focus-ring-offset: 0.125rem;
     --kb-focus-ring: 0 0 0 var(--kb-focus-ring-offset) var(--kb-color-canvas),
-      0 0 0 calc(var(--kb-focus-ring-offset) + var(--kb-focus-ring-width)) var(--kb-color-accent);
+      0 0 0 calc(var(--kb-focus-ring-offset) + var(--kb-focus-ring-width)) var(--kb-color-accent-strong);
     --kb-duration-fast: 150ms;
     --kb-ease-standard: cubic-bezier(0.2, 0, 0, 1);
 

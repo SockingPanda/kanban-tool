@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 
 import { NavigationIcon } from "./icons"
 import { ProjectPicker } from "./ProjectPicker"
@@ -102,17 +102,47 @@ export function ProjectsSidebar({
     onCloseRef.current = onClose
   }, [onClose])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isDrawer || open === undefined) return
+
+    const focusFirstElement = () => {
+      const sidebar = sidebarRef.current
+      const firstFocusable = sidebar === null ? null : focusableElements(sidebar)[0]
+      if (firstFocusable !== null) firstFocusable.focus()
+      else sidebar?.focus()
+    }
+    const focusIfOpen = () => {
+      const sidebar = sidebarRef.current
+      if (sidebar?.getAttribute("data-open") !== "true" || sidebar.contains(document.activeElement)) return
+      focusFirstElement()
+    }
 
     if (open && !wasOpenRef.current) {
       const activeElement = document.activeElement
       returnFocusRef.current = activeElement instanceof HTMLElement ? activeElement : null
-      const sidebar = sidebarRef.current
-      const firstFocusable = sidebar === null ? null : focusableElements(sidebar)[0]
-      firstFocusable?.focus()
-    } else if (!open && wasOpenRef.current) {
-      returnFocusRef.current?.focus()
+    }
+
+    if (open) {
+      // Focus on every effect setup while open. React StrictMode deliberately
+      // replays layout effects; repeating this idempotent focus keeps an actual
+      // closed → open transition inside the dialog after that replay.
+      focusIfOpen()
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          focusIfOpen()
+          window.requestAnimationFrame(focusIfOpen)
+        })
+      }
+    } else if (wasOpenRef.current) {
+      const returnFocus = returnFocusRef.current
+      if (returnFocus?.isConnected && typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          if (sidebarRef.current?.getAttribute("data-open") === "false") returnFocus.focus()
+          window.requestAnimationFrame(() => {
+            if (sidebarRef.current?.getAttribute("data-open") === "false") returnFocus.focus()
+          })
+        })
+      } else if (returnFocus?.isConnected) returnFocus.focus()
       returnFocusRef.current = null
     }
     wasOpenRef.current = open
@@ -208,7 +238,7 @@ export function ProjectsSidebar({
             type="button"
             className={`${styles.sidebarNavItem} ${selectedSection === "home" ? styles.sidebarNavItemActive : ""}`}
             aria-current={selectedSection === "home" ? "page" : undefined}
-            onClick={() => onSectionSelect?.("home")}
+            disabled
             data-testid="projects-sidebar-home"
           >
             <NavigationIcon name="home" size={17} />

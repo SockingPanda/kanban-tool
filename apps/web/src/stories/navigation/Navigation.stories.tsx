@@ -1,5 +1,6 @@
 import { useState } from "react"
 import type { Meta, StoryObj } from "@storybook/react-vite"
+import { expect, userEvent, waitFor, within } from "storybook/test"
 
 import {
   NavigationIcon,
@@ -40,6 +41,8 @@ const DEMO_PROJECTS = [
   }),
 ] as const satisfies readonly NavigationProject[]
 
+const ACTIVE_PROJECTS = DEMO_PROJECTS.filter((project) => project.archivedAt === null)
+
 type StoryLocale = "zh" | "en"
 type StoryTheme = "light" | "dark"
 type StoryDensity = "compact" | "comfortable"
@@ -49,7 +52,7 @@ const STORY_LABELS: Record<StoryLocale, Partial<NavigationLabels>> = {
     productNavigation: "产品导航",
     projects: "项目",
     settings: "设置",
-    home: "首页",
+    home: "首页（规划中）",
     projectSearch: "搜索项目",
     projectSearchPlaceholder: "搜索项目",
     clearSearch: "清除项目搜索",
@@ -76,7 +79,7 @@ const STORY_LABELS: Record<StoryLocale, Partial<NavigationLabels>> = {
     productNavigation: "Product navigation",
     projects: "Projects",
     settings: "Settings",
-    home: "Home",
+    home: "Home (planned)",
     projectSearch: "Search projects",
     projectSearchPlaceholder: "Search projects",
     clearSearch: "Clear project search",
@@ -122,8 +125,14 @@ const STORY_COPY = {
     taskTitle: "任务",
     more: "更多",
     projectSearchEmpty: "没有匹配的项目。",
-    tasksDeferred: "Production task views remain deferred to the tasks owner; this story only verifies navigation context.",
+    tasksDeferred: "生产任务视图交由 Tasks owner；此 story 仅验证导航上下文。",
     taskViews: "任务视图",
+    boardView: "看板",
+    listView: "列表（规划中）",
+    tableView: "表格（规划中）",
+    mapView: "关系图（规划中）",
+    taskColumns: { todo: "待办", ready: "就绪", running: "运行中", review: "待审核", done: "已完成", blocked: "已阻塞" },
+    taskStatuses: { todo: "待办", ready: "就绪", running: "运行中" },
     filters: "筛选",
     display: "显示",
     searchTasks: "搜索任务",
@@ -132,6 +141,12 @@ const STORY_COPY = {
     closeTaskDetails: "关闭任务详情",
     openDetails: "打开详情",
     canonicalTaskStatus: "canonical task status",
+    inspectorStatus: "状态",
+    requiredStep: "必需步骤",
+    run: "运行",
+    emptyColumn: "暂无任务",
+    emptySelection: "选择任务以打开详情。",
+    diagnosticLabels: { runs: "运行", events: "事件", signals: "Signals", ontology: "本体" },
     fixture: "Storybook fixture · demo-only；无 API、SSE 或 mutation path。",
   },
   en: {
@@ -156,6 +171,12 @@ const STORY_COPY = {
     projectSearchEmpty: "No projects match this search.",
     tasksDeferred: "Production task views remain deferred to the tasks owner; this story only verifies navigation context.",
     taskViews: "Task views",
+    boardView: "Board",
+    listView: "List (planned)",
+    tableView: "Table (planned)",
+    mapView: "Map (planned)",
+    taskColumns: { todo: "To do", ready: "Ready", running: "Running", review: "Review", done: "Done", blocked: "Blocked" },
+    taskStatuses: { todo: "To do", ready: "Ready", running: "Running" },
     filters: "Filters",
     display: "Display",
     searchTasks: "Search tasks",
@@ -164,6 +185,12 @@ const STORY_COPY = {
     closeTaskDetails: "Close task details",
     openDetails: "Open details",
     canonicalTaskStatus: "canonical task status",
+    inspectorStatus: "Status",
+    requiredStep: "Required step",
+    run: "Run",
+    emptyColumn: "No tasks",
+    emptySelection: "Select a task to open its details.",
+    diagnosticLabels: { runs: "Runs", events: "Events", signals: "Signals", ontology: "Ontology" },
     fixture: "Storybook fixture · demo-only; no API, SSE, or mutation path.",
   },
 } as const
@@ -173,7 +200,7 @@ type StoryViewport = "desktop" | "narrow"
 type DemoTask = {
   readonly ref: string
   readonly title: string
-  readonly status: "Todo" | "Ready" | "Running"
+  readonly status: "todo" | "ready" | "running"
   readonly metadata?: string
   readonly steps?: string
 }
@@ -182,14 +209,14 @@ const DEMO_COLUMNS: readonly { name: string; tasks: readonly DemoTask[] }[] = [
   {
     name: "Todo",
     tasks: [
-      { ref: "#505", title: "Design system foundations", status: "Todo", metadata: "Waiting on dependency" },
-      { ref: "#506", title: "Projects shell and overview", status: "Todo", metadata: "Waiting on dependency" },
-      { ref: "#507", title: "Tasks multi-view workspace", status: "Todo", metadata: "Waiting on dependency" },
-      { ref: "#508", title: "Web/Desktop acceptance", status: "Todo", metadata: "Waiting on dependency" },
+      { ref: "#505", title: "Design system foundations", status: "todo", metadata: "Waiting on dependency" },
+      { ref: "#506", title: "Projects shell and overview", status: "todo", metadata: "Waiting on dependency" },
+      { ref: "#507", title: "Tasks multi-view workspace", status: "todo", metadata: "Waiting on dependency" },
+      { ref: "#508", title: "Web/Desktop acceptance", status: "todo", metadata: "Waiting on dependency" },
     ],
   },
-  { name: "Ready", tasks: [{ ref: "#503", title: "Plane-only Web UI", status: "Ready", steps: "0/5 steps" }] },
-  { name: "Running", tasks: [{ ref: "#504", title: "Storybook component lab", status: "Running", steps: "0/1 step" }] },
+  { name: "Ready", tasks: [{ ref: "#503", title: "Plane-only Web UI", status: "ready", steps: "0/5 steps" }] },
+  { name: "Running", tasks: [{ ref: "#504", title: "Storybook component lab", status: "running", steps: "0/1 step" }] },
   { name: "Review", tasks: [] },
   { name: "Done", tasks: [] },
   { name: "Blocked", tasks: [] },
@@ -200,7 +227,7 @@ const DIAGNOSTICS = [
   { id: "events", label: "Events", icon: "activity" as const },
   { id: "signals", label: "Signals", icon: "activity" as const },
   { id: "ontology", label: "Ontology", icon: "activity" as const },
-]
+] as const
 
 type NavigationCanvasProps = {
   readonly initialSurface: ProjectSurface
@@ -272,7 +299,6 @@ function NavigationCanvas({ initialSurface, viewport, locale = "zh", theme = "li
           onSurfaceSelect={openSurface}
           onSectionSelect={(section) => {
             if (section === "projects") setSurface("projects")
-            if (section === "home") setSurface("projects")
           }}
           labels={labels}
           drawerId="navigation-projects-sidebar"
@@ -297,7 +323,7 @@ function NavigationCanvas({ initialSurface, viewport, locale = "zh", theme = "li
           {showingSettings ? <SettingsSurface copy={copy} /> : null}
           {!showingSettings && surface === "projects" ? <ProjectsCollection density={density} copy={copy} onDensityChange={setDensity} onOpenProject={openProject} /> : null}
           {!showingSettings && surface === "overview" ? <ProjectOverview copy={copy} project={currentProject} onOpenTasks={() => setSurface("tasks")} /> : null}
-          {!showingSettings && surface === "tasks" ? <TasksWorkspace copy={copy} /> : null}
+          {!showingSettings && surface === "tasks" ? <TasksWorkspace copy={copy} locale={locale} /> : null}
         </main>
       </div>
     </div>
@@ -330,7 +356,7 @@ function ProjectsCollection({
   readonly onOpenProject: (project: NavigationProject) => void
 }) {
   const [query, setQuery] = useState("")
-  const filteredProjects = DEMO_PROJECTS.filter((project) => `${project.name} ${project.slug} ${project.description}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  const filteredProjects = ACTIVE_PROJECTS.filter((project) => `${project.name} ${project.slug} ${project.description}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
 
   return (
     <section className={styles.storySurfaceContent} aria-labelledby="projects-collection-title">
@@ -414,9 +440,9 @@ function ProjectOverview({ project, onOpenTasks, copy }: { readonly project: Nav
           <ul className={styles.storyDiagnosticsList}>
             {DIAGNOSTICS.map((item) => (
               <li key={item.id}>
-                <button type="button" className={styles.storyDiagnosticsItem} data-demo-only="true">
+                <button type="button" className={styles.storyDiagnosticsItem} data-demo-only="true" disabled title={copy.detailsDeferred}>
                   <NavigationIcon name={item.icon} size={18} />
-                  <span>{item.label}</span>
+                  <span>{copy.diagnosticLabels[item.id]}</span>
                   <NavigationIcon name="chevron-right" size={15} />
                 </button>
               </li>
@@ -428,15 +454,15 @@ function ProjectOverview({ project, onOpenTasks, copy }: { readonly project: Nav
   )
 }
 
-function TasksWorkspace({ copy }: { readonly copy: (typeof STORY_COPY)[StoryLocale] }) {
-  const [view, setView] = useState<"Board" | "List" | "Table" | "Map">("Board")
+function TasksWorkspace({ copy, locale }: { readonly copy: (typeof STORY_COPY)[StoryLocale]; readonly locale: StoryLocale }) {
+  const view = "board" as const
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const selectedTask = DEMO_COLUMNS[2].tasks[0]
-  const views: readonly { name: typeof view; icon: "grid" | "list" | "table" | "map" }[] = [
-    { name: "Board", icon: "grid" },
-    { name: "List", icon: "list" },
-    { name: "Table", icon: "table" },
-    { name: "Map", icon: "map" },
+  const views: readonly { id: typeof view | "list" | "table" | "map"; label: string; icon: "grid" | "list" | "table" | "map" }[] = [
+    { id: "board", label: copy.boardView, icon: "grid" },
+    { id: "list", label: copy.listView, icon: "list" },
+    { id: "table", label: copy.tableView, icon: "table" },
+    { id: "map", label: copy.mapView, icon: "map" },
   ]
 
   return (
@@ -447,36 +473,38 @@ function TasksWorkspace({ copy }: { readonly copy: (typeof STORY_COPY)[StoryLoca
           <div className={styles.storyViewSwitch} role="tablist" aria-label={copy.taskViews}>
             {views.map((item) => (
               <button
-                key={item.name}
+                key={item.id}
                 type="button"
-                className={`${styles.storyViewButton} ${view === item.name ? styles.storyViewButtonActive : ""}`}
+                className={`${styles.storyViewButton} ${view === item.id ? styles.storyViewButtonActive : ""}`}
                 role="tab"
-                aria-selected={view === item.name}
-                onClick={() => setView(item.name)}
+                aria-selected={view === item.id}
+                aria-disabled="true"
+                disabled
+                title={copy.tasksDeferred}
               >
                 <NavigationIcon name={item.icon} size={16} />
-                <span>{item.name}</span>
+                <span>{item.label}</span>
               </button>
             ))}
           </div>
         </div>
         <div className={styles.storyTaskToolbarGroup}>
-          <button type="button" className={styles.storyToolbarButton}><NavigationIcon name="list" size={16} />{copy.filters}</button>
-          <button type="button" className={styles.storyToolbarButton}><NavigationIcon name="grid" size={16} />{copy.display}</button>
-          <button type="button" className={styles.storyToolbarButton} aria-label={copy.searchTasks}><NavigationIcon name="search" size={17} /></button>
+          <button type="button" className={styles.storyToolbarButton} disabled title={copy.tasksDeferred}><NavigationIcon name="list" size={16} />{copy.filters}</button>
+          <button type="button" className={styles.storyToolbarButton} disabled title={copy.tasksDeferred}><NavigationIcon name="grid" size={16} />{copy.display}</button>
+          <button type="button" className={styles.storyToolbarButton} aria-label={copy.searchTasks} disabled title={copy.tasksDeferred}><NavigationIcon name="search" size={17} /></button>
         </div>
       </div>
       <div className={styles.storyTaskFilterBar}>
         <span className={styles.storyFilterChip}><NavigationIcon name="list" size={15} />{copy.allTasks} <NavigationIcon name="close" size={13} /></span>
-        <span className={styles.storyTaskMeta}>{view} view · {copy.canonicalTaskStatus}</span>
+        <span className={styles.storyTaskMeta}>{copy.boardView} · {copy.canonicalTaskStatus}</span>
       </div>
       <div className={styles.storyTaskBody}>
-        <div className={styles.storyBoardScroller} aria-label="Task board region">
+        <div className={styles.storyBoardScroller} aria-label={copy.boardView}>
           <div className={styles.storyBoardColumns}>
             {DEMO_COLUMNS.map((column) => (
               <section key={column.name} className={styles.storyBoardColumn} aria-labelledby={`task-column-${column.name.toLocaleLowerCase()}`}>
                 <h2 id={`task-column-${column.name.toLocaleLowerCase()}`} className={styles.storyBoardColumnHeader}>
-                  <span>{column.name}</span><span className={styles.storyBoardColumnCount}>{column.tasks.length}</span>
+                  <span>{copy.taskColumns[column.name.toLocaleLowerCase() as keyof typeof copy.taskColumns]}</span><span className={styles.storyBoardColumnCount}>{column.tasks.length}</span>
                 </h2>
                 {column.tasks.length > 0 ? column.tasks.map((task) => (
                   <button
@@ -487,11 +515,11 @@ function TasksWorkspace({ copy }: { readonly copy: (typeof STORY_COPY)[StoryLoca
                   >
                     <span className={styles.storyTaskRef}>{task.ref}</span>
                     <span className={styles.storyTaskTitle}>{task.title}</span>
-                    <span className={`${styles.storyTaskBadge} ${task.status === "Ready" ? styles.storyTaskBadgeReady : task.status === "Running" ? styles.storyTaskBadgeRunning : ""}`}>{task.status}</span>
-                    {task.metadata ? <span className={styles.storyTaskMeta}>{task.metadata}</span> : null}
-                    {task.steps ? <span className={styles.storyTaskMeta}>{task.steps}</span> : null}
+                    <span className={`${styles.storyTaskBadge} ${task.status === "ready" ? styles.storyTaskBadgeReady : task.status === "running" ? styles.storyTaskBadgeRunning : ""}`}>{copy.taskStatuses[task.status]}</span>
+                    {task.metadata ? <span className={styles.storyTaskMeta}>{locale === "zh" && task.metadata === "Waiting on dependency" ? "等待依赖" : task.metadata}</span> : null}
+                    {task.steps ? <span className={styles.storyTaskMeta}>{locale === "zh" ? task.steps.replace(" steps", " 步骤").replace(" step", " 步骤") : task.steps}</span> : null}
                   </button>
-                )) : <p className={styles.storyTaskMeta}>0 tasks</p>}
+                )) : <p className={styles.storyTaskMeta}>{copy.emptyColumn}</p>}
               </section>
             ))}
           </div>
@@ -503,14 +531,14 @@ function TasksWorkspace({ copy }: { readonly copy: (typeof STORY_COPY)[StoryLoca
               <button type="button" className={styles.storyInspectorClose} aria-label={copy.closeTaskDetails} onClick={() => setInspectorOpen(false)}><NavigationIcon name="close" size={19} /></button>
             </div>
             <dl className={styles.storyInspectorRows}>
-              <div className={styles.storyInspectorRow}><dt>Status</dt><dd><span className={`${styles.storyTaskBadge} ${styles.storyTaskBadgeRunning}`}>Running</span></dd></div>
-              <div className={styles.storyInspectorRow}><dt>Required step</dt><dd>Build a static Storybook</dd></div>
-              <div className={styles.storyInspectorRow}><dt>Run</dt><dd><code className={styles.storyInspectorRun}>r_01KZRMHQA8</code></dd></div>
+              <div className={styles.storyInspectorRow}><dt>{copy.inspectorStatus}</dt><dd><span className={`${styles.storyTaskBadge} ${styles.storyTaskBadgeRunning}`}>{copy.taskStatuses.running}</span></dd></div>
+              <div className={styles.storyInspectorRow}><dt>{copy.requiredStep}</dt><dd>Build a static Storybook</dd></div>
+              <div className={styles.storyInspectorRow}><dt>{copy.run}</dt><dd><code className={styles.storyInspectorRun}>r_01KZRMHQA8</code></dd></div>
             </dl>
-            <button type="button" className={styles.storyInspectorButton}>{copy.openDetails}</button>
+            <button type="button" className={styles.storyInspectorButton} disabled title={copy.tasksDeferred}>{copy.openDetails}</button>
           </aside>
         ) : (
-          <div className={styles.storyEmptyNotice}>Select a task to open its details.</div>
+          <div className={styles.storyEmptyNotice}>{copy.emptySelection}</div>
         )}
       </div>
       <p className={styles.storyFixtureNote}>{copy.tasksDeferred}</p>
@@ -547,19 +575,18 @@ function storyCanvas(initialSurface: ProjectSurface, viewport: StoryViewport, co
 }
 
 async function drawerPlay({ canvasElement }: { readonly canvasElement: HTMLElement }): Promise<void> {
-  const trigger = canvasElement.querySelector<HTMLButtonElement>('[data-testid="resource-header-menu"]')
-  if (trigger === null) throw new Error("narrow navigation story is missing its menu trigger")
-  trigger.click()
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-  const drawer = canvasElement.querySelector<HTMLElement>('[data-testid="projects-sidebar"]')
-  if (drawer?.getAttribute("data-open") !== "true" || document.activeElement === trigger) {
-    throw new Error("drawer play did not open and move focus into the sidebar")
+  const canvas = within(canvasElement)
+  const cycle = async () => {
+    const trigger = canvas.getByTestId("resource-header-menu")
+    await userEvent.click(trigger)
+    await waitFor(() => expect(canvas.getByTestId("projects-sidebar-close")).toHaveFocus())
+    await userEvent.keyboard("{Escape}")
+    await waitFor(() => expect(canvas.getByTestId("resource-header-menu")).toHaveFocus())
   }
-  document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-  if (drawer.getAttribute("data-open") !== "false" || document.activeElement !== trigger) {
-    throw new Error("drawer play did not close and return focus to its trigger")
-  }
+
+  // Repeat the real focus/click/Escape cycle to catch StrictMode effect replays.
+  await cycle()
+  await cycle()
 }
 
 export const ProjectsCollectionDesktop: Story = {

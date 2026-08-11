@@ -1,0 +1,14 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop north-star UI reference, 1440×900 landscape
+Primary request: Create a completely original P1 concept for the expert "KANBAN TOOL" compact List view with a contextual command palette open.
+Input images: Image 1 and Image 2 are reference-only incumbent screenshots. Generate a new mockup; do not edit them and do not copy another product's UI.
+Mode: Operate — scan many tasks and navigate or invoke an existing typed action quickly.
+Structure: same compact 216px left rail and consolidated board header; segmented view control with "列表" active; dedicated filter chips row; dense 44–48px table rows underneath; centered 600px command palette above a lightly dimmed but still readable list.
+Exact header labels: "默认看板", "看板", "列表", "关系图", "运行记录", "事件", "筛选", "新建任务".
+Filter chips: "状态：READY + RUNNING", "优先级：P0 + P1", "未归档", "清除全部".
+Table columns: "任务", "状态", "优先级", "执行者", "Lease", "更新时间"; show 10–12 synthetic rows with stable alignment, sticky task column, semantic status dots, no checkboxes.
+Command palette exact text: small badge "P1 概念"; search placeholder "搜索任务、视图或运行记录"; groups "跳转" and "当前任务操作"; results "打开任务 default#184", "切换到看板", "查看失败运行", "新建任务"; footer hints "↑↓ 选择", "Enter 打开", "Esc 关闭".
+Visual world: identical cool neutral Astryx identity, graphite text, subtle layered surfaces, restrained cobalt selection/action accent, amber only for risk, red only for error, green only for done; workhorse sans with monospace IDs; tight but breathable density; clear keyboard focus.
+Composition: flat desktop product screenshot, edge-to-edge interface, no browser frame, no device mockup.
+Constraints: clearly label this as a future concept, not current capability. Palette actions must be context-aware and limited to existing product facts; no generic arbitrary status transition, no bulk-selection checkbox, no team/workspace entities.
+Avoid: Plane branding, copied Plane UI, purple brand palette, gradients, glassmorphism, SaaS collaboration chrome, avatars, dashboards, decorative charts, random unreadable copy, watermark.

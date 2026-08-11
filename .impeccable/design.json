@@ -1,0 +1,782 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-11T07:19:51Z",
+  "title": "Design System: kanban-tool",
+  "extensions": {
+    "colorMeta": {
+      "background-surface": {
+        "role": "neutral",
+        "displayName": "工作表面",
+        "canonical": "light-dark(#ffffff, #262626)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "background-body": {
+        "role": "neutral",
+        "displayName": "暖灰画布",
+        "canonical": "light-dark(#f1f1f1, #1b1b1b)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "background-card": {
+        "role": "neutral",
+        "displayName": "卡片表面",
+        "canonical": "light-dark(#ffffff, #1b1b1b)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "background-popover": {
+        "role": "neutral",
+        "displayName": "弹出层表面",
+        "canonical": "light-dark(#ffffff, #1b1b1b)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "background-muted": {
+        "role": "neutral",
+        "displayName": "弱化表面",
+        "canonical": "light-dark(#f1f1f1, #1b1b1b)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "accent-graphite": {
+        "role": "primary",
+        "displayName": "石墨强调色",
+        "canonical": "light-dark(#262626, #ebebeb)",
+        "tonalRamp": [
+          "oklch(18% 0 0)",
+          "oklch(27% 0 0)",
+          "oklch(36% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(66% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "accent-muted": {
+        "role": "neutral",
+        "displayName": "石墨强调色调",
+        "canonical": "light-dark(#f1f1f1, #262626)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "neutral": {
+        "role": "neutral",
+        "displayName": "中性叠加层",
+        "canonical": "light-dark(#0000000F, #FFFFFF1A)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "overlay": {
+        "role": "neutral",
+        "displayName": "模态遮罩",
+        "canonical": "light-dark(#00000080, #000000CC)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "overlay-hover": {
+        "role": "neutral",
+        "displayName": "悬停叠加层",
+        "canonical": "light-dark(#0000000D, #FFFFFF0D)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "overlay-pressed": {
+        "role": "neutral",
+        "displayName": "按下叠加层",
+        "canonical": "light-dark(#0000001A, #FFFFFF1A)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "主石墨文本",
+        "canonical": "light-dark(#171717, #fafafa)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "次级石墨文本",
+        "canonical": "light-dark(#525252, #a3a3a3)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "text-disabled": {
+        "role": "neutral",
+        "displayName": "禁用文本",
+        "canonical": "light-dark(#a3a3a3, #525252)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "text-accent": {
+        "role": "primary",
+        "displayName": "强调色文本",
+        "canonical": "light-dark(#262626, #ebebeb)",
+        "tonalRamp": [
+          "oklch(18% 0 0)",
+          "oklch(27% 0 0)",
+          "oklch(36% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(66% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "on-accent": {
+        "role": "neutral",
+        "displayName": "强调色上的文本",
+        "canonical": "light-dark(#ffffff, #171717)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "成功",
+        "canonical": "light-dark(#007004, #9fe59b)",
+        "tonalRamp": [
+          "oklch(18% 0.09 145)",
+          "oklch(28% 0.11 145)",
+          "oklch(38% 0.12 145)",
+          "oklch(48% 0.13 145)",
+          "oklch(58% 0.12 145)",
+          "oklch(68% 0.10 145)",
+          "oklch(80% 0.08 145)",
+          "oklch(93% 0.04 145)"
+        ]
+      },
+      "error": {
+        "role": "semantic",
+        "displayName": "错误",
+        "canonical": "light-dark(#a50c25, #ffc6c1)",
+        "tonalRamp": [
+          "oklch(18% 0.10 25)",
+          "oklch(28% 0.13 25)",
+          "oklch(38% 0.15 25)",
+          "oklch(48% 0.16 25)",
+          "oklch(58% 0.15 25)",
+          "oklch(68% 0.12 25)",
+          "oklch(80% 0.08 25)",
+          "oklch(93% 0.04 25)"
+        ]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "警告",
+        "canonical": "light-dark(#745b00, #fdcf4f)",
+        "tonalRamp": [
+          "oklch(22% 0.08 90)",
+          "oklch(32% 0.11 90)",
+          "oklch(42% 0.13 90)",
+          "oklch(52% 0.14 90)",
+          "oklch(62% 0.14 90)",
+          "oklch(72% 0.12 90)",
+          "oklch(84% 0.09 90)",
+          "oklch(95% 0.04 90)"
+        ]
+      },
+      "success-muted": {
+        "role": "semantic",
+        "displayName": "弱化成功色",
+        "canonical": "light-dark(#c5e5c0, #84c9803D)",
+        "tonalRamp": [
+          "oklch(18% 0.09 145)",
+          "oklch(28% 0.11 145)",
+          "oklch(38% 0.12 145)",
+          "oklch(48% 0.13 145)",
+          "oklch(58% 0.12 145)",
+          "oklch(68% 0.10 145)",
+          "oklch(80% 0.08 145)",
+          "oklch(93% 0.04 145)"
+        ]
+      },
+      "error-muted": {
+        "role": "semantic",
+        "displayName": "弱化错误色",
+        "canonical": "light-dark(#facecb, #ff9e973D)",
+        "tonalRamp": [
+          "oklch(18% 0.10 25)",
+          "oklch(28% 0.13 25)",
+          "oklch(38% 0.15 25)",
+          "oklch(48% 0.16 25)",
+          "oklch(58% 0.15 25)",
+          "oklch(68% 0.12 25)",
+          "oklch(80% 0.08 25)",
+          "oklch(93% 0.04 25)"
+        ]
+      },
+      "warning-muted": {
+        "role": "semantic",
+        "displayName": "弱化警告色",
+        "canonical": "light-dark(#f8da9d, #deb4333D)",
+        "tonalRamp": [
+          "oklch(22% 0.08 90)",
+          "oklch(32% 0.11 90)",
+          "oklch(42% 0.13 90)",
+          "oklch(52% 0.14 90)",
+          "oklch(62% 0.14 90)",
+          "oklch(72% 0.12 90)",
+          "oklch(84% 0.09 90)",
+          "oklch(95% 0.04 90)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "细线边框",
+        "canonical": "light-dark(#00000014, #FFFFFF1A)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "border-emphasized": {
+        "role": "neutral",
+        "displayName": "强调边框",
+        "canonical": "light-dark(#d4d4d4, #525252)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "skeleton": {
+        "role": "neutral",
+        "displayName": "骨架屏",
+        "canonical": "light-dark(#ebebeb, #525252)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "background-gray": {
+        "role": "neutral",
+        "displayName": "灰色徽章表面",
+        "canonical": "light-dark(#e5e5e5, var(--color-neutral))",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "text-gray": {
+        "role": "neutral",
+        "displayName": "灰色徽章文本",
+        "canonical": "light-dark(#262626, #e5e5e5)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "background-blue": {
+        "role": "semantic",
+        "displayName": "分类蓝色表面",
+        "canonical": "light-dark(#c4ddfb, #9eb7ff3D)",
+        "tonalRamp": [
+          "oklch(18% 0.08 250)",
+          "oklch(28% 0.11 250)",
+          "oklch(38% 0.14 250)",
+          "oklch(48% 0.16 250)",
+          "oklch(58% 0.15 250)",
+          "oklch(68% 0.12 250)",
+          "oklch(80% 0.08 250)",
+          "oklch(94% 0.04 250)"
+        ]
+      },
+      "text-blue": {
+        "role": "semantic",
+        "displayName": "分类蓝色文本",
+        "canonical": "light-dark(#00458c, #c7d3ff)",
+        "tonalRamp": [
+          "oklch(18% 0.08 250)",
+          "oklch(28% 0.11 250)",
+          "oklch(38% 0.14 250)",
+          "oklch(48% 0.16 250)",
+          "oklch(58% 0.15 250)",
+          "oklch(68% 0.12 250)",
+          "oklch(80% 0.08 250)",
+          "oklch(94% 0.04 250)"
+        ]
+      },
+      "info-fill": {
+        "role": "semantic",
+        "displayName": "信息徽章填充",
+        "canonical": "light-dark(#0074e2, #6d9cfe)",
+        "tonalRamp": [
+          "oklch(18% 0.08 250)",
+          "oklch(28% 0.11 250)",
+          "oklch(38% 0.14 250)",
+          "oklch(48% 0.16 250)",
+          "oklch(58% 0.15 250)",
+          "oklch(68% 0.12 250)",
+          "oklch(80% 0.08 250)",
+          "oklch(94% 0.04 250)"
+        ]
+      },
+      "info-on": {
+        "role": "neutral",
+        "displayName": "信息徽章文本",
+        "canonical": "light-dark(#ffffff, #171717)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "success-fill": {
+        "role": "semantic",
+        "displayName": "成功徽章填充",
+        "canonical": "light-dark(#198100, #64af4c)",
+        "tonalRamp": [
+          "oklch(18% 0.09 145)",
+          "oklch(28% 0.11 145)",
+          "oklch(38% 0.12 145)",
+          "oklch(48% 0.13 145)",
+          "oklch(58% 0.12 145)",
+          "oklch(68% 0.10 145)",
+          "oklch(80% 0.08 145)",
+          "oklch(93% 0.04 145)"
+        ]
+      },
+      "success-on": {
+        "role": "neutral",
+        "displayName": "成功徽章文本",
+        "canonical": "light-dark(#ffffff, #171717)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "warning-fill": {
+        "role": "semantic",
+        "displayName": "警告徽章填充",
+        "canonical": "#ffce2f",
+        "tonalRamp": [
+          "oklch(22% 0.08 90)",
+          "oklch(32% 0.11 90)",
+          "oklch(42% 0.13 90)",
+          "oklch(52% 0.14 90)",
+          "oklch(62% 0.14 90)",
+          "oklch(72% 0.12 90)",
+          "oklch(84% 0.09 90)",
+          "oklch(95% 0.04 90)"
+        ]
+      },
+      "warning-on": {
+        "role": "neutral",
+        "displayName": "警告徽章文本",
+        "canonical": "#171717",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "error-fill": {
+        "role": "semantic",
+        "displayName": "错误徽章填充",
+        "canonical": "light-dark(#e33f4a, #ff705d)",
+        "tonalRamp": [
+          "oklch(18% 0.10 25)",
+          "oklch(28% 0.13 25)",
+          "oklch(38% 0.15 25)",
+          "oklch(48% 0.16 25)",
+          "oklch(58% 0.15 25)",
+          "oklch(68% 0.12 25)",
+          "oklch(80% 0.08 25)",
+          "oklch(93% 0.04 25)"
+        ]
+      },
+      "error-on": {
+        "role": "neutral",
+        "displayName": "错误徽章文本",
+        "canonical": "light-dark(#ffffff, #171717)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(80% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "展示",
+        "purpose": "稀疏的页面级引导。"
+      },
+      "headline": {
+        "displayName": "主标题",
+        "purpose": "页面标题与主要 section heading。"
+      },
+      "title": {
+        "displayName": "标题",
+        "purpose": "board、inspector 与 panel heading。"
+      },
+      "body": {
+        "displayName": "正文",
+        "purpose": "task description、解释与辅助 prose。"
+      },
+      "label": {
+        "displayName": "标签",
+        "purpose": "button label、field label 与紧凑 navigation。"
+      },
+      "code": {
+        "displayName": "代码",
+        "purpose": "identifier、ref、hash、timestamp 与 code excerpt。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "none",
+        "value": "0 0 transparent",
+        "purpose": "普通静止 task card 与 surface 的 flat 状态。"
+      },
+      {
+        "name": "low",
+        "value": "var(--shadow-low)",
+        "purpose": "小型浮动 menu 或有意抬高的 surface。"
+      },
+      {
+        "name": "med",
+        "value": "var(--shadow-med)",
+        "purpose": "必须与邻近 content 拉开距离的临时 popover。"
+      },
+      {
+        "name": "high",
+        "value": "var(--shadow-high)",
+        "purpose": "dialog 与阻断式确认 layer。"
+      },
+      {
+        "name": "mutation-dialog",
+        "value": "0 1rem 3rem var(--color-border)",
+        "purpose": "现有 native mutation dialog treatment。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "var(--ease-standard)",
+        "purpose": "安静 state transition 使用的 Astryx easing。"
+      },
+      {
+        "name": "fast",
+        "value": "var(--duration-fast)",
+        "purpose": "button、border 与 focus state transition。"
+      },
+      {
+        "name": "medium",
+        "value": "var(--duration-medium)",
+        "purpose": "panel 与 disclosure transition。"
+      },
+      {
+        "name": "slow",
+        "value": "var(--duration-slow)",
+        "purpose": "loading 等长时 ambient feedback。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "inspector-narrow",
+        "value": "68rem",
+        "purpose": "在堆叠前收窄 Explorer inspector。"
+      },
+      {
+        "name": "settings-compact",
+        "value": "64rem",
+        "purpose": "将 Settings 从三列改为两列。"
+      },
+      {
+        "name": "single-column",
+        "value": "56rem",
+        "purpose": "将 Explorer content 与 inspector 堆叠。"
+      },
+      {
+        "name": "settings-single-column",
+        "value": "42rem",
+        "purpose": "将 Settings 改为单列。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "用于创建或确认 task 等正向 mutation。",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Create task</button>",
+      "css": ".ds-btn-primary { background: var(--color-accent); color: var(--color-on-accent); border: 1px solid transparent; border-radius: var(--radius-element); padding: var(--spacing-2) var(--spacing-3); min-height: 2rem; font-family: var(--font-family-body); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); cursor: pointer; } .ds-btn-primary:hover { background: var(--color-text-primary); } .ds-btn-primary:focus-visible { outline: 0.15rem solid var(--color-accent); outline-offset: 0.15rem; } .ds-btn-primary:active { opacity: 0.88; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "用于 retry、cancel 或 refresh 等有边界的替代 action。",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Retry</button>",
+      "css": ".ds-btn-secondary { background: var(--color-background-surface); color: var(--color-text-primary); border: 1px solid var(--color-border-emphasized); border-radius: var(--radius-element); padding: var(--spacing-2) var(--spacing-3); min-height: 2rem; font-family: var(--font-family-body); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard); cursor: pointer; } .ds-btn-secondary:hover { background: var(--color-accent-muted); border-color: var(--color-accent); } .ds-btn-secondary:focus-visible { outline: 0.15rem solid var(--color-accent); outline-offset: 0.15rem; } .ds-btn-secondary:active { background: var(--color-overlay-pressed); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "不应与 primary mutation 竞争的安静 inline action。",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\">Open details</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: var(--color-accent); border: 1px solid transparent; border-radius: var(--radius-element); padding: var(--spacing-2) var(--spacing-3); min-height: 2rem; font-family: var(--font-family-body); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); cursor: pointer; } .ds-btn-ghost:hover { background: var(--color-accent-muted); } .ds-btn-ghost:focus-visible { outline: 0.15rem solid var(--color-accent); outline-offset: 0.15rem; } .ds-btn-ghost:active { background: var(--color-overlay-pressed); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-status",
+      "description": "用于 priority、readiness 或 status 的紧凑非交互分类。",
+      "html": "<span class=\"ds-badge-status\">Ready</span>",
+      "css": ".ds-badge-status { display: inline-flex; align-items: center; min-height: 1.25rem; padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-full); background: var(--color-background-gray); color: var(--color-text-gray); font-family: var(--font-family-code); font-size: var(--font-size-sm); line-height: 1; white-space: nowrap; } .ds-badge-status:hover { filter: brightness(0.97); }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "inspector 与 Settings form 中使用的 native semantic text control。",
+      "html": "<label class=\"ds-input-field\"><span>Task ref</span><input type=\"text\" value=\"task-123\" /></label>",
+      "css": ".ds-input-field { display: grid; gap: var(--spacing-1); color: var(--color-text-primary); font-family: var(--font-family-body); font-size: var(--font-size-sm); } .ds-input-field input { min-height: 2.25rem; padding: var(--spacing-1) var(--spacing-2); border: 1px solid var(--color-border-emphasized); border-radius: var(--radius-element); background: var(--color-background-surface); color: var(--color-text-primary); font: inherit; } .ds-input-field input:hover { border-color: var(--color-accent); } .ds-input-field input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Side Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-item",
+      "description": "带可折叠 shell 与明确 selection 的常驻分组 navigation。",
+      "html": "<nav class=\"ds-side-nav\" aria-label=\"Workspace\"><a class=\"ds-side-nav-item\" href=\"#\" aria-current=\"page\">Board</a><a class=\"ds-side-nav-item\" href=\"#\">Explorer</a></nav>",
+      "css": ".ds-side-nav { display: grid; align-content: start; gap: var(--spacing-1); width: 14rem; min-height: 16rem; padding: var(--spacing-3); border-inline-end: 1px solid var(--color-border); background: var(--color-background-surface); } .ds-side-nav-item { display: flex; align-items: center; min-height: 2.25rem; padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-inner); border-inline-start: 0.2rem solid transparent; color: var(--color-text-secondary); font-family: var(--font-family-body); font-size: var(--font-size-base); text-decoration: none; transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); } .ds-side-nav-item:hover { background: var(--color-accent-muted); color: var(--color-text-primary); } .ds-side-nav-item:focus-visible { outline: 0.15rem solid var(--color-accent); outline-offset: 0.15rem; } .ds-side-nav-item[aria-current=\"page\"] { border-inline-start-color: var(--color-accent); background: var(--color-accent-muted); color: var(--color-text-primary); }"
+    },
+    {
+      "name": "Task Card",
+      "kind": "card",
+      "refersTo": "card-task",
+      "description": "以 evidence 为先、展示 task title、status 与 identifier 的 board item。",
+      "html": "<article class=\"ds-task-card\"><div class=\"ds-task-card-head\"><span class=\"ds-task-card-badge\">High</span><h3>Prepare release notes</h3></div><p>Review the durable run evidence.</p><code>task-123</code></article>",
+      "css": ".ds-task-card { display: grid; gap: var(--spacing-2); padding: var(--spacing-3); border: 1px solid var(--color-border); border-radius: var(--radius-container); background: var(--color-background-card); color: var(--color-text-primary); box-shadow: none; transition: border-color var(--duration-fast) var(--ease-standard); } .ds-task-card:hover { border-color: var(--color-accent); } .ds-task-card:focus-within { outline: 0.15rem solid var(--color-accent); outline-offset: 0.15rem; } .ds-task-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-2); } .ds-task-card-badge { padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-full); background: var(--color-warning-muted); color: var(--color-warning); font-family: var(--font-family-code); font-size: var(--font-size-sm); } .ds-task-card h3 { margin: 0; font-family: var(--font-family-heading); font-size: var(--font-size-lg); line-height: var(--text-heading-3-leading); } .ds-task-card p { margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-base); } .ds-task-card code { color: var(--color-text-secondary); font-family: var(--font-family-code); font-size: var(--font-size-sm); }"
+    },
+    {
+      "name": "Task Inspector",
+      "kind": "custom",
+      "refersTo": "task-inspector",
+      "description": "用于呈现事实、readiness 与 mutation action 的右侧 surfaced detail region。",
+      "html": "<aside class=\"ds-task-inspector\"><h2>Task details</h2><p class=\"ds-task-inspector-meta\">task-123</p><button class=\"ds-task-inspector-action\" type=\"button\">Save</button></aside>",
+      "css": ".ds-task-inspector { display: grid; align-content: start; gap: var(--spacing-3); width: min(24rem, 100%); padding: var(--spacing-4); border-inline-start: 1px solid var(--color-border); background: var(--color-background-surface); color: var(--color-text-primary); } .ds-task-inspector h2 { margin: 0; font-family: var(--font-family-heading); font-size: var(--font-size-xl); line-height: var(--text-heading-2-leading); } .ds-task-inspector-meta { margin: 0; color: var(--color-text-secondary); font-family: var(--font-family-code); font-size: var(--font-size-sm); } .ds-task-inspector-action { justify-self: start; min-height: 2rem; padding: var(--spacing-2) var(--spacing-3); border: 1px solid var(--color-border-emphasized); border-radius: var(--radius-element); background: var(--color-background-surface); color: var(--color-text-primary); font: inherit; cursor: pointer; } .ds-task-inspector-action:hover { border-color: var(--color-accent); background: var(--color-accent-muted); } .ds-task-inspector-action:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Task List Table",
+      "kind": "custom",
+      "refersTo": "task-list-table",
+      "description": "保留面向机器的 ref 与 date 的紧凑 evidence table。",
+      "html": "<table class=\"ds-task-list-table\"><thead><tr><th>Task</th><th>Status</th><th>Ref</th></tr></thead><tbody><tr><td>Prepare release notes</td><td>Ready</td><td><code>task-123</code></td></tr></tbody></table>",
+      "css": ".ds-task-list-table { width: 100%; min-width: 50rem; border-collapse: collapse; background: var(--color-background-surface); color: var(--color-text-primary); font-family: var(--font-family-body); font-size: var(--font-size-base); } .ds-task-list-table th { position: sticky; top: 0; padding: var(--spacing-2) var(--spacing-1); border-block-end: 1px solid var(--color-border-emphasized); background: var(--color-background-body); color: var(--color-text-secondary); text-align: start; font-weight: var(--font-weight-semibold); } .ds-task-list-table td { padding: var(--spacing-2) var(--spacing-1); border-block-end: 1px solid var(--color-border); } .ds-task-list-table tbody tr:hover { background: var(--color-accent-muted); } .ds-task-list-table code { font-family: var(--font-family-code); font-size: var(--font-size-sm); }"
+    },
+    {
+      "name": "Mutation Dialog",
+      "kind": "custom",
+      "refersTo": "mutation-dialog",
+      "description": "用于 create、save、retry 与 destructive maintenance action 的 native modal confirmation。",
+      "html": "<dialog class=\"ds-mutation-dialog\" open><form method=\"dialog\"><h2>Confirm change</h2><p>This action writes the canonical task state.</p><div class=\"ds-mutation-dialog-actions\"><button class=\"ds-btn-secondary\" value=\"cancel\">Cancel</button><button class=\"ds-btn-primary\" value=\"confirm\">Confirm</button></div></form></dialog>",
+      "css": ".ds-mutation-dialog { width: min(32rem, calc(100vw - 2rem)); max-height: min(90dvh, 42rem); padding: var(--spacing-5); border: 1px solid var(--color-border-emphasized); border-radius: var(--radius-container); background: var(--color-background-popover); color: var(--color-text-primary); box-shadow: 0 1rem 3rem var(--color-border); } .ds-mutation-dialog::backdrop { background: rgb(0 0 0 / 0.45); } .ds-mutation-dialog h2 { margin: 0 0 var(--spacing-2); font-family: var(--font-family-heading); font-size: var(--font-size-xl); line-height: var(--text-heading-2-leading); } .ds-mutation-dialog p { margin: 0; color: var(--color-text-secondary); } .ds-mutation-dialog-actions { display: flex; justify-content: flex-end; gap: var(--spacing-2); margin-block-start: var(--spacing-4); } .ds-mutation-dialog button { min-height: 2rem; padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-element); font: inherit; cursor: pointer; } .ds-mutation-dialog button:focus-visible { outline: 0.15rem solid var(--color-accent); outline-offset: 0.15rem; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Local Workbench",
+    "overview": "`kanban-tool` 是一个本地优先的操作界面，用于检查、认领、运行和维护持久工作项。视觉语言应当平静、精确、紧凑：信息近在手边，操作含义明确，界面为证据留出空间而不是堆叠装饰。当前实现采用 Astryx `neutral` 主题 `0.3.0`，以石墨强调色、暖灰画布、白色工作表面和安静的细线边框为基线。\n\n这个系统是一次只由一个人操作的工作台，不是协作动态流，也不是营销海报。任务事实、标识符、就绪信号和变更结果通过层次、间距和语义状态颜色保持清晰。已批准的 Plane/cobalt mockup 只是未来视觉参考；它们不会给当前 Astryx neutral 基线增加 cobalt token。",
+    "keyCharacteristics": [
+      "安静的本地优先操作界面，操作入口明确。",
+      "暖灰画布与白色表面上的石墨中性色对比。",
+      "证据优先的层次：任务事实、标识符与状态始终可见。",
+      "静止表面保持扁平；只有必须浮起的层或需要确认的状态才使用深度。"
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "使用 `--color-accent` 表达操作和焦点。success、warning、error 与分类颜色只保留给各自的语义；不要把已批准的未来 cobalt mock 引入当前操作 token。",
+        "section": "colors"
+      },
+      {
+        "name": "The Identifier Rule",
+        "body": "task ID、ref、hash、timestamp 和 code excerpt 必须使用 `--font-family-code` 字体栈；解释性文字保持 Figtree，让证据与解释在视觉上清晰分开。",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-by-Default Rule",
+        "body": "surface 在静止时保持扁平。只有 surface 浮在内容上方或 modal state 需要分隔时才添加 shadow；绝不要把 elevation 当作普通 task card 的装饰。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "使用 graphite `--color-accent` 表达 action、focus、selected tab 和 active edge；semantic color 只表达 status。",
+      "将 identifier、ref、hash 和 timestamp 保持在 Astryx code stack 中。",
+      "在普通静止 surface 上使用 1px hairline、Astryx radius scale 与 `Card elevation=\"none\"`。",
+      "保留 strict CSP 所要求的 static Astryx CSS import order 与 native semantic fallback path。"
+    ],
+    "donts": [
+      "将 approved future mockup 的 cobalt value 或 Plane-specific chrome 复制到当前 Astryx neutral token set。",
+      "添加 SaaS collaboration chrome、装饰性 dashboard ornament 或第二个 action accent。",
+      "给普通 task card 添加 resting shadow，也不要把 badge 当作 interactive control。",
+      "在当前 web surface 引入 Tailwind、Radix、shadcn、runtime style injection 或 inline `<style>` block。"
+    ]
+  }
+}

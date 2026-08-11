@@ -1,0 +1,12 @@
+Use case: ui-mockup
+Asset type: revised high-fidelity desktop north-star UI reference, 1586×992 landscape
+Primary request: Generate a new original v2 of the approved "KANBAN TOOL" board overview that makes switching between many local projects unmistakable while preserving the rest of the approved composition.
+Input images: Image 1 is the primary approved visual reference. Preserve its palette, typography, card density, five-column board, filter row, icon weight, restrained cobalt focus treatment, and overall proportions. Generate a new screen; do not edit pixels.
+Product truth: the user-facing word "项目" maps to the product's existing canonical board selector. This is a local-first, single-user board switch, not a workspace, organization, team, or second domain model.
+Required shell change: beneath the "KANBAN TOOL" wordmark in the global left rail, add a compact full-width project switcher before navigation. It has a small label "当前项目", a small local-device glyph, selected name "kanban-tool", monospace slug "default", a tiny neutral badge "本机", and a chevron. The control is obvious, keyboard-focusable, but visually calm.
+Main context: replace the ambiguous large title "默认看板" with "kanban-tool"; below it show a restrained breadcrumb/subtitle "项目看板 · default". Keep exact view tabs "看板", "列表", "关系图", "运行记录", "事件", plus "筛选" and "新建任务".
+Board body: keep five compact columns "READY 4", "RUNNING 2", "BLOCKED 1", "REVIEW 3", "DONE 8", realistic synthetic Chinese task titles, compact cards, one selected card with quick actions, and the same dedicated filter row.
+Visual world: cool off-white Astryx canvas, white layered surfaces, graphite typography, hairline borders, one restrained cobalt action/focus accent, amber only for lease/risk, red only for blocked/error, green only for done. Workhorse sans and monospace IDs.
+Composition: edge-to-edge flat desktop product screen, no browser/device frame. The project switcher must be visible above the fold on every route without stealing focus from the board.
+Constraints: no "新建项目" action in this read-only selector concept; no workspace, teamspace, organization, members, avatars, roles, permissions, cloud account, sync status, collaboration presence, cycles, modules, epics, roadmaps, analytics, or custom workflow. Switching projects is global navigation; task status remains canonical per board.
+Avoid: Plane branding, logo, assets, copied Plane layout, purple branding, gradients, glassmorphism, oversized rounded cards, bento tiles, decorative illustration, watermark.

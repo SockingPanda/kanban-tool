@@ -1,0 +1,15 @@
+{
+  "kind": "ui-mockup",
+  "surface": "list-command-palette",
+  "approved": true,
+  "approval_source": "user",
+  "approval_note": "用户将其余视觉决策委托给当前方向；该图仅批准为 P1 概念。",
+  "implementation_priority": "P1",
+  "capability_status": "concept_only",
+  "shell_reference": "01-board-overview-v2.png",
+  "prompt_file": "03-list-command-palette.prompt.txt",
+  "source_images": [
+    "apps/web/tests/a11y-visual.spec.ts-snapshots/board-ready-chromium-linux.png",
+    "apps/web/tests/a11y-visual.spec.ts-snapshots/inspector-ready-chromium-linux.png"
+  ]
+}

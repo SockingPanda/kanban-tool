@@ -1,0 +1,14 @@
+{
+  "kind": "ui-mockup",
+  "surface": "task-side-peek",
+  "approved": true,
+  "approval_source": "user",
+  "approval_note": "用户批准整体详情方向；实现时继承 v2 全局项目切换壳。",
+  "implementation_priority": "P0",
+  "shell_reference": "01-board-overview-v2.png",
+  "prompt_file": "02-task-side-peek.prompt.txt",
+  "source_images": [
+    ".impeccable/mocks/plane-adaptation/01-board-overview.png",
+    "apps/web/tests/a11y-visual.spec.ts-snapshots/inspector-ready-chromium-linux.png"
+  ]
+}

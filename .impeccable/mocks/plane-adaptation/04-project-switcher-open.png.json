@@ -1,0 +1,12 @@
+{
+  "kind": "ui-mockup",
+  "surface": "project-switcher-open",
+  "approved": true,
+  "approval_source": "user",
+  "approval_note": "用户明确要求支持并展示多个项目之间的切换。",
+  "implementation_priority": "P0",
+  "prompt_file": "04-project-switcher-open.prompt.txt",
+  "source_images": [
+    ".impeccable/mocks/plane-adaptation/01-board-overview.png"
+  ]
+}

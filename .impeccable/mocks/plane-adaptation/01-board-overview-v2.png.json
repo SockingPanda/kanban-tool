@@ -1,0 +1,12 @@
+{
+  "kind": "ui-mockup",
+  "surface": "board-overview-with-project-switcher",
+  "approved": true,
+  "approval_source": "user",
+  "approval_note": "用户批准整体方向，并要求把多项目切换作为全局能力明确呈现。",
+  "implementation_priority": "P0",
+  "prompt_file": "01-board-overview-v2.prompt.txt",
+  "source_images": [
+    ".impeccable/mocks/plane-adaptation/01-board-overview.png"
+  ]
+}

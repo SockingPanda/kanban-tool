@@ -1,0 +1,11 @@
+{
+  "kind": "ui-mockup",
+  "surface": "board-overview",
+  "approved": false,
+  "superseded_by": "01-board-overview-v2.png",
+  "prompt_file": "01-board-overview.prompt.txt",
+  "source_images": [
+    "apps/web/tests/a11y-visual.spec.ts-snapshots/board-ready-chromium-linux.png",
+    "apps/web/tests/a11y-visual.spec.ts-snapshots/inspector-ready-chromium-linux.png"
+  ]
+}

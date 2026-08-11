@@ -1,0 +1,15 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop interaction reference, 1586×992 landscape
+Primary request: Create a new original "KANBAN TOOL" screen showing the approved global project switcher open over the compact board.
+Input images: Image 1 is the primary approved visual reference for all visual language and board composition. Generate a new screen, not a pixel edit.
+Product truth: "项目" is the user-facing label for the existing canonical board selector. Everything is local-first and single-user. This is not a workspace/team picker and does not introduce a new product entity.
+Shared shell: preserve the approved cool-neutral board, five compact columns, filter row, left rail, cobalt selection accent, typography, spacing, and card density. At the top of the left rail, under "KANBAN TOOL", show the project control with "当前项目", selected "kanban-tool", slug "default", badge "本机", and chevron.
+Open interaction: anchor a 360px project-switcher popover directly beneath that control, floating above the board with a hairline border and restrained raised shadow. The rail and switcher remain visually connected; the board stays readable behind it.
+Exact popover text: heading "切换项目"; search placeholder "搜索项目"; section "最近项目"; section "全部项目"; footer hints "↑↓ 选择", "Enter 切换", "Esc 关闭".
+Project rows, synthetic examples: "kanban-tool" with slug "default" and active check; "wiki" with slug "knowledge"; "模型训练" with slug "ml-lab"; "基础设施" with slug "infra"; "个人实验" with slug "sandbox". Each row has a simple local-project glyph, project name, monospace slug, and optional muted last-opened time such as "刚刚" or "12 分钟前". No avatar, member count, organization, permission, or cloud icon.
+State design: the active project row has a subtle cobalt tint and checkmark; keyboard focus is visible on another row; search field is clearly focused. Show a quiet empty-search affordance only implicitly, not as another panel. The popover has enough height for many projects and implies scrolling.
+Behavioral implication: selection changes the canonical board/URL and replaces the active board session. It does not keep multiple live boards, merge cross-project tasks, or retain invalid task selection.
+Visual world: cool off-white/white layered surfaces, graphite text, restrained cobalt, amber/red/green only for semantics, workhorse sans, monospace slugs, compact 8px rhythm.
+Composition: edge-to-edge flat desktop product screen, no browser or device frame.
+Constraints: read-only switcher; no "新建项目", workspace, teamspace, organization, account switcher, invite, members, avatars, roles, permissions, cloud sync, collaboration presence, cycles, modules, epics, analytics, or custom workflow.
+Avoid: Plane branding or assets, copied Plane project picker, purple palette, gradients, glassmorphism, giant modal, dashboard tiles, decorative art, watermark.

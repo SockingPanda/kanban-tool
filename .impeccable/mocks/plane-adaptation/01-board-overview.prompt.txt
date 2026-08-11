@@ -1,0 +1,14 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop north-star UI reference, 1440×900 landscape
+Primary request: Create a completely original redesign concept for the local-first single-user product "KANBAN TOOL". This is the main Kanban board overview.
+Input images: Image 1 and Image 2 are reference-only incumbent screenshots showing real product structure and constraints. Generate a new mockup; do not edit pixels, do not copy their layout verbatim, and do not reproduce another product's branding.
+Mode: Operate — expert work queue, fast scanning, calm and precise.
+Structure, in order: a compact 216px left application rail; one consolidated board context header; a tight horizontal view switcher; a dedicated active-filter row; then five full-height board columns with multiple compact task cards.
+Sidebar exact labels: "KANBAN TOOL", "看板", "信号", "本体", "健康", "维护", "设置".
+Header exact labels: "默认看板", "看板", "列表", "关系图", "运行记录", "事件", "筛选", "新建任务".
+Columns: "READY 4", "RUNNING 2", "BLOCKED 1", "REVIEW 3", "DONE 8".
+Cards: compact 100–128px cards, clear task ID and one-line Chinese title, P0/P1/P2 badge, at most two small labels, one concise readiness/lease/blocker line, restrained hover/focus quick actions on one selected card. Use realistic synthetic tasks such as "收敛 Web 任务卡信息密度", "补齐失败状态的重试入口", "校准 SSE 恢复边界", "验证 Desktop package".
+Visual world: preserve the incumbent Astryx neutral identity but elevate it—cool off-white canvas, white layered surfaces, graphite typography, hairline borders, subtle shadow only on the active object, one restrained cobalt action accent, amber for lease/risk, red only for blocked/error, green only for done. Workhorse sans typography, small monospace IDs, sharp hierarchy, compact rhythm, accessible focus rings.
+Composition: straight-on flat desktop product screenshot, edge-to-edge interface, no browser frame, no device mockup.
+Constraints: this is a communication comp, not a marketing poster. Show more task titles above the fold than the incumbent. Status and blocker meaning must remain readable. All secondary hover actions also have visible focus/menu affordance. No workspace, avatars, team members, comments, cycles, modules, epics, roadmaps, analytics, SaaS chrome, collaboration indicators, or custom workflow concepts.
+Avoid: Plane branding, Plane logo, copied Plane tokens or illustrations, purple branding, gradients, glassmorphism, oversized rounded cards, bento dashboard tiles, decorative charts, fake photos, random unreadable copy, watermark.

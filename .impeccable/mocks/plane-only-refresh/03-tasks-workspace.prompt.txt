@@ -1,7 +1,7 @@
 Use case: ui-mockup
 Asset type: high-fidelity desktop north-star comp for kanban-tool Tasks workspace
 Primary request: Create a polished 1920×1080 dark desktop application UI screenshot for kanban-tool, learning Plane's dense task-view shell, compact toolbar, filter/display controls, kanban columns, and side-peek craftsmanship while using an original implementation and canonical kanban-tool semantics.
-Structure: fixed 56px product rail, fixed 248px Projects context sidebar, main Tasks workspace with compact header, and an open 390px task inspector. The sidebar contains Home, Projects, kanban-tool expanded with exactly Overview and Tasks, then Wiki and Story Workshop.
+Structure: fixed 56px product rail, fixed 248px Projects context sidebar, main Tasks workspace with compact header, and an open 390px task inspector. The product rail contains only a simple white K mark in a blue outline, Projects, and bottom-pinned Settings. The sidebar contains Home, Projects, kanban-tool expanded with exactly Overview and Tasks, then Wiki and Story Workshop.
 Tasks toolbar: breadcrumb “kanban-tool / Tasks”; segmented views Board, List, Table, Map with Board selected; Filters, Display, search; active filter row “All tasks”.
 Board truth: columns “Todo 4”, “Ready 1”, “Running 1”, “Review 0”, “Done 0”, “Blocked 0”. Todo contains #505, #506, #507, #508 with Todo plus Waiting on dependency. Ready contains #503 Plane-only Web UI with 0/5 steps. Running contains selected #504 Storybook component lab with 0/1 step. Other columns are empty.
 Inspector truth: #504 Storybook component lab; Running; required step “Build a static Storybook”; mono run ID r_01KZRMHQA8; Open details.

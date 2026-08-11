@@ -308,8 +308,8 @@ test.describe("agent-first Plane shell and board acceptance", () => {
     await page.goto("/app/boards/alpha/board", { waitUntil: "domcontentloaded" })
 
     const switcher = page.getByTestId("board-switcher-select")
-    await expect(switcher.locator("optgroup").filter({ hasText: "当前项目" })).toHaveCount(1)
-    await expect(switcher.locator("optgroup").filter({ hasText: "所有项目" })).toHaveCount(1)
+    await expect(switcher.locator('optgroup[label="当前项目"]')).toHaveCount(1)
+    await expect(switcher.locator('optgroup[label="所有项目"]')).toHaveCount(1)
 
     const search = page.getByTestId("board-switcher-search")
     await search.focus()
@@ -319,10 +319,10 @@ test.describe("agent-first Plane shell and board acceptance", () => {
     await expect(page).toHaveURL(/\/app\/boards\/beta\/board$/)
 
     await page.getByTestId("board-switcher-search").fill("")
-    await expect(page.getByTestId("board-switcher-select").locator("optgroup").filter({ hasText: "最近项目" })).toHaveCount(0)
+    await expect(page.getByTestId("board-switcher-select").locator('optgroup[label="最近项目"]')).toHaveCount(0)
     await page.getByTestId("board-switcher-select").selectOption("alpha")
     await expect(page).toHaveURL(/\/app\/boards\/alpha\/board$/)
-    await expect(page.getByTestId("board-switcher-select").locator("optgroup").filter({ hasText: "最近项目" })).toHaveCount(1)
+    await expect(page.getByTestId("board-switcher-select").locator('optgroup[label="最近项目"]')).toHaveCount(1)
   })
 
   test("shows primary task facts first and expands secondary facts from the keyboard", async ({ page }) => {

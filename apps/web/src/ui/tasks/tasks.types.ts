@@ -24,6 +24,8 @@ export interface TaskFilterValue {
 
 interface TaskFilterBarCommonProps {
   readonly placeholder?: string
+  /** Stable hook for product surfaces that share this search control. */
+  readonly searchTestId?: string
   /** Disable the search control when the active projection has no query-backed handler. */
   readonly disabled?: boolean
   readonly filters?: readonly TaskFilterValue[]

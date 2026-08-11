@@ -221,7 +221,7 @@ describe("ProductShell route offline boundary", () => {
     const markup = renderWithLiveChild(parseAppRoute("http://kanban.test/app/boards/default"))
 
     expect(markup).toContain('data-testid="explorer-page"')
-    expect(markup).toContain('aria-label="看板浏览视图"')
+    expect(markup).toContain('aria-label="任务视图"')
     expect(markup).toContain('href="/app/boards/default/list"')
     expect(markup).toContain('href="/app/boards/default/map"')
     expect(markup).toContain('href="/app/boards/default/runs"')

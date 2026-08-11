@@ -151,6 +151,11 @@ describe("Tasks interaction grammar", () => {
     expect(markup).toContain('disabled=""')
   })
 
+  test("preserves a stable search hook for shared product chrome", () => {
+    const markup = renderToStaticMarkup(<FilterBar defaultSearch="local" searchTestId="list-search" />)
+    expect(markup).toContain('data-testid="list-search"')
+  })
+
   test("uses one atomic selection callback for the Table projection", () => {
     const onSelectionChange = vi.fn()
     const root = ViewSwitcher({ activeView: "list", includeTableDisplay: true, displayVariant: "grouped", onSelectionChange }) as ReactElement<{ readonly children: readonly ReactElement[] }>
@@ -160,5 +165,16 @@ describe("Tasks interaction grammar", () => {
     tableControl.props.onClick?.()
     expect(onSelectionChange).toHaveBeenCalledTimes(1)
     expect(onSelectionChange).toHaveBeenCalledWith("list", "table")
+  })
+
+  test("keeps href navigation when no local selection handler exists", () => {
+    const hrefForView = vi.fn((view: string, display: string) => `/${view}?display=${display}`)
+    const root = ViewSwitcher({ activeView: "board", hrefForView }) as ReactElement<{ readonly children: readonly ReactElement[] }>
+    const boardWrapper = root.props.children[0] as ReactElement<{ readonly children: ReactElement<{ readonly href?: string; readonly onClick?: unknown }> }>
+    const boardLink = boardWrapper.props.children
+    expect(boardLink.type).toBe("a")
+    expect(boardLink.props.href).toBe("/board?display=grouped")
+    expect(boardLink.props.onClick).toBeUndefined()
+    expect(hrefForView).toHaveBeenCalled()
   })
 })

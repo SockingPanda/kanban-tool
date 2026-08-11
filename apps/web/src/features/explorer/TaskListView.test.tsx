@@ -91,6 +91,25 @@ describe("TaskListView", () => {
     expect(table).toContain("First task")
   })
 
+  test("keeps grouped List semantics legal and exposes labeled facts at both densities", () => {
+    const dense = renderToStaticMarkup(
+      <TaskListView state={state} rows={rows} loading={false} displayVariant="grouped" density="dense" showHeading={false} onQueryChange={vi.fn()} onSelectTask={vi.fn()} />,
+    )
+    const comfortable = renderToStaticMarkup(
+      <TaskListView state={state} rows={rows} loading={false} displayVariant="table" density="comfortable" onQueryChange={vi.fn()} onSelectTask={vi.fn()} />,
+    )
+
+    expect(dense).toContain('data-density="dense"')
+    expect(dense).toContain('role="list"')
+    expect(dense).toContain('role="listitem"')
+    expect(dense).toContain('class="')
+    expect(dense).toContain("<dl")
+    expect(dense).toContain("优先级")
+    expect(dense).toContain('class="')
+    expect(comfortable).toContain('data-density="comfortable"')
+    expect(comfortable).toContain("<table")
+  })
+
   test("distinguishes an empty board from a filtered no-result list", () => {
     const emptyBoardState: TaskListViewState = {
       query: { status: [], priority: [], plan: [], search: "", sort: "updated_at", page: 1, limit: 100, includeArchived: false },

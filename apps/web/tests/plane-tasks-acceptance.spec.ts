@@ -42,8 +42,9 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expect(drawer).toHaveAttribute("role", "dialog")
     await expect(drawer).toHaveAttribute("aria-modal", "true")
     await expect(drawer).toHaveAttribute("data-open", "true")
-    await page.getByTestId("resource-header-menu").click()
+    await page.getByTestId("projects-sidebar-close").click()
     await expect(drawer).toHaveAttribute("data-open", "false")
+    await expect(page.getByTestId("resource-header-menu")).toBeFocused()
 
     const taskOpener = page.getByRole("button", { name: /ready task$/i }).first()
     await taskOpener.click()

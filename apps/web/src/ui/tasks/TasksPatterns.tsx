@@ -224,9 +224,9 @@ function CloseIcon() {
 
 interface ViewSwitcherCommonProps {
   readonly onViewChange?: (view: TasksView) => void
-  /** Atomic route/display seam for product surfaces; avoids two history writes for List/Table. */
+  /** Atomic route/display seam for product surfaces; one selection handles List/Table display state. */
   readonly onSelectionChange?: (view: TasksView, display: TasksListDisplay) => void
-  /** Optional progressive-enhancement hrefs; product routes remain `/list?display=table`. */
+  /** Optional progressive-enhancement hrefs; native navigation remains when no handler is supplied. */
   readonly hrefForView?: (view: TasksView, display: TasksListDisplay) => string | undefined
   readonly includeTableDisplay?: boolean
   readonly displayVariant?: TasksListDisplay
@@ -257,16 +257,15 @@ export function ViewSwitcher({ activeView, onViewChange, onSelectionChange, href
         const unavailable = view.unsupported === true
         const isTableDisplay = view.id === "table"
         const listNeedsDisplayChange = view.id === "list" && includeTableDisplay && displayVariant === "table"
-        const canChange = onSelectionChange
-          ? true
-          : isTableDisplay
-            ? Boolean(onDisplayChange && onViewChange)
-            : Boolean(onViewChange) && (!listNeedsDisplayChange || Boolean(onDisplayChange))
-        const inert = unavailable || !canChange
+        const hasHandler = onSelectionChange !== undefined || (isTableDisplay
+          ? Boolean(onDisplayChange && onViewChange)
+          : Boolean(onViewChange) && (!listNeedsDisplayChange || Boolean(onDisplayChange)))
+        const href = !unavailable ? hrefForView?.(isTableDisplay ? "list" : view.id as TasksView, isTableDisplay ? "table" : "grouped") : undefined
+        const canChange = !unavailable && (hasHandler || href !== undefined)
+        const inert = !canChange
         const selected = isTableDisplay ? activeView === "list" && displayVariant === "table" : activeView === view.id && (!isTableDisplay && view.id === "list" ? displayVariant !== "table" : true)
-        const href = !unavailable && canChange ? hrefForView?.(isTableDisplay ? "list" : view.id as TasksView, isTableDisplay ? "table" : "grouped") : undefined
         const handleClick = (event?: { preventDefault: () => void }) => {
-          if (href !== undefined && onSelectionChange) event?.preventDefault()
+          if (hasHandler) event?.preventDefault()
           if (onSelectionChange) {
             onSelectionChange(isTableDisplay ? "list" : view.id as TasksView, isTableDisplay ? "table" : "grouped")
             return
@@ -280,7 +279,7 @@ export function ViewSwitcher({ activeView, onViewChange, onSelectionChange, href
           }
         }
         const control = href !== undefined ? (
-          <a href={href} className={styles.viewButton} aria-current={selected ? "page" : undefined} aria-disabled={inert ? true : undefined} onClick={handleClick}>
+          <a href={href} className={styles.viewButton} aria-current={selected ? "page" : undefined} aria-disabled={inert ? true : undefined} onClick={hasHandler ? handleClick : undefined}>
             {view.label}
           </a>
         ) : (
@@ -319,7 +318,7 @@ export function ActiveFilter({ label, onRemove, removeLabel = "移除筛选" }: 
 }
 
 export function FilterBar(props: TaskFilterBarProps) {
-  const { placeholder, disabled = false, filters = [], onRemoveFilter, onClearFilters, onOpenFilters, filterButtonLabel, clearButtonLabel, locale = "zh" } = props
+  const { placeholder, searchTestId, disabled = false, filters = [], onRemoveFilter, onClearFilters, onOpenFilters, filterButtonLabel, clearButtonLabel, locale = "zh" } = props
   const copy = copyFor(locale)
   const [uncontrolledSearch, setUncontrolledSearch] = useState(props.defaultSearch ?? "")
   const search = props.search ?? uncontrolledSearch
@@ -338,7 +337,7 @@ export function FilterBar(props: TaskFilterBarProps) {
     <div className={`${styles.root} ${styles.filterBar}`} role="search" aria-label={copy.searchLabel}>
       <label className={styles.searchField} htmlFor={labelId}>
         <span>{copy.searchLabel}</span>
-        <input id={labelId} type="search" value={search} placeholder={placeholder ?? copy.searchPlaceholder} disabled={disabled} onChange={(event) => handleSearchChange(event.currentTarget.value)} />
+        <input id={labelId} data-testid={searchTestId} type="search" value={search} placeholder={placeholder ?? copy.searchPlaceholder} disabled={disabled} onChange={(event) => handleSearchChange(event.currentTarget.value)} />
       </label>
       <button type="button" className={styles.filterButton} disabled={disabled || !onOpenFilters} onClick={onOpenFilters}>
         {filterButtonLabel ?? copy.filterLabel}

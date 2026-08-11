@@ -1,3 +1,5 @@
+import type { MouseEvent } from "react"
+
 import type { TaskListQueryState } from "../../lib/api/explorer-read-model"
 import type { DensityMode, Locale } from "../../lib/preferences"
 import { DisplayMenu, FilterBar, ViewSwitcher, type TasksDensity, type TasksListDisplay, type TasksView } from "../../ui/tasks"
@@ -27,8 +29,11 @@ export interface TasksWorkspaceChromeProps {
   readonly visibleColumns: Readonly<Record<string, boolean>>
   readonly onVisibleColumnsChange: (columnId: string, visible: boolean) => void
   readonly diagnostics: readonly TasksDiagnosticLink[]
+  /** Intercept unmodified diagnostic clicks while retaining the anchor href fallback. */
+  readonly onNavigate?: (target: string) => void | Promise<unknown>
   readonly hasInspector: boolean
   readonly onCloseInspector?: () => void
+  readonly inert?: boolean
 }
 
 const displayColumns = {
@@ -64,10 +69,16 @@ function listFilters(query: TaskListQueryState | undefined, locale: Locale): rea
   ]
 }
 
-export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, displayVariant, density, listQuery, onViewChange, onSearchChange, onOpenFilters, onRemoveFilter, onClearFilters, onDensityChange, visibleColumns, onVisibleColumnsChange, diagnostics, hasInspector, onCloseInspector }: TasksWorkspaceChromeProps) {
+function handleDiagnosticClick(event: MouseEvent<HTMLAnchorElement>, href: string, onNavigate?: (target: string) => void | Promise<unknown>): void {
+  if (!onNavigate || event.button !== 0 || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  void onNavigate(href)
+}
+
+export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, displayVariant, density, listQuery, onViewChange, onSearchChange, onOpenFilters, onRemoveFilter, onClearFilters, onDensityChange, visibleColumns, onVisibleColumnsChange, diagnostics, onNavigate, hasInspector, onCloseInspector, inert = false }: TasksWorkspaceChromeProps) {
   const copy = locale === "en"
-    ? { title: "Tasks", views: "Board explorer views", search: "Search tasks", filters: "Filters", display: "Display", more: "More", diagnostics: "Diagnostics", close: "Close Inspector" }
-    : { title: "任务", views: "看板浏览视图", search: "搜索任务", filters: "筛选", display: "显示", more: "更多", diagnostics: "诊断", close: "关闭任务检查器" }
+    ? { title: "Tasks", views: "Task views", search: "Search tasks", filters: "Filters", display: "Display", more: "More", diagnostics: "Diagnostics", close: "Close Inspector" }
+    : { title: "任务", views: "任务视图", search: "搜索任务", filters: "筛选", display: "显示", more: "更多", diagnostics: "诊断", close: "关闭任务检查器" }
   const columns = Object.values(locale === "en" ? displayColumnsEnglish : displayColumns)
   const filters = activeView === "list" ? listFilters(listQuery, locale) : []
   const querySearch = activeView === "list" ? listQuery?.search ?? "" : ""
@@ -75,7 +86,7 @@ export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, d
   const display = displayVariant === "table" ? "table" : "grouped"
 
   return (
-    <section className={styles.chrome} aria-labelledby="tasks-workspace-heading" data-testid="tasks-workspace-chrome">
+    <section className={styles.chrome} aria-labelledby="tasks-workspace-heading" data-testid="tasks-workspace-chrome" inert={inert || undefined}>
       <header className={styles.header}>
         <div className={styles.identity}>
           <h1 id="tasks-workspace-heading" tabIndex={-1} data-explorer-focus-fallback>{copy.title}</h1>
@@ -104,7 +115,7 @@ export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, d
             <details className={styles.more}>
               <summary>{copy.more}</summary>
               <nav aria-label={copy.diagnostics}>
-                {diagnostics.map((link) => <a key={link.id} href={link.href}>{link.label}</a>)}
+                {diagnostics.map((link) => <a key={link.id} href={link.href} onClick={onNavigate ? (event) => handleDiagnosticClick(event, link.href, onNavigate) : undefined}>{link.label}</a>)}
               </nav>
             </details>
           ) : null}
@@ -112,6 +123,7 @@ export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, d
       </header>
       <FilterBar
         search={querySearch}
+        searchTestId="list-search"
         onSearchChange={onSearchChange ?? (() => undefined)}
         disabled={searchDisabled}
         placeholder={copy.search}

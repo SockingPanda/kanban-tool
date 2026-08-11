@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import type { ExplorerReadError, TaskListPlanFilter, TaskListQueryState, TaskListSort, TaskListStatus } from "../../lib/api/explorer-read-model"
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { Locale } from "../../lib/preferences"
+import type { TasksDensity } from "../../ui/tasks"
 import { activeAttentionLens, attentionCounts, attentionLenses, queryWithAttentionLens, type AttentionLens } from "../attention/attention-lens"
 import styles from "./TaskListView.module.css"
 
@@ -42,6 +43,10 @@ export interface TaskListViewProps {
   /** View-local presentation choices; never serialized as canonical task state. */
   readonly visibleColumns?: Readonly<Record<string, boolean>>
   readonly showToolbarSearch?: boolean
+  /** Keep the section heading in the accessibility tree while allowing the workspace chrome to own the visible title. */
+  readonly showHeading?: boolean
+  /** User-selected list geometry; this must affect both grouped and table projections. */
+  readonly density?: TasksDensity
 }
 
 type ListCopy = {
@@ -146,7 +151,7 @@ function listRange(meta: TaskListViewState["meta"]): string {
   return `${meta.offset + 1}–${Math.min(meta.offset + meta.limit, meta.total)} / ${meta.total}`
 }
 
-export function TaskListView({ state, rows, loading, error, onQueryChange, onSelectTask, onRetry, onCreate, isMutationPending = false, locale = "zh", displayVariant = "table", visibleColumns, showToolbarSearch = true }: TaskListViewProps) {
+export function TaskListView({ state, rows, loading, error, onQueryChange, onSelectTask, onRetry, onCreate, isMutationPending = false, locale = "zh", displayVariant = "table", visibleColumns, showToolbarSearch = true, showHeading = true, density = "comfortable" }: TaskListViewProps) {
   const copy = copies[locale]
   const attentionCountsByStatus = attentionCounts(rows)
   const selectedAttention = activeAttentionLens(state.query.status)
@@ -170,11 +175,11 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
   }
 
   return (
-    <section className={styles.list} data-testid="task-list" aria-labelledby="task-list-heading">
+    <section className={styles.list} data-testid="task-list" data-density={density} aria-labelledby="task-list-heading">
       <header className={styles.toolbar}>
         <div className={styles.heading}>
-          <p className={styles.eyebrow}>{copy.eyebrow}</p>
-          <h2 id="task-list-heading">{copy.title}</h2>
+          {showHeading ? <p className={styles.eyebrow}>{copy.eyebrow}</p> : null}
+          <h2 id="task-list-heading" className={showHeading ? undefined : styles.visuallyHidden}>{copy.title}</h2>
           <p className={styles.muted}>{loading ? copy.refreshing : listRange(state.meta)}</p>
         </div>
         <div className={styles.toolbarActions}>
@@ -288,26 +293,26 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
             const group = rows.filter((task) => task.status === status)
             if (group.length === 0) return null
             return (
-              <section className={styles.statusGroup} key={status} aria-labelledby={`task-status-${status}`}>
+              <section className={styles.statusGroup} key={status} role="listitem" aria-labelledby={`task-status-${status}`}>
                 <header className={styles.statusGroupHeader}>
                   <h3 id={`task-status-${status}`}>{copy.statusValues[status]}</h3>
                   <span>{group.length}</span>
                 </header>
-                <div className={styles.statusGroupRows}>
+                <div className={styles.statusGroupRows} role="list" aria-labelledby={`task-status-${status}`}>
                   {group.map((task) => (
                     <article className={styles.groupedRow} key={task.id} data-testid="task-row" data-task-id={task.id} role="listitem">
                       <div className={styles.groupedIdentity}>
                         <span className={styles.mono}>{task.ref}</span>
                         <button type="button" className={styles.taskLink} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>{task.title}</button>
                       </div>
-                      <div className={styles.groupedFacts}>
-                        {visibleColumns?.priority !== false ? <span>P{task.priority}</span> : null}
-                        {visibleColumns?.assignee !== false ? <span>{task.assignee || "—"}</span> : null}
-                        {visibleColumns?.plan !== false ? <span>{copy.planState[task.executionPlanState]}</span> : null}
-                        {visibleColumns?.steps !== false ? <span>{task.completedRequiredStepCount} / {task.requiredStepCount}{task.optionalStepCount ? ` + ${task.optionalStepCount}` : ""}</span> : null}
-                        {visibleColumns?.updated !== false ? <span className={styles.mono}>{task.updatedAt}</span> : null}
-                        {task.dependencyBlocked ? <span className={styles.muted}>{copy.blocked}</span> : null}
-                      </div>
+                      <dl className={styles.groupedFacts}>
+                        {visibleColumns?.priority !== false ? <div><dt className={styles.visuallyHidden}>{copy.headers[3]}</dt><dd>P{task.priority}</dd></div> : null}
+                        {visibleColumns?.assignee !== false ? <div><dt className={styles.visuallyHidden}>{copy.headers[4]}</dt><dd>{task.assignee || "—"}</dd></div> : null}
+                        {visibleColumns?.plan !== false ? <div><dt className={styles.visuallyHidden}>{copy.headers[5]}</dt><dd>{copy.planState[task.executionPlanState]}</dd></div> : null}
+                        {visibleColumns?.steps !== false ? <div><dt className={styles.visuallyHidden}>{copy.headers[6]}</dt><dd>{task.completedRequiredStepCount} / {task.requiredStepCount}{task.optionalStepCount ? ` + ${task.optionalStepCount}` : ""}</dd></div> : null}
+                        {visibleColumns?.updated !== false ? <div><dt className={styles.visuallyHidden}>{copy.headers[7]}</dt><dd className={styles.mono}>{task.updatedAt}</dd></div> : null}
+                        {task.dependencyBlocked ? <div><dt className={styles.visuallyHidden}>{copy.statusValues.blocked}</dt><dd className={styles.muted}>{copy.blocked}</dd></div> : null}
+                      </dl>
                     </article>
                   ))}
                 </div>

@@ -292,6 +292,17 @@
     text-align: end;
   }
 
+  .groupedFacts,
+  .groupedFacts > div,
+  .groupedFacts dt,
+  .groupedFacts dd {
+    margin: 0;
+  }
+
+  .groupedFacts > div {
+    display: inline-flex;
+  }
+
   .visuallyHidden {
     position: absolute;
     width: 1px;
@@ -335,6 +346,28 @@
 
   .table tbody tr:hover {
     background: var(--color-background-body);
+  }
+
+  .list[data-density="dense"] .groupedRow {
+    padding-block: 0.42rem;
+    padding-inline: 0.5rem;
+  }
+
+  .list[data-density="dense"] .table th,
+  .list[data-density="dense"] .table td {
+    padding-block: 0.45rem;
+    padding-inline: 0.4rem;
+  }
+
+  .list[data-density="comfortable"] .groupedRow {
+    padding-block: 0.72rem;
+    padding-inline: 0.75rem;
+  }
+
+  .list[data-density="comfortable"] .table th,
+  .list[data-density="comfortable"] .table td {
+    padding-block: 0.78rem;
+    padding-inline: 0.65rem;
   }
 
   .taskLink {

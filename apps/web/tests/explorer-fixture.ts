@@ -509,6 +509,11 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       return
     }
 
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/labels` && route.request().method() === "GET") {
+      await fulfillJson(route, { data: Array.isArray(readyTask.labels) ? readyTask.labels : [] })
+      return
+    }
+
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/labels` && route.request().method() === "POST") {
       if (labelAddFailuresRemaining > 0) {
         labelAddFailuresRemaining -= 1

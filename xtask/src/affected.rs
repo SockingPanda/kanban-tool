@@ -10,6 +10,7 @@ use xtask::ToolResult;
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Recipe {
     DocsCheck,
+    AgentsCheck,
     RustFast,
     RustFull,
     WebCheck,
@@ -25,6 +26,7 @@ impl Recipe {
     fn name(self) -> &'static str {
         match self {
             Self::DocsCheck => "docs-check",
+            Self::AgentsCheck => "agents-check",
             Self::RustFast => "rust-fast",
             Self::RustFull => "rust-full",
             Self::WebCheck => "web-check",
@@ -99,6 +101,7 @@ fn classify(paths: &[String]) -> BTreeMap<String, Vec<String>> {
     let mut classifications = BTreeMap::new();
     for (name, predicate) in [
         ("docs-only", is_document as fn(&str) -> bool),
+        ("agents", is_agent_contract),
         ("root-risk", is_root_risk),
         ("tooling", is_tooling),
         ("schema", is_schema),
@@ -150,6 +153,9 @@ fn plan_recipes(paths: &[String]) -> Vec<Recipe> {
             recipes.push(Recipe::RustFast);
         }
     }
+    if paths.iter().any(|path| is_agent_contract(path)) {
+        recipes.push(Recipe::AgentsCheck);
+    }
     recipes.push(Recipe::DiffCheck);
     dedupe_recipes(recipes)
 }
@@ -166,6 +172,10 @@ fn dedupe_recipes(recipes: Vec<Recipe>) -> Vec<Recipe> {
 
 fn is_document(path: &str) -> bool {
     path == "README.md" || path.starts_with("docs/") || path.ends_with(".md")
+}
+
+fn is_agent_contract(path: &str) -> bool {
+    path == "AGENTS.md" || path.starts_with(".agents/") || path == ".codex/hooks.json"
 }
 
 fn is_root_risk(path: &str) -> bool {
@@ -419,6 +429,25 @@ mod tests {
             build_plan("main".to_owned(), sources(&["xtask/src/affected.rs"])).recipes,
             vec![Recipe::ToolingCheck, Recipe::DiffCheck]
         );
+    }
+
+    #[test]
+    fn agent_contract_paths_use_agents_check() {
+        for path in [
+            "AGENTS.md",
+            ".agents/skills/impeccable/SKILL.md",
+            ".codex/hooks.json",
+        ] {
+            let recipes = build_plan("main".to_owned(), sources(&[path]))
+                .recipes
+                .into_iter()
+                .map(Recipe::name)
+                .collect::<Vec<_>>();
+            assert!(
+                recipes.contains(&"agents-check"),
+                "agent contract path must use agents-check for {path}: {recipes:?}"
+            );
+        }
     }
 
     #[test]

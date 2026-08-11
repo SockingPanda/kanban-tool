@@ -11,6 +11,8 @@
 
 ## 组件与样式
 
+- 页面结构、视觉层级、响应式、排版或交互反馈改动使用项目级 `$impeccable`；它提供设计方法和
+  审查证据，不替代本文件的 Astryx、strict CSP、领域语义或交付边界。
 - 先查询已安装 Astryx CLI，并从官方 component、composition 或 ready template 选择通用 UI。
 - Astryx 使用精确版本和 subpath import；本地组件只表达 kanban-tool 领域概念。
 - 普通 React、CSS Modules 和静态 token CSS 承担领域组合与 fallback；保持 strict CSP，不产生

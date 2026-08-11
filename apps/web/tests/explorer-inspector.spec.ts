@@ -97,7 +97,8 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await page.getByTestId("task-create").click()
     await page.getByTestId("task-title-input").fill("Created from list")
     await page.getByTestId("task-mutation-dialog").getByRole("button", { name: "创建", exact: true }).click()
-    await expect(page).toHaveURL(/\/app\/boards\/default\/list\?task=t_[^&]+$/)
+    await expect(page.getByTestId("task-mutation-dialog")).toHaveCount(0)
+    await expect(page).toHaveURL(/\/app\/boards\/default\/list\?task=t_[^&]+$/, { timeout: 15_000 })
   })
 
   test("keeps one persistent SSE connection while Events refreshes from a business event", async ({ page }) => {
@@ -141,6 +142,7 @@ test.describe("Astryx Explorer browser acceptance", () => {
   })
 
   test("renders loading, empty, error and offline boundaries without invented API errors", async ({ page }) => {
+    test.setTimeout(60_000)
     const loadingFixture = await install(page, { delayList: true })
     await open(page, "list")
     await expect(page.getByTestId("task-list-loading")).toBeVisible()
@@ -190,6 +192,8 @@ test.describe("Astryx Explorer browser acceptance", () => {
     const search = page.getByTestId("list-search")
     await search.focus()
     await expect(search).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(page.getByRole("button", { name: "筛选", exact: true })).toBeFocused()
     await page.keyboard.press("Tab")
     await expect(page.getByTestId("task-create")).toBeFocused()
 

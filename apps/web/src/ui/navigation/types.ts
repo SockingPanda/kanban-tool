@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { MouseEvent, ReactNode } from "react"
 
 import type { BoardListItem } from "../../lib/api/board-list-read-model"
 
@@ -36,7 +36,7 @@ export type ResourceHeaderMoreItem = {
   readonly href?: string
   readonly icon?: ReactNode
   readonly disabled?: boolean
-  readonly onSelect?: () => void
+  readonly onSelect?: (event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => void
 }
 
 export type NavigationLabels = {
@@ -62,6 +62,7 @@ export type NavigationLabels = {
   readonly expand: string
   readonly overview: string
   readonly tasks: string
+  readonly archived: string
   readonly more: string
   readonly breadcrumb: string
   readonly projectPicker: string
@@ -90,6 +91,7 @@ export const defaultNavigationLabels: NavigationLabels = {
   expand: "Expand project navigation",
   overview: "Overview",
   tasks: "Tasks",
+  archived: "Archived",
   more: "More",
   breadcrumb: "Breadcrumb",
   projectPicker: "Project switcher",

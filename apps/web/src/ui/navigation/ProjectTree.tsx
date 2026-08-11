@@ -1,5 +1,6 @@
-import { useState, type KeyboardEvent } from "react"
+import { useState, type KeyboardEvent, type MouseEvent } from "react"
 
+import { routePath } from "../../lib/router"
 import { NavigationIcon } from "./icons"
 import styles from "./navigation.module.css"
 import { mergeNavigationLabels, type NavigationLabels, type NavigationProject, type ProjectSurface } from "./types"
@@ -9,6 +10,7 @@ export type ProjectTreeProps = {
   readonly activeSurface?: ProjectSurface
   readonly expanded?: boolean
   readonly defaultExpanded?: boolean
+  readonly basePath?: string
   readonly onExpandedChange?: (expanded: boolean) => void
   readonly onProjectSelect?: (project: NavigationProject) => void
   readonly onSurfaceSelect?: (project: NavigationProject, surface: Exclude<ProjectSurface, "projects">) => void
@@ -22,6 +24,7 @@ export function ProjectTree({
   activeSurface,
   expanded,
   defaultExpanded = true,
+  basePath = "/app/",
   onExpandedChange,
   onProjectSelect,
   onSurfaceSelect,
@@ -51,14 +54,14 @@ export function ProjectTree({
 
   const children: readonly { surface: Exclude<ProjectSurface, "projects">; label: string; icon: "grid" | "list" }[] = [
     { surface: "overview", label: labels.overview, icon: "grid" },
-    { surface: "tasks", label: labels.tasks, icon: "list" },
+    ...(project.archivedAt === null ? [{ surface: "tasks" as const, label: labels.tasks, icon: "list" as const }] : []),
   ]
 
   return (
     <nav className={rootClassName} aria-label={`${project.name} navigation`} data-testid="project-tree">
       <h3 className={styles.projectTreeHeading}>
         <span>{project.name}</span>
-        {project.archivedAt !== null ? <span aria-label="Archived">· archived</span> : null}
+        {project.archivedAt !== null ? <span aria-label={labels.archived}>· {labels.archived}</span> : null}
       </h3>
       <ul className={styles.projectTreeList} aria-label={`${project.name} project sections`}>
         <li>
@@ -75,32 +78,43 @@ export function ProjectTree({
             >
               <NavigationIcon name={isExpanded ? "chevron-down" : "chevron-right"} size={16} />
             </button>
-            <button
-              type="button"
+            <a
               className={styles.projectTreeProjectButton}
-              onClick={() => onProjectSelect?.(project)}
+              href={routePath({ kind: "project-overview", boardSlug: project.slug }, { basePath })}
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                if (onProjectSelect === undefined || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                event.preventDefault()
+                onProjectSelect(project)
+              }}
               data-testid="project-tree-project"
             >
               <NavigationIcon name="folder" size={17} />
               <span className={styles.projectTreeProjectName}>{project.name}</span>
-            </button>
+            </a>
           </div>
           {isExpanded ? (
             <ul id={childrenId} className={styles.projectTreeChildren}>
               {children.map((child) => {
                 const isActive = activeSurface === child.surface
+                const href = child.surface === "overview"
+                  ? routePath({ kind: "project-overview", boardSlug: project.slug }, { basePath })
+                  : routePath({ kind: "board", boardSlug: project.slug, view: "board" }, { basePath })
                 return (
                   <li key={child.surface}>
-                    <button
-                      type="button"
+                    <a
                       className={`${styles.projectTreeChildButton} ${isActive ? styles.projectTreeChildButtonActive : ""}`}
                       aria-current={isActive ? "page" : undefined}
-                      onClick={() => onSurfaceSelect?.(project, child.surface)}
+                      href={href}
+                      onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                        if (onSurfaceSelect === undefined || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                        event.preventDefault()
+                        onSurfaceSelect(project, child.surface)
+                      }}
                       data-testid={`project-tree-${child.surface}`}
                     >
                       <NavigationIcon name={child.icon} size={17} />
                       <span className={styles.projectTreeChildLabel}>{child.label}</span>
-                    </button>
+                    </a>
                   </li>
                 )
               })}

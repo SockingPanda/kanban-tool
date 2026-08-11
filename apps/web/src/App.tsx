@@ -95,7 +95,7 @@ function useBoardListSurface(runtime: WebRuntimeConfig, enabled: boolean): Board
       const error = boardListError(reason)
       setSurface((current) => ({
         ...current,
-        status: error.kind === "offline" ? "offline" : current.items.length > 0 ? "stale" : "error",
+        status: error.kind === "offline" ? "offline" : "error",
         error,
         isRefreshing: false,
       }))
@@ -165,11 +165,14 @@ function RuntimeThemedShell() {
         : null
   const boardRoute = boardRouteCandidate !== null && (
     !boardListReady
-    || boardList.items.some((item) => item.slug === boardRouteCandidate.boardSlug)
+    || boardList.items.some((item) => item.slug === boardRouteCandidate.boardSlug && item.archivedAt === null)
   )
     ? boardRouteCandidate
     : null
   const retainedSessionAvailable = retainedSessionSlug !== null
+  const shellCanonicalBoardSlug = router.route.kind === "settings"
+    ? retainedSessionSlug
+    : routeBoardSlug
   // The canonical BoardLive remains mounted for every board route as the
   // single session/SSE owner, while Explorer owns the visible board view.
   const liveBoardVisible = false
@@ -394,7 +397,7 @@ function RuntimeThemedShell() {
         <ProductShell
           runtime={runtime}
           route={router.route}
-          canonicalBoardSlug={routeBoardSlug ?? undefined}
+          canonicalBoardSlug={shellCanonicalBoardSlug ?? undefined}
           boardList={boardList}
           boundary={router.error ? "error" : undefined}
           error={router.error instanceof Error ? router.error.message : undefined}

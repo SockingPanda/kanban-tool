@@ -55,19 +55,21 @@ export function ProjectOverview({ project, onOpenTasks, basePath = "/app/", stat
               <dd>{project.archivedAt === null ? t("active") : t("archived")}</dd>
             </div>
           </dl>
-          <a
-            href={routePath({ kind: "board", boardSlug: project.slug, view: "board" }, { basePath })}
-            className={styles.overviewTasksButton}
-            onClick={(event: MouseEvent<HTMLAnchorElement>) => {
-              if (onOpenTasks === undefined) return
-              event.preventDefault()
-              onOpenTasks()
-            }}
-            data-testid="project-overview-open-tasks"
-          >
-            <span><NavigationIcon name="list" size={17} />{t("tasks")}</span>
-            <NavigationIcon name="chevron-right" size={16} />
-          </a>
+          {project.archivedAt === null ? (
+            <a
+              href={routePath({ kind: "board", boardSlug: project.slug, view: "board" }, { basePath })}
+              className={styles.overviewTasksButton}
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                if (onOpenTasks === undefined || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                event.preventDefault()
+                onOpenTasks()
+              }}
+              data-testid="project-overview-open-tasks"
+            >
+              <span><NavigationIcon name="list" size={17} />{t("tasks")}</span>
+              <NavigationIcon name="chevron-right" size={16} />
+            </a>
+          ) : null}
         </div>
       </div>
     </section>

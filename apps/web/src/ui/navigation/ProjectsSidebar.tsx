@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef, type MouseEvent } from "react"
 
 import { NavigationIcon } from "./icons"
 import { ProjectPicker } from "./ProjectPicker"
@@ -19,6 +19,8 @@ type ProjectsSidebarBaseProps = {
   readonly activeSurface?: ProjectSurface
   readonly activeSection?: ContextNavigationSection
   readonly projectStatus?: ProjectPickerStatus
+  readonly projectsHref?: string
+  readonly basePath?: string
   readonly onProjectSelect?: (project: NavigationProject) => void
   readonly onSurfaceSelect?: (project: NavigationProject, surface: Exclude<ProjectSurface, "projects">) => void
   readonly onSectionSelect?: (section: ContextNavigationSection) => void
@@ -71,6 +73,8 @@ export function ProjectsSidebar({
   activeSurface,
   activeSection,
   projectStatus = "ready",
+  projectsHref,
+  basePath,
   projectQuery,
   onProjectQueryChange,
   onProjectSelect,
@@ -244,16 +248,33 @@ export function ProjectsSidebar({
             <NavigationIcon name="home" size={17} />
             <span>{labels.home}</span>
           </button>
-          <button
-            type="button"
-            className={`${styles.sidebarNavItem} ${selectedSection === "projects" ? styles.sidebarNavItemActive : ""}`}
-            aria-current={selectedSection === "projects" ? "page" : undefined}
-            onClick={() => onSectionSelect?.("projects")}
-            data-testid="projects-sidebar-projects"
-          >
-            <NavigationIcon name="folder" size={17} />
-            <span>{labels.projects}</span>
-          </button>
+          {projectsHref === undefined ? (
+            <button
+              type="button"
+              className={`${styles.sidebarNavItem} ${selectedSection === "projects" ? styles.sidebarNavItemActive : ""}`}
+              aria-current={selectedSection === "projects" ? "page" : undefined}
+              onClick={() => onSectionSelect?.("projects")}
+              data-testid="projects-sidebar-projects"
+            >
+              <NavigationIcon name="folder" size={17} />
+              <span>{labels.projects}</span>
+            </button>
+          ) : (
+            <a
+              className={`${styles.sidebarNavItem} ${selectedSection === "projects" ? styles.sidebarNavItemActive : ""}`}
+              aria-current={selectedSection === "projects" ? "page" : undefined}
+              href={projectsHref}
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                if (onSectionSelect === undefined || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                event.preventDefault()
+                onSectionSelect("projects")
+              }}
+              data-testid="projects-sidebar-projects"
+            >
+              <NavigationIcon name="folder" size={17} />
+              <span>{labels.projects}</span>
+            </a>
+          )}
             </nav>
 
             <div className={styles.sidebarDivider} />
@@ -276,6 +297,7 @@ export function ProjectsSidebar({
                 activeSurface={activeSurface}
                 onProjectSelect={handleProjectSelect}
                 onSurfaceSelect={onSurfaceSelect}
+                basePath={basePath}
                 labels={labels}
               />
             ) : null}

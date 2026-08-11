@@ -91,7 +91,7 @@ export function ProjectsCollection({
                 href={routePath({ kind: "project-overview", boardSlug: project.slug }, { basePath })}
                 className={styles.projectRow}
                 onClick={(event: MouseEvent<HTMLAnchorElement>) => {
-                  if (onOpenProject === undefined) return
+                  if (onOpenProject === undefined || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
                   event.preventDefault()
                   onOpenProject(project)
                 }}

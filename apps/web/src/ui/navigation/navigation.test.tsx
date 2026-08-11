@@ -6,6 +6,7 @@ import { asCanonicalBoardId } from "../../lib/sync/contracts"
 import { ProjectPicker } from "./ProjectPicker"
 import { ProjectTree } from "./ProjectTree"
 import { ProjectsSidebar } from "./ProjectsSidebar"
+import { ProductRail } from "./ProductRail"
 import { ResourceHeader } from "./ResourceHeader"
 import type { NavigationProject, ProjectPickerStatus } from "./types"
 
@@ -70,12 +71,42 @@ describe("navigation accessibility contracts", () => {
 
   test("uses canonical archive semantics and a semantic nested list", () => {
     const archivedProject: NavigationProject = { ...project, archivedAt: 1 }
-    const tree = renderToStaticMarkup(<ProjectTree project={archivedProject} activeSurface="overview" />)
+    const tree = renderToStaticMarkup(
+      <ProjectTree project={archivedProject} activeSurface="overview" labels={{ archived: "已归档" }} />,
+    )
 
-    expect(tree).toContain("archived")
+    expect(tree).toContain("已归档")
+    expect(tree).not.toContain("archived")
     expect(tree).not.toContain('role="tree"')
     expect(tree).not.toContain('role="treeitem"')
     expect(tree).toContain('aria-current="page"')
+    expect(tree).not.toContain('data-testid="project-tree-tasks"')
+  })
+
+  test("keeps product and project destinations as native fallback links", () => {
+    const rail = renderToStaticMarkup(
+      <ProductRail hrefs={{ projects: "/app/", settings: "/app/settings" }} onNavigate={vi.fn()} />,
+    )
+    const sidebar = renderToStaticMarkup(
+      <ProjectsSidebar
+        projects={[project]}
+        activeProjectSlug={project.slug}
+        activeSurface="overview"
+        activeSection="project"
+        projectsHref="/app/"
+        basePath="/app/"
+        onSectionSelect={vi.fn()}
+        onProjectSelect={vi.fn()}
+        onSurfaceSelect={vi.fn()}
+      />,
+    )
+
+    expect(rail).toContain('href="/app/"')
+    expect(rail).toContain('href="/app/settings"')
+    expect(sidebar).toContain('data-testid="projects-sidebar-projects"')
+    expect(sidebar).toContain('href="/app/"')
+    expect(sidebar).toContain('href="/app/boards/navigation/overview"')
+    expect(sidebar).toContain('href="/app/boards/navigation/board"')
   })
 
   test("keeps the picker query API controlled when both props are supplied", () => {

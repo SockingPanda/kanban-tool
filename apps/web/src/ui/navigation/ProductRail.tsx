@@ -1,3 +1,5 @@
+import type { MouseEvent } from "react"
+
 import { NavigationIcon } from "./icons"
 import styles from "./navigation.module.css"
 import { mergeNavigationLabels, type NavigationLabels } from "./types"
@@ -7,6 +9,7 @@ export type ProductRailItem = "projects" | "settings"
 export type ProductRailProps = {
   readonly activeItem?: ProductRailItem
   readonly onNavigate?: (item: ProductRailItem) => void
+  readonly hrefs?: Partial<Record<ProductRailItem, string>>
   readonly brandLabel?: string
   readonly labels?: Partial<NavigationLabels>
   readonly className?: string
@@ -16,6 +19,7 @@ export type ProductRailProps = {
 export function ProductRail({
   activeItem = "projects",
   onNavigate,
+  hrefs,
   brandLabel = "kanban-tool",
   labels: labelOverrides,
   className,
@@ -29,19 +33,45 @@ export function ProductRail({
 
   const renderItem = (item: (typeof items)[number]) => {
     const isActive = item.id === activeItem
+    const className = `${styles.railItem} ${isActive ? styles.railItemActive : ""}`
+    const commonProps = {
+      className,
+      "aria-current": isActive ? "page" as const : undefined,
+      "aria-label": item.label,
+      title: item.label,
+      "data-testid": `product-rail-${item.id}`,
+    }
+    const content = (
+      <>
+        <NavigationIcon name={item.icon} size={18} />
+        <span className={styles.railItemLabel}>{item.label}</span>
+      </>
+    )
+    const href = hrefs?.[item.id]
+    if (href !== undefined) {
+      return (
+        <a
+          key={item.id}
+          {...commonProps}
+          href={href}
+          onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+            if (onNavigate === undefined || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+            event.preventDefault()
+            onNavigate(item.id)
+          }}
+        >
+          {content}
+        </a>
+      )
+    }
     return (
       <button
         key={item.id}
         type="button"
-        className={`${styles.railItem} ${isActive ? styles.railItemActive : ""}`}
-        aria-current={isActive ? "page" : undefined}
-        aria-label={item.label}
-        title={item.label}
+        {...commonProps}
         onClick={() => onNavigate?.(item.id)}
-        data-testid={`product-rail-${item.id}`}
       >
-        <NavigationIcon name={item.icon} size={18} />
-        <span className={styles.railItemLabel}>{item.label}</span>
+        {content}
       </button>
     )
   }

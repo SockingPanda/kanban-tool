@@ -1,5 +1,5 @@
 import { Button } from "@astryxdesign/core/Button"
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
 
 import { ProjectOverview, type ProjectOverviewStatus } from "./features/projects/ProjectOverview"
 import { ProjectsCollection } from "./features/projects/ProjectsCollection"
@@ -80,7 +80,6 @@ function projectSurface(route: AppRoute): ProjectSurface | undefined {
 function projectOverviewStatus(surface: BoardListSurface | undefined): ProjectOverviewStatus {
   if (surface === undefined) return "ready"
   if (surface.isRefreshing && surface.status === "ready") return "recovering"
-  if (surface.status === "error") return "stale"
   if (surface.status === "loading") return "ready"
   return surface.status
 }
@@ -105,12 +104,14 @@ function routeTitle(route: AppRoute, project: BoardListItem | undefined, t: Retu
 function ShellNavigation({
   route,
   boardList,
+  basePath,
   onNavigate,
   sidebarOpen,
   onSidebarOpenChange,
 }: {
   readonly route: AppRoute
   readonly boardList?: BoardListSurface
+  readonly basePath: string
   readonly onNavigate?: ProductShellProps["onNavigate"]
   readonly sidebarOpen: boolean
   readonly onSidebarOpenChange: (open: boolean) => void
@@ -151,6 +152,10 @@ function ShellNavigation({
     <div className={styles.productNavigationFrame}>
       <ProductRail
         activeItem={activeRail}
+        hrefs={{
+          projects: routePath({ kind: "home" }, { basePath }),
+          settings: routePath({ kind: "settings" }, { basePath }),
+        }}
         onNavigate={(item) => navigate(item === "settings" ? { kind: "settings" } : { kind: "home" })}
         labels={{ productNavigation: t("productNavigation"), projects: t("projects"), settings: t("settings") }}
       />
@@ -160,6 +165,8 @@ function ShellNavigation({
         activeSurface={selectedSurface}
         activeSection={selectedProject === undefined ? "projects" : "project"}
         projectStatus={projectPickerStatus(boardList)}
+        projectsHref={routePath({ kind: "home" }, { basePath })}
+        basePath={basePath}
         projectSnapshotAvailable={projects.length > 0 || boardList?.status === "ready"}
         isRefreshing={boardList?.isRefreshing}
         onProjectSelect={openProject}
@@ -195,6 +202,7 @@ function ShellNavigation({
           expand: t("expand"),
           overview: t("overview"),
           tasks: t("tasks"),
+          archived: t("archived"),
           more: t("more"),
           breadcrumb: t("breadcrumb"),
         }}
@@ -203,23 +211,52 @@ function ShellNavigation({
   )
 }
 
-function moreItems(runtime: WebRuntimeConfig, slug: CanonicalBoardSlug | undefined, t: ReturnType<typeof createTranslator>): readonly ResourceHeaderMoreItem[] {
+function shouldUseSpaNavigation(event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>): boolean {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
+}
+
+type StructuredNavigationTarget = Exclude<AppNavigationTarget, string>
+
+function moreItems(
+  runtime: WebRuntimeConfig,
+  slug: CanonicalBoardSlug | undefined,
+  t: ReturnType<typeof createTranslator>,
+  onNavigate: ProductShellProps["onNavigate"],
+): readonly ResourceHeaderMoreItem[] {
   if (slug === undefined) return []
+  const navigationItem = (
+    id: string,
+    label: string,
+    target: StructuredNavigationTarget,
+    icon?: ReactNode,
+  ): ResourceHeaderMoreItem => ({
+    id,
+    label,
+    icon,
+    href: routePath(target, { basePath: runtime.webBasePath }),
+    onSelect: onNavigate === undefined
+      ? undefined
+      : (event) => {
+          if (!shouldUseSpaNavigation(event)) return
+          event.preventDefault()
+          void onNavigate(target)
+        },
+  })
   const items = ([
     ["runs", t("runs"), "activity"],
     ["events", t("events"), "activity"],
     ["signals", t("signals"), "activity"],
     ["ontology", t("ontology"), "activity"],
-  ] as const).map(([id, label, icon]) => ({
+  ] as const).map(([id, label, icon]) => navigationItem(
     id,
     label,
-    icon: <span aria-hidden="true"><span className={styles.diagnosticDot} data-icon={icon} /></span>,
-    href: routePath({ kind: "board", boardSlug: slug, view: id as "runs" | "events" | "signals" | "ontology" }, { basePath: runtime.webBasePath }),
-  }))
+    { kind: "board", boardSlug: slug, view: id },
+    <span aria-hidden="true"><span className={styles.diagnosticDot} data-icon={icon} /></span>,
+  ))
   return [
     ...items,
-    { id: "health", label: t("health"), href: routePath({ kind: "health", boardSlug: slug }, { basePath: runtime.webBasePath }) },
-    { id: "maintenance", label: t("maintenance"), href: routePath({ kind: "maintenance", boardSlug: slug }, { basePath: runtime.webBasePath }) },
+    navigationItem("health", t("health"), { kind: "health", boardSlug: slug }),
+    navigationItem("maintenance", t("maintenance"), { kind: "maintenance", boardSlug: slug }),
   ]
 }
 
@@ -256,6 +293,11 @@ function RouteContent({
   const project = routeProject(route, boardList?.items)
   const requiresProject = route.kind === "board" || route.kind === "project-overview"
   const missingReadyProject = requiresProject && boardList?.status === "ready" && boardList.isRefreshing !== true && project === undefined
+  const archivedTasksUnavailable = route.kind === "board"
+    && boardList?.status === "ready"
+    && boardList.isRefreshing !== true
+    && project !== undefined
+    && project.archivedAt !== null
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -268,11 +310,6 @@ function RouteContent({
     }
   }, [])
 
-  const ownsFeatureRoute = route.kind === "board" && (route.view === "signals" || route.view === "ontology")
-  if (ownsFeatureRoute && children) {
-    return <BrowserConnectivityProvider online={isOnline}>{children}</BrowserConnectivityProvider>
-  }
-
   if (missingReadyProject) {
     return (
       <section className={styles.boundary} role="alert" data-testid="shell-project-not-found">
@@ -282,6 +319,32 @@ function RouteContent({
         <code translate="no">{route.pathname}</code>
       </section>
     )
+  }
+  if (archivedTasksUnavailable && project !== undefined) {
+    const overviewTarget = { kind: "project-overview" as const, boardSlug: project.slug }
+    const overviewHref = routePath(overviewTarget, { basePath: runtime.webBasePath })
+    return (
+      <section className={styles.boundary} role="alert" data-testid="shell-project-archived">
+        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
+        <h1>{t("archived")}</h1>
+        <p>{t("archivedTasksUnavailable")}</p>
+        <a
+          className={styles.secondaryAction}
+          href={overviewHref}
+          onClick={(event) => {
+            if (childNavigate === undefined || !shouldUseSpaNavigation(event)) return
+            event.preventDefault()
+            void childNavigate(overviewTarget)
+          }}
+        >
+          {t("overview")}
+        </a>
+      </section>
+    )
+  }
+  const ownsFeatureRoute = route.kind === "board" && (route.view === "signals" || route.view === "ontology")
+  if (ownsFeatureRoute && children) {
+    return <BrowserConnectivityProvider online={isOnline}>{children}</BrowserConnectivityProvider>
   }
   if (effectiveBoundary === "loading") {
     return <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-loading"><p className={styles.eyebrow}>{t("routeBoundary")}</p><h1>{t("loading")}</h1></section>
@@ -376,13 +439,13 @@ export function ProductShell({
         : project !== undefined && slug !== undefined
         ? [{ label: project.name, href: routePath({ kind: "project-overview", boardSlug: slug }, { basePath: runtime.webBasePath }) }, { label: route.kind === "project-overview" ? t("overview") : title }]
         : [{ label: title }]
-  const actions = route.kind === "project-overview" && project !== undefined && onNavigate !== undefined
+  const actions = route.kind === "project-overview" && project !== undefined && project.archivedAt === null && onNavigate !== undefined
     ? [{ id: "open-tasks", label: t("tasks"), kind: "primary" as const, onSelect: () => void onNavigate({ kind: "board", boardSlug: project.slug, view: "board" }) }]
     : []
 
   return (
     <div className={navigationStyles.navigationRoot} data-theme={preferences.theme === "dark" ? "dark" : preferences.theme === "light" ? "light" : undefined} data-density={preferences.density} data-testid="product-shell">
-      <ShellNavigation route={route} boardList={boardList} onNavigate={onNavigate} sidebarOpen={sidebarOpen} onSidebarOpenChange={setSidebarOpen} />
+      <ShellNavigation route={route} boardList={boardList} basePath={runtime.webBasePath} onNavigate={onNavigate} sidebarOpen={sidebarOpen} onSidebarOpenChange={setSidebarOpen} />
       <main className={styles.productNavigationMain} aria-label={t("productName")}>
         <ResourceHeader
           breadcrumbs={breadcrumbs}
@@ -390,7 +453,7 @@ export function ProductShell({
           projectSwitchAriaLabel={t("projectSwitcher")}
           onProjectSwitch={onNavigate === undefined ? undefined : () => void onNavigate({ kind: "home" })}
           actions={actions}
-          moreItems={moreItems(runtime, slug, t)}
+          moreItems={moreItems(runtime, slug, t, onNavigate)}
           onMenuToggle={() => setSidebarOpen((open) => !open)}
           menuOpen={sidebarOpen}
           menuControlsId="product-projects-sidebar"

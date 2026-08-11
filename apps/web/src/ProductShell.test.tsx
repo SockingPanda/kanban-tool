@@ -93,14 +93,26 @@ describe("ProductShell route offline boundary", () => {
       description: "Retained identity",
       archivedAt: 1,
     })
+    const archivedSurface = boardListSurface({ items: [...boardListItems, archived] })
     const markup = renderWithBoardList(
       parseAppRoute("http://kanban.test/app/boards/archived/overview"),
-      boardListSurface({ items: [...boardListItems, archived] }),
+      archivedSurface,
+    )
+    const tasksMarkup = renderWithBoardList(
+      parseAppRoute("http://kanban.test/app/boards/archived/board"),
+      archivedSurface,
     )
 
     expect(markup).toContain('data-testid="project-overview"')
     expect(markup).toContain('data-archived="true"')
     expect(markup).not.toContain('data-testid="board-live-session"')
+    expect(markup).not.toContain('data-testid="project-overview-open-tasks"')
+    expect(markup).not.toContain('data-testid="project-tree-tasks"')
+    expect(markup).not.toContain('data-testid="resource-header-action-open-tasks"')
+    expect(tasksMarkup).toContain('data-testid="shell-project-archived"')
+    expect(tasksMarkup).toContain('href="/app/boards/archived/overview"')
+    expect(tasksMarkup).not.toContain('data-testid="explorer-page"')
+    expect(tasksMarkup).not.toContain('data-testid="board-live-session"')
   })
 
   test("turns a ready snapshot miss into typed not-found instead of fetching a project", () => {
@@ -109,6 +121,14 @@ describe("ProductShell route offline boundary", () => {
     expect(markup).toContain('data-testid="shell-project-not-found"')
     expect(markup).not.toContain('data-testid="project-overview"')
     expect(markup).not.toContain('data-testid="board-live-session"')
+  })
+
+  test("keeps feature-owned routes behind the ready project snapshot boundary", () => {
+    const markup = renderWithBoardList(parseAppRoute("http://kanban.test/app/boards/missing/signals"))
+
+    expect(markup).toContain('data-testid="shell-project-not-found"')
+    expect(markup).not.toContain('data-testid="live-board-child"')
+    expect(markup).not.toContain('data-testid="signals-screen"')
   })
 
   test("does not keep an overview in loading when the list is offline without a snapshot", () => {

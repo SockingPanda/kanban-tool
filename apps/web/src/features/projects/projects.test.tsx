@@ -73,7 +73,8 @@ describe("production Projects surfaces", () => {
     expect(markup).not.toMatch(/metric|owner|cover|activity|progress|risk/i)
     expect(markup).not.toContain("BoardLive")
     expect(markup).not.toContain("SSE")
-    expect(markup).toContain('href="/app/boards/archived/board"')
+    expect(markup).not.toContain('href="/app/boards/archived/board"')
+    expect(markup).not.toContain('data-testid="project-overview-open-tasks"')
     expect(markup).not.toContain("此项目没有提供")
   })
 

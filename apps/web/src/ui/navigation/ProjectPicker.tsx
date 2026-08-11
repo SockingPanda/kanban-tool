@@ -261,7 +261,7 @@ export function ProjectPicker({
                 <span className={styles.projectPickerOptionCopy}>
                   <span className={styles.projectPickerOptionName}>
                     {project.name}
-                    {project.archivedAt !== null ? <span className={styles.projectPickerOptionArchive}> · archived</span> : null}
+                    {project.archivedAt !== null ? <span className={styles.projectPickerOptionArchive}> · {labels.archived}</span> : null}
                   </span>
                   <span className={styles.projectPickerOptionMeta}>{project.slug}</span>
                 </span>

@@ -203,6 +203,8 @@ test.describe("Astryx Explorer browser acceptance", () => {
     await readyLens.press("Enter")
     await expect(readyLens).toHaveAttribute("aria-pressed", "true")
     await expect(page.getByTestId("attention-active-filter")).toBeVisible()
+    await readyLens.focus()
+    await expect(readyLens).toBeFocused()
     for (const lens of ["running", "blocked", "review"]) {
       await page.keyboard.press("Tab")
       await expect(page.getByTestId(`attention-lens-${lens}`)).toBeFocused()

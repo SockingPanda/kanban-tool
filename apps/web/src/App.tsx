@@ -163,9 +163,12 @@ function RuntimeThemedShell() {
       : router.route.kind === "settings" && retainedSessionSlug !== null
         ? { kind: "board" as const, boardSlug: retainedSessionSlug, pathname: routePath({ kind: "board", boardSlug: retainedSessionSlug }, { basePath: runtime.webBasePath }) }
         : null
+  const boardRouteProject = boardRouteCandidate === null
+    ? undefined
+    : boardList.items.find((item) => item.slug === boardRouteCandidate.boardSlug)
   const boardRoute = boardRouteCandidate !== null && (
-    !boardListReady
-    || boardList.items.some((item) => item.slug === boardRouteCandidate.boardSlug && item.archivedAt === null)
+    boardRouteProject?.archivedAt === null
+    || (!boardListReady && boardRouteProject === undefined)
   )
     ? boardRouteCandidate
     : null

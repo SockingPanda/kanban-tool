@@ -906,7 +906,9 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
       setEventsStatus(model.events.length > 0 ? "ready" : "idle")
       setNeighborhoodStatus(model.neighborhood ? "ready" : "idle")
     }
-    if (!mountedRef.current || identityChanged) headingRef.current?.focus()
+    // The owning modal dialog chooses the initial focus for a narrow sheet.
+    // Desktop side-peek keeps the existing task-heading focus behavior.
+    if (mode === "side-peek" && (!mountedRef.current || identityChanged)) headingRef.current?.focus()
     mountedRef.current = true
     requestIdentityRef.current = requestIdentity
     return () => {
@@ -916,7 +918,7 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
         neighborhoodFence.abort()
       }
     }
-  }, [eventsFence, model.events, model.neighborhood, model.runs, model.task.id, neighborhoodFence, requestIdentity, runsFence])
+  }, [eventsFence, mode, model.events, model.neighborhood, model.runs, model.task.id, neighborhoodFence, requestIdentity, runsFence])
 
   useEffect(() => () => {
     runsFence.abort()

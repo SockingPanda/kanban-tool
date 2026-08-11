@@ -293,11 +293,7 @@ function RouteContent({
   const project = routeProject(route, boardList?.items)
   const requiresProject = route.kind === "board" || route.kind === "project-overview"
   const missingReadyProject = requiresProject && boardList?.status === "ready" && boardList.isRefreshing !== true && project === undefined
-  const archivedTasksUnavailable = route.kind === "board"
-    && boardList?.status === "ready"
-    && boardList.isRefreshing !== true
-    && project !== undefined
-    && project.archivedAt !== null
+  const archivedTasksUnavailable = route.kind === "board" && project !== undefined && project.archivedAt !== null
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -442,6 +438,9 @@ export function ProductShell({
   const actions = route.kind === "project-overview" && project !== undefined && project.archivedAt === null && onNavigate !== undefined
     ? [{ id: "open-tasks", label: t("tasks"), kind: "primary" as const, onSelect: () => void onNavigate({ kind: "board", boardSlug: project.slug, view: "board" }) }]
     : []
+  const headerMoreItems = boardList === undefined || project?.archivedAt === null
+    ? moreItems(runtime, slug, t, onNavigate)
+    : []
 
   return (
     <div className={navigationStyles.navigationRoot} data-theme={preferences.theme === "dark" ? "dark" : preferences.theme === "light" ? "light" : undefined} data-density={preferences.density} data-testid="product-shell">
@@ -453,7 +452,7 @@ export function ProductShell({
           projectSwitchAriaLabel={t("projectSwitcher")}
           onProjectSwitch={onNavigate === undefined ? undefined : () => void onNavigate({ kind: "home" })}
           actions={actions}
-          moreItems={moreItems(runtime, slug, t, onNavigate)}
+          moreItems={headerMoreItems}
           onMenuToggle={() => setSidebarOpen((open) => !open)}
           menuOpen={sidebarOpen}
           menuControlsId="product-projects-sidebar"

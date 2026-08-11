@@ -189,7 +189,7 @@ export async function installPlaneAcceptanceFixture(page: Page): Promise<PlaneAc
       const allTasks = tasksFor(project)
       const filtered = query.length === 0
         ? allTasks
-        : allTasks.filter((task) => `${task.title} ${task.ref}`.toLocaleLowerCase().includes(query))
+        : allTasks.filter((task) => `${task.title} ${task.ref} ${task.description} ${task.assignee ?? ""}`.toLocaleLowerCase().includes(query))
       const limit = Number(url.searchParams.get("limit") ?? 100)
       const offset = Number(url.searchParams.get("offset") ?? 0)
       const tasks = filtered.slice(offset, offset + limit)

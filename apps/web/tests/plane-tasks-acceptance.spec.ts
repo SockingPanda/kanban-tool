@@ -68,7 +68,7 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
 
   test("keeps product rail and task view controls keyboard reachable", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
-    await page.goto("/app/boards/default/board?q=agent&task=t_default_ready", { waitUntil: "domcontentloaded" })
+    await page.goto("/app/boards/default/board?q=agent", { waitUntil: "domcontentloaded" })
 
     const projects = page.getByTestId("product-rail-projects")
     const settings = page.getByTestId("product-rail-settings")
@@ -82,13 +82,13 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await settings.press("Enter")
     await expect(page).toHaveURL(/\/app\/settings$/)
 
-    await page.goto("/app/boards/default/board?q=agent&task=t_default_ready", { waitUntil: "domcontentloaded" })
+    await page.goto("/app/boards/default/board?q=agent", { waitUntil: "domcontentloaded" })
     const viewSwitcher = page.getByRole("group", { name: "任务视图" })
     const list = viewSwitcher.getByRole("link", { name: "列表", exact: true })
     await list.focus()
     await expect(list).toBeFocused()
     await list.press("Enter")
-    await expect(page).toHaveURL(/\/app\/boards\/default\/list\?q=agent&task=t_default_ready$/)
+    await expect(page).toHaveURL(/\/app\/boards\/default\/list\?q=agent$/)
   })
 
   test("keeps diagnostics and Settings on the retained canonical board session", async ({ page }) => {

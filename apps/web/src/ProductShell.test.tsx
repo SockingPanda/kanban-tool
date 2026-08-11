@@ -102,6 +102,10 @@ describe("ProductShell route offline boundary", () => {
       parseAppRoute("http://kanban.test/app/boards/archived/board"),
       archivedSurface,
     )
+    const offlineTasksMarkup = renderWithBoardList(
+      parseAppRoute("http://kanban.test/app/boards/archived/board"),
+      { ...archivedSurface, status: "offline" },
+    )
 
     expect(markup).toContain('data-testid="project-overview"')
     expect(markup).toContain('data-archived="true"')
@@ -109,10 +113,15 @@ describe("ProductShell route offline boundary", () => {
     expect(markup).not.toContain('data-testid="project-overview-open-tasks"')
     expect(markup).not.toContain('data-testid="project-tree-tasks"')
     expect(markup).not.toContain('data-testid="resource-header-action-open-tasks"')
+    expect(markup).not.toContain('href="/app/boards/archived/runs"')
+    expect(markup).not.toContain('href="/app/boards/archived/maintenance"')
     expect(tasksMarkup).toContain('data-testid="shell-project-archived"')
     expect(tasksMarkup).toContain('href="/app/boards/archived/overview"')
     expect(tasksMarkup).not.toContain('data-testid="explorer-page"')
     expect(tasksMarkup).not.toContain('data-testid="board-live-session"')
+    expect(offlineTasksMarkup).toContain('data-testid="shell-project-archived"')
+    expect(offlineTasksMarkup).not.toContain('data-testid="explorer-page"')
+    expect(offlineTasksMarkup).not.toContain('data-testid="board-live-session"')
   })
 
   test("turns a ready snapshot miss into typed not-found instead of fetching a project", () => {

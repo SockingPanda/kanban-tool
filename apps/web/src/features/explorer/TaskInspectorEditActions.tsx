@@ -1,4 +1,4 @@
-import { useEffect, useRef, type FormEvent, type ReactNode } from "react"
+import { useEffect, useRef, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react"
 
 import type { Locale } from "../../lib/preferences"
 import styles from "./TaskInspector.module.css"
@@ -178,12 +178,53 @@ export function TaskInspectorActionDialog({
   readonly onCancel: () => void
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null)
   const dialogInputRef = useRef<HTMLTextAreaElement | null>(null)
   const dialogConfirmRef = useRef<HTMLButtonElement | null>(null)
   useEffect(() => {
     const target = dialogInputRef.current ?? dialogConfirmRef.current
     target?.focus()
   }, [])
+  const onDialogKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      // The action dialog is nested inside the mobile inspector sheet. Keep
+      // Escape scoped to this inner surface and let the owning sheet remain
+      // open; closeActionDialog restores the original action trigger.
+      event.preventDefault()
+      event.stopPropagation()
+      onCancel()
+      return
+    }
+    if (event.key !== "Tab") return
+
+    // Stop the outer sheet's document-level trap before it can recalculate
+    // focusables that include this nested dialog.
+    event.stopPropagation()
+    const dialog = dialogRef.current
+    if (dialog === null) return
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+    ))
+    if (focusable.length === 0) {
+      event.preventDefault()
+      dialog.focus()
+      return
+    }
+    const active = document.activeElement
+    const activeInside = active instanceof HTMLElement && dialog.contains(active)
+    if (!activeInside) {
+      event.preventDefault()
+      ;(event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus()
+      return
+    }
+    if (event.shiftKey && active === focusable[0]) {
+      event.preventDefault()
+      focusable[focusable.length - 1]?.focus()
+    } else if (!event.shiftKey && active === focusable[focusable.length - 1]) {
+      event.preventDefault()
+      focusable[0]?.focus()
+    }
+  }
   const title = dialog.kind === "description" ? copy.actionDescriptionTitle : dialog.kind === "reason" ? copy.actionReasonTitle : copy.actionConfirmTitle
   const submitLabel = actionLabel(dialog.action, locale)
   const invalid = dialog.kind === "description"
@@ -193,7 +234,7 @@ export function TaskInspectorActionDialog({
       : false
   return (
     <div className={styles.dialogBackdrop} role="presentation">
-      <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="inspector-action-dialog-title" aria-describedby="inspector-action-dialog-description">
+      <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="inspector-action-dialog-title" aria-describedby="inspector-action-dialog-description" tabIndex={-1} onKeyDown={onDialogKeyDown}>
         <form onSubmit={onSubmit}>
           <h2 id="inspector-action-dialog-title">{title}</h2>
           <p id="inspector-action-dialog-description">{dialog.kind === "description" ? copy.actionDescriptionHint : dialog.kind === "reason" ? copy.actionReasonHint : copy.actionConfirmDescription}</p>

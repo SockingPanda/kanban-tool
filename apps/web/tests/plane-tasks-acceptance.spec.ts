@@ -96,6 +96,43 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expect(taskOpener).toBeFocused()
   })
 
+  test("keeps a nested task action dialog trapped without closing the inspector sheet", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+    await page.setViewportSize({ width: 430, height: 900 })
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+
+    const taskOpener = page.getByRole("button", { name: /ready task$/i }).first()
+    await taskOpener.click()
+    const inspector = page.getByTestId("task-inspector-dialog")
+    await expect(inspector).toHaveAttribute("role", "dialog")
+    const block = page.getByTestId("task-inspector").getByRole("button", { name: "阻塞", exact: true })
+    await block.click()
+
+    const actionDialog = page.locator('[role="dialog"]').filter({ has: page.locator("textarea[name='action-reason']") }).last()
+    await expect(actionDialog).toBeVisible()
+    const textarea = actionDialog.locator("textarea[name='action-reason']")
+    const cancel = actionDialog.getByRole("button", { name: "取消", exact: true })
+    const submit = actionDialog.getByRole("button", { name: "阻塞", exact: true })
+    await expect(textarea).toBeFocused()
+
+    await textarea.fill("需要确认")
+    await expect(submit).toBeEnabled()
+
+    await cancel.focus()
+    await page.keyboard.press("Tab")
+    await expect(submit).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(textarea).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(submit).toBeFocused()
+
+    await page.keyboard.press("Escape")
+    await expect(actionDialog).toHaveCount(0)
+    await expect(inspector).toBeVisible()
+    await expect(block).toBeFocused()
+    await expect(page.getByTestId("task-inspector-dialog")).toHaveAttribute("data-mode", "sheet")
+  })
+
   test("keeps product rail and task view controls keyboard reachable", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
     await page.goto("/app/boards/default/board?q=agent", { waitUntil: "domcontentloaded" })

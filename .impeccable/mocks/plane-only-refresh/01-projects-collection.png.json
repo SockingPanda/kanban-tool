@@ -1,0 +1,8 @@
+{
+  "kind": "ui-mockup",
+  "surface": "projects-collection",
+  "approved": false,
+  "prompt_file": "01-projects-collection.prompt.txt",
+  "source": "built-in-imagegen",
+  "product_reference": "Plane-only"
+}

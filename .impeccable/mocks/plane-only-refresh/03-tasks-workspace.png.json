@@ -1,0 +1,8 @@
+{
+  "kind": "ui-mockup",
+  "surface": "tasks-workspace",
+  "approved": false,
+  "prompt_file": "03-tasks-workspace.prompt.txt",
+  "source": "built-in-imagegen",
+  "product_reference": "Plane-only"
+}

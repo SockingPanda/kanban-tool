@@ -1,0 +1,8 @@
+{
+  "kind": "ui-mockup",
+  "surface": "project-overview",
+  "approved": false,
+  "prompt_file": "02-project-overview.prompt.txt",
+  "source": "built-in-imagegen",
+  "product_reference": "Plane-only"
+}

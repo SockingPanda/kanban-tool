@@ -1,0 +1,7 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop north-star comp for kanban-tool Project Overview
+Primary request: Create a polished 1920×1080 dark desktop application UI screenshot for kanban-tool, learning Plane's compact shell, hierarchy, and finish while using an original implementation and only kanban-tool facts.
+Structure: fixed 56px product rail, fixed 248px Projects context sidebar, compact 44px header, project overview main surface, and a narrow More strip. The rail contains Projects and Settings. The sidebar contains Home, Projects, and kanban-tool expanded with exactly Overview and Tasks; Overview is selected.
+Main surface: compact 24px title “kanban-tool”, factual description “Local-first kanban and durable work queue.”, aligned identity rows for Slug = kanban-tool and Archive state = Active, then a single Explore row for Tasks. The right More strip contains Runs, Events, Signals, and Ontology. The header contains “kanban-tool / Overview”, a project switch trigger, and “Open Tasks”.
+Visual world: realistic pixel-perfect product UI; dark neutral canvas/surface/layer hierarchy; cool-gray hairlines; off-white and muted gray text; one operational blue accent; 14px humanist sans; mono only for slug; 6px controls; flat by default; consistent 16px line icons.
+Constraints: application screenshot, not poster; no browser chrome, perspective, people, photography, banner, cover, gradient, glass, marketing prose, owner, avatars, metrics, progress, health score, activity, team, task count, Plane brand, or watermark.

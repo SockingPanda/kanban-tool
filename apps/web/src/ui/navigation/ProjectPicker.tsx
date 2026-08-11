@@ -52,10 +52,11 @@ export function ProjectPickerSearch({
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={expanded}
-        aria-controls={listboxId}
-        aria-activedescendant={activeDescendant}
+        aria-controls={listboxId === undefined ? undefined : listboxId}
+        aria-activedescendant={activeDescendant === undefined ? undefined : activeDescendant}
         autoComplete="off"
         disabled={disabled}
+        data-project-picker-input="true"
         onChange={handleChange}
         onKeyDown={onKeyDown}
       />
@@ -74,17 +75,31 @@ export function ProjectPickerSearch({
   )
 }
 
-export type ProjectPickerProps = {
+type ProjectPickerPropsBase = {
   readonly projects: readonly NavigationProject[]
   readonly activeProjectSlug?: string
   readonly status?: ProjectPickerStatus
-  readonly query?: string
-  readonly onQueryChange?: (query: string) => void
   readonly onSelect?: (project: NavigationProject) => void
   readonly onRetry?: () => void
+  /** True when `projects` is a cached snapshot, including a valid empty snapshot. */
+  readonly hasSnapshot?: boolean
+  /** Separates an in-flight refresh from a blocking first load. */
+  readonly isRefreshing?: boolean
   readonly labels?: Partial<NavigationLabels>
   readonly className?: string
 }
+
+export type ProjectPickerQueryProps =
+  | {
+      readonly query: string
+      readonly onQueryChange: (query: string) => void
+    }
+  | {
+      readonly query?: never
+      readonly onQueryChange?: never
+    }
+
+export type ProjectPickerProps = ProjectPickerPropsBase & ProjectPickerQueryProps
 
 function projectMatches(project: NavigationProject, query: string): boolean {
   const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -96,6 +111,8 @@ function statusMessage(status: ProjectPickerStatus, labels: NavigationLabels, ha
   if (status === "loading") return labels.projectLoading
   if (status === "offline") return labels.projectOffline
   if (status === "error") return labels.projectError
+  if (status === "stale") return labels.projectStale
+  if (status === "recovering") return labels.projectRecovering
   return hasQuery ? labels.projectSearchEmpty : labels.projectsEmpty
 }
 
@@ -111,6 +128,8 @@ export function ProjectPicker({
   onQueryChange,
   onSelect,
   onRetry,
+  hasSnapshot: hasSnapshotOverride,
+  isRefreshing = false,
   labels: labelOverrides,
   className,
 }: ProjectPickerProps) {
@@ -127,8 +146,11 @@ export function ProjectPicker({
     [currentQuery, projects],
   )
   const activeOption = filteredProjects[activeIndex]
-  const activeDescendant = activeOption === undefined ? undefined : `${listboxId}-${activeOption.id}`
-  const disabled = status === "loading" || status === "offline" || status === "error"
+  const hasSnapshot = hasSnapshotOverride ?? projects.length > 0
+  const disabled = status === "loading" && !hasSnapshot
+  const boundaryStatus = isRefreshing && status === "ready" ? "recovering" : status
+  const hasOptions = !disabled && filteredProjects.length > 0
+  const activeDescendant = hasOptions && activeOption !== undefined ? `${listboxId}-${activeOption.id}` : undefined
 
   useEffect(() => {
     setActiveIndex((index) => Math.min(index, Math.max(filteredProjects.length - 1, 0)))
@@ -144,7 +166,7 @@ export function ProjectPicker({
   }
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (filteredProjects.length === 0) {
+    if (disabled || filteredProjects.length === 0) {
       if (event.key === "Escape" && currentQuery.length > 0) {
         event.preventDefault()
         handleQueryChange("")
@@ -168,10 +190,19 @@ export function ProjectPicker({
   }
 
   const rootClassName = className === undefined ? styles.projectPicker : `${styles.projectPicker} ${className}`
-  const showBoundary = status !== "ready" || filteredProjects.length === 0
+  const showBoundary = boundaryStatus !== "ready" || filteredProjects.length === 0
+  const boundaryIsEmpty = boundaryStatus === "ready" && filteredProjects.length === 0
+  const hasRetry = onRetry !== undefined && boundaryStatus !== "ready" && boundaryStatus !== "loading"
 
   return (
-    <section className={rootClassName} aria-label={labels.projectPicker} data-testid="project-picker" data-status={status}>
+    <section
+      className={rootClassName}
+      aria-label={labels.projectPicker}
+      aria-busy={isRefreshing || boundaryStatus === "loading" || boundaryStatus === "recovering" ? true : undefined}
+      data-testid="project-picker"
+      data-status={boundaryStatus}
+      data-has-snapshot={hasSnapshot ? "true" : "false"}
+    >
       <ProjectPickerSearch
         query={currentQuery}
         onQueryChange={handleQueryChange}
@@ -180,30 +211,30 @@ export function ProjectPicker({
         clearLabel={labels.clearSearch}
         disabled={disabled}
         inputId={inputId}
-        listboxId={listboxId}
+        listboxId={hasOptions ? listboxId : undefined}
         activeDescendant={activeDescendant}
-        expanded={status === "ready" && filteredProjects.length > 0}
+        expanded={hasOptions}
         onKeyDown={handleSearchKeyDown}
         onClear={() => handleQueryChange("")}
       />
 
       {showBoundary ? (
         <div
-          className={`${styles.projectPickerBoundary} ${status === "error" ? styles.projectPickerBoundaryError : ""}`}
-          role={status === "error" ? "alert" : "status"}
+          className={`${styles.projectPickerBoundary} ${boundaryStatus === "error" ? styles.projectPickerBoundaryError : ""}`}
+          role={boundaryStatus === "error" || boundaryStatus === "offline" ? "alert" : "status"}
           aria-live="polite"
-          data-testid={`project-picker-${status === "ready" ? "empty" : status}`}
+          data-testid={`project-picker-${boundaryIsEmpty ? "empty" : boundaryStatus}`}
         >
-          <span>{statusMessage(status, labels, currentQuery.trim().length > 0)}</span>
-          {status === "error" || status === "offline" ? (
-            <button type="button" className={styles.projectPickerRetry} onClick={onRetry} disabled={onRetry === undefined}>
+          <span>{statusMessage(boundaryStatus, labels, currentQuery.trim().length > 0)}</span>
+          {hasRetry ? (
+            <button type="button" className={styles.projectPickerRetry} onClick={onRetry}>
               {labels.retry}
             </button>
           ) : null}
         </div>
       ) : null}
 
-      {status === "ready" && filteredProjects.length > 0 ? (
+      {hasOptions ? (
         <ul
           id={listboxId}
           className={styles.projectPickerList}
@@ -223,13 +254,14 @@ export function ProjectPicker({
                 className={`${styles.projectPickerOption} ${highlighted ? styles.projectPickerOptionHighlighted : ""}`}
                 data-active={highlighted ? "true" : undefined}
                 onMouseEnter={() => setActiveIndex(index)}
+                onPointerDown={(event) => event.preventDefault()}
                 onClick={() => handleSelect(project)}
               >
                 <NavigationIcon name="folder" size={17} />
                 <span className={styles.projectPickerOptionCopy}>
                   <span className={styles.projectPickerOptionName}>
                     {project.name}
-                    {project.archived ? <span className={styles.projectPickerOptionArchive}> · archived</span> : null}
+                    {project.archivedAt !== null ? <span className={styles.projectPickerOptionArchive}> · archived</span> : null}
                   </span>
                   <span className={styles.projectPickerOptionMeta}>{project.slug}</span>
                 </span>

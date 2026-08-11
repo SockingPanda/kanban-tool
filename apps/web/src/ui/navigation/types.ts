@@ -1,21 +1,18 @@
 import type { ReactNode } from "react"
 
+import type { BoardListItem } from "../../lib/api/board-list-read-model"
+
 /**
  * Storybook and shell consumers pass the same identity-only board shape. The
  * navigation layer deliberately does not add lifecycle, metrics, or owner
  * fields that are not part of the canonical board contract.
  */
-export type NavigationProject = {
-  readonly id: string
-  readonly slug: string
-  readonly name: string
-  readonly description?: string | null
-  readonly archived?: boolean
-}
+/** Navigation consumes the canonical board list read model without weakening identity fields. */
+export type NavigationProject = BoardListItem
 
 export type ProjectSurface = "projects" | "overview" | "tasks"
 
-export type ProjectPickerStatus = "ready" | "loading" | "offline" | "error"
+export type ProjectPickerStatus = "ready" | "loading" | "offline" | "error" | "stale" | "recovering"
 
 export type ContextNavigationSection = "home" | "projects" | "project"
 
@@ -55,8 +52,12 @@ export type NavigationLabels = {
   readonly projectLoading: string
   readonly projectOffline: string
   readonly projectError: string
+  readonly projectStale: string
+  readonly projectRecovering: string
   readonly retry: string
   readonly close: string
+  readonly openProjectNavigation: string
+  readonly closeProjectNavigation: string
   readonly collapse: string
   readonly expand: string
   readonly overview: string
@@ -79,8 +80,12 @@ export const defaultNavigationLabels: NavigationLabels = {
   projectLoading: "Loading projects…",
   projectOffline: "Projects are unavailable while offline.",
   projectError: "Projects could not be loaded.",
+  projectStale: "Showing a cached project list.",
+  projectRecovering: "Refreshing projects…",
   retry: "Retry",
   close: "Close",
+  openProjectNavigation: "Open project navigation",
+  closeProjectNavigation: "Close project navigation",
   collapse: "Collapse project navigation",
   expand: "Expand project navigation",
   overview: "Overview",

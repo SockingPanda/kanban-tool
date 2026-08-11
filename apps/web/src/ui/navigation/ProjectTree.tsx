@@ -55,19 +55,19 @@ export function ProjectTree({
   ]
 
   return (
-    <section className={rootClassName} aria-label={`${project.name} navigation`} data-testid="project-tree">
+    <nav className={rootClassName} aria-label={`${project.name} navigation`} data-testid="project-tree">
       <h3 className={styles.projectTreeHeading}>
         <span>{project.name}</span>
-        {project.archived ? <span aria-label="Archived">· archived</span> : null}
+        {project.archivedAt !== null ? <span aria-label="Archived">· archived</span> : null}
       </h3>
-      <ul className={styles.projectTreeList} role="tree" aria-label={`${project.name} project sections`}>
-        <li role="treeitem" aria-expanded={isExpanded}>
+      <ul className={styles.projectTreeList} aria-label={`${project.name} project sections`}>
+        <li>
           <div className={styles.projectTreeProjectRow}>
             <button
               type="button"
               className={styles.projectTreeToggle}
               aria-label={isExpanded ? labels.collapse : labels.expand}
-              aria-controls={childrenId}
+              aria-controls={isExpanded ? childrenId : undefined}
               aria-expanded={isExpanded}
               onClick={() => setExpanded(!isExpanded)}
               onKeyDown={handleToggleKeyDown}
@@ -86,11 +86,11 @@ export function ProjectTree({
             </button>
           </div>
           {isExpanded ? (
-            <ul id={childrenId} className={styles.projectTreeChildren} role="group">
+            <ul id={childrenId} className={styles.projectTreeChildren}>
               {children.map((child) => {
                 const isActive = activeSurface === child.surface
                 return (
-                  <li key={child.surface} role="treeitem" aria-selected={isActive}>
+                  <li key={child.surface}>
                     <button
                       type="button"
                       className={`${styles.projectTreeChildButton} ${isActive ? styles.projectTreeChildButtonActive : ""}`}
@@ -108,7 +108,7 @@ export function ProjectTree({
           ) : null}
         </li>
       </ul>
-    </section>
+    </nav>
   )
 }
 

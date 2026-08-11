@@ -1,7 +1,7 @@
 export { ProductRail } from "./ProductRail"
 export type { ProductRailItem, ProductRailProps } from "./ProductRail"
 export { ProjectPicker, ProjectPickerSearch } from "./ProjectPicker"
-export type { ProjectPickerProps, ProjectPickerSearchProps } from "./ProjectPicker"
+export type { ProjectPickerProps, ProjectPickerQueryProps, ProjectPickerSearchProps } from "./ProjectPicker"
 export { ProjectTree } from "./ProjectTree"
 export type { ProjectTreeProps } from "./ProjectTree"
 export { ProjectsSidebar } from "./ProjectsSidebar"

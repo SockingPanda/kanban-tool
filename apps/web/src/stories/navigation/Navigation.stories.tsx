@@ -6,32 +6,167 @@ import {
   ProductRail,
   ProjectsSidebar,
   ResourceHeader,
+  type NavigationLabels,
   type NavigationProject,
+  type ProductRailItem,
   type ProjectSurface,
 } from "../../ui/navigation"
+import { assertCanonicalBoardSlug } from "../../lib/board-slug"
+import { asCanonicalBoardId } from "../../lib/sync/contracts"
 import navigationStyles from "../../ui/navigation/navigation.module.css"
 import styles from "./navigation.stories.module.css"
 
 const DEMO_PROJECTS = [
-  {
-    id: "board-kanban-tool",
-    slug: "kanban-tool",
+  Object.freeze({
+    id: asCanonicalBoardId("b_kanban_tool"),
+    slug: assertCanonicalBoardSlug("kanban-tool"),
     name: "kanban-tool",
     description: "Local-first kanban and durable work queue.",
-  },
-  {
-    id: "board-wiki",
-    slug: "wiki",
+    archivedAt: null,
+  }),
+  Object.freeze({
+    id: asCanonicalBoardId("b_wiki"),
+    slug: assertCanonicalBoardSlug("wiki"),
     name: "Wiki",
     description: "Project knowledge and decision ledger.",
-  },
-  {
-    id: "board-story-workshop",
-    slug: "story-workshop",
+    archivedAt: null,
+  }),
+  Object.freeze({
+    id: asCanonicalBoardId("b_story_workshop"),
+    slug: assertCanonicalBoardSlug("story-workshop"),
     name: "Story Workshop",
     description: "Local story asset workbench.",
-  },
+    archivedAt: 1_754_918_400,
+  }),
 ] as const satisfies readonly NavigationProject[]
+
+type StoryLocale = "zh" | "en"
+type StoryTheme = "light" | "dark"
+type StoryDensity = "compact" | "comfortable"
+
+const STORY_LABELS: Record<StoryLocale, Partial<NavigationLabels>> = {
+  zh: {
+    productNavigation: "产品导航",
+    projects: "项目",
+    settings: "设置",
+    home: "首页",
+    projectSearch: "搜索项目",
+    projectSearchPlaceholder: "搜索项目",
+    clearSearch: "清除项目搜索",
+    projectSearchEmpty: "没有匹配的项目。",
+    projectsEmpty: "没有可用的 canonical 项目。",
+    projectLoading: "正在加载项目…",
+    projectOffline: "当前离线，显示可用的项目快照。",
+    projectError: "项目加载失败，显示可用的项目快照。",
+    projectStale: "正在显示缓存的项目列表。",
+    projectRecovering: "正在恢复项目列表…",
+    retry: "重试",
+    close: "关闭",
+    openProjectNavigation: "打开项目导航",
+    closeProjectNavigation: "关闭项目导航",
+    collapse: "收起项目导航",
+    expand: "展开项目导航",
+    overview: "概览",
+    tasks: "任务",
+    more: "更多",
+    breadcrumb: "面包屑",
+    projectPicker: "项目切换器",
+  },
+  en: {
+    productNavigation: "Product navigation",
+    projects: "Projects",
+    settings: "Settings",
+    home: "Home",
+    projectSearch: "Search projects",
+    projectSearchPlaceholder: "Search projects",
+    clearSearch: "Clear project search",
+    projectSearchEmpty: "No projects match this search.",
+    projectsEmpty: "No canonical projects are available.",
+    projectLoading: "Loading projects…",
+    projectOffline: "Offline; showing the available project snapshot.",
+    projectError: "Projects failed to load; showing the available snapshot.",
+    projectStale: "Showing a cached project list.",
+    projectRecovering: "Refreshing projects…",
+    retry: "Retry",
+    close: "Close",
+    openProjectNavigation: "Open project navigation",
+    closeProjectNavigation: "Close project navigation",
+    collapse: "Collapse project navigation",
+    expand: "Expand project navigation",
+    overview: "Overview",
+    tasks: "Tasks",
+    more: "More",
+    breadcrumb: "Breadcrumb",
+    projectPicker: "Project switcher",
+  },
+}
+
+const STORY_COPY = {
+  zh: {
+    projectsTitle: "项目",
+    projectsDescription: "当前本地实例可用的 canonical board。",
+    searchProjects: "搜索项目",
+    compact: "紧凑",
+    comfortable: "舒适",
+    density: "密度",
+    settingsDescription: "设置状态（Storybook 占位）；不会回到项目集合。",
+    settingsTitle: "设置",
+    overviewDescription: "项目 identity 与 description；不会伪造指标。",
+    slug: "Slug",
+    archiveState: "归档状态",
+    archived: "已归档",
+    active: "活动",
+    explore: "浏览",
+    detailsDeferred: "详情与诊断操作保留在右侧操作组；当前 story 不连接 API。",
+    tasksPlaceholder: "Tasks canvas navigation context placeholder",
+    taskTitle: "任务",
+    more: "更多",
+    projectSearchEmpty: "没有匹配的项目。",
+    tasksDeferred: "Production task views remain deferred to the tasks owner; this story only verifies navigation context.",
+    taskViews: "任务视图",
+    filters: "筛选",
+    display: "显示",
+    searchTasks: "搜索任务",
+    allTasks: "全部任务",
+    taskDetails: "任务详情",
+    closeTaskDetails: "关闭任务详情",
+    openDetails: "打开详情",
+    canonicalTaskStatus: "canonical task status",
+    fixture: "Storybook fixture · demo-only；无 API、SSE 或 mutation path。",
+  },
+  en: {
+    projectsTitle: "Projects",
+    projectsDescription: "Canonical boards available on this local instance.",
+    searchProjects: "Search projects",
+    compact: "Compact",
+    comfortable: "Comfortable",
+    density: "Density",
+    settingsDescription: "Settings state (Storybook placeholder); it does not navigate back to Projects.",
+    settingsTitle: "Settings",
+    overviewDescription: "Project identity and description; no invented metrics.",
+    slug: "Slug",
+    archiveState: "Archive state",
+    archived: "Archived",
+    active: "Active",
+    explore: "Explore",
+    detailsDeferred: "Details and diagnostics stay in the single right-side action group; this story has no API.",
+    tasksPlaceholder: "Tasks canvas navigation context placeholder",
+    taskTitle: "Tasks",
+    more: "More",
+    projectSearchEmpty: "No projects match this search.",
+    tasksDeferred: "Production task views remain deferred to the tasks owner; this story only verifies navigation context.",
+    taskViews: "Task views",
+    filters: "Filters",
+    display: "Display",
+    searchTasks: "Search tasks",
+    allTasks: "All tasks",
+    taskDetails: "Task details",
+    closeTaskDetails: "Close task details",
+    openDetails: "Open details",
+    canonicalTaskStatus: "canonical task status",
+    fixture: "Storybook fixture · demo-only; no API, SSE, or mutation path.",
+  },
+} as const
 
 type StoryViewport = "desktop" | "narrow"
 
@@ -70,45 +205,67 @@ const DIAGNOSTICS = [
 type NavigationCanvasProps = {
   readonly initialSurface: ProjectSurface
   readonly viewport: StoryViewport
+  readonly locale?: StoryLocale
+  readonly theme?: StoryTheme
 }
 
-function NavigationCanvas({ initialSurface, viewport }: NavigationCanvasProps) {
+function NavigationCanvas({ initialSurface, viewport, locale = "zh", theme = "light" }: NavigationCanvasProps) {
   const [surface, setSurface] = useState<ProjectSurface>(initialSurface)
   const [activeProjectSlug, setActiveProjectSlug] = useState<string | undefined>(initialSurface === "projects" ? undefined : DEMO_PROJECTS[0].slug)
   const [projectQuery, setProjectQuery] = useState("")
+  const [density, setDensity] = useState<StoryDensity>("comfortable")
+  const [railItem, setRailItem] = useState<ProductRailItem>("projects")
   const [sidebarOpen, setSidebarOpen] = useState(viewport === "desktop")
   const currentProject = DEMO_PROJECTS.find((project) => project.slug === activeProjectSlug) ?? DEMO_PROJECTS[0]
+  const labels = STORY_LABELS[locale]
+  const copy = STORY_COPY[locale]
+  const showingSettings = railItem === "settings"
 
   const openProject = (project: NavigationProject) => {
+    setRailItem("projects")
     setActiveProjectSlug(project.slug)
     setSurface("overview")
     if (viewport === "narrow") setSidebarOpen(false)
   }
 
   const openSurface = (project: NavigationProject, nextSurface: Exclude<ProjectSurface, "projects">) => {
+    setRailItem("projects")
     setActiveProjectSlug(project.slug)
     setSurface(nextSurface)
     if (viewport === "narrow") setSidebarOpen(false)
   }
 
-  const breadcrumbs = surface === "projects"
-    ? [{ label: "Projects" }]
-    : [{ label: currentProject.name }, { label: surface === "overview" ? "Overview" : "Tasks" }]
+  const breadcrumbs = showingSettings
+    ? [{ label: labels.settings ?? "Settings" }]
+    : surface === "projects"
+      ? [{ label: labels.projects ?? "Projects" }]
+      : [{ label: currentProject.name }, { label: surface === "overview" ? (labels.overview ?? "Overview") : (labels.tasks ?? "Tasks") }]
 
   return (
     <div
       className={`${navigationStyles.navigationRoot} ${styles.storyFrame}`}
       data-viewport={viewport}
-      data-theme="dark"
+      data-theme={theme}
+      data-density={density}
       data-testid={`navigation-story-${initialSurface}-${viewport}`}
     >
       <div className={styles.storyCanvas}>
-        <ProductRail activeItem="projects" onNavigate={() => setSurface("projects")} />
+        <ProductRail
+          activeItem={railItem}
+          labels={labels}
+          onNavigate={(item) => {
+            setRailItem(item)
+            if (item === "projects") {
+              setSurface("projects")
+              setSidebarOpen(viewport === "desktop")
+            }
+          }}
+        />
         <ProjectsSidebar
           projects={DEMO_PROJECTS}
-          activeProjectSlug={surface === "projects" ? undefined : currentProject.slug}
-          activeSurface={surface}
-          activeSection={surface === "projects" ? "projects" : "project"}
+          activeProjectSlug={!showingSettings && surface !== "projects" ? currentProject.slug : undefined}
+          activeSurface={!showingSettings ? surface : undefined}
+          activeSection={!showingSettings && surface !== "projects" ? "project" : "projects"}
           projectQuery={projectQuery}
           onProjectQueryChange={setProjectQuery}
           onProjectSelect={openProject}
@@ -117,30 +274,61 @@ function NavigationCanvas({ initialSurface, viewport }: NavigationCanvasProps) {
             if (section === "projects") setSurface("projects")
             if (section === "home") setSurface("projects")
           }}
+          labels={labels}
+          drawerId="navigation-projects-sidebar"
           open={viewport === "narrow" ? sidebarOpen : undefined}
           onClose={() => setSidebarOpen(false)}
         />
-        <main className={styles.storyMainSurface} aria-label="Navigation story surface">
+        <main className={styles.storyMainSurface} aria-label={showingSettings ? labels.settings : "Navigation story surface"}>
           <ResourceHeader
             breadcrumbs={breadcrumbs}
-            projectSwitchLabel={surface === "projects" ? undefined : currentProject.name}
-            projectSwitchAriaLabel="Switch project"
-            onProjectSwitch={() => setSurface("projects")}
-            onMenuToggle={() => setSidebarOpen(true)}
+            projectSwitchLabel={!showingSettings && surface !== "projects" ? currentProject.name : undefined}
+            projectSwitchAriaLabel={labels.projectPicker}
+            onProjectSwitch={() => {
+              setRailItem("projects")
+              setSurface("projects")
+            }}
+            onMenuToggle={() => setSidebarOpen((isOpen) => !isOpen)}
             menuOpen={sidebarOpen}
-            actions={surface === "overview" ? [{ id: "open-tasks", label: "Open Tasks", kind: "primary", onSelect: () => setSurface("tasks") }] : []}
-            moreItems={surface === "overview" ? DIAGNOSTICS.map((item) => ({ id: item.id, label: item.label, icon: <NavigationIcon name={item.icon} size={16} /> })) : []}
+            menuControlsId="navigation-projects-sidebar"
+            labels={labels}
+            actions={!showingSettings && surface === "overview" ? [{ id: "open-tasks", label: labels.tasks ?? "Tasks", kind: "primary", onSelect: () => setSurface("tasks") }] : []}
           />
-          {surface === "projects" ? <ProjectsCollection onOpenProject={openProject} /> : null}
-          {surface === "overview" ? <ProjectOverview project={currentProject} onOpenTasks={() => setSurface("tasks")} /> : null}
-          {surface === "tasks" ? <TasksWorkspace /> : null}
+          {showingSettings ? <SettingsSurface copy={copy} /> : null}
+          {!showingSettings && surface === "projects" ? <ProjectsCollection density={density} copy={copy} onDensityChange={setDensity} onOpenProject={openProject} /> : null}
+          {!showingSettings && surface === "overview" ? <ProjectOverview copy={copy} project={currentProject} onOpenTasks={() => setSurface("tasks")} /> : null}
+          {!showingSettings && surface === "tasks" ? <TasksWorkspace copy={copy} /> : null}
         </main>
       </div>
     </div>
   )
 }
 
-function ProjectsCollection({ onOpenProject }: { readonly onOpenProject: (project: NavigationProject) => void }) {
+function SettingsSurface({ copy }: { readonly copy: (typeof STORY_COPY)[StoryLocale] }) {
+  return (
+    <section className={styles.storySurfaceContent} aria-labelledby="settings-state-title" data-testid="story-settings-state">
+      <div className={styles.storySurfaceHeading}>
+        <div>
+          <h1 id="settings-state-title">{copy.settingsTitle}</h1>
+          <p>{copy.settingsDescription}</p>
+        </div>
+      </div>
+      <p className={styles.storyFixtureNote}>{copy.fixture}</p>
+    </section>
+  )
+}
+
+function ProjectsCollection({
+  density,
+  copy,
+  onDensityChange,
+  onOpenProject,
+}: {
+  readonly density: StoryDensity
+  readonly copy: (typeof STORY_COPY)[StoryLocale]
+  readonly onDensityChange: (density: StoryDensity) => void
+  readonly onOpenProject: (project: NavigationProject) => void
+}) {
   const [query, setQuery] = useState("")
   const filteredProjects = DEMO_PROJECTS.filter((project) => `${project.name} ${project.slug} ${project.description}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
 
@@ -149,18 +337,25 @@ function ProjectsCollection({ onOpenProject }: { readonly onOpenProject: (projec
       <div className={styles.storyCollectionToolbar}>
         <div className={styles.storySurfaceHeading}>
           <div>
-            <h1 id="projects-collection-title">Projects</h1>
-            <p>Canonical boards available on this local instance.</p>
+            <h1 id="projects-collection-title">{copy.projectsTitle}</h1>
+            <p>{copy.projectsDescription}</p>
           </div>
         </div>
         <label className={styles.storyCollectionSearch}>
           <NavigationIcon name="search" size={16} />
-          <span className={navigationStyles.visuallyHidden}>Search projects</span>
-          <input type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search projects" />
+          <span className={navigationStyles.visuallyHidden}>{copy.searchProjects}</span>
+          <input type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={copy.searchProjects} />
         </label>
-        <button type="button" className={styles.storyDensityControl} aria-label="Change density">
+        <button
+          type="button"
+          className={styles.storyDensityControl}
+          aria-label={copy.density}
+          aria-pressed={density === "compact"}
+          data-testid="navigation-density-toggle"
+          onClick={() => onDensityChange(density === "compact" ? "comfortable" : "compact")}
+        >
           <NavigationIcon name="list" size={16} />
-          <span>Dense</span>
+          <span>{density === "compact" ? copy.compact : copy.comfortable}</span>
           <NavigationIcon name="chevron-down" size={14} />
         </button>
       </div>
@@ -181,41 +376,41 @@ function ProjectsCollection({ onOpenProject }: { readonly onOpenProject: (projec
           ))}
         </ul>
       ) : (
-        <p className={styles.storyEmptyNotice} role="status">No projects match this search.</p>
+        <p className={styles.storyEmptyNotice} role="status">{copy.projectSearchEmpty}</p>
       )}
-      <p className={styles.storyFixtureNote}>Storybook fixture · demo-only canonical board identities; no API or mutation path.</p>
+      <p className={styles.storyFixtureNote}>{copy.fixture}</p>
     </section>
   )
 }
 
-function ProjectOverview({ project, onOpenTasks }: { readonly project: NavigationProject; readonly onOpenTasks: () => void }) {
+function ProjectOverview({ project, onOpenTasks, copy }: { readonly project: NavigationProject; readonly onOpenTasks: () => void; readonly copy: (typeof STORY_COPY)[StoryLocale] }) {
   return (
     <section className={styles.storySurfaceContent} aria-labelledby="project-overview-title">
       <div className={styles.storyOverviewLayout}>
         <div className={styles.storyOverviewMain}>
           <h1 id="project-overview-title" className={styles.storyOverviewTitle}>{project.name}</h1>
-          <p className={styles.storyOverviewDescription}>{project.description}</p>
+          <p className={styles.storyOverviewDescription}>{project.description ?? copy.overviewDescription}</p>
           <dl className={styles.storyIdentityRows}>
             <div className={styles.storyIdentityRow}>
-              <dt>Slug</dt>
+              <dt>{copy.slug}</dt>
               <dd><code>{project.slug}</code></dd>
             </div>
             <div className={styles.storyIdentityRow}>
-              <dt>Archive state</dt>
-              <dd>{project.archived ? "Archived" : "Active"}</dd>
+              <dt>{copy.archiveState}</dt>
+              <dd>{project.archivedAt !== null ? copy.archived : copy.active}</dd>
             </div>
           </dl>
           <div className={styles.storyExplore}>
-            <h2>Explore</h2>
+            <h2>{copy.explore}</h2>
             <button type="button" className={styles.storyExploreButton} onClick={onOpenTasks}>
-              <span className={styles.storyExploreButtonCopy}><NavigationIcon name="list" size={18} /><span>Tasks</span></span>
+              <span className={styles.storyExploreButtonCopy}><NavigationIcon name="list" size={18} /><span>{copy.taskTitle}</span></span>
               <NavigationIcon name="chevron-right" size={17} />
             </button>
           </div>
-          <p className={styles.storyFixtureNote}>Storybook fixture · identity-only overview; progress, risk, owners and metrics are intentionally absent.</p>
+          <p className={styles.storyFixtureNote}>{copy.detailsDeferred}</p>
         </div>
-        <aside className={styles.storyDiagnostics} aria-label="More diagnostics">
-          <h2>More</h2>
+        <aside className={styles.storyDiagnostics} aria-label={`${copy.more} diagnostics`}>
+          <h2>{copy.more}</h2>
           <ul className={styles.storyDiagnosticsList}>
             {DIAGNOSTICS.map((item) => (
               <li key={item.id}>
@@ -233,7 +428,7 @@ function ProjectOverview({ project, onOpenTasks }: { readonly project: Navigatio
   )
 }
 
-function TasksWorkspace() {
+function TasksWorkspace({ copy }: { readonly copy: (typeof STORY_COPY)[StoryLocale] }) {
   const [view, setView] = useState<"Board" | "List" | "Table" | "Map">("Board")
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const selectedTask = DEMO_COLUMNS[2].tasks[0]
@@ -246,10 +441,10 @@ function TasksWorkspace() {
 
   return (
     <section className={styles.storyTaskWorkspace} aria-labelledby="tasks-workspace-title">
-      <h1 id="tasks-workspace-title" className={navigationStyles.visuallyHidden}>Tasks</h1>
+      <h1 id="tasks-workspace-title" className={navigationStyles.visuallyHidden}>{copy.tasksPlaceholder}</h1>
       <div className={styles.storyTaskToolbar}>
         <div className={styles.storyTaskToolbarGroup}>
-          <div className={styles.storyViewSwitch} role="tablist" aria-label="Task views">
+          <div className={styles.storyViewSwitch} role="tablist" aria-label={copy.taskViews}>
             {views.map((item) => (
               <button
                 key={item.name}
@@ -266,14 +461,14 @@ function TasksWorkspace() {
           </div>
         </div>
         <div className={styles.storyTaskToolbarGroup}>
-          <button type="button" className={styles.storyToolbarButton}><NavigationIcon name="list" size={16} />Filters</button>
-          <button type="button" className={styles.storyToolbarButton}><NavigationIcon name="grid" size={16} />Display</button>
-          <button type="button" className={styles.storyToolbarButton} aria-label="Search tasks"><NavigationIcon name="search" size={17} /></button>
+          <button type="button" className={styles.storyToolbarButton}><NavigationIcon name="list" size={16} />{copy.filters}</button>
+          <button type="button" className={styles.storyToolbarButton}><NavigationIcon name="grid" size={16} />{copy.display}</button>
+          <button type="button" className={styles.storyToolbarButton} aria-label={copy.searchTasks}><NavigationIcon name="search" size={17} /></button>
         </div>
       </div>
       <div className={styles.storyTaskFilterBar}>
-        <span className={styles.storyFilterChip}><NavigationIcon name="list" size={15} />All tasks <NavigationIcon name="close" size={13} /></span>
-        <span className={styles.storyTaskMeta}>{view} view · canonical task status</span>
+        <span className={styles.storyFilterChip}><NavigationIcon name="list" size={15} />{copy.allTasks} <NavigationIcon name="close" size={13} /></span>
+        <span className={styles.storyTaskMeta}>{view} view · {copy.canonicalTaskStatus}</span>
       </div>
       <div className={styles.storyTaskBody}>
         <div className={styles.storyBoardScroller} aria-label="Task board region">
@@ -302,23 +497,23 @@ function TasksWorkspace() {
           </div>
         </div>
         {inspectorOpen ? (
-          <aside className={styles.storyTaskInspector} aria-label="Task details">
+          <aside className={styles.storyTaskInspector} aria-label={copy.taskDetails}>
             <div className={styles.storyTaskInspectorHeader}>
               <h2>{selectedTask.ref} {selectedTask.title}</h2>
-              <button type="button" className={styles.storyInspectorClose} aria-label="Close task details" onClick={() => setInspectorOpen(false)}><NavigationIcon name="close" size={19} /></button>
+              <button type="button" className={styles.storyInspectorClose} aria-label={copy.closeTaskDetails} onClick={() => setInspectorOpen(false)}><NavigationIcon name="close" size={19} /></button>
             </div>
             <dl className={styles.storyInspectorRows}>
               <div className={styles.storyInspectorRow}><dt>Status</dt><dd><span className={`${styles.storyTaskBadge} ${styles.storyTaskBadgeRunning}`}>Running</span></dd></div>
               <div className={styles.storyInspectorRow}><dt>Required step</dt><dd>Build a static Storybook</dd></div>
               <div className={styles.storyInspectorRow}><dt>Run</dt><dd><code className={styles.storyInspectorRun}>r_01KZRMHQA8</code></dd></div>
             </dl>
-            <button type="button" className={styles.storyInspectorButton}>Open details</button>
+            <button type="button" className={styles.storyInspectorButton}>{copy.openDetails}</button>
           </aside>
         ) : (
           <div className={styles.storyEmptyNotice}>Select a task to open its details.</div>
         )}
       </div>
-      <p className={styles.storyFixtureNote}>Storybook fixture · task status and run reference are demo-only; no API, SSE or mutation path.</p>
+      <p className={styles.storyFixtureNote}>{copy.tasksDeferred}</p>
     </section>
   )
 }
@@ -338,32 +533,62 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
+type StoryRenderContext = { readonly globals: Record<string, unknown> }
+
+function storyCanvas(initialSurface: ProjectSurface, viewport: StoryViewport, context: StoryRenderContext) {
+  return (
+    <NavigationCanvas
+      initialSurface={initialSurface}
+      viewport={viewport}
+      locale={context.globals.locale === "en" ? "en" : "zh"}
+      theme={context.globals.theme === "dark" ? "dark" : "light"}
+    />
+  )
+}
+
+async function drawerPlay({ canvasElement }: { readonly canvasElement: HTMLElement }): Promise<void> {
+  const trigger = canvasElement.querySelector<HTMLButtonElement>('[data-testid="resource-header-menu"]')
+  if (trigger === null) throw new Error("narrow navigation story is missing its menu trigger")
+  trigger.click()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  const drawer = canvasElement.querySelector<HTMLElement>('[data-testid="projects-sidebar"]')
+  if (drawer?.getAttribute("data-open") !== "true" || document.activeElement === trigger) {
+    throw new Error("drawer play did not open and move focus into the sidebar")
+  }
+  document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  if (drawer.getAttribute("data-open") !== "false" || document.activeElement !== trigger) {
+    throw new Error("drawer play did not close and return focus to its trigger")
+  }
+}
+
 export const ProjectsCollectionDesktop: Story = {
   name: "Projects collection · desktop",
-  render: () => <NavigationCanvas initialSurface="projects" viewport="desktop" />,
+  render: (_args, context) => storyCanvas("projects", "desktop", context),
 }
 
 export const ProjectsCollectionNarrow: Story = {
   name: "Projects collection · narrow drawer",
-  render: () => <NavigationCanvas initialSurface="projects" viewport="narrow" />,
+  render: (_args, context) => storyCanvas("projects", "narrow", context),
+  play: drawerPlay,
 }
 
 export const ProjectOverviewDesktop: Story = {
   name: "Project Overview · desktop",
-  render: () => <NavigationCanvas initialSurface="overview" viewport="desktop" />,
+  render: (_args, context) => storyCanvas("overview", "desktop", context),
 }
 
 export const ProjectOverviewNarrow: Story = {
   name: "Project Overview · narrow drawer",
-  render: () => <NavigationCanvas initialSurface="overview" viewport="narrow" />,
+  render: (_args, context) => storyCanvas("overview", "narrow", context),
 }
 
 export const TasksContextDesktop: Story = {
   name: "Tasks context · desktop side-peek",
-  render: () => <NavigationCanvas initialSurface="tasks" viewport="desktop" />,
+  render: (_args, context) => storyCanvas("tasks", "desktop", context),
 }
 
 export const TasksContextNarrow: Story = {
   name: "Tasks context · narrow sheet",
-  render: () => <NavigationCanvas initialSurface="tasks" viewport="narrow" />,
+  render: (_args, context) => storyCanvas("tasks", "narrow", context),
 }

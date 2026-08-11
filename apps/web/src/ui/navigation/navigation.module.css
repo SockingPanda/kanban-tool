@@ -49,6 +49,25 @@
     color-scheme: dark;
   }
 
+  .navigationRoot[data-theme="light"] {
+    --nav-canvas: #f1f1f1;
+    --nav-surface: #ffffff;
+    --nav-layer: #f1f1f1;
+    --nav-layer-active: #e5e5e5;
+    --nav-border: rgb(0 0 0 / 0.12);
+    --nav-border-strong: rgb(0 0 0 / 0.22);
+    --nav-text: #171717;
+    --nav-text-secondary: #525252;
+    --nav-text-tertiary: #737373;
+    --nav-text-disabled: #a3a3a3;
+    --nav-accent: #262626;
+    --nav-accent-muted: #e5e5e5;
+    --nav-success: #007004;
+    --nav-warning: #745b00;
+    --nav-danger: #a50c25;
+    color-scheme: light;
+  }
+
   .navigationRoot,
   .navigationRoot * {
     box-sizing: border-box;
@@ -156,6 +175,24 @@
     border-inline-end: 1px solid var(--nav-border);
     background: var(--nav-surface);
     transition: transform 160ms ease-out, visibility 160ms ease-out;
+  }
+
+  .sidebarDrawerContent {
+    display: flex;
+    min-block-size: 100%;
+    min-inline-size: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .sidebarBackdrop {
+    position: fixed;
+    z-index: 2;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: rgb(0 0 0 / 0.48);
+    cursor: pointer;
   }
 
   .sidebarHeader {
@@ -735,6 +772,7 @@
   @media (max-width: 60rem) {
     .projectsSidebar {
       position: fixed;
+      z-index: 3;
       inset-block: 0;
       inset-inline-start: var(--nav-rail-width);
       transform: translateX(-104%);
@@ -808,6 +846,7 @@
   @container navigation-shell (max-width: 60rem) {
     .projectsSidebar {
       position: fixed;
+      z-index: 3;
       inset-block: 0;
       inset-inline-start: var(--nav-rail-width);
       transform: translateX(-104%);

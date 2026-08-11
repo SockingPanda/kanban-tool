@@ -105,6 +105,22 @@
   font: inherit;
 }
 
+.storyFrame[data-density="compact"] .storyProjectRow {
+  min-block-size: 4.25rem;
+  padding-block: 0.65rem;
+}
+
+.storyFrame[data-density="compact"] .storyTaskToolbar,
+.storyFrame[data-density="compact"] .storyTaskFilterBar {
+  min-block-size: 2.55rem;
+  padding-block: 0.25rem;
+}
+
+.storyFrame[data-density="comfortable"] .storyProjectRow {
+  min-block-size: 5.3rem;
+  padding-block: 0.9rem;
+}
+
 .storyProjectRows {
   display: grid;
   gap: 0.7rem;

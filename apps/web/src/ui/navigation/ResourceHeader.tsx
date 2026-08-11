@@ -40,6 +40,8 @@ export type ResourceHeaderProps = {
   readonly children?: ReactNode
   readonly onMenuToggle?: () => void
   readonly menuOpen?: boolean
+  /** Explicit ID seam shared with ProjectsSidebar's drawer element. */
+  readonly menuControlsId?: string
   readonly labels?: Partial<NavigationLabels>
   readonly className?: string
 }
@@ -75,7 +77,7 @@ function MoreItem({ item }: { readonly item: ResourceHeaderMoreItem }) {
       <span className={styles.resourceHeaderMoreItemLabel}>{item.label}</span>
     </>
   )
-  if (item.href !== undefined) {
+  if (item.href !== undefined && !item.disabled) {
     return (
       <a className={styles.resourceHeaderMoreItem} href={item.href} onClick={item.onSelect}>
         {content}
@@ -100,6 +102,7 @@ export function ResourceHeader({
   children,
   onMenuToggle,
   menuOpen = false,
+  menuControlsId = "projects-sidebar",
   labels: labelOverrides,
   className,
 }: ResourceHeaderProps) {
@@ -113,8 +116,10 @@ export function ResourceHeader({
           <button
             type="button"
             className={`${styles.iconButton} ${styles.resourceHeaderMenu}`}
-            aria-label={labels.projectPicker}
+            aria-label={menuOpen ? labels.closeProjectNavigation : labels.openProjectNavigation}
+            aria-controls={menuControlsId}
             aria-expanded={menuOpen}
+            aria-haspopup="dialog"
             onClick={onMenuToggle}
             data-testid="resource-header-menu"
           >

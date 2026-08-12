@@ -56,6 +56,8 @@ export interface GridProps
   extends Omit<HTMLAttributes<HTMLElement>, "children" | "style">,
     NoRuntimeStyleProps {
   readonly children?: ReactNode
+  /** Required accessible name because the primitive renders a section landmark. */
+  readonly label: string
   readonly columns?: GridColumns
   readonly gap?: GridGap
   readonly density?: GridDensity
@@ -81,6 +83,7 @@ export function Grid({
   columns = "single",
   density,
   gap,
+  label,
   ref,
   ...rest
 }: GridProps) {
@@ -102,6 +105,7 @@ export function Grid({
         className,
       )}
       {...safeRest}
+      aria-label={label}
       data-columns={columns}
       data-density={density}
     >

@@ -47,6 +47,7 @@ export type NoRuntimeStyleProps = {
   readonly minHeight?: never
   readonly contentWidth?: never
   readonly rowHeight?: never
+  readonly resizable?: never
 }
 
 const UNSAFE_RUNTIME_PROP_KEYS = [
@@ -58,7 +59,12 @@ const UNSAFE_RUNTIME_PROP_KEYS = [
   "minHeight",
   "contentWidth",
   "rowHeight",
+  "resizable",
 ] as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
 
 /**
  * Runtime companion to {@link NoRuntimeStyleProps}.
@@ -70,10 +76,29 @@ const UNSAFE_RUNTIME_PROP_KEYS = [
 export function guardNoRuntimeStyleProps<Props extends Record<string, unknown>>(
   props: Props,
 ): Omit<Props, keyof NoRuntimeStyleProps> {
-  const safeProps = {...props}
+  const safeProps = {...props} as Record<string, unknown>
   for (const key of UNSAFE_RUNTIME_PROP_KEYS) {
-    delete safeProps[key as keyof Props]
+    delete safeProps[key]
   }
+
+  // MetadataList's label config also accepts a custom width. Keep only its
+  // finite position vocabulary so spread/JS callers cannot reintroduce the
+  // nested runtime sizing path after the top-level guard.
+  const label = safeProps["label"]
+  if (isRecord(label)) {
+    const position = label["position"]
+    safeProps["label"] = {
+      position: position === "top" ? "top" : "start",
+    }
+  }
+
+  // MetadataList's numeric column count is another runtime grid-template
+  // value. Keep only its static vocabulary for JS/spread callers.
+  const columns = safeProps["columns"]
+  if (columns !== undefined && columns !== "single" && columns !== "multi") {
+    delete safeProps["columns"]
+  }
+
   return safeProps as Omit<Props, keyof NoRuntimeStyleProps>
 }
 
@@ -103,7 +128,17 @@ export type SafeLayoutContentProps = StaticCoreProps<LayoutContentProps>
 export type SafeLayoutFooterProps = StaticCoreProps<LayoutFooterProps>
 export type SafeLayoutHeaderProps = StaticCoreProps<LayoutHeaderProps>
 export type SafeLayoutPanelProps = StaticCoreProps<LayoutPanelProps>
-export type SafeMetadataListProps = StaticCoreProps<MetadataListProps>
+export type SafeMetadataListColumns = "single" | "multi"
+export type SafeMetadataListLabel = {
+  readonly position?: "start" | "top"
+}
+export type SafeMetadataListProps = Omit<
+  StaticCoreProps<MetadataListProps>,
+  "columns" | "label"
+> & {
+  readonly columns?: SafeMetadataListColumns
+  readonly label?: SafeMetadataListLabel
+}
 export type SafeMetadataListItemProps = StaticCoreProps<MetadataListItemProps>
 export type SafeSectionProps = StaticCoreProps<SectionProps>
 export type SafeStackProps = StaticCoreProps<StackProps>

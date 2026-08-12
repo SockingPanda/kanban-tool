@@ -1,5 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useCallback, useState, type HTMLAttributes, type Ref } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type Ref,
+} from "react"
 
 import {
   guardNoRuntimeStyleProps,
@@ -8,6 +15,21 @@ import {
 
 export type CodeBlockHeight = "none" | "compact" | "evidence"
 export type CodeBlockContainer = "card" | "section"
+export type CodeBlockCopyState = "idle" | "copied" | "error"
+
+/** Caller-provided copy feedback remains visible for a short, finite window. */
+export const CODE_BLOCK_COPY_FEEDBACK_MS = 2_000
+
+/**
+ * Schedule the success-state reset without involving CSS or runtime styles.
+ * Kept as a tiny export so the timer contract can be verified with fake timers.
+ */
+export function scheduleCopyFeedbackReset(
+  setStatus: (status: CodeBlockCopyState) => void,
+): () => void {
+  const timerId = setTimeout(() => setStatus("idle"), CODE_BLOCK_COPY_FEEDBACK_MS)
+  return () => clearTimeout(timerId)
+}
 
 export const CODE_BLOCK_HEIGHT_CLASSES: Readonly<Record<CodeBlockHeight, string>> = {
   none: "max-h-none",
@@ -35,9 +57,11 @@ export interface CodeBlockProps
   readonly maxHeight?: CodeBlockHeight
   readonly label?: string
   readonly hasCopy?: boolean
-  readonly copyLabel?: string
-  readonly copiedLabel?: string
+  readonly copyLabel: string
+  readonly copiedLabel: string
+  readonly errorLabel: string
   readonly onCopy?: () => void
+  readonly onCopyError?: (error: unknown) => void
   readonly "data-testid"?: string
   readonly ref?: Ref<HTMLElement>
 }
@@ -62,27 +86,63 @@ export function CodeBlock({
   maxHeight = "none",
   label,
   hasCopy = true,
-  copyLabel = "Copy code",
-  copiedLabel = "Copied",
+  copyLabel,
+  copiedLabel,
+  errorLabel,
   onCopy,
+  onCopyError,
   className,
   ref,
   ...rest
 }: CodeBlockProps) {
-  const [copied, setCopied] = useState(false)
+  const [copyState, setCopyState] = useState<CodeBlockCopyState>("idle")
+  const resetCopyFeedback = useRef<(() => void) | null>(null)
+
+  const clearCopyReset = useCallback(() => {
+    resetCopyFeedback.current?.()
+    resetCopyFeedback.current = null
+  }, [])
+
+  useEffect(() => clearCopyReset, [clearCopyReset])
+
+  const markCopied = useCallback(() => {
+    clearCopyReset()
+    setCopyState("copied")
+    resetCopyFeedback.current = scheduleCopyFeedbackReset((status) => {
+      resetCopyFeedback.current = null
+      setCopyState(status)
+    })
+  }, [clearCopyReset])
+
+  const markCopyError = useCallback((error: unknown) => {
+    clearCopyReset()
+    setCopyState("error")
+    onCopyError?.(error)
+  }, [clearCopyReset, onCopyError])
+
   const copy = useCallback(async () => {
-    if (typeof navigator === "undefined" || !navigator.clipboard) return
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      markCopyError(new Error("Clipboard API unavailable"))
+      return
+    }
     try {
       await navigator.clipboard.writeText(code)
-      setCopied(true)
-      onCopy?.()
-    } catch {
-      setCopied(false)
+    } catch (error) {
+      markCopyError(error)
+      return
     }
-  }, [code, onCopy])
+    markCopied()
+    onCopy?.()
+  }, [code, markCopied, markCopyError, onCopy])
 
   const safeRest = guardNoRuntimeStyleProps(rest)
   const resolvedLabel = label ?? `${language} code`
+  const currentCopyLabel = copyState === "copied"
+    ? copiedLabel
+    : copyState === "error"
+      ? errorLabel
+      : copyLabel
+  const liveCopyLabel = copyState === "idle" ? "" : currentCopyLabel
 
   return (
     <section
@@ -114,14 +174,14 @@ export function CodeBlock({
         <button
           type="button"
           className="absolute end-2 top-2 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-primary"
-          aria-label={copied ? copiedLabel : copyLabel}
+          aria-label={currentCopyLabel}
           onClick={() => void copy()}
         >
-          {copied ? copiedLabel : copyLabel}
+          {currentCopyLabel}
         </button>
       ) : null}
       <p className="sr-only" aria-live="polite" aria-atomic="true" data-copy-status>
-        {copied ? copiedLabel : ""}
+        {liveCopyLabel}
       </p>
     </section>
   )

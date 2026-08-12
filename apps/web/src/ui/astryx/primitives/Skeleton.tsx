@@ -41,7 +41,7 @@ export function Skeleton({
       ref={ref}
       aria-hidden="true"
       className={classNames(
-        "animate-pulse bg-skeleton",
+        "motion-safe:animate-pulse bg-skeleton",
         SKELETON_SIZE_CLASSES[size],
         className,
       )}

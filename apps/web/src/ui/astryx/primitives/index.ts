@@ -13,9 +13,12 @@ export {
 export {
   CodeBlock,
   CODE_BLOCK_CONTAINER_CLASSES,
+  CODE_BLOCK_COPY_FEEDBACK_MS,
   CODE_BLOCK_HEIGHT_CLASSES,
   CODE_BLOCK_SIZE_CLASSES,
+  scheduleCopyFeedbackReset,
   type CodeBlockContainer,
+  type CodeBlockCopyState,
   type CodeBlockHeight,
   type CodeBlockProps,
 } from "./CodeBlock"
@@ -38,7 +41,9 @@ export {
   type SafeLayoutFooterProps,
   type SafeLayoutHeaderProps,
   type SafeLayoutPanelProps,
+  type SafeMetadataListColumns,
   type SafeMetadataListProps,
+  type SafeMetadataListLabel,
   type SafeMetadataListItemProps,
   type SafeSectionProps,
   type SafeStackProps,

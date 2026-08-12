@@ -6,7 +6,6 @@ import { Button } from "@astryxdesign/core/Button"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
 import { List, ListItem } from "@astryxdesign/core/List"
-import { Spinner } from "@astryxdesign/core/Spinner"
 import { Text } from "@astryxdesign/core/Text"
 
 import { TextInput } from "../../ui/astryx/fields"
@@ -19,6 +18,7 @@ import {
   SafeMetadataList,
   SafeMetadataListItem,
   SafeVStack,
+  Skeleton,
 } from "../../ui/astryx/primitives"
 
 import type {
@@ -253,6 +253,7 @@ export function SignalsScreenView({
       header={(
         <SafeHStack gap={4} justify="between" align="start" wrap="wrap">
             <SafeVStack gap={1}>
+              <Text as="p" type="supporting">{copy.eyebrow}</Text>
               <Heading level={1} id="signals-title">{copy.heading}</Heading>
               <Text as="p" type="supporting">{copy.lede}</Text>
               <Text as="p" type="supporting">{copy.board} · <code translate="no">{boardName}</code></Text>
@@ -283,7 +284,6 @@ export function SignalsScreenView({
                 placeholder={copy.kindPlaceholder}
                 onChange={(value) => onFiltersChange({ ...filters, kinds: value.split(",").map((item) => item.trim()).filter(Boolean) })}
                 htmlName="signal-kind"
-                size="sm"
               />
             </SafeVStack>
             <SafeVStack className="min-w-0 flex-1">
@@ -293,7 +293,6 @@ export function SignalsScreenView({
                 placeholder={copy.taskRefPlaceholder}
                 onChange={(value) => onFiltersChange({ ...filters, task: value.trim() || undefined })}
                 htmlName="signal-task-ref"
-                size="sm"
               />
             </SafeVStack>
           </SafeHStack>
@@ -316,7 +315,7 @@ export function SignalsScreenView({
               />
             ) : null}
 
-            <Grid label={`${copy.signalRows} / ${copy.detail}`} columns="auto-md" gap={4}>
+            <Grid label={`${copy.signalRows} / ${copy.detail}`} columns="two" gap={4}>
               <SafeCard padding={0}>
                 <SafeVStack gap={0}>
                     <SafeHStack padding={4} gap={2} justify="between" align="start" wrap="wrap">
@@ -375,7 +374,7 @@ export function SignalListView({
   readonly copy?: SignalsCopy
 }) {
   if (phase === "loading" && signals.length === 0) {
-    return <SafeVStack padding={4} role="status" aria-label={copy.loading}><Spinner size="sm" label={copy.loading} /></SafeVStack>
+    return <SignalLoadingState label={copy.loading} />
   }
   if (signals.length === 0) {
     return <EmptyState title={copy.noSignals} isCompact />
@@ -388,13 +387,13 @@ export function SignalListView({
           label={(
             <SafeHStack gap={1} wrap="wrap" align="center">
               <MachineBadge variant={statusVariant(signal.status)} label={signal.status} />
-              <Text weight="semibold" maxLines={1}>{signal.title}</Text>
+              <Text weight="semibold">{signal.title}</Text>
             </SafeHStack>
           )}
           description={(
             <SafeVStack gap={1}>
-              <Text type="supporting" maxLines={2}>{signal.summary}</Text>
-              <Text as="span" type="code" maxLines={1}><span translate="no">{signal.kind} · {signalTask(signal)} · {timestamp(signal.created_at, locale)}</span></Text>
+              <Text type="supporting">{signal.summary}</Text>
+              <Text as="span" type="code"><span translate="no">{signal.kind} · {signalTask(signal)} · {timestamp(signal.created_at, locale)}</span></Text>
             </SafeVStack>
           )}
           isSelected={signal.id === selectedSignalId}
@@ -407,7 +406,7 @@ export function SignalListView({
 
 export function SignalDetailView({ loading, signal, error, onRetry, locale = "en", copy = featureCopyForLocale("en").signals }: { readonly loading: boolean; readonly signal: SignalRecord | null; readonly error?: unknown | null; readonly onRetry?: () => void; readonly locale?: Locale; readonly copy?: SignalsCopy }) {
   if (loading && signal === null) {
-    return <SafeVStack padding={4} role="status" aria-label={copy.loading}><Spinner size="sm" label={copy.loading} /></SafeVStack>
+    return <SignalLoadingState label={copy.loading} />
   }
   if (errorStatus(error) === 404) {
     return <EmptyState title={copy.unavailable} isCompact />
@@ -453,6 +452,15 @@ export function SignalDetailView({ loading, signal, error, onRetry, locale = "en
           container="section"
         />
       </SafeVStack>
+    </SafeVStack>
+  )
+}
+
+function SignalLoadingState({ label }: { readonly label: string }) {
+  return (
+    <SafeVStack gap={2} padding={4} role="status" aria-label={label}>
+      <Text type="supporting">{label}</Text>
+      <Skeleton size="row" />
     </SafeVStack>
   )
 }

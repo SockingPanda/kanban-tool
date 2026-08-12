@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test } from "vitest"
 
@@ -70,12 +71,28 @@ describe("Signals screen presentation", () => {
     )
 
     expect(html).toContain("Signals")
+    expect(html).toContain("KANBAN TOOL / SIGNALS")
     expect(html).toContain("Generic agent and product signals for the active board.")
     expect(html).toContain("Open + confirmed")
     expect(html).toContain("CLI friction")
     expect(html).toContain("Evidence JSON")
     expect(html).toContain("default#1")
     expect(html).toContain("Close detail")
+    expect(html).toContain('data-columns="two"')
+    expect(html).not.toContain(" style=")
+    expect(html).not.toContain("<style")
+  })
+
+  test("keeps the two-column and CSP-safe text contracts in source", () => {
+    const source = readFileSync(new URL("./SignalsScreen.tsx", import.meta.url), "utf8")
+    expect(source).toContain('columns="two"')
+    expect(source).not.toContain('columns="auto-md"')
+    expect(source).not.toContain("maxLines")
+    expect(source).not.toContain("@astryxdesign/core/Spinner")
+    expect(source).toContain("SignalLoadingState")
+    const textInputs = source.match(/<TextInput[\s\S]*?\/>/g) ?? []
+    expect(textInputs).not.toHaveLength(0)
+    expect(textInputs.every((input) => !/\bsize=/.test(input))).toBe(true)
   })
 
   test.each([
@@ -204,6 +221,16 @@ describe("Signals screen presentation", () => {
       <SignalDetailView loading={false} signal={null} error={{ status: 404 }} />,
     )
     expect(html).toContain("Signal is no longer available")
+  })
+
+  test("renders a CSP-safe static loading state with its caller label", () => {
+    const html = renderToStaticMarkup(
+      <SignalDetailView loading signal={null} />,
+    )
+    expect(html).toContain('role="status"')
+    expect(html).toContain("Loading signal detail")
+    expect(html).not.toContain(" style=")
+    expect(html).not.toContain("<style")
   })
 
   test("removes a not-found detail row from the list projection", () => {

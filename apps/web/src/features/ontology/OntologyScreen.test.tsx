@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { isValidElement, type ReactElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
@@ -199,10 +200,20 @@ describe("Ontology screen presentation", () => {
     )
 
     expect(html).toContain("Ontology review")
+    expect(html).toContain("KANBAN TOOL / ONTOLOGY")
     expect(html).toContain("does not modify canonical semantics")
     expect(html).toContain("Signal rows")
     expect(html).toContain("Grouped review")
     expect(html).toContain("Candidate atom")
+    expect(html).toContain('data-columns="three"')
+    expect(html).not.toContain(" style=")
+    expect(html).not.toContain("<style")
+  })
+
+  test("keeps the three-column contract explicit in source", () => {
+    const source = readFileSync(new URL("./OntologyScreen.tsx", import.meta.url), "utf8")
+    expect(source).toContain('columns="three"')
+    expect(source).not.toContain('columns="auto-lg"')
   })
 
   test.each([

@@ -424,6 +424,7 @@ export function OntologyScreenView({
       header={(
         <SafeHStack gap={4} justify="between" align="start" wrap="wrap">
           <SafeVStack gap={1}>
+            <Text as="p" type="supporting">{copy.eyebrow}</Text>
             <Heading level={1} id="ontology-title">{copy.heading}</Heading>
             <Text as="p" type="supporting">{copy.lede}</Text>
             <Text as="p" type="supporting">{copy.board} · <MachineText>{boardName}</MachineText></Text>
@@ -440,7 +441,7 @@ export function OntologyScreenView({
         {signals.error ? <Banner status="error" title={copy.rowsError} description={localizedErrorMessage(signals.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryRows} variant="ghost" size="sm" onClick={onRefreshRows} />} /> : null}
         {groups.error ? <Banner status="error" title={copy.groupsError} description={localizedErrorMessage(groups.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryGroups} variant="ghost" size="sm" onClick={onRefreshGroups} />} /> : null}
 
-        <Grid label={`${copy.signalRows} / ${copy.groupedReview} / ${copy.signalDetail}`} columns="auto-lg" gap={4}>
+        <Grid label={`${copy.signalRows} / ${copy.groupedReview} / ${copy.signalDetail}`} columns="three" gap={4}>
         <SafeCard padding={0}>
           <SafeVStack gap={0}>
             <PanelHeader title={copy.signalRows} meta={copy.loadedCount(viewSignals.length)} refreshing={signals.phase === "refreshing"} copy={copy} />

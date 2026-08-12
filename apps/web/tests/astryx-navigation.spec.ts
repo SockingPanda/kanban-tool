@@ -3,19 +3,26 @@ import { resolve } from "node:path"
 
 import { expect, test } from "@playwright/test"
 
-const webRoot = resolve(import.meta.dirname, "../../../..")
-const fixtureUrl = "http://127.0.0.1:1421/app/src/ui/astryx/navigation/navigation-browser.html"
+test.describe.configure({ mode: "serial" })
+
+const webRoot = resolve(import.meta.dirname, "..")
 
 let viteProcess: ChildProcess | undefined
+let fixturePort = 1421
 
-test.beforeAll(async () => {
-  viteProcess = spawn("pnpm", ["exec", "vite", "--host", "127.0.0.1", "--port", "1421"], {
+const fixtureUrl = () => `http://127.0.0.1:${fixturePort}/app/tests/astryx-navigation.html`
+
+test.beforeAll(async (workerFixtures, testInfo) => {
+  void workerFixtures
+  const projectPortOffset = testInfo.project.name === "firefox" ? 10 : 0
+  fixturePort = 1421 + projectPortOffset + testInfo.workerIndex
+  viteProcess = spawn("pnpm", ["exec", "vite", "--host", "127.0.0.1", "--port", String(fixturePort)], {
     cwd: webRoot,
     stdio: "ignore",
   })
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
-      const response = await fetch(fixtureUrl)
+      const response = await fetch(fixtureUrl())
       if (response.ok) return
     } catch {
       // Vite is still starting.
@@ -30,7 +37,7 @@ test.afterAll(() => {
 })
 
 test("SideNav preserves the focused section sibling and removes stale aria-controls", async ({ page }) => {
-  await page.goto(fixtureUrl)
+  await page.goto(fixtureUrl())
   const parent = page.getByTestId("parent-item")
   const nestedChild = page.getByTestId("nested-child")
   const toggle = page.getByRole("button", { name: "收起项目" })
@@ -52,7 +59,7 @@ test("SideNav preserves the focused section sibling and removes stale aria-contr
 })
 
 test("TreeList owns keyboard navigation and preserves modified anchor clicks", async ({ page }) => {
-  await page.goto(fixtureUrl)
+  await page.goto(fixtureUrl())
   const tree = page.getByRole("tree")
   const root = page.getByRole("treeitem", { name: /Tree root/ })
   const child = page.getByRole("treeitem", { name: /Tree child/ })

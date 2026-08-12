@@ -1,11 +1,11 @@
 import { useState } from "react"
 import { createRoot } from "react-dom/client"
 
-import { SideNav } from "./SideNav"
-import { SideNavItem } from "./SideNavItem"
-import { SideNavSection } from "./SideNavSection"
-import { TreeList } from "./TreeList"
-import type { TreeListItemData } from "./types"
+import { SideNav } from "../src/ui/astryx/navigation/SideNav"
+import { SideNavItem } from "../src/ui/astryx/navigation/SideNavItem"
+import { SideNavSection } from "../src/ui/astryx/navigation/SideNavSection"
+import { TreeList } from "../src/ui/astryx/navigation/TreeList"
+import type { TreeListItemData } from "../src/ui/astryx/navigation/types"
 
 declare global {
   interface Window {

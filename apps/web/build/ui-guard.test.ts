@@ -145,6 +145,27 @@ describe("Astryx CSP UI guard", () => {
     }
   })
 
+  test("does not trust out-of-scope or mutable object spread bindings", () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-guard-scope-"))
+    try {
+      writeFileSync(path.join(temporaryRoot, "scope.tsx"), [
+        'const safe = { className: "flex" }',
+        'const postUse = <div {...postProps} />; const postProps = { className: "flex" }',
+        'function Shadowed() { const safe = { style: { color: "red" } }; return <div {...safe} /> }',
+        'let reassigned = { className: "flex" }; reassigned = { style: { color: "red" } }; const Reassigned = () => <div {...reassigned} />',
+        'const mutated = { className: "flex" }; mutated.style = { color: "red" }; const Mutated = () => <div {...mutated} />',
+        'const polluted = { className: "flex" }; Object.assign(polluted, { style: { color: "red" } }); const Polluted = () => <div {...polluted} />',
+        'declare function sink(value: unknown): void; const escaped = { className: "flex" }; sink(escaped); const Escaped = () => <div {...escaped} />',
+        'const Safe = () => <div {...safe} />',
+      ].join("\n"))
+      const report = scanUiSource({ projectRoot: temporaryRoot, sourcePaths: ["scope.tsx"], mode: "enforce" })
+      const spreadErrors = report.errors.filter((error) => error.path === "scope.tsx" && error.code === "inline-style")
+      expect(spreadErrors).toHaveLength(6)
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true })
+    }
+  })
+
   test("resolves only the supported inventory and enforce modes", () => {
     expect(uiGuardModeFromEnv("inventory")).toBe("inventory")
     expect(uiGuardModeFromEnv("enforce")).toBe("enforce")

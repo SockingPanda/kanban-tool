@@ -546,7 +546,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
   }
   const scriptKind = extension === ".tsx" ? ts.ScriptKind.TSX : extension === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
   const sourceFile = ts.createSourceFile(relativePath, source, ts.ScriptTarget.Latest, true, scriptKind)
-  const staticObjectBindings = collectStaticObjectBindings(sourceFile)
+  const staticObjectModel = collectStaticObjectBindings(sourceFile)
   let rawDivCount = 0
   let layoutSpanCount = 0
   const styleViolations: { code: "inline-style" | "dom-style"; offset: number; message: string }[] = []
@@ -570,7 +570,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
       if (ts.isJsxAttribute(attribute) && jsxAttributeNameText(attribute.name) === "dangerouslySetInnerHTML") {
         addViolation("inline-style", attribute, "dangerouslySetInnerHTML is forbidden under the static CSP style policy.")
       }
-      if (isIntrinsicJsxTagName(tagName) && ts.isJsxSpreadAttribute(attribute) && spreadMayCarryStyle(attribute.expression, sourceFile, staticObjectBindings)) {
+      if (isIntrinsicJsxTagName(tagName) && ts.isJsxSpreadAttribute(attribute) && spreadMayCarryStyle(attribute.expression, staticObjectModel, attribute)) {
         addViolation("inline-style", attribute, "JSX spread props may inject inline style; use explicit static props instead.")
       }
     }
@@ -583,7 +583,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
       if (expressionContainsStyle(node.left)) addViolation("dom-style", node.left, "DOM .style mutation is forbidden under the static CSP style policy.")
       else if (expressionContainsMarkupSink(node.left)) addViolation("inline-style", node.left, "Runtime HTML/style injection is forbidden under the static CSP style policy.")
     }
-    if (ts.isCallExpression(node) && isStyleMutationCall(node, sourceFile, staticObjectBindings)) {
+    if (ts.isCallExpression(node) && isStyleMutationCall(node, staticObjectModel)) {
       addViolation("dom-style", node.expression, "DOM .style mutation is forbidden under the static CSP style policy.")
     }
     if (ts.isCallExpression(node) && isMarkupInjectionCall(node)) {
@@ -592,7 +592,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
     if (ts.isCallExpression(node) && isStyleElementFactory(node)) {
       addViolation("inline-style", node.expression, "Runtime style element injection is forbidden under the static CSP style policy.")
     }
-    if (ts.isCallExpression(node) && isCreateElementCall(node) && createElementPropsMayCarryStyle(node, sourceFile, staticObjectBindings)) {
+    if (ts.isCallExpression(node) && isCreateElementCall(node) && createElementPropsMayCarryStyle(node, staticObjectModel)) {
       addViolation("inline-style", node.expression, "React.createElement style props are forbidden under the static CSP style policy.")
     }
     if (ts.isCallExpression(node) && isCreateElementCall(node)) {
@@ -609,16 +609,168 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
   return { rawLayoutCount: rawDivCount + layoutSpanCount, styleViolations }
 }
 
-function collectStaticObjectBindings(sourceFile: ts.SourceFile): ReadonlyMap<string, ts.ObjectLiteralExpression> {
-  const bindings = new Map<string, ts.ObjectLiteralExpression>()
-  const visit = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && ts.isObjectLiteralExpression(node.initializer)) {
-      bindings.set(node.name.text, node.initializer)
+type StaticObjectBinding = {
+  readonly name: string
+  readonly declaration: ts.Node
+  readonly initializer: ts.ObjectLiteralExpression | undefined
+  readonly isConstObject: boolean
+  mutated: boolean
+  escaped: boolean
+}
+
+type StaticObjectScope = {
+  readonly node: ts.Node
+  readonly parent: StaticObjectScope | undefined
+  readonly bindings: Map<string, StaticObjectBinding>
+}
+
+type StaticObjectModel = {
+  readonly mayCarryStyle: (expression: ts.Expression | undefined, useNode: ts.Node, seen?: Set<StaticObjectBinding>) => boolean
+  readonly bindingFor: (identifier: ts.Identifier, useNode: ts.Node) => StaticObjectBinding | undefined
+}
+
+function collectStaticObjectBindings(sourceFile: ts.SourceFile): StaticObjectModel {
+  const root: StaticObjectScope = { node: sourceFile, parent: undefined, bindings: new Map() }
+  const scopeByNode = new Map<ts.Node, StaticObjectScope>([[sourceFile, root]])
+
+  const isScopeNode = (node: ts.Node): boolean => ts.isBlock(node)
+    || ts.isCaseBlock(node)
+    || ts.isCatchClause(node)
+    || ts.isFunctionDeclaration(node)
+    || ts.isFunctionExpression(node)
+    || ts.isArrowFunction(node)
+    || ts.isMethodDeclaration(node)
+    || ts.isGetAccessorDeclaration(node)
+    || ts.isSetAccessorDeclaration(node)
+    || ts.isConstructorDeclaration(node)
+
+  const registerBinding = (scope: StaticObjectScope, name: string, declaration: ts.Node, initializer: ts.ObjectLiteralExpression | undefined, isConstObject: boolean): void => {
+    const existing = scope.bindings.get(name)
+    if (existing !== undefined) {
+      existing.mutated = true
+      existing.escaped = true
+      return
     }
-    ts.forEachChild(node, visit)
+    scope.bindings.set(name, { name, declaration, initializer, isConstObject, mutated: false, escaped: false })
   }
-  visit(sourceFile)
-  return bindings
+
+  const visitScopes = (node: ts.Node, parentScope: StaticObjectScope): void => {
+    let scope = parentScope
+    if (node !== sourceFile && isScopeNode(node)) {
+      scope = { node, parent: parentScope, bindings: new Map() }
+      scopeByNode.set(node, scope)
+      if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) || ts.isConstructorDeclaration(node)) {
+        for (const parameter of node.parameters) {
+          for (const identifier of identifiersInBindingName(parameter.name)) registerBinding(scope, identifier.text, identifier, undefined, false)
+        }
+      }
+      if (ts.isCatchClause(node) && node.variableDeclaration !== undefined) {
+        for (const identifier of identifiersInBindingName(node.variableDeclaration.name)) registerBinding(scope, identifier.text, identifier, undefined, false)
+      }
+    }
+    if (ts.isVariableDeclaration(node)) {
+      const declarationList = node.parent
+      const isConst = ts.isVariableDeclarationList(declarationList) && (declarationList.flags & ts.NodeFlags.Const) !== 0
+      const initializer = node.initializer !== undefined && ts.isObjectLiteralExpression(node.initializer) ? node.initializer : undefined
+      const identifiers = identifiersInBindingName(node.name)
+      for (const identifier of identifiers) {
+        registerBinding(scope, identifier.text, identifier, identifiers.length === 1 ? initializer : undefined, isConst && identifiers.length === 1 && initializer !== undefined)
+      }
+    }
+    ts.forEachChild(node, (child) => visitScopes(child, scope))
+  }
+  visitScopes(sourceFile, root)
+
+  const scopeFor = (node: ts.Node): StaticObjectScope => {
+    let current: ts.Node | undefined = node
+    while (current !== undefined) {
+      const scope = scopeByNode.get(current)
+      if (scope !== undefined) return scope
+      current = current.parent
+    }
+    return root
+  }
+
+  const bindingFor = (identifier: ts.Identifier, useNode: ts.Node): StaticObjectBinding | undefined => {
+    let scope: StaticObjectScope | undefined = scopeFor(useNode)
+    while (scope !== undefined) {
+      const binding = scope.bindings.get(identifier.text)
+      if (binding !== undefined) {
+        if (binding.declaration.getStart(sourceFile) >= useNode.getStart(sourceFile)) return binding
+        return binding
+      }
+      scope = scope.parent
+    }
+    return undefined
+  }
+
+  const rootIdentifier = (expression: ts.Expression): ts.Identifier | undefined => {
+    if (ts.isParenthesizedExpression(expression)) return rootIdentifier(expression.expression)
+    if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) return rootIdentifier(expression.expression)
+    return ts.isIdentifier(expression) ? expression : undefined
+  }
+
+  const markMutation = (expression: ts.Expression | undefined, useNode: ts.Node, escaped = false): void => {
+    if (expression === undefined) return
+    const identifier = rootIdentifier(expression)
+    if (identifier === undefined) return
+    const binding = bindingFor(identifier, useNode)
+    if (binding === undefined) return
+    if (escaped) binding.escaped = true
+    else binding.mutated = true
+  }
+
+  const visitMutations = (node: ts.Node): void => {
+    if (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind)) markMutation(node.left, node.left)
+    if (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) {
+      if (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) markMutation(node.operand, node.operand)
+    }
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && ts.isIdentifier(node.initializer)) {
+      markMutation(node.initializer, node.initializer, true)
+    }
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression
+      const isObjectAssign = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === "Object" && (callee.name.text === "assign" || callee.name.text === "defineProperty")
+      if (isObjectAssign) markMutation(node.arguments[0], node.arguments[0])
+      const isCreateElement = isCreateElementCall(node)
+      for (const [index, argument] of node.arguments.entries()) {
+        if (!(isCreateElement && index === 1)) markMutation(argument, argument, true)
+      }
+      if (!isObjectAssign) markMutation(callee, callee, true)
+    }
+    ts.forEachChild(node, visitMutations)
+  }
+  visitMutations(sourceFile)
+
+  const mayCarryStyle = (expression: ts.Expression | undefined, useNode: ts.Node, seen = new Set<StaticObjectBinding>()): boolean => {
+    if (expression === undefined) return true
+    if (ts.isParenthesizedExpression(expression)) return mayCarryStyle(expression.expression, useNode, seen)
+    if (ts.isIdentifier(expression)) {
+      const binding = bindingFor(expression, useNode)
+      if (binding === undefined || binding.declaration.getStart(sourceFile) >= useNode.getStart(sourceFile) || !binding.isConstObject || binding.mutated || binding.escaped || binding.initializer === undefined || seen.has(binding)) return true
+      seen.add(binding)
+      return mayCarryStyle(binding.initializer, binding.declaration, seen)
+    }
+    if (!ts.isObjectLiteralExpression(expression)) return true
+    for (const property of expression.properties) {
+      const name = "name" in property && property.name !== undefined ? property.name.getText(sourceFile) : undefined
+      if (name === "style" || name === "dangerouslySetInnerHTML") return true
+      if (ts.isSpreadAssignment(property) && mayCarryStyle(property.expression, property, new Set(seen))) return true
+      if (property.name !== undefined && ts.isComputedPropertyName(property.name)) return true
+    }
+    return false
+  }
+
+  return { mayCarryStyle, bindingFor }
+}
+
+function identifiersInBindingName(name: ts.BindingName): readonly ts.Identifier[] {
+  if (ts.isIdentifier(name)) return [name]
+  const identifiers: ts.Identifier[] = []
+  for (const element of name.elements) {
+    if (ts.isBindingElement(element)) identifiers.push(...identifiersInBindingName(element.name))
+  }
+  return identifiers
 }
 
 function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiGuardMode, manifest: UiGuardManifest, issues: UiGuardIssue[]): void {
@@ -730,14 +882,14 @@ function expressionContainsMarkupSink(expression: ts.Expression): boolean {
   return false
 }
 
-function isStyleMutationCall(node: ts.CallExpression, sourceFile: ts.SourceFile, bindings: ReadonlyMap<string, ts.ObjectLiteralExpression>): boolean {
+function isStyleMutationCall(node: ts.CallExpression, objectModel: StaticObjectModel): boolean {
   if (ts.isPropertyAccessExpression(node.expression)) {
     if ((node.expression.name.text === "setProperty" || node.expression.name.text === "removeProperty") && expressionContainsStyle(node.expression.expression)) return true
     if (node.expression.name.text === "setAttribute" || node.expression.name.text === "removeAttribute") {
       return node.arguments.length === 0 || !ts.isStringLiteral(node.arguments[0]) || node.arguments[0].text === "style"
     }
     if (node.expression.name.text === "assign" && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "Object") {
-      return node.arguments.length < 2 || expressionContainsStyle(node.arguments[0]) || objectMayCarryStyle(node.arguments[1], bindings, new Set(), sourceFile)
+      return node.arguments.length < 2 || expressionContainsStyle(node.arguments[0]) || objectModel.mayCarryStyle(node.arguments[1], node)
     }
   }
   return false
@@ -764,30 +916,8 @@ function isIntrinsicJsxTagName(tagName: string): boolean {
   return /^[a-z]/.test(tagName)
 }
 
-function spreadMayCarryStyle(expression: ts.Expression, sourceFile: ts.SourceFile, bindings: ReadonlyMap<string, ts.ObjectLiteralExpression>): boolean {
-  return objectMayCarryStyle(expression, bindings, new Set(), sourceFile)
-}
-
-function objectMayCarryStyle(expression: ts.Expression | undefined, bindings: ReadonlyMap<string, ts.ObjectLiteralExpression>, seen: Set<string>, sourceFile?: ts.SourceFile): boolean {
-  if (expression === undefined) return true
-  if (ts.isParenthesizedExpression(expression)) return objectMayCarryStyle(expression.expression, bindings, seen, sourceFile)
-  if (ts.isIdentifier(expression)) {
-    const binding = bindings.get(expression.text)
-    if (binding === undefined || seen.has(expression.text)) return true
-    seen.add(expression.text)
-    return objectMayCarryStyle(binding, bindings, seen, sourceFile)
-  }
-  if (!ts.isObjectLiteralExpression(expression)) return true
-  for (const property of expression.properties) {
-    const name = "name" in property && property.name !== undefined && sourceFile !== undefined ? property.name.getText(sourceFile) : undefined
-    if (name === "style" || name === "dangerouslySetInnerHTML") return true
-    if (ts.isSpreadAssignment(property)) {
-      if (objectMayCarryStyle(property.expression, bindings, new Set(seen), sourceFile)) return true
-      continue
-    }
-    if (ts.isComputedPropertyName(property.name)) return true
-  }
-  return false
+function spreadMayCarryStyle(expression: ts.Expression, objectModel: StaticObjectModel, useNode: ts.Node): boolean {
+  return objectModel.mayCarryStyle(expression, useNode)
 }
 
 function spreadObjectHasLayoutClass(expression: ts.Expression, sourceFile: ts.SourceFile): boolean {
@@ -813,12 +943,12 @@ function isCreateElementCall(node: ts.CallExpression): boolean {
     || ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "createElement"
 }
 
-function createElementPropsMayCarryStyle(node: ts.CallExpression, sourceFile: ts.SourceFile, bindings: ReadonlyMap<string, ts.ObjectLiteralExpression>): boolean {
+function createElementPropsMayCarryStyle(node: ts.CallExpression, objectModel: StaticObjectModel): boolean {
   const tag = node.arguments[0]
   const props = node.arguments[1]
   if (tag === undefined || props === undefined) return false
-  if (ts.isStringLiteral(tag) && isIntrinsicJsxTagName(tag.text)) return objectMayCarryStyle(props, bindings, new Set(), sourceFile)
-  if (ts.isObjectLiteralExpression(props)) return objectMayCarryStyle(props, bindings, new Set(), sourceFile)
+  if (ts.isStringLiteral(tag) && isIntrinsicJsxTagName(tag.text)) return objectModel.mayCarryStyle(props, node)
+  if (ts.isObjectLiteralExpression(props)) return objectModel.mayCarryStyle(props, node)
   return ts.isIdentifier(props) && /style|props/i.test(props.text)
 }
 

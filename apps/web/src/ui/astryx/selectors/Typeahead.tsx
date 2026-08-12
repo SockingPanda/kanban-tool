@@ -176,6 +176,7 @@ function TypeaheadImpl<T extends SearchableItem>(
     onOpenChangeRef.current?.(next)
     if (!next) {
       setActiveIndex(-1)
+      setLoading(false)
       invalidatePending()
     }
   }, [invalidatePending])

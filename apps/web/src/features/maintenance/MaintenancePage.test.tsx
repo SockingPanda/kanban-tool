@@ -134,6 +134,7 @@ describe("MaintenancePage", () => {
     expect(source).toContain("initialFocusRef={confirmCancelRef}")
     expect(source).toContain("returnFocusRef={confirmOpenerRef}")
     expect(source).toContain("closeOnBackdrop={false}")
+    expect(source).not.toContain("aria-busy={pendingAction !== null || undefined}")
     expect(source).toContain("aria-busy")
   })
 

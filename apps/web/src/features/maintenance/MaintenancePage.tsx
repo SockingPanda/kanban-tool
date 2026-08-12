@@ -541,7 +541,6 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
           returnFocusRef={confirmOpenerRef}
           initialFocusRef={confirmCancelRef}
           closeOnBackdrop={false}
-          aria-busy={pendingAction !== null || undefined}
           data-testid="maintenance-confirm-dialog"
         >
           <SafeVStack as="section" gap={4} padding={6}>

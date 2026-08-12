@@ -8,6 +8,7 @@ import {
   Dialog,
   DropdownMenu,
   MoreMenu,
+  POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT,
   POPOVER_PLACEMENT_CLASSES,
   Popover,
   Tooltip,
@@ -19,8 +20,15 @@ describe("Astryx CSP-safe overlays", () => {
     expect(Object.keys(DIALOG_SIZE_CLASSES)).toEqual(["sm", "md", "lg", "xl", "full"])
     expect(Object.keys(DIALOG_PLACEMENT_CLASSES)).toEqual(["center", "top", "bottom"])
     expect(Object.keys(POPOVER_PLACEMENT_CLASSES)).toEqual(["above", "below", "start", "end"])
+    expect(POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT).toEqual({
+      above: { start: "start-0", center: "start-1/2 -translate-x-1/2", end: "end-0" },
+      below: { start: "start-0", center: "start-1/2 -translate-x-1/2", end: "end-0" },
+      start: { start: "top-0", center: "top-1/2 -translate-y-1/2", end: "bottom-0" },
+      end: { start: "top-0", center: "top-1/2 -translate-y-1/2", end: "bottom-0" },
+    })
     expect(Object.values(DIALOG_SIZE_CLASSES).join(" ")).not.toMatch(/\[[^\]]+\]/)
     expect(Object.values(POPOVER_PLACEMENT_CLASSES).join(" ")).not.toMatch(/\[[^\]]+\]/)
+    expect(Object.values(POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT).flatMap((map) => Object.values(map)).join(" ")).not.toMatch(/\[[^\]]+\]/)
   })
 
   test("keeps the source free of raw layout wrappers, runtime styles, and palette forks", () => {
@@ -54,6 +62,24 @@ describe("Astryx CSP-safe overlays", () => {
     expect(popover).toContain("DOM-contained, non-modal static placement")
     expect(popover).not.toMatch(/\bisModal\b/)
     expect(popover).not.toContain("aria-modal")
+    for (const file of ["Popover.tsx", "Tooltip.tsx", "DropdownMenu.tsx"]) {
+      expect(readFileSync(new URL(`./${file}`, import.meta.url), "utf8")).toContain("relative inline-flex overflow-visible")
+    }
+    const tooltip = readFileSync(new URL("./Tooltip.tsx", import.meta.url), "utf8")
+    expect(tooltip).toContain("bg-surface")
+    expect(tooltip).toContain("border border-border")
+    expect(tooltip).not.toContain("bg-inverted")
+    expect(dialog).toContain('nativeOpen ? "flex" : "hidden"')
+    expect(dialog).toContain("setNativeOpen(true)")
+    expect(dialog).toContain("setNativeOpen(false)")
+    expect(dialog).toContain("callbackRef.current(true)")
+  })
+
+  test("rolls Dialog back to its native-open state when close throws", () => {
+    const dialog = readFileSync(new URL("./Dialog.tsx", import.meta.url), "utf8")
+    expect(dialog).toMatch(
+      /dialog\.close\(\)\s*setNativeOpen\(false\)\s*}\s*catch \(error\) \{\s*setNativeOpen\(true\)\s*runtimeErrorRef\.current\?\.\(error\)\s*callbackRef\.current\(true\)/,
+    )
   })
 
   test("requires caller-owned accessible labels instead of English defaults", () => {
@@ -84,6 +110,8 @@ describe("Astryx CSP-safe overlays", () => {
     expect(markup).toContain('aria-label="Confirm"')
     expect(markup).toContain('aria-modal="true"')
     expect(markup).toContain('data-testid="confirm-dialog"')
+    expect(markup).toContain('class="hidden')
+    expect(markup).not.toContain('class="flex')
     expect(markup).not.toContain(" style=")
     expect(markup).not.toContain("<style")
   })
@@ -119,7 +147,7 @@ describe("Astryx CSP-safe overlays", () => {
     expect(markup).toContain('aria-haspopup="dialog"')
     expect(markup).toContain('role="dialog"')
     expect(markup).not.toContain('aria-modal="true"')
-    expect(markup).toContain('class="relative inline-flex"')
+    expect(markup).toContain('class="relative inline-flex overflow-visible"')
     expect(markup).toContain("top-full")
     expect(markup).toContain('data-testid="filters-popover"')
     expect(markup).not.toContain(" style=")
@@ -137,6 +165,9 @@ describe("Astryx CSP-safe overlays", () => {
     expect(markup).toContain('role="tooltip"')
     expect(markup).toContain("More detail")
     expect(markup).toContain("sr-only")
+    expect(markup).toContain("bg-surface")
+    expect(markup).toContain("border-border")
+    expect(markup).not.toContain("bg-inverted")
     expect(markup).not.toContain('aria-hidden="true"')
     expect(markup).not.toContain('class="hidden"')
     expect(markup).not.toContain(" style=")

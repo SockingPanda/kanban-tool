@@ -16,10 +16,11 @@ import {
 
 import { classNames, mergeDescribedBy } from "./overlay-runtime"
 import type { PopoverAlignment, PopoverPlacement } from "./Popover"
-import { POPOVER_ALIGNMENT_CLASSES, POPOVER_PLACEMENT_CLASSES } from "./Popover"
+import { POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT, POPOVER_PLACEMENT_CLASSES } from "./Popover"
 
 export type TooltipFocusTrigger = "auto" | "always" | "never"
 
+/** Static describedby feedback surface. The local root is overflow-visible; ancestors must avoid clipping. */
 export interface TooltipProps {
   readonly children?: ReactNode
   readonly anchorRef?: RefObject<HTMLElement | null>
@@ -191,7 +192,7 @@ export function Tooltip({
   }
 
   return (
-    <section className="relative inline-flex">
+    <section className="relative inline-flex overflow-visible">
       {trigger}
       <aside
         id={tooltipId}
@@ -200,9 +201,9 @@ export function Tooltip({
         data-testid={testId}
         className={classNames(
           open ? "block" : "sr-only",
-          "absolute z-50 max-w-xs rounded-md bg-inverted px-2 py-1 text-xs text-primary shadow-md",
+          "absolute z-50 max-w-xs rounded-md border border-border bg-surface px-2 py-1 text-xs text-primary shadow-md",
           POPOVER_PLACEMENT_CLASSES[placement],
-          POPOVER_ALIGNMENT_CLASSES[alignment],
+          POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT[placement][alignment],
           className,
         )}
       >

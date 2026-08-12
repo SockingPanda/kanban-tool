@@ -15,6 +15,7 @@ import {
   useOverlayInteraction,
 } from "./overlay-runtime"
 import {
+  POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT,
   POPOVER_ALIGNMENT_CLASSES,
   POPOVER_PLACEMENT_CLASSES,
   type PopoverAlignment,
@@ -60,6 +61,7 @@ export type DropdownMenuButtonProps =
       readonly "aria-label": string
     })
 
+/** DOM-contained menu with static placement. The local root is overflow-visible; ancestors must avoid clipping. */
 export interface DropdownMenuProps {
   readonly button: DropdownMenuButtonProps
   readonly items: readonly DropdownMenuOption[]
@@ -79,6 +81,7 @@ export interface DropdownMenuProps {
 
 export const DROPDOWN_MENU_PLACEMENT_CLASSES = POPOVER_PLACEMENT_CLASSES
 export const DROPDOWN_MENU_ALIGNMENT_CLASSES = POPOVER_ALIGNMENT_CLASSES
+export const DROPDOWN_MENU_ALIGNMENT_CLASSES_BY_PLACEMENT = POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT
 export const DROPDOWN_MENU_BUTTON_SIZE_CLASSES: Readonly<Record<NonNullable<DropdownMenuButtonProps["size"]>, string>> = Object.freeze({
   sm: "text-xs",
   md: "text-sm",
@@ -299,7 +302,7 @@ export function DropdownMenu({
   const triggerLabel = button["aria-label"] ?? button.label
 
   return (
-    <section className="relative inline-flex">
+    <section className="relative inline-flex overflow-visible">
       <button
         ref={assignTriggerRef}
         type="button"
@@ -343,7 +346,7 @@ export function DropdownMenu({
           open ? "block" : "hidden",
           "absolute z-40 min-w-40 rounded-lg border border-border bg-popover p-1 text-primary shadow-lg",
           POPOVER_PLACEMENT_CLASSES[placement],
-          POPOVER_ALIGNMENT_CLASSES[alignment],
+          POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT[placement][alignment],
           className,
         )}
         onKeyDown={handleMenuKeyDown}

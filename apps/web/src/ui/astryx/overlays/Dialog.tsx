@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type MouseEvent,
   type ReactNode,
   type Ref,
@@ -98,6 +99,7 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
   const callbackRef = useRef(onOpenChange)
   const runtimeErrorRef = useRef(onRuntimeError)
   const closingRef = useRef(false)
+  const [nativeOpen, setNativeOpen] = useState(false)
   callbackRef.current = onOpenChange
   runtimeErrorRef.current = onRuntimeError
 
@@ -122,17 +124,22 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
           (document.activeElement instanceof HTMLElement ? document.activeElement : null)
         if (typeof dialog.showModal !== "function") {
           const error = new Error("AstryxDialog requires HTMLDialogElement.showModal")
+          setNativeOpen(false)
           runtimeErrorRef.current?.(error)
           callbackRef.current(false)
           return undefined
         }
         try {
           dialog.showModal()
+          setNativeOpen(true)
         } catch (error) {
+          setNativeOpen(false)
           runtimeErrorRef.current?.(error)
           callbackRef.current(false)
           return undefined
         }
+      } else {
+        setNativeOpen(true)
       }
       const frame = typeof requestAnimationFrame === "function"
         ? requestAnimationFrame(() => focusInitial(dialog, initialFocusRef))
@@ -149,10 +156,15 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
       closingRef.current = true
       try {
         dialog.close()
+        setNativeOpen(false)
       } catch (error) {
+        setNativeOpen(true)
         runtimeErrorRef.current?.(error)
+        callbackRef.current(true)
       }
       closingRef.current = false
+    } else {
+      setNativeOpen(false)
     }
     return undefined
   }, [initialFocusRef, isOpen, returnFocusRef])
@@ -166,6 +178,7 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
       if (isTopOverlay(dialog)) callbackRef.current(false)
     }
     const handleClose = () => {
+      setNativeOpen(false)
       if (!closingRef.current && isTopOverlay(dialog)) callbackRef.current(false)
     }
     dialog.addEventListener("cancel", handleCancel)
@@ -195,11 +208,11 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledBy}
       aria-modal="true"
-      data-open={isOpen ? "true" : "false"}
+      data-open={nativeOpen ? "true" : "false"}
       data-testid={testId}
       tabIndex={-1}
       className={classNames(
-        isOpen ? "flex" : "hidden",
+        nativeOpen ? "flex" : "hidden",
         "fixed inset-0 z-50 max-h-full flex-col overflow-hidden rounded-lg border border-border bg-surface p-0 text-primary shadow-xl backdrop:bg-inverted",
         DIALOG_SIZE_CLASSES[size],
         DIALOG_PLACEMENT_CLASSES[placement],

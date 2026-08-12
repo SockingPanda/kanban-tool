@@ -26,14 +26,29 @@ export type PopoverSize = "sm" | "md" | "lg"
 export const POPOVER_PLACEMENT_CLASSES: Readonly<Record<PopoverPlacement, string>> = Object.freeze({
   above: "bottom-full mb-2",
   below: "top-full mt-2",
-  start: "end-full me-2 top-0",
-  end: "start-full ms-2 top-0",
+  start: "end-full me-2",
+  end: "start-full ms-2",
 })
 
 export const POPOVER_ALIGNMENT_CLASSES: Readonly<Record<PopoverAlignment, string>> = Object.freeze({
   start: "start-0",
   center: "start-1/2 -translate-x-1/2",
   end: "end-0",
+})
+
+export const POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT: Readonly<Record<PopoverPlacement, Readonly<Record<PopoverAlignment, string>>>> = Object.freeze({
+  above: POPOVER_ALIGNMENT_CLASSES,
+  below: POPOVER_ALIGNMENT_CLASSES,
+  start: Object.freeze({
+    start: "top-0",
+    center: "top-1/2 -translate-y-1/2",
+    end: "bottom-0",
+  }),
+  end: Object.freeze({
+    start: "top-0",
+    center: "top-1/2 -translate-y-1/2",
+    end: "bottom-0",
+  }),
 })
 
 export const POPOVER_SIZE_CLASSES: Readonly<Record<PopoverSize, string>> = Object.freeze({
@@ -58,8 +73,8 @@ export interface PopoverTriggerRenderProps {
   readonly "aria-controls": string
 }
 
+/** DOM-contained, non-modal static placement. Use Dialog for modal semantics. Ancestors must avoid overflow clipping. */
 export interface PopoverProps extends NativePopoverProps {
-  /** DOM-contained, non-modal static placement. Use Dialog for modal semantics. */
   readonly children?: ReactNode | ((props: PopoverTriggerRenderProps) => ReactNode)
   readonly anchorRef?: RefObject<HTMLElement | null>
   readonly content: ReactNode
@@ -275,7 +290,7 @@ export function Popover({
   }
 
   return (
-    <section ref={rootRef} className="relative inline-flex" aria-label={label ?? ariaLabel}>
+    <section ref={rootRef} className="relative inline-flex overflow-visible" aria-label={label ?? ariaLabel}>
       {trigger}
       <aside
         {...props}
@@ -291,7 +306,7 @@ export function Popover({
           open ? "block" : "hidden",
           "absolute z-40 rounded-lg border border-border bg-popover p-3 text-primary shadow-lg",
           POPOVER_PLACEMENT_CLASSES[placement],
-          POPOVER_ALIGNMENT_CLASSES[alignment],
+          POPOVER_ALIGNMENT_CLASSES_BY_PLACEMENT[placement][alignment],
           POPOVER_SIZE_CLASSES[size],
           className,
         )}

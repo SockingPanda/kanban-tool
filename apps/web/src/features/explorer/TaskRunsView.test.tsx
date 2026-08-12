@@ -64,6 +64,8 @@ describe("TaskRunsView", () => {
     expect(markup).toContain('data-testid="run-row"')
     expect(markup).toContain("r_no_log")
     expect(markup).toContain("hello from run log")
+    expect(markup).toMatch(/<li[^>]*data-testid="run-row"[^>]*class="[^"]*x92x3c3[^"]*"/)
+    expect(markup).not.toContain("<span><p>")
     expect(markup).not.toContain("<button")
     expect(markup).not.toContain("<a ")
     expect(markup).toContain('id="runs-heading"')

@@ -4,8 +4,7 @@ import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Heading } from "@astryxdesign/core/Heading"
-import { Item } from "@astryxdesign/core/Item"
-import { List } from "@astryxdesign/core/List"
+import { List, ListItem } from "@astryxdesign/core/List"
 import { Text } from "@astryxdesign/core/Text"
 
 import { CodeBlock, Grid, PageFrame, SafeHStack, SafeVStack } from "@/ui/astryx"
@@ -133,14 +132,13 @@ function machineToken(value: string | null | undefined, fallback: string): React
 
 function RunRow({ run, copy, locale }: { readonly run: TaskRunsReadModel["runs"][number]; readonly copy: RunsCopy; readonly locale: Locale }) {
   return (
-    <Item
-      as="li"
+    <ListItem
       data-testid="run-row"
       density="compact"
       label={machineToken(run.id, "—")}
       endContent={<Badge variant={statusVariant(run.status)} label={copy.status[run.status]} />}
       description={(
-        <Text as="p" type="supporting" wordBreak="break-word">
+        <Text type="supporting" wordBreak="break-word">
           {copy.worker}: {machineToken(run.worker_profile, copy.manual)} · {copy.owner}: {machineToken(run.claim_owner, "—")} · {copy.started}: {timestamp(run.started_at, locale)} · {copy.finished}: {timestamp(run.finished_at, locale)} · {copy.exit}: {run.exit_code === null ? "—" : String(run.exit_code)}
           {run.error ? <> · {run.error}</> : null}
         </Text>

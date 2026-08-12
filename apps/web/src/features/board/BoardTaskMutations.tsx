@@ -1,6 +1,7 @@
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Heading } from "@astryxdesign/core/Heading"
+import { useRef } from "react"
 import {
   CheckboxInput,
   Dialog,
@@ -14,6 +15,7 @@ import type { BoardMessages } from "./types"
 import type { BoardTaskMutationController } from "./task-mutation-controller"
 
 export function MutationDialog({ controller, copy }: { readonly controller: BoardTaskMutationController; readonly copy: BoardMessages }) {
+  const cancelRef = useRef<HTMLButtonElement | null>(null)
   const dialog = controller.dialog
   if (dialog === null) return null
 
@@ -24,6 +26,7 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
       : copy.transitionTaskTitle
   const pendingKey = dialog.kind === "create" ? "create" : `${dialog.kind === "edit" ? "edit" : "transition"}:${dialog.taskId}`
   const pending = controller.isPending(pendingKey)
+  const isConfirmationDialog = dialog.kind === "transition" && dialog.option.requiresConfirmation
 
   return (
     <Dialog
@@ -34,6 +37,7 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
       size="lg"
       role={dialog.kind === "transition" && dialog.option.requiresConfirmation ? "alertdialog" : "dialog"}
       aria-labelledby="task-mutation-dialog-title"
+      initialFocusRef={isConfirmationDialog ? cancelRef : undefined}
       data-testid="task-mutation-dialog"
       className="max-h-screen"
     >
@@ -66,8 +70,8 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
                   onChange={(value) => controller.setDialogDescription(value)}
                   isDisabled={pending}
                   isRequired
-                  hasAutoFocus
-                  data-autofocus="true"
+                  hasAutoFocus={!isConfirmationDialog}
+                  data-autofocus={!isConfirmationDialog ? "true" : undefined}
                   data-testid="task-description-input"
                   htmlName="task-description"
                   autoComplete="off"
@@ -81,8 +85,8 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
                   onChange={(value) => controller.setDialogReason(value)}
                   isDisabled={pending}
                   isRequired
-                  hasAutoFocus={!dialog.option.requiresDescription}
-                  data-autofocus={!dialog.option.requiresDescription ? "true" : undefined}
+                  hasAutoFocus={!dialog.option.requiresDescription && !isConfirmationDialog}
+                  data-autofocus={!dialog.option.requiresDescription && !isConfirmationDialog ? "true" : undefined}
                   data-testid="task-block-reason"
                   htmlName="block-reason"
                   autoComplete="off"
@@ -150,14 +154,21 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
               autoComplete="off"
             />
           )}
-          <SafeHStack as="footer" justify="end" gap={2} wrap="wrap" className="min-w-0">
-            <Button label={copy.cancel} variant="secondary" type="button" isDisabled={pending} onClick={controller.closeDialog} />
+          <SafeHStack as="footer" justify="end" gap={2} wrap="wrap" className="min-w-0" aria-busy={pending || undefined}>
+            <Button
+              ref={cancelRef}
+              label={copy.cancel}
+              variant="secondary"
+              type="button"
+              isDisabled={pending}
+              data-autofocus={isConfirmationDialog ? "true" : undefined}
+              onClick={controller.closeDialog}
+            />
             <Button
               label={pending ? copy.mutationPending : dialog.kind === "create" ? copy.create : copy.save}
               variant="primary"
               type="submit"
               isDisabled={pending}
-              isLoading={pending}
             />
           </SafeHStack>
         </form>
@@ -183,8 +194,9 @@ export function MutationNotice({ controller, copy }: { readonly controller: Boar
       status={controller.notice.kind === "conflict" ? "warning" : "error"}
       title={title}
       description={controller.notice.kind === "conflict" ? undefined : controller.notice.message}
-      endContent={controller.retryIntent !== null ? <Button label={retryLabel} variant="secondary" size="sm" onClick={controller.retryMutation} data-testid="mutation-retry" /> : undefined}
+      endContent={controller.retryIntent !== null ? <Button label={controller.isMutationPending ? copy.mutationPending : retryLabel} variant="secondary" size="sm" isDisabled={controller.isMutationPending} onClick={controller.retryMutation} data-testid="mutation-retry" /> : undefined}
       aria-live="assertive"
+      aria-busy={controller.isMutationPending || undefined}
       data-testid="mutation-notice"
       data-notice-kind={controller.notice.kind}
     />

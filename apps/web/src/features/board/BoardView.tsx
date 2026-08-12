@@ -390,7 +390,6 @@ function TaskCard({
                 variant="secondary"
                 size="sm"
                 isDisabled={pending}
-                isLoading={pending}
                 onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
                 data-testid={`task-transition-${option.action}-${task.id}`}
               />
@@ -411,12 +410,14 @@ function BoardColumns({
   rootId,
   controller,
   onSelectTask,
+  showColumnNavigation,
 }: {
   readonly model: BoardViewModel
   readonly copy: BoardMessages
   readonly rootId: string
   readonly controller?: BoardTaskMutationController
   readonly onSelectTask?: (taskId: string) => void
+  readonly showColumnNavigation: boolean
 }) {
   const [pagesByColumn, setPagesByColumn] = useState<Record<string, number>>({})
   const [attentionLens, setAttentionLens] = useState<AttentionLens | null>(null)
@@ -472,16 +473,18 @@ function BoardColumns({
           <Text as="span" type="supporting">{copyForAttention.active(copyForAttention.statuses[attentionLens])}</Text>
         </SafeVStack>
       ) : null}
-      <nav className="min-w-0 overflow-x-auto" aria-label={copy.columnNavigationLabel}>
-        <ul className="flex min-w-max gap-3 m-0 list-none p-0">
-          {displayColumns.map(({ column }, index) => (
-            <li key={column.id}>
-              <a className={`inline-flex min-h-8 items-center border-b border-border-strong px-1 text-sm text-secondary no-underline hover:border-accent hover:text-primary ${focusRingClass}`} href={`#${columnAnchorId(rootId, index)}`}>{column.title}</a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <SafeVStack as="div" className={`boardColumns min-w-0 max-w-full overflow-x-auto pb-2 overscroll-x-contain ${focusRingClass}`} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
+      {showColumnNavigation ? (
+        <nav className="min-w-0 overflow-x-auto overscroll-x-contain snap-x snap-mandatory touch-pan-x" aria-label={copy.columnNavigationLabel}>
+          <ul className="flex min-w-max gap-3 m-0 list-none p-0">
+            {displayColumns.map(({ column }, index) => (
+              <li key={column.id}>
+                <a className={`inline-flex min-h-8 items-center border-b border-border-strong px-1 text-sm text-secondary no-underline hover:border-accent hover:text-primary ${focusRingClass}`} href={`#${columnAnchorId(rootId, index)}`}>{column.title}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
+      <SafeVStack as="div" className={`boardColumns min-w-0 max-w-full overflow-x-auto overscroll-x-contain snap-x snap-mandatory touch-pan-x pb-2 ${focusRingClass}`} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
         <SafeHStack as="div" align="stretch" gap={2} className="min-w-max">
           {displayColumns.map(({ column, tasks }, index) => {
             const headingId = `${columnAnchorId(rootId, index)}-heading`
@@ -493,7 +496,7 @@ function BoardColumns({
 
             return (
               <section
-                className={`grid w-72 min-w-60 content-start gap-2 rounded-md border border-border bg-muted ${focusRingClass}`}
+                className={`grid w-72 min-w-60 snap-start content-start gap-2 rounded-md border border-border bg-muted ${focusRingClass}`}
                 key={column.id}
                 id={columnAnchorId(rootId, index)}
                 aria-labelledby={headingId}
@@ -619,11 +622,51 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       />
     </SafeHStack>
   ) : null
-  const syncAndNotices = (
+  const hasSyncBanner = renderedState.kind === "ready" && syncStatus !== undefined
+  const hasMutationNotice = controller !== null && controller.dialog === null && controller.notice !== null
+  const syncAndNotices = hasSyncBanner || hasMutationNotice ? (
     <SafeVStack as="div" gap={2} className="min-w-0">
-      {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
-      {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
+      {hasSyncBanner && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
+      {hasMutationNotice ? <MutationNotice controller={controller} copy={copy} /> : null}
     </SafeVStack>
+  ) : null
+  const pageToolbar = presentation === "embedded"
+    ? embeddedToolbar !== null || syncAndNotices !== null
+      ? <SafeVStack as="div" gap={2} className="min-w-0">{embeddedToolbar}{syncAndNotices}</SafeVStack>
+      : null
+    : syncAndNotices
+  const pageHeader = presentation === "embedded"
+    ? embeddedHeader
+    : <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />
+  const boardBody = (
+    <>
+      {controller?.isMutationPending ? <Text as="p" className={visuallyHiddenClass} type="supporting" role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</Text> : null}
+      {controller ? <Text as="p" className={visuallyHiddenClass} type="supporting" role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</Text> : null}
+      <SafeVStack as="div" className="min-w-0 max-w-full" id={`${id}-columns`} tabIndex={-1}>
+        {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (
+          <BoardColumns
+            key={displayModel.board.id}
+            model={displayModel}
+            copy={copy}
+            rootId={id}
+            controller={controller ?? undefined}
+            onSelectTask={onSelectTask}
+            showColumnNavigation={presentation !== "embedded"}
+          />
+        ) : (
+          <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
+        )}
+      </SafeVStack>
+    </>
+  )
+  const pageFrame = pageToolbar === null ? (
+    <PageFrame frame="workspace" bodyLabel={copy.boardColumnsLabel} bodyOverflow="none" header={pageHeader}>
+      {boardBody}
+    </PageFrame>
+  ) : (
+    <PageFrame frame="workspace" bodyLabel={copy.boardColumnsLabel} bodyOverflow="none" header={pageHeader} toolbar={pageToolbar} toolbarLabel={copy.boardTitle}>
+      {boardBody}
+    </PageFrame>
   )
 
   return (
@@ -642,24 +685,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       <a className={`absolute z-10 -translate-y-full rounded-md border border-border-strong bg-surface px-3 py-2 text-primary focus:translate-y-0 ${focusRingClass}`} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
-      <PageFrame
-        frame="workspace"
-        bodyLabel={copy.boardColumnsLabel}
-        bodyOverflow="none"
-        header={presentation === "embedded" ? embeddedHeader : <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />}
-        toolbar={presentation === "embedded" ? <SafeVStack as="div" gap={2} className="min-w-0">{embeddedToolbar}{syncAndNotices}</SafeVStack> : syncAndNotices}
-        toolbarLabel={copy.boardTitle}
-      >
-        {controller?.isMutationPending ? <Text as="p" className={visuallyHiddenClass} type="supporting" role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</Text> : null}
-        {controller ? <Text as="p" className={visuallyHiddenClass} type="supporting" role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</Text> : null}
-        <SafeVStack as="div" className="min-w-0 max-w-full" id={`${id}-columns`} tabIndex={-1}>
-          {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (
-            <BoardColumns key={displayModel.board.id} model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} onSelectTask={onSelectTask} />
-          ) : (
-            <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
-          )}
-        </SafeVStack>
-      </PageFrame>
+      {pageFrame}
       {controller ? <MutationDialog controller={controller} copy={copy} /> : null}
     </SafeVStack>
   )

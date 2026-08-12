@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
@@ -186,6 +187,15 @@ describe("BoardView", () => {
     expect(markup).not.toContain('data-testid="board-identity-details"')
   })
 
+  test("embedded presentation omits column navigation and no-notice boards omit an empty toolbar", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} presentation="embedded" />)
+    const standaloneMarkup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+
+    expect(markup).not.toContain('aria-label="看板列导航"')
+    expect(markup).not.toContain('role="toolbar"')
+    expect(standaloneMarkup).not.toContain('role="toolbar"')
+  })
+
   test("task card keeps agent summary facts and places low-frequency facts in a details reveal", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
 
@@ -358,6 +368,19 @@ describe("BoardView", () => {
     expect(markup).toContain('role="region" aria-label="看板列内容" tabindex="0"')
     expect(markup).toMatch(/tabindex="-1"[^>]*data-testid="board-column"/)
     expect((markup.match(/tabindex="-1"/g) ?? []).length).toBeGreaterThanOrEqual(3)
+  })
+
+  test("board horizontal surfaces keep standard touch and snap utilities without runtime style escape hatches", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+    const source = readFileSync(new URL("./BoardView.tsx", import.meta.url), "utf8")
+
+    expect(markup).toContain("snap-x")
+    expect(markup).toContain("snap-mandatory")
+    expect(markup).toContain("touch-pan-x")
+    expect(markup).toContain("snap-start")
+    expect(markup).not.toContain("style=")
+    expect(source).not.toContain("isLoading")
+    expect(source).not.toContain("<Spinner")
   })
 
   test("presentation 校验拒绝空白身份和异常 server columns", () => {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
@@ -66,12 +67,28 @@ describe("Board task mutation surface", () => {
 
   test("exposes pointer and keyboard drag semantics without inline style", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} taskMutations={surface()} />)
+    const source = readFileSync(new URL("./BoardTaskMutations.tsx", import.meta.url), "utf8")
 
     expect(markup).toContain('draggable="true"')
     expect(markup).toContain('aria-grabbed="false"')
     expect(markup).toContain('aria-roledescription="可拖动任务卡片"')
     expect(markup).toContain('data-testid="board-drop-target-ready"')
     expect(markup).not.toContain("style=")
+    expect(markup).not.toContain("Spinner")
+    expect(markup).not.toContain("isLoading")
+    expect(source).not.toContain("isLoading")
+    expect(source).not.toContain("<Spinner")
+  })
+
+  test("keeps confirmation dialogs cancel-first and retry notices safe while pending", () => {
+    const source = readFileSync(new URL("./BoardTaskMutations.tsx", import.meta.url), "utf8")
+
+    expect(source).toContain("initialFocusRef={isConfirmationDialog ? cancelRef : undefined}")
+    expect(source).toContain("ref={cancelRef}")
+    expect(source).toContain('data-autofocus={isConfirmationDialog ? "true" : undefined}')
+    expect(source).toContain("isDisabled={controller.isMutationPending}")
+    expect(source).toContain("controller.isMutationPending ? copy.mutationPending : retryLabel")
+    expect(source).toContain("aria-busy={controller.isMutationPending || undefined}")
   })
 
   test("supports English mutation copy", () => {

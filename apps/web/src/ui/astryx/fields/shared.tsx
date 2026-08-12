@@ -171,7 +171,8 @@ export function FieldShell({
           data-status={status.type}
           data-variant={statusVariant}
           id={statusId}
-          role={status.type === "error" ? "alert" : undefined}
+          aria-live={status.type === "error" ? "assertive" : "polite"}
+          role={status.type === "error" ? "alert" : "status"}
         >
           {status.message}
         </p>

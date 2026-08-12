@@ -63,6 +63,8 @@ describe("CSP-safe field contracts", () => {
     expect(markup).toContain('id="project-name-status"')
     expect(markup).toContain('id="project-name-disabled"')
     expect(markup).toContain('aria-disabled="true"')
+    expect(markup).toContain('role="alert"')
+    expect(markup).toContain('aria-live="assertive"')
   })
 
   test("TextArea forwards maxLength, count ID, spellcheck, and status", () => {
@@ -88,7 +90,25 @@ describe("CSP-safe field contracts", () => {
     expect(markup).toContain('translate="no"')
     expect(markup).toContain('id="notes-counter"')
     expect(markup).toContain('aria-describedby="notes-description notes-status notes-counter"')
+    expect(markup).toContain('role="status"')
+    expect(markup).toContain('aria-live="polite"')
     expect(markup).toContain("3/10")
+  })
+
+  test("success status uses a polite status live region", () => {
+    const markup = renderToStaticMarkup(
+      <TextInput
+        id="saved-name"
+        label="Saved name"
+        value="kanban"
+        status={{type: "success", message: "Saved."}}
+        onChange={() => undefined}
+      />,
+    )
+
+    expect(markup).toContain('id="saved-name-status"')
+    expect(markup).toContain('role="status"')
+    expect(markup).toContain('aria-live="polite"')
   })
 
   test("CheckboxInput and FileInput retain native names, refs, and file constraints", () => {

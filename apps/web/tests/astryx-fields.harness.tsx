@@ -1,8 +1,9 @@
 import {useState} from "react"
 import {createRoot} from "react-dom/client"
 
-import {FileInput} from "./FileInput"
-import {TextInput} from "./TextInput"
+import {FileInput} from "../src/ui/astryx/fields/FileInput"
+import {TextArea} from "../src/ui/astryx/fields/TextArea"
+import {TextInput} from "../src/ui/astryx/fields/TextInput"
 
 interface FieldLogEntry {
   readonly field: string
@@ -56,6 +57,7 @@ export function FieldHarness() {
         id="text-clear"
         label="Text value"
         value={text}
+        status={{type: "success", message: "Saved."}}
         hasClear
         clearLabel="Clear text value"
         clearText="Clear"
@@ -63,6 +65,13 @@ export function FieldHarness() {
           log({field: "text-clear", kind: "change", value, reason: event === null ? "null" : "event"})
           setText(value)
         }}
+      />
+      <TextArea
+        id="notes-status"
+        label="Notes"
+        value=""
+        status={{type: "warning", message: "Review notes."}}
+        onChange={() => undefined}
       />
 
       <FileInput

@@ -15,10 +15,10 @@ declare global {
   }
 }
 
-const webRoot = resolve(import.meta.dirname, "../../../../")
+const webRoot = resolve(import.meta.dirname, "..")
 const port = 4300 + (process.pid % 500)
 const baseUrl = `http://127.0.0.1:${port}`
-const harnessPath = "/app/src/ui/astryx/fields/fields.browser.harness.html"
+const harnessPath = "/app/tests/astryx-fields.harness.html"
 let viteProcess: ChildProcess | undefined
 
 async function waitForHarness(): Promise<void> {
@@ -58,8 +58,12 @@ async function logs(page: Page): Promise<ReadonlyArray<{field: string; kind: str
   return page.evaluate(() => window.__astryxFieldLogs)
 }
 
-test("safe field callbacks, native reset, refs, and IDREFs hold in a real browser", async ({page}) => {
+test("safe field callbacks, native reset, refs, IDREFs, and status live regions hold in a real browser", async ({page}) => {
   await openHarness(page)
+  await expect(page.locator("#text-clear-status")).toHaveAttribute("role", "status")
+  await expect(page.locator("#text-clear-status")).toHaveAttribute("aria-live", "polite")
+  await expect(page.locator("#notes-status-status")).toHaveAttribute("role", "status")
+  await expect(page.locator("#notes-status-status")).toHaveAttribute("aria-live", "polite")
 
   const textInput = page.locator("#text-clear")
   await textInput.focus()

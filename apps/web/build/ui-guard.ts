@@ -1,4 +1,5 @@
-import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -46,6 +47,65 @@ export type UiGuardSwizzle = {
   readonly runtimeStylePolicy: string
 }
 
+export type UiGuardManifestOrigin =
+  | "app-owned"
+  | "astryx-reimplementation"
+  | "astryx-facade"
+  | "astryx-swizzle"
+
+export type UiGuardRootBarrel = {
+  readonly path: string
+  readonly mode: "explicit"
+}
+
+export type UiGuardUpstream = {
+  readonly import: string
+  readonly package: string
+  readonly version: string
+  readonly license: string
+  readonly sourcePath: string
+  readonly sourceSha256: string
+}
+
+export type UiGuardCliEvidence = {
+  readonly package: string
+  readonly version: string
+  readonly command: string
+  readonly component: string
+  readonly evidenceSha256?: string
+}
+
+export type UiGuardSafeWrapperMember = {
+  readonly component: string
+  readonly publicApi: readonly string[]
+  readonly upstream?: UiGuardUpstream
+  readonly cli?: UiGuardCliEvidence
+}
+
+export type UiGuardSafeWrapperComponent = {
+  readonly kind: "component"
+  readonly component: string
+  readonly publicApi: readonly string[]
+  readonly ownedPath: string
+  readonly origin: UiGuardManifestOrigin
+  readonly reason: string
+  readonly runtimeStylePolicy: string
+  readonly upstream?: UiGuardUpstream
+  readonly cli?: UiGuardCliEvidence
+}
+
+export type UiGuardSafeWrapperGroup = {
+  readonly kind: "group"
+  readonly component: string
+  readonly ownedPath: string
+  readonly origin: UiGuardManifestOrigin
+  readonly reason: string
+  readonly runtimeStylePolicy: string
+  readonly members: readonly UiGuardSafeWrapperMember[]
+}
+
+export type UiGuardSafeWrapper = UiGuardSafeWrapperComponent | UiGuardSafeWrapperGroup
+
 export type UiGuardResidualCss = {
   readonly path: string
   readonly maxLoc: number
@@ -86,6 +146,8 @@ export type UiGuardManifest = {
   readonly schemaVersion: number
   readonly source: UiGuardSource
   readonly tailwindBridge: UiGuardTailwindBridge
+  readonly rootBarrel: UiGuardRootBarrel
+  readonly safeWrappers: readonly UiGuardSafeWrapper[]
   readonly swizzles: readonly UiGuardSwizzle[]
   readonly unsafeDirectImports: readonly string[]
   readonly unsafeImportBaseline: readonly UiGuardUnsafeImportBaseline[]
@@ -163,22 +225,57 @@ export function readUiGuardManifest(manifestPath = UI_GUARD_MANIFEST_PATH): UiGu
 /** Validate the manifest shape before it can influence a guard decision. */
 export function validateUiGuardManifest(value: unknown): asserts value is UiGuardManifest {
   if (!isRecord(value)) throw new Error("Astryx UI safety manifest must be an object")
+  assertExactKeys(
+    value,
+    [
+      "schemaVersion",
+      "source",
+      "tailwindBridge",
+      "rootBarrel",
+      "safeWrappers",
+      "swizzles",
+      "unsafeDirectImports",
+      "unsafeImportBaseline",
+      "ownedPaths",
+      "forbiddenRoots",
+      "residualCss",
+      "legacyRawLayout",
+      "cssImports",
+      "pageContract",
+    ],
+    "Astryx UI safety manifest",
+  )
   if (value.schemaVersion !== UI_GUARD_SCHEMA_VERSION) {
     throw new Error(`Unsupported Astryx UI safety manifest schemaVersion: ${String(value.schemaVersion)}`)
   }
   const source = value.source
   if (!isRecord(source)) throw new Error("Astryx UI safety manifest source must be an object")
+  assertExactKeys(source, ["package", "version", "tarballOrSourceHash", "license", "upstream"], "Astryx UI safety manifest source")
   for (const key of ["package", "version", "tarballOrSourceHash", "license", "upstream"] as const) {
     if (!isNonEmptyString(source[key])) throw new Error(`Astryx UI safety manifest source.${key} must be a string`)
   }
+  if (!isPackageName(source.package)) throw new Error(`Astryx UI safety manifest source.package is invalid: ${source.package}`)
 
   const bridge = value.tailwindBridge
   if (!isRecord(bridge) || !isStringArray(bridge.packages) || bridge.packages.length === 0 || !isNonEmptyString(bridge.version) || !isNonEmptyString(bridge.staticCssEntry)) {
     throw new Error("Astryx UI safety manifest tailwindBridge is invalid")
   }
+  if (isRecord(bridge)) assertExactKeys(bridge, ["packages", "version", "staticCssEntry"], "Astryx UI safety manifest tailwindBridge")
+  const rootBarrel = value.rootBarrel
+  if (!isRecord(rootBarrel) || rootBarrel.mode !== "explicit" || !isNonEmptyString(rootBarrel.path)) {
+    throw new Error("Astryx UI safety manifest rootBarrel is invalid")
+  }
+  if (isRecord(rootBarrel)) assertExactKeys(rootBarrel, ["path", "mode"], "Astryx UI safety manifest rootBarrel")
+  if (!Array.isArray(value.safeWrappers) || value.safeWrappers.length === 0 || !value.safeWrappers.every(isSafeWrapper)) {
+    throw new Error("Astryx UI safety manifest safeWrappers are invalid")
+  }
+  assertSafeWrapperUniqueness(value.safeWrappers)
   if (!isStringArray(value.unsafeDirectImports) || !isStringArray(value.ownedPaths) || !isStringArray(value.forbiddenRoots)) {
     throw new Error("Astryx UI safety manifest path lists are invalid")
   }
+  assertUniqueStrings(value.unsafeDirectImports, "unsafeDirectImports")
+  assertUniqueStrings(value.ownedPaths, "ownedPaths")
+  assertUniqueStrings(value.forbiddenRoots, "forbiddenRoots")
   if (!Array.isArray(value.unsafeImportBaseline) || !value.unsafeImportBaseline.every(isUnsafeImportBaseline)) {
     throw new Error("Astryx UI safety manifest unsafeImportBaseline is invalid")
   }
@@ -197,35 +294,52 @@ export function validateUiGuardManifest(value: unknown): asserts value is UiGuar
   if (!isRecord(value.pageContract) || value.pageContract.schemaVersion !== UI_GUARD_SCHEMA_VERSION || !isNonEmptyString(value.pageContract.sharedStyleEntry) || !Array.isArray(value.pageContract.entrypoints) || !value.pageContract.entrypoints.every(isPageEntrypoint)) {
     throw new Error("Astryx UI safety manifest pageContract is invalid")
   }
+  if (isRecord(value.pageContract)) {
+    assertExactKeys(value.pageContract, ["schemaVersion", "sharedStyleEntry", "entrypoints"], "Astryx UI safety manifest pageContract")
+  }
   for (const candidate of [...value.ownedPaths, ...value.forbiddenRoots, ...value.residualCss.map((item) => item.path), ...value.legacyRawLayout.map((item) => item.path), value.pageContract.sharedStyleEntry, ...value.pageContract.entrypoints.map((item) => item.path), ...value.cssImports.map((item) => item.importer), ...value.unsafeImportBaseline.map((item) => item.importer)]) {
     validateManifestPath(candidate)
   }
-  for (const entry of value.cssImports) validateCssImportPath(entry.path)
-  for (const entry of value.unsafeImportBaseline) {
-    if (entry.path.startsWith("/") || entry.path.includes("\\") || entry.path.split("/").includes("..")) {
-      throw new Error(`Invalid Astryx UI safety manifest unsafe import path: ${entry.path}`)
+  validateManifestPath(rootBarrel.path)
+  for (const wrapper of value.safeWrappers) {
+    validateManifestPath(wrapper.ownedPath)
+    const members = wrapper.kind === "group" ? wrapper.members : [wrapper]
+    for (const member of members) {
+      if (member.upstream !== undefined) validateManifestPath(member.upstream.sourcePath)
     }
   }
+  for (const swizzle of value.swizzles) validateManifestPath(swizzle.ownedPath)
+  for (const entry of value.cssImports) validateCssImportPath(entry.path)
+  for (const entry of value.unsafeImportBaseline) {
+    validateModuleSpecifier(entry.path, "unsafe import path")
+  }
+  for (const entry of value.unsafeDirectImports) validateModuleSpecifier(entry, "unsafe direct import")
 }
 
 /** Validate provenance against the checked-in package metadata and lockfile before scanning sources. */
-function validateUiGuardManifestProvenance(manifest: UiGuardManifest, projectRoot: string): void {
+export function validateUiGuardManifestProvenance(manifest: UiGuardManifest, projectRoot: string): void {
   const packageJsonPath = path.join(projectRoot, "package.json")
   const lockfilePath = path.resolve(projectRoot, "..", "..", "pnpm-lock.yaml")
-  let packageJson: { dependencies?: Record<string, unknown>; devDependencies?: Record<string, unknown> }
+  let packageJson: {
+    dependencies?: Record<string, unknown>
+    devDependencies?: Record<string, unknown>
+    exports?: Record<string, unknown>
+  }
   try {
     packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as typeof packageJson
   } catch (error) {
     throw new Error(`Unable to validate Astryx manifest provenance: ${packageJsonPath}`, { cause: error })
   }
-  const corePackagePath = path.join(projectRoot, "node_modules", "@astryxdesign", "core", "package.json")
-  let corePackage: { version?: unknown; license?: unknown }
+
+  const installedPackageRoot = resolveInstalledPackageRoot(projectRoot, manifest.source.package)
+  const corePackagePath = path.join(installedPackageRoot, "package.json")
+  let corePackage: { name?: unknown; version?: unknown; license?: unknown; exports?: Record<string, unknown> }
   try {
     corePackage = JSON.parse(readFileSync(corePackagePath, "utf8")) as typeof corePackage
   } catch (error) {
     throw new Error(`Unable to validate Astryx package provenance: ${corePackagePath}`, { cause: error })
   }
-  if (corePackage.version !== manifest.source.version || corePackage.license !== manifest.source.license) {
+  if (corePackage.name !== manifest.source.package || corePackage.version !== manifest.source.version || corePackage.license !== manifest.source.license) {
     throw new Error(`Astryx manifest source metadata does not match installed ${manifest.source.package}`)
   }
   const packageVersion = packageJson.dependencies?.[manifest.source.package]
@@ -249,8 +363,7 @@ function validateUiGuardManifestProvenance(manifest: UiGuardManifest, projectRoo
   if (lockMatch?.[1] !== `sha512-${manifest.source.tarballOrSourceHash.replace(/^sha512-/, "")}`) {
     throw new Error(`Astryx manifest source hash does not match pnpm-lock.yaml (${manifest.source.package})`)
   }
-  const packageIntegrityPattern = /^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$/
-  if (!packageIntegrityPattern.test(manifest.source.tarballOrSourceHash)) {
+  if (!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(manifest.source.tarballOrSourceHash)) {
     throw new Error("Astryx manifest source.tarballOrSourceHash must be a valid SRI hash")
   }
   const owned = new Set<string>()
@@ -258,16 +371,47 @@ function validateUiGuardManifestProvenance(manifest: UiGuardManifest, projectRoo
   for (const ownedPath of manifest.ownedPaths) {
     if (owned.has(ownedPath)) throw new Error(`Astryx manifest ownedPaths contains a duplicate: ${ownedPath}`)
     owned.add(ownedPath)
-    const absolutePath = path.resolve(projectRoot, ownedPath)
-    if (!existsSync(absolutePath) || !isRegularFile(absolutePath)) {
-      throw new Error(`Astryx manifest ownedPath must be an existing file under the app root: ${ownedPath}`)
-    }
-    const canonicalPath = realpathSync(absolutePath)
-    if (canonicalPath !== canonicalRoot && !canonicalPath.startsWith(`${canonicalRoot}${path.sep}`)) {
-      throw new Error(`Astryx manifest ownedPath must remain under the canonical app root: ${ownedPath}`)
+    assertAppFile(projectRoot, canonicalRoot, ownedPath, "ownedPath")
+  }
+
+  assertAppFile(projectRoot, canonicalRoot, manifest.rootBarrel.path, "rootBarrel path")
+  validateRootBarrelContract(projectRoot, manifest.rootBarrel)
+
+  const wrapperComponents = new Set<string>()
+  const wrapperPublicApi = new Set<string>()
+  const wrapperRuntimeApi = new Set<string>()
+  const wrapperOwnedPaths = new Set<string>()
+  const swizzleWrappers = new Map<string, { readonly ownedPath: string; readonly publicApi: readonly string[]; readonly upstream?: UiGuardUpstream; readonly cli?: UiGuardCliEvidence }>()
+  for (const wrapper of manifest.safeWrappers) {
+    if (wrapperComponents.has(wrapper.component)) throw new Error(`Astryx manifest safeWrappers contains a duplicate component: ${wrapper.component}`)
+    if (wrapper.kind === "group") wrapperComponents.add(wrapper.component)
+    if (wrapperOwnedPaths.has(wrapper.ownedPath)) throw new Error(`Astryx manifest safeWrappers contains a duplicate ownedPath: ${wrapper.ownedPath}`)
+    wrapperOwnedPaths.add(wrapper.ownedPath)
+    assertAppFile(projectRoot, canonicalRoot, wrapper.ownedPath, "safeWrapper ownedPath")
+    const members = wrapper.kind === "group" ? wrapper.members : [wrapper]
+    for (const member of members) {
+      if (wrapperComponents.has(member.component)) throw new Error(`Astryx manifest safeWrappers contains a duplicate component: ${member.component}`)
+      wrapperComponents.add(member.component)
+      for (const publicName of member.publicApi) {
+        if (wrapperPublicApi.has(publicName)) throw new Error(`Astryx manifest safeWrappers contains a duplicate publicApi symbol: ${publicName}`)
+        wrapperPublicApi.add(publicName)
+      }
+      wrapperRuntimeApi.add(member.component)
+      if (member.upstream !== undefined) validateUpstreamProvenance(manifest, corePackage, installedPackageRoot, member.upstream)
+      if (member.cli !== undefined) validateCliProvenance(projectRoot, member.cli)
+      if (wrapper.origin === "astryx-swizzle") swizzleWrappers.set(member.component, { ownedPath: wrapper.ownedPath, publicApi: member.publicApi, upstream: member.upstream, cli: member.cli })
     }
   }
+  const barrelExports = readRootBarrelPublicApi(projectRoot, manifest.rootBarrel.path)
+  if (!sameStringSet(barrelExports.names, wrapperPublicApi)) {
+    throw new Error("Astryx root barrel exports must exactly match safeWrappers publicApi")
+  }
+  if (!sameStringSet(barrelExports.runtimeNames, wrapperRuntimeApi)) throw new Error("Astryx root barrel runtime exports must exactly match safeWrapper components")
+
+  const legacySwizzles = new Map<string, UiGuardSwizzle>()
   for (const swizzle of manifest.swizzles) {
+    if (legacySwizzles.has(swizzle.component)) throw new Error(`Astryx manifest swizzles contains a duplicate component: ${swizzle.component}`)
+    legacySwizzles.set(swizzle.component, swizzle)
     if (!owned.has(swizzle.ownedPath)) {
       throw new Error(`Astryx manifest swizzle ownedPath must be listed in ownedPaths: ${swizzle.component}`)
     }
@@ -277,20 +421,152 @@ function validateUiGuardManifestProvenance(manifest: UiGuardManifest, projectRoo
     if (swizzle.sourceVersion !== manifest.source.version || swizzle.license !== manifest.source.license) {
       throw new Error(`Astryx manifest swizzle provenance does not match ${manifest.source.package}: ${swizzle.component}`)
     }
+    const wrapper = swizzleWrappers.get(swizzle.component)
+    if (wrapper === undefined || wrapper.ownedPath !== swizzle.ownedPath || !wrapper.publicApi.includes(swizzle.publicApi) || wrapper.upstream?.sourcePath !== swizzle.sourcePath || wrapper.upstream?.sourceSha256.toLowerCase() !== swizzle.sourceSha256.toLowerCase() || wrapper.cli?.command !== swizzle.command) {
+      throw new Error(`Astryx manifest swizzle must have a matching safeWrapper entry: ${swizzle.component}`)
+    }
+  }
+  for (const component of swizzleWrappers.keys()) {
+    if (!legacySwizzles.has(component)) throw new Error(`Astryx safeWrapper swizzle is missing from legacy swizzles: ${component}`)
   }
   for (const entry of manifest.cssImports) {
-    if (!isRegularFile(path.join(projectRoot, entry.importer))) {
-      throw new Error(`Astryx manifest CSS importer must be an existing file: ${entry.importer}`)
-    }
+    assertAppFile(projectRoot, canonicalRoot, entry.importer, "CSS importer")
     if (isAppRelativeCssPath(entry.path) && !isRegularFile(path.join(projectRoot, entry.path))) {
       throw new Error(`Astryx manifest CSS path must be an existing app file: ${entry.path}`)
     }
   }
   for (const entry of manifest.unsafeImportBaseline) {
-    if (!isRegularFile(path.join(projectRoot, entry.importer))) {
-      throw new Error(`Astryx manifest unsafe import baseline importer must be an existing file: ${entry.importer}`)
+    assertAppFile(projectRoot, canonicalRoot, entry.importer, "unsafe import baseline importer")
+  }
+}
+
+function resolveInstalledPackageRoot(projectRoot: string, packageName: string): string {
+  const packagePath = path.join(projectRoot, "node_modules", ...packageName.split("/"))
+  const packageJsonPath = path.join(packagePath, "package.json")
+  if (!isRegularFile(packageJsonPath)) throw new Error(`Unable to validate Astryx package provenance: ${packageJsonPath}`)
+  return realpathSync(packagePath)
+}
+
+function assertAppFile(projectRoot: string, canonicalRoot: string, relativePath: string, label: string): void {
+  const absolutePath = path.resolve(projectRoot, relativePath)
+  if (!isRegularFile(absolutePath)) throw new Error(`Astryx manifest ${label} must be an existing regular file: ${relativePath}`)
+  const canonicalPath = realpathSync(absolutePath)
+  if (canonicalPath !== canonicalRoot && !canonicalPath.startsWith(`${canonicalRoot}${path.sep}`)) {
+    throw new Error(`Astryx manifest ${label} must remain under the canonical app root: ${relativePath}`)
+  }
+}
+
+function validateUpstreamProvenance(
+  manifest: UiGuardManifest,
+  corePackage: { version?: unknown; license?: unknown; exports?: Record<string, unknown> },
+  installedPackageRoot: string,
+  upstream: UiGuardUpstream,
+): void {
+  if (upstream.package !== manifest.source.package || upstream.version !== manifest.source.version || upstream.license !== manifest.source.license) {
+    throw new Error(`Astryx safeWrapper upstream metadata does not match ${manifest.source.package}`)
+  }
+  validateManifestPath(upstream.sourcePath)
+  validateModuleSpecifier(upstream.import, "upstream import")
+  if (upstream.import !== manifest.source.package && !upstream.import.startsWith(`${manifest.source.package}/`)) {
+    throw new Error(`Astryx safeWrapper upstream import is outside ${manifest.source.package}: ${upstream.import}`)
+  }
+  const exportName = upstream.import === manifest.source.package ? "." : `.${upstream.import.slice(manifest.source.package.length)}`
+  const declaredExport = corePackage.exports?.[exportName]
+  if (!isRecord(declaredExport) || declaredExport.source !== `./${upstream.sourcePath}`) {
+    throw new Error(`Astryx safeWrapper upstream source does not match package.json exports: ${upstream.import}`)
+  }
+  const sourcePath = path.join(installedPackageRoot, upstream.sourcePath)
+  if (!isRegularFile(sourcePath)) throw new Error(`Astryx safeWrapper upstream source is not a regular file: ${upstream.sourcePath}`)
+  const packageRoot = realpathSync(installedPackageRoot)
+  const canonicalSource = realpathSync(sourcePath)
+  if (canonicalSource !== packageRoot && !canonicalSource.startsWith(`${packageRoot}${path.sep}`)) {
+    throw new Error(`Astryx safeWrapper upstream source escapes installed package root: ${upstream.sourcePath}`)
+  }
+  const actualHash = createHash("sha256").update(readFileSync(sourcePath)).digest("hex")
+  if (actualHash !== upstream.sourceSha256.toLowerCase()) {
+    throw new Error(`Astryx safeWrapper upstream source hash mismatch: ${upstream.import}`)
+  }
+}
+
+function validateCliProvenance(projectRoot: string, evidence: UiGuardCliEvidence): void {
+  if (evidence.package !== "@astryxdesign/cli") throw new Error(`Astryx CLI evidence package is invalid: ${evidence.package}`)
+  let appPackage: { dependencies?: Record<string, unknown>; devDependencies?: Record<string, unknown> }
+  try {
+    appPackage = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8")) as typeof appPackage
+  } catch (error) {
+    throw new Error(`Unable to validate Astryx CLI app dependency provenance: ${evidence.package}`, { cause: error })
+  }
+  const declaredVersion = appPackage.dependencies?.[evidence.package] ?? appPackage.devDependencies?.[evidence.package]
+  if (declaredVersion !== evidence.version) throw new Error(`Astryx CLI evidence version does not match package.json: ${evidence.package}`)
+  const cliRoot = resolveInstalledPackageRoot(projectRoot, evidence.package)
+  let cliPackage: { name?: unknown; version?: unknown }
+  try {
+    cliPackage = JSON.parse(readFileSync(path.join(cliRoot, "package.json"), "utf8")) as typeof cliPackage
+  } catch (error) {
+    throw new Error(`Unable to validate Astryx CLI provenance: ${evidence.package}`, { cause: error })
+  }
+  if (cliPackage.name !== evidence.package || cliPackage.version !== evidence.version) throw new Error(`Astryx CLI evidence metadata does not match installed package: ${evidence.package}`)
+  const lockfilePath = path.resolve(projectRoot, "..", "..", "pnpm-lock.yaml")
+  const lockfile = readFileSync(lockfilePath, "utf8")
+  const lockPattern = new RegExp(`['"]?${escapeRegExp(evidence.package)}@${escapeRegExp(evidence.version)}['"]?:\\n\\s+resolution: \\{integrity: ([^}]+)\\}`)
+  if (!lockPattern.test(lockfile)) throw new Error(`Astryx CLI evidence package is missing from pnpm-lock.yaml: ${evidence.package}`)
+  if (evidence.evidenceSha256 !== undefined && !/^[a-f0-9]{64}$/i.test(evidence.evidenceSha256)) {
+    throw new Error(`Astryx CLI evidence hash is invalid: ${evidence.component}`)
+  }
+}
+
+function validateRootBarrelContract(projectRoot: string, rootBarrel: UiGuardRootBarrel): void {
+  const sourcePath = path.join(projectRoot, rootBarrel.path)
+  const source = readFileSync(sourcePath, "utf8")
+  ts.createSourceFile(rootBarrel.path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+}
+
+function readRootBarrelPublicApi(projectRoot: string, rootBarrelPath: string): { names: readonly string[]; runtimeNames: ReadonlySet<string> } {
+  const source = readFileSync(path.join(projectRoot, rootBarrelPath), "utf8")
+  const sourceFile = ts.createSourceFile(rootBarrelPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const names: string[] = []
+  const runtimeNames = new Set<string>()
+  const seen = new Set<string>()
+  const add = (name: string, runtime: boolean): void => {
+    if (name === "default") throw new Error("Astryx root barrel default exports are forbidden")
+    if (seen.has(name)) throw new Error(`Astryx root barrel contains a duplicate export: ${name}`)
+    seen.add(name)
+    names.push(name)
+    if (runtime) runtimeNames.add(name)
+  }
+  for (const statement of sourceFile.statements) {
+    if (ts.isExportDeclaration(statement)) {
+      const clause = statement.exportClause
+      if (clause === undefined || ts.isNamespaceExport(clause)) throw new Error("Astryx root barrel wildcard and namespace exports are forbidden")
+      if (!ts.isNamedExports(clause)) throw new Error("Astryx root barrel export form is unsupported")
+      for (const element of clause.elements) {
+        if (element.propertyName?.text === "default") throw new Error("Astryx root barrel default exports are forbidden")
+        add(element.name.text, !statement.isTypeOnly && !element.isTypeOnly)
+      }
+      continue
+    }
+    if (ts.isExportAssignment(statement)) throw new Error("Astryx root barrel default exports are forbidden")
+    const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) : undefined
+    if (!modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue
+    if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) throw new Error("Astryx root barrel default exports are forbidden")
+    if (ts.isVariableStatement(statement)) {
+      for (const item of statement.declarationList.declarations) {
+        for (const identifier of identifiersInBindingName(item.name)) add(identifier.text, true)
+      }
+    } else if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement) || ts.isModuleDeclaration(statement)) {
+      if (statement.name === undefined || !ts.isIdentifier(statement.name)) throw new Error("Astryx root barrel export form is unsupported")
+      add(statement.name.text, true)
+    } else {
+      throw new Error("Astryx root barrel export form is unsupported")
     }
   }
+  return { names, runtimeNames }
+}
+
+function sameStringSet(left: readonly string[] | ReadonlySet<string>, right: readonly string[] | ReadonlySet<string>): boolean {
+  const leftValues: readonly string[] = Array.isArray(left) ? left : [...left]
+  const rightValues = right instanceof Set ? right : new Set(right)
+  return leftValues.length === rightValues.size && leftValues.every((value) => rightValues.has(value))
 }
 
 function isAppRelativeCssPath(value: string): boolean {
@@ -1279,7 +1555,12 @@ function toManifestPath(value: string): string {
 }
 
 function validateManifestPath(value: string): void {
-  if (!isNonEmptyString(value) || path.isAbsolute(value) || value.split(/[\\/]/).includes("..")) {
+  if (!isNonEmptyString(value) || path.posix.isAbsolute(value) || /^[A-Za-z]:/.test(value) || value.includes("\\")) {
+    throw new Error(`Invalid Astryx UI safety manifest path: ${String(value)}`)
+  }
+  const decoded = decodeManifestPath(value)
+  const segments = value.split("/")
+  if (decoded !== value || segments.some((segment) => segment.length === 0 || segment === "." || segment === "..") || path.posix.normalize(value) !== value) {
     throw new Error(`Invalid Astryx UI safety manifest path: ${String(value)}`)
   }
 }
@@ -1288,6 +1569,32 @@ function validateCssImportPath(value: string): void {
   if (!isNonEmptyString(value) || value.startsWith("/") || value.includes("\\") || value.split("/").includes("..")) {
     throw new Error(`Invalid Astryx UI safety manifest CSS path: ${String(value)}`)
   }
+  const clean = value.split(/[?#]/, 1)[0]
+  if (clean.startsWith(".")) validateManifestPath(clean)
+  else if (decodeManifestPath(clean) !== clean || clean.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+    throw new Error(`Invalid Astryx UI safety manifest CSS path: ${String(value)}`)
+  }
+}
+
+function validateModuleSpecifier(value: string, label: string): void {
+  if (!isNonEmptyString(value) || value.includes("\\") || value.startsWith("/") || decodeManifestPath(value) !== value || value.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+    throw new Error(`Invalid Astryx UI safety manifest ${label}: ${String(value)}`)
+  }
+}
+
+function decodeManifestPath(value: string): string {
+  let decoded = value
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    let next: string
+    try {
+      next = decodeURIComponent(decoded)
+    } catch {
+      throw new Error(`Invalid Astryx UI safety manifest path: ${String(value)}`)
+    }
+    if (next === decoded) return decoded
+    decoded = next
+  }
+  return decoded
 }
 
 function lineCount(source: string): number {
@@ -1302,8 +1609,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+function assertExactKeys(value: Record<string, unknown>, required: readonly string[], label: string): void {
+  const requiredSet = new Set(required)
+  for (const key of required) {
+    if (!(key in value)) throw new Error(`${label}.${key} is required`)
+  }
+  for (const key of Object.keys(value)) {
+    if (!requiredSet.has(key)) throw new Error(`${label}.${key} is not allowed`)
+  }
+}
+
+function assertUniqueStrings(values: readonly string[], label: string): void {
+  if (new Set(values).size !== values.length) throw new Error(`Astryx UI safety manifest ${label} contains duplicates`)
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
+}
+
+function isPackageName(value: unknown): value is string {
+  return typeof value === "string" && /^(?:@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+$/.test(value)
 }
 
 function isStringArray(value: unknown): value is readonly string[] {
@@ -1311,29 +1636,138 @@ function isStringArray(value: unknown): value is readonly string[] {
 }
 
 function isSwizzle(value: unknown): value is UiGuardSwizzle {
-  return isRecord(value) && ["component", "ownedPath", "sourcePackage", "sourceVersion", "sourcePath", "command", "sourceSha256", "reason", "publicApi", "license", "runtimeStylePolicy"].every((key) => isNonEmptyString(value[key]))
+  if (!isRecord(value)) return false
+  try {
+    assertExactKeys(value, ["component", "ownedPath", "sourcePackage", "sourceVersion", "sourcePath", "command", "sourceSha256", "reason", "publicApi", "license", "runtimeStylePolicy"], "Astryx UI safety manifest swizzle")
+  } catch {
+    return false
+  }
+  return ["component", "ownedPath", "sourcePackage", "sourceVersion", "sourcePath", "command", "sourceSha256", "reason", "publicApi", "license", "runtimeStylePolicy"].every((key) => isNonEmptyString(value[key]))
 }
 
 function isResidualCss(value: unknown): value is UiGuardResidualCss {
-  return isRecord(value) && isNonEmptyString(value.path) && isSafeNonNegativeInteger(value.maxLoc) && isNonEmptyString(value.owner) && isNonEmptyString(value.reason) && isNonEmptyString(value.exitCondition)
+  if (!isRecord(value)) return false
+  try { assertExactKeys(value, ["path", "maxLoc", "owner", "reason", "exitCondition"], "Astryx UI safety manifest residualCss") } catch { return false }
+  return isNonEmptyString(value.path) && isSafeNonNegativeInteger(value.maxLoc) && isNonEmptyString(value.owner) && isNonEmptyString(value.reason) && isNonEmptyString(value.exitCondition)
 }
 
 function isLegacyRawLayout(value: unknown): value is UiGuardLegacyRawLayout {
-  return isRecord(value) && isNonEmptyString(value.path) && isSafeNonNegativeInteger(value.maxCount) && isNonEmptyString(value.owner) && isNonEmptyString(value.exitCondition)
+  if (!isRecord(value)) return false
+  try { assertExactKeys(value, ["path", "maxCount", "owner", "exitCondition"], "Astryx UI safety manifest legacyRawLayout") } catch { return false }
+  return isNonEmptyString(value.path) && isSafeNonNegativeInteger(value.maxCount) && isNonEmptyString(value.owner) && isNonEmptyString(value.exitCondition)
 }
 
 function isCssImport(value: unknown): value is UiGuardCssImport {
-  return isRecord(value) && isNonEmptyString(value.importer) && isNonEmptyString(value.path)
+  if (!isRecord(value)) return false
+  try { assertExactKeys(value, ["importer", "path"], "Astryx UI safety manifest cssImports") } catch { return false }
+  return isNonEmptyString(value.importer) && isNonEmptyString(value.path)
 }
 
 function isUnsafeImportBaseline(value: unknown): value is UiGuardUnsafeImportBaseline {
-  return isRecord(value) && isNonEmptyString(value.importer) && isNonEmptyString(value.path)
+  if (!isRecord(value)) return false
+  try { assertExactKeys(value, ["importer", "path"], "Astryx UI safety manifest unsafeImportBaseline") } catch { return false }
+  return isNonEmptyString(value.importer) && isNonEmptyString(value.path)
 }
 
 function isPageEntrypoint(value: unknown): value is UiGuardPageEntrypoint {
-  return isRecord(value) && isNonEmptyString(value.path) && isNonEmptyString(value.import)
+  if (!isRecord(value)) return false
+  try { assertExactKeys(value, ["path", "import"], "Astryx UI safety manifest pageContract entrypoint") } catch { return false }
+  return isNonEmptyString(value.path) && isNonEmptyString(value.import)
 }
 
 function isSafeNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+}
+
+function isSafeWrapper(value: unknown): value is UiGuardSafeWrapper {
+  if (!isRecord(value) || (value.kind !== "component" && value.kind !== "group")) return false
+  const base = ["kind", "component", "ownedPath", "origin", "reason", "runtimeStylePolicy"]
+  try {
+    if (value.kind === "component") {
+      assertExactKeys(value, [...base, "publicApi", ...(value.upstream === undefined ? [] : ["upstream"]), ...(value.cli === undefined ? [] : ["cli"])], "Astryx UI safety manifest safeWrappers component")
+      if (!isNonEmptyString(value.component) || !isNonEmptyString(value.ownedPath) || !isManifestOrigin(value.origin) || !isNonEmptyString(value.reason) || !isNonEmptyString(value.runtimeStylePolicy) || !isPublicApi(value.publicApi) || (value.upstream !== undefined && !isUpstream(value.upstream)) || (value.cli !== undefined && !isCliEvidence(value.cli))) return false
+      validateSafeWrapperEvidence(value.origin, value.component, value as unknown as UiGuardSafeWrapperComponent)
+      return true
+    }
+    assertExactKeys(value, [...base, "members"], "Astryx UI safety manifest safeWrappers group")
+    if (!isNonEmptyString(value.component) || !isNonEmptyString(value.ownedPath) || !isManifestOrigin(value.origin) || !isNonEmptyString(value.reason) || !isNonEmptyString(value.runtimeStylePolicy) || !Array.isArray(value.members) || value.members.length === 0 || !value.members.every(isSafeWrapperMember)) return false
+    for (const member of value.members) validateSafeWrapperEvidence(value.origin, member.component, member)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function assertSafeWrapperUniqueness(wrappers: readonly UiGuardSafeWrapper[]): void {
+  const components = new Set<string>()
+  const publicApi = new Set<string>()
+  const ownedPaths = new Set<string>()
+  for (const wrapper of wrappers) {
+    if (components.has(wrapper.component)) throw new Error(`Astryx manifest safeWrappers contains a duplicate component: ${wrapper.component}`)
+    if (wrapper.kind === "group") components.add(wrapper.component)
+    if (ownedPaths.has(wrapper.ownedPath)) throw new Error(`Astryx manifest safeWrappers contains a duplicate ownedPath: ${wrapper.ownedPath}`)
+    ownedPaths.add(wrapper.ownedPath)
+    const members = wrapper.kind === "group" ? wrapper.members : [wrapper]
+    for (const member of members) {
+      if (components.has(member.component)) throw new Error(`Astryx manifest safeWrappers contains a duplicate component: ${member.component}`)
+      components.add(member.component)
+      for (const symbol of member.publicApi) {
+        if (publicApi.has(symbol)) throw new Error(`Astryx manifest safeWrappers contains a duplicate publicApi symbol: ${symbol}`)
+        publicApi.add(symbol)
+      }
+    }
+  }
+}
+
+function isSafeWrapperMember(value: unknown): value is UiGuardSafeWrapperMember {
+  if (!isRecord(value)) return false
+  try {
+    assertExactKeys(value, ["component", "publicApi", ...(value.upstream === undefined ? [] : ["upstream"]), ...(value.cli === undefined ? [] : ["cli"])], "Astryx UI safety manifest safeWrappers member")
+  } catch {
+    return false
+  }
+  return isNonEmptyString(value.component) && isPublicApi(value.publicApi) && (value.upstream === undefined || isUpstream(value.upstream)) && (value.cli === undefined || isCliEvidence(value.cli))
+}
+
+function validateSafeWrapperEvidence(origin: UiGuardManifestOrigin, component: string, value: UiGuardSafeWrapperComponent | UiGuardSafeWrapperMember): void {
+  const hasUpstream = value.upstream !== undefined
+  const hasCli = value.cli !== undefined
+  if (origin === "app-owned" && (hasUpstream || hasCli)) throw new Error(`app-owned Astryx safe wrapper must not carry upstream or CLI evidence: ${component}`)
+  if (origin === "astryx-reimplementation" && (!hasUpstream || !hasCli)) throw new Error(`astryx-reimplementation requires upstream and component CLI evidence: ${component}`)
+  if (origin === "astryx-facade" && !hasUpstream) throw new Error(`astryx-facade requires upstream evidence: ${component}`)
+  if (origin === "astryx-swizzle" && (!hasUpstream || !hasCli)) throw new Error(`astryx-swizzle requires upstream and swizzle CLI evidence: ${component}`)
+  if (value.cli !== undefined) {
+    if (value.cli.component !== component) throw new Error(`Astryx CLI evidence component mismatch: ${component}`)
+    const commandKind = origin === "astryx-swizzle" ? "swizzle" : "component"
+    const expected = `pnpm exec astryx --json ${commandKind} ${component}`
+    if (value.cli.command !== expected) throw new Error(`Astryx CLI evidence command mismatch for ${component}: expected ${expected}`)
+  }
+}
+
+function isManifestOrigin(value: unknown): value is UiGuardManifestOrigin {
+  return value === "app-owned" || value === "astryx-reimplementation" || value === "astryx-facade" || value === "astryx-swizzle"
+}
+
+function isPublicApi(value: unknown): value is readonly string[] {
+  return isStringArray(value) && value.length > 0 && value.every((entry) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(entry))
+}
+
+function isUpstream(value: unknown): value is UiGuardUpstream {
+  if (!isRecord(value)) return false
+  try {
+    assertExactKeys(value, ["import", "package", "version", "license", "sourcePath", "sourceSha256"], "Astryx UI safety manifest upstream")
+  } catch {
+    return false
+  }
+  return isNonEmptyString(value.import) && isPackageName(value.package) && isNonEmptyString(value.version) && isNonEmptyString(value.license) && isNonEmptyString(value.sourcePath) && isNonEmptyString(value.sourceSha256) && /^[a-f0-9]{64}$/i.test(value.sourceSha256)
+}
+
+function isCliEvidence(value: unknown): value is UiGuardCliEvidence {
+  if (!isRecord(value)) return false
+  try {
+    assertExactKeys(value, ["package", "version", "command", "component", ...(value.evidenceSha256 === undefined ? [] : ["evidenceSha256"])], "Astryx UI safety manifest CLI evidence")
+  } catch {
+    return false
+  }
+  return isPackageName(value.package) && isNonEmptyString(value.version) && isNonEmptyString(value.command) && isNonEmptyString(value.component) && (value.evidenceSha256 === undefined || (isNonEmptyString(value.evidenceSha256) && /^[a-f0-9]{64}$/i.test(value.evidenceSha256)))
 }

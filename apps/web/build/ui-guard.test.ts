@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -6,7 +6,14 @@ import tailwindcss from "@tailwindcss/vite"
 import { build as viteBuild } from "vite"
 import { describe, expect, test } from "vitest"
 
-import { readUiGuardManifest, scanUiSource, uiGuardModeFromEnv, validateUiGuardManifest } from "./ui-guard"
+import {
+  readUiGuardManifest,
+  scanUiSource,
+  uiGuardModeFromEnv,
+  validateUiGuardManifest,
+  validateUiGuardManifestProvenance,
+  type UiGuardManifest,
+} from "./ui-guard"
 
 const projectRoot = path.resolve(import.meta.dirname, "..")
 
@@ -14,6 +21,9 @@ describe("Astryx CSP UI guard", () => {
   test("loads the machine-readable manifest and shared page contract", () => {
     const manifest = readUiGuardManifest()
     expect(manifest.schemaVersion).toBe(1)
+    expect(manifest.rootBarrel).toEqual({ path: "src/ui/astryx/index.ts", mode: "explicit" })
+    expect(manifest.safeWrappers.find((entry) => entry.kind === "group")).toMatchObject({ origin: "astryx-facade", component: "SafeCoreFacades" })
+    expect(manifest.swizzles).toEqual([])
     expect(manifest.tailwindBridge.version).toBe("4.3.3")
     expect(manifest.cssImports).toContainEqual({ importer: "src/main.tsx", path: "src/styles.css" })
     expect(manifest.pageContract.sharedStyleEntry).toBe("src/styles.css")
@@ -22,6 +32,129 @@ describe("Astryx CSP UI guard", () => {
       { path: ".storybook/preview.tsx", import: "../src/styles.css" },
     ]))
     expect(() => validateUiGuardManifest(manifest)).not.toThrow()
+  })
+
+  test("enforces the origin discriminant and evidence requirements", () => {
+    const appOwned = cloneManifest()
+    const appOwnedEntry = componentEntry(appOwned, "TextArea") as Record<string, unknown>
+    appOwnedEntry.origin = "astryx-facade"
+    expect(() => validateUiGuardManifest(appOwned)).toThrow()
+
+    const reimplementation = cloneManifest()
+    const reimplementationEntry = componentEntry(reimplementation, "TextInput") as Record<string, unknown>
+    delete reimplementationEntry.cli
+    expect(() => validateUiGuardManifest(reimplementation)).toThrow()
+
+    const swizzle = cloneManifest()
+    const swizzleEntry = componentEntry(swizzle, "TextInput") as Record<string, unknown>
+    swizzleEntry.origin = "astryx-swizzle"
+    expect(() => validateUiGuardManifest(swizzle)).toThrow()
+
+    const facade = cloneManifest()
+    const facadeGroup = facade.safeWrappers.find((entry) => entry.kind === "group")
+    expect(facadeGroup?.origin).toBe("astryx-facade")
+    expect(() => validateUiGuardManifest(facade)).not.toThrow()
+  })
+
+  test("checks package, lock, export, license, version, source hash, and path provenance", () => {
+    const cases: Array<[string, (manifest: UiGuardManifest) => void, RegExp]> = [
+      ["source hash", (manifest) => { (groupMember(manifest, "SafeCard").upstream as Record<string, unknown>).sourceSha256 = "0".repeat(64) }, /source hash mismatch/],
+      ["package", (manifest) => { (groupMember(manifest, "SafeCard").upstream as Record<string, unknown>).package = "@other/core" }, /upstream metadata/],
+      ["version", (manifest) => { (groupMember(manifest, "SafeCard").upstream as Record<string, unknown>).version = "9.9.9" }, /upstream metadata/],
+      ["license", (manifest) => { (groupMember(manifest, "SafeCard").upstream as Record<string, unknown>).license = "Apache-2.0" }, /upstream metadata/],
+      ["source export", (manifest) => { (groupMember(manifest, "SafeCard").upstream as Record<string, unknown>).sourcePath = "src/HStack/index.ts" }, /package.json exports/],
+      ["lock", (manifest) => { manifest.source.tarballOrSourceHash = `sha512-${"A".repeat(86)}` }, /source hash does not match pnpm-lock/],
+    ]
+    for (const [, mutate, expected] of cases) {
+      const manifest = cloneManifest()
+      mutate(manifest)
+      expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).toThrow(expected)
+    }
+
+    const traversal = cloneManifest()
+    traversal.rootBarrel.path = "src/ui/astryx/../index.ts"
+    expect(() => validateUiGuardManifest(traversal)).toThrow(/Invalid Astryx UI safety manifest path/)
+  })
+
+  test("rejects symlink escapes and duplicate wrapper identities", () => {
+    const temporaryRoot = mkdtempSync(path.join(projectRoot, ".ui-guard-manifest-test-"))
+    try {
+      symlinkSync("/etc/passwd", path.join(temporaryRoot, "escape.ts"))
+      const symlinkManifest = cloneManifest()
+      symlinkManifest.safeWrappers[0].ownedPath = `${path.basename(temporaryRoot)}/escape.ts`
+      expect(() => validateUiGuardManifestProvenance(symlinkManifest, projectRoot)).toThrow(/regular file/)
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true })
+    }
+
+    const duplicate = cloneManifest()
+    duplicate.safeWrappers[1].publicApi = [...duplicate.safeWrappers[1].publicApi, duplicate.safeWrappers[0].publicApi[0]]
+    expect(() => validateUiGuardManifestProvenance(duplicate, projectRoot)).toThrow(/duplicate publicApi/)
+  })
+
+  test("requires an explicit root barrel with exact runtime and type exports", () => {
+    const source = readFileSync(path.join(projectRoot, "src/ui/astryx/index.ts"), "utf8")
+    const cases: Array<[string, string, RegExp]> = [
+      ["wildcard", "export * from \"./fields/TextInput\"", /wildcard/],
+      ["missing", source.replace('export {CheckboxInput} from "./fields/CheckboxInput"\n', ""), /exactly match/],
+      ["extra", `${source}\nexport const Extra = 1\n`, /exactly match/],
+      ["runtime", source.replace('export {CheckboxInput} from "./fields/CheckboxInput"', 'export type {CheckboxInput} from "./fields/CheckboxInput"'), /runtime exports must exactly match/],
+      ["type-as-runtime", source.replace('export type {\n  CheckboxInputProps,', 'export {\n  CheckboxInputProps,'), /runtime exports must exactly match/],
+      ["duplicate", `${source}\nexport {CheckboxInput} from "./fields/CheckboxInput"\n`, /duplicate export/],
+    ]
+    for (const [, barrel, expected] of cases) {
+      const temporaryRoot = mkdtempSync(path.join(projectRoot, ".ui-guard-root-test-"))
+      try {
+        writeFileSync(path.join(temporaryRoot, "index.ts"), barrel)
+        const manifest = cloneManifest()
+        manifest.rootBarrel.path = `${path.basename(temporaryRoot)}/index.ts`
+        expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).toThrow(expected)
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true })
+      }
+    }
+  })
+
+  test("keeps safe-wrapper provenance independent from unsafe direct-import severity", () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-guard-safe-wrapper-"))
+    try {
+      writeFileSync(path.join(temporaryRoot, "unsafe.tsx"), 'import "@astryxdesign/core/TextInput"')
+      const manifest = cloneManifest()
+      const textInput = componentEntry(manifest, "TextInput") as Record<string, unknown>
+      textInput.origin = "app-owned"
+      delete textInput.upstream
+      delete textInput.cli
+      const report = scanUiSource({ projectRoot: temporaryRoot, sourcePaths: ["unsafe.tsx"], mode: "enforce", manifest })
+      expect(report.errors.some((error) => error.code === "unsafe-direct-import")).toBe(true)
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("requires swizzle safe wrappers to match legacy swizzle provenance", () => {
+    const manifest = cloneManifest()
+    const textInput = componentEntry(manifest, "TextInput")
+    textInput.origin = "astryx-swizzle"
+    const cli = textInput.cli as Record<string, unknown>
+    cli.command = "pnpm exec astryx --json swizzle TextInput"
+    manifest.ownedPaths = [...manifest.ownedPaths, textInput.ownedPath]
+    expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).toThrow(/missing from legacy/)
+    manifest.swizzles = [{
+      component: "TextInput",
+      ownedPath: textInput.ownedPath,
+      sourcePackage: "@astryxdesign/core",
+      sourceVersion: "0.3.0",
+      sourcePath: "src/TextInput/index.ts",
+      command: "pnpm exec astryx --json swizzle TextInput",
+      sourceSha256: textInput.upstream.sourceSha256,
+      reason: "test",
+      publicApi: "TextInput",
+      license: "MIT",
+      runtimeStylePolicy: "static",
+    }]
+    expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).not.toThrow()
+    manifest.swizzles[0].publicApi = "Other"
+    expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).toThrow(/matching safeWrapper/)
   })
 
   test("inventories the current source without traversing reference/output", () => {
@@ -353,4 +486,23 @@ function readBuiltCssTopology(root: string): { cssFiles: string[]; css: string; 
   const html = files.filter((file) => file.endsWith(".html")).map((file) => readFileSync(file, "utf8")).join("\n")
   const firstLayer = css.match(/@layer\s+[\w-]+/)?.[0] ?? ""
   return { cssFiles, css, html, firstLayer }
+}
+
+function cloneManifest(): UiGuardManifest {
+  return JSON.parse(JSON.stringify(readUiGuardManifest())) as UiGuardManifest
+}
+
+function componentEntry(manifest: UiGuardManifest, component: string): Record<string, unknown> {
+  const entry = manifest.safeWrappers.find((candidate) => candidate.kind === "component" && candidate.component === component)
+  if (entry === undefined || entry.kind !== "component") throw new Error(`missing test wrapper: ${component}`)
+  return entry as unknown as Record<string, unknown>
+}
+
+function groupMember(manifest: UiGuardManifest, component: string): Record<string, unknown> {
+  for (const entry of manifest.safeWrappers) {
+    if (entry.kind !== "group") continue
+    const member = entry.members.find((candidate) => candidate.component === component)
+    if (member !== undefined) return member as unknown as Record<string, unknown>
+  }
+  throw new Error(`missing test group member: ${component}`)
 }

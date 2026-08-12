@@ -1,59 +1,22 @@
+import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Heading } from "@astryxdesign/core/Heading"
-import { useEffect, useRef } from "react"
+import {
+  CheckboxInput,
+  Dialog,
+  SafeHStack,
+  SafeVStack,
+  TextArea,
+  TextInput,
+} from "@/ui/astryx"
 
-import styles from "./BoardView.module.css"
 import type { BoardMessages } from "./types"
 import type { BoardTaskMutationController } from "./task-mutation-controller"
 
 export function MutationDialog({ controller, copy }: { readonly controller: BoardTaskMutationController; readonly copy: BoardMessages }) {
   const dialog = controller.dialog
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const controllerRef = useRef(controller)
-  controllerRef.current = controller
-  const isOpen = dialog !== null
-  useEffect(() => {
-    const node = dialogRef.current
-    if (node === null) return
-    if (!node.open) node.showModal()
-    const initialFocus = node.querySelector<HTMLElement>("[data-testid='task-title-input'], [data-testid='task-description-input'], [data-testid='task-block-reason']")
-    initialFocus?.focus()
-    const focusTimer = window.setTimeout(() => initialFocus?.focus(), 0)
-    const onCancel = (event: Event) => {
-      event.preventDefault()
-      controllerRef.current.closeDialog()
-    }
-    const onClose = () => {
-      if (controllerRef.current.dialog !== null) controllerRef.current.closeDialog()
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return
-      const focusable = Array.from(node.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
-      ))
-      if (focusable.length === 0) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    node.addEventListener("cancel", onCancel)
-    node.addEventListener("close", onClose)
-    node.addEventListener("keydown", onKeyDown, true)
-    return () => {
-      node.removeEventListener("cancel", onCancel)
-      node.removeEventListener("close", onClose)
-      node.removeEventListener("keydown", onKeyDown, true)
-      window.clearTimeout(focusTimer)
-      if (node.open) node.close()
-    }
-  }, [isOpen])
   if (dialog === null) return null
+
   const title = dialog.kind === "create"
     ? copy.createTaskTitle
     : dialog.kind === "edit"
@@ -63,14 +26,31 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
   const pending = controller.isPending(pendingKey)
 
   return (
-      <dialog ref={dialogRef} className={styles.dialog} role={dialog.kind === "transition" && dialog.option.requiresConfirmation ? "alertdialog" : "dialog"} aria-modal="true" aria-labelledby="task-mutation-dialog-title" data-testid="task-mutation-dialog">
-        <div className={styles.dialogHeader}>
-          <Heading level={2} id="task-mutation-dialog-title">{title}</Heading>
-          <Button label={copy.close} variant="secondary" size="sm" isDisabled={pending} onClick={controller.closeDialog} />
-        </div>
+    <Dialog
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) controller.closeDialog()
+      }}
+      size="lg"
+      role={dialog.kind === "transition" && dialog.option.requiresConfirmation ? "alertdialog" : "dialog"}
+      aria-labelledby="task-mutation-dialog-title"
+      data-testid="task-mutation-dialog"
+      className="max-h-screen"
+    >
+      <SafeVStack as="section" gap={4} padding={5} className="min-w-0 overflow-y-auto" aria-label={title}>
+        <SafeHStack as="header" justify="between" align="center" gap={3} className="min-w-0">
+          <Heading level={2} id="task-mutation-dialog-title" className="min-w-0 break-words">{title}</Heading>
+          <Button
+            label={copy.close}
+            variant="secondary"
+            size="sm"
+            isDisabled={pending}
+            onClick={controller.closeDialog}
+          />
+        </SafeHStack>
         {controller.notice !== null ? <MutationNotice controller={controller} copy={copy} /> : null}
         <form
-          className={styles.dialogForm}
+          className="grid min-w-0 gap-4"
           onSubmit={(event) => {
             event.preventDefault()
             controller.submitDialog()
@@ -79,115 +59,110 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
           {dialog.kind === "transition" ? (
             <>
               {dialog.option.requiresDescription ? (
-                <label className={styles.dialogField}>
-                  <span>{copy.taskDescriptionLabel}</span>
-                  <textarea
-                    name="task-description"
-                    autoComplete="off"
-                    value={dialog.description}
-                    placeholder={copy.taskDescriptionPlaceholder}
-                    onChange={(event) => controller.setDialogDescription(event.currentTarget.value)}
-                    disabled={pending}
-                    required
-                    autoFocus
-                    data-testid="task-description-input"
-                  />
-                </label>
+                <TextArea
+                  label={copy.taskDescriptionLabel}
+                  value={dialog.description}
+                  placeholder={copy.taskDescriptionPlaceholder}
+                  onChange={(value) => controller.setDialogDescription(value)}
+                  isDisabled={pending}
+                  isRequired
+                  hasAutoFocus
+                  data-autofocus="true"
+                  data-testid="task-description-input"
+                  htmlName="task-description"
+                  autoComplete="off"
+                />
               ) : null}
               {dialog.option.requiresReason ? (
-                <label className={styles.dialogField}>
-                  <span>{copy.blockReasonLabel}</span>
-                  <input
-                    name="block-reason"
-                    autoComplete="off"
-                    value={dialog.reason}
-                    placeholder={copy.blockReasonPlaceholder}
-                    onChange={(event) => controller.setDialogReason(event.currentTarget.value)}
-                    disabled={pending}
-                    required
-                    autoFocus={!dialog.option.requiresDescription}
-                    data-testid="task-block-reason"
-                  />
-                </label>
+                <TextInput
+                  label={copy.blockReasonLabel}
+                  value={dialog.reason}
+                  placeholder={copy.blockReasonPlaceholder}
+                  onChange={(value) => controller.setDialogReason(value)}
+                  isDisabled={pending}
+                  isRequired
+                  hasAutoFocus={!dialog.option.requiresDescription}
+                  data-autofocus={!dialog.option.requiresDescription ? "true" : undefined}
+                  data-testid="task-block-reason"
+                  htmlName="block-reason"
+                  autoComplete="off"
+                />
               ) : null}
               {dialog.option.requiresConfirmation ? (
-                <label className={styles.dialogCheckField}>
-                  <input
-                    name="force-confirmation"
-                    autoComplete="off"
-                    type="checkbox"
-                    checked={dialog.confirmed}
-                    onChange={(event) => controller.setDialogConfirmed(event.currentTarget.checked)}
-                    disabled={pending}
-                    required
-                    data-testid="task-force-confirmation"
-                  />
-                  <span>{copy.forceConfirmationLabel}</span>
-                </label>
+                <CheckboxInput
+                  label={copy.forceConfirmationLabel}
+                  value={dialog.confirmed}
+                  onChange={(checked) => controller.setDialogConfirmed(checked)}
+                  isDisabled={pending}
+                  isRequired
+                  data-testid="task-force-confirmation"
+                  htmlName="force-confirmation"
+                />
               ) : null}
             </>
           ) : dialog.kind === "create" ? (
             <>
-              <label className={styles.dialogField}>
-                <span>{copy.taskTitleLabel}</span>
-                <input
-                  name="task-title"
-                  autoComplete="off"
-                  value={dialog.title}
-                  onChange={(event) => controller.setDialogTitle(event.currentTarget.value)}
-                  placeholder={copy.taskTitleLabel}
-                  disabled={pending}
-                  required
-                  autoFocus
-                  data-testid="task-title-input"
-                />
-              </label>
-              <label className={styles.dialogField}>
-                <span>{copy.taskDescriptionLabel}</span>
-                <textarea
-                  name="task-description"
-                  autoComplete="off"
-                  value={dialog.description}
-                  onChange={(event) => controller.setDialogDescription(event.currentTarget.value)}
-                  placeholder={copy.taskDescriptionPlaceholder}
-                  disabled={pending}
-                  data-testid="task-description-input"
-                />
-              </label>
-              <label className={styles.dialogField}>
-                <span>{copy.firstRequiredStepLabel}</span>
-                <input
-                  name="first-required-step"
-                  autoComplete="off"
-                  value={dialog.firstStepTitle}
-                  onChange={(event) => controller.setDialogFirstStepTitle(event.currentTarget.value)}
-                  placeholder={copy.firstRequiredStepPlaceholder}
-                  disabled={pending}
-                  data-testid="first-required-step-input"
-                />
-              </label>
+              <TextInput
+                label={copy.taskTitleLabel}
+                value={dialog.title}
+                placeholder={copy.taskTitleLabel}
+                onChange={(value) => controller.setDialogTitle(value)}
+                isDisabled={pending}
+                isRequired
+                hasAutoFocus
+                data-autofocus="true"
+                data-testid="task-title-input"
+                htmlName="task-title"
+                autoComplete="off"
+              />
+              <TextArea
+                label={copy.taskDescriptionLabel}
+                value={dialog.description}
+                placeholder={copy.taskDescriptionPlaceholder}
+                onChange={(value) => controller.setDialogDescription(value)}
+                isDisabled={pending}
+                data-testid="task-description-input"
+                htmlName="task-description"
+                autoComplete="off"
+              />
+              <TextInput
+                label={copy.firstRequiredStepLabel}
+                value={dialog.firstStepTitle}
+                placeholder={copy.firstRequiredStepPlaceholder}
+                onChange={(value) => controller.setDialogFirstStepTitle(value)}
+                isDisabled={pending}
+                data-testid="first-required-step-input"
+                htmlName="first-required-step"
+                autoComplete="off"
+              />
             </>
           ) : (
-            <label className={styles.dialogField}>
-              <span>{copy.taskTitleLabel}</span>
-              <input
-                name="task-title"
-                autoComplete="off"
-                value={dialog.title}
-                onChange={(event) => controller.setDialogTitle(event.currentTarget.value)}
-                disabled={pending}
-                required
-                autoFocus
-                data-testid="task-title-input"
-              />
-            </label>
+            <TextInput
+              label={copy.taskTitleLabel}
+              value={dialog.title}
+              onChange={(value) => controller.setDialogTitle(value)}
+              isDisabled={pending}
+              isRequired
+              hasAutoFocus
+              data-autofocus="true"
+              data-testid="task-title-input"
+              htmlName="task-title"
+              autoComplete="off"
+            />
           )}
-          <div className={styles.dialogActions}>
+          <SafeHStack as="footer" justify="end" gap={2} wrap="wrap" className="min-w-0">
             <Button label={copy.cancel} variant="secondary" type="button" isDisabled={pending} onClick={controller.closeDialog} />
-            <Button label={pending ? copy.mutationPending : dialog.kind === "create" ? copy.create : copy.save} variant="primary" type="submit" isDisabled={pending} isLoading={pending} />
-          </div>
+            <Button
+              label={pending ? copy.mutationPending : dialog.kind === "create" ? copy.create : copy.save}
+              variant="primary"
+              type="submit"
+              isDisabled={pending}
+              isLoading={pending}
+            />
+          </SafeHStack>
         </form>
-      </dialog>
+      </SafeVStack>
+    </Dialog>
   )
 }
 
@@ -198,11 +173,20 @@ export function MutationNotice({ controller, copy }: { readonly controller: Boar
     : controller.notice.kind === "stale"
       ? copy.retryReload
       : copy.retryMutation
+  const title = controller.notice.kind === "conflict"
+    ? copy.conflictDescription
+    : controller.notice.kind === "stale"
+      ? copy.reconcileStale
+      : copy.mutationError
   return (
-    <div className={styles.mutationNotice} role="alert" aria-live="assertive" data-testid="mutation-notice" data-notice-kind={controller.notice.kind}>
-      <strong>{controller.notice.kind === "conflict" ? copy.conflictDescription : controller.notice.kind === "stale" ? copy.reconcileStale : copy.mutationError}</strong>
-      {controller.notice.kind !== "conflict" ? <span>{controller.notice.message}</span> : null}
-      {controller.retryIntent !== null ? <Button label={retryLabel} variant="secondary" size="sm" onClick={controller.retryMutation} data-testid="mutation-retry" /> : null}
-    </div>
+    <Banner
+      status={controller.notice.kind === "conflict" ? "warning" : "error"}
+      title={title}
+      description={controller.notice.kind === "conflict" ? undefined : controller.notice.message}
+      endContent={controller.retryIntent !== null ? <Button label={retryLabel} variant="secondary" size="sm" onClick={controller.retryMutation} data-testid="mutation-retry" /> : undefined}
+      aria-live="assertive"
+      data-testid="mutation-notice"
+      data-notice-kind={controller.notice.kind}
+    />
   )
 }

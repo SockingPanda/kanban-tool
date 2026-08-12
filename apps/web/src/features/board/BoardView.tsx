@@ -3,12 +3,18 @@ import { useState } from "react"
 import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
-import { Card } from "@astryxdesign/core/Card"
 import { Heading } from "@astryxdesign/core/Heading"
+import { Text } from "@astryxdesign/core/Text"
+import {
+  PageFrame,
+  SafeCard,
+  SafeHStack,
+  SafeVStack,
+  Skeleton,
+} from "@/ui/astryx"
 
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import { attentionCounts, attentionLenses, type AttentionLens } from "../attention/attention-lens"
-import styles from "./BoardView.module.css"
 import { boardColumnsForAttention } from "./board-attention"
 import { MutationDialog, MutationNotice } from "./BoardTaskMutations"
 import {
@@ -68,6 +74,10 @@ function priorityVariant(priority: BoardTaskViewModel["priority"]): "neutral" | 
 }
 
 const taskTimestampFormatters = new Map<string, Intl.DateTimeFormat>()
+
+const visuallyHiddenClass = "sr-only"
+const focusRingClass = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-1"
+const mutedTextClass = "text-sm text-secondary"
 
 function taskTimestampFormatter(locale: string): Intl.DateTimeFormat {
   const cached = taskTimestampFormatters.get(locale)
@@ -136,35 +146,35 @@ function BoardHeader({
   readonly headingLevel: 1 | 2 | 3
 }) {
   return (
-    <header className={styles.header}>
-      <div className={styles.headerIdentity}>
-        <Heading level={headingLevel} id={titleId}>
+    <SafeHStack as="div" justify="between" align="center" wrap="wrap" gap={3} className="min-w-0 border-b border-border pb-3">
+      <SafeVStack gap={1} className="min-w-0 flex-1">
+        <Heading level={headingLevel} id={titleId} className="min-w-0 break-words">
           {board?.name ?? copy.boardTitle}
         </Heading>
         {board ? (
-          <div className={styles.identity}>
-            <span className={styles.identityLabel}>{copy.boardIdentityLabel}</span>
+          <SafeHStack as="div" wrap="wrap" align="center" gap={2} className="min-w-0 text-sm text-secondary">
+            <Text as="span" type="supporting" weight="semibold">{copy.boardIdentityLabel}</Text>
             <code translate="no" data-testid="board-identity-slug">
               {board.slug}
             </code>
-            <details className={styles.identityDetails} data-testid="board-identity-details">
+            <details className="inline-flex min-w-0 items-baseline gap-1" data-testid="board-identity-details">
               <summary onKeyDown={(event) => event.stopPropagation()}>ID</summary>
               <code translate="no">{board.id}</code>
             </details>
-          </div>
+          </SafeHStack>
         ) : null}
-      </div>
+      </SafeVStack>
       {onCreate ? <Button label={copy.createTask} variant="primary" isDisabled={isMutationPending} onClick={(event) => onCreate(event.currentTarget)} data-testid="task-create" /> : null}
-    </header>
+    </SafeHStack>
   )
 }
 
 function EmptyBoard({ title, description }: { readonly title: string; readonly description: string }) {
   return (
-    <div className={styles.emptyBoard} role="status" aria-live="polite" data-testid="board-empty">
-      <Heading level={2}>{title}</Heading>
-      <p>{description}</p>
-    </div>
+    <SafeVStack as="section" gap={1} className="min-w-0 min-h-36 content-center border border-dashed border-border-strong bg-surface p-6" role="status" aria-live="polite" data-testid="board-empty">
+      <Heading level={2} className="min-w-0 break-words">{title}</Heading>
+      <Text as="p" type="supporting" className="max-w-prose min-w-0 break-words">{description}</Text>
+    </SafeVStack>
   )
 }
 
@@ -182,26 +192,31 @@ function SyncBanner({ status, copy, onRetry }: { readonly status: BoardSyncStatu
           : copy.syncStale
   const isHealthy = status === "live"
   return (
-    <div
-      className={`${styles.syncBanner} ${isHealthy ? styles.syncBannerLive : styles.syncBannerStale}`}
+    <SafeHStack
+      as="div"
+      align="center"
+      wrap="wrap"
+      gap={2}
+      className={`min-w-0 border-s-2 ${isHealthy ? "border-accent" : "border-warning"} bg-surface px-3 py-2 ${mutedTextClass}`}
       role="status"
       aria-live="polite"
       data-testid="board-sync-banner"
       data-sync-state={status}
     >
-      <strong>{title}</strong>
-      {!isHealthy ? <span>{copy.syncStaleDescription}</span> : null}
+      <strong className="text-sm text-primary">{title}</strong>
+      {!isHealthy ? <Text as="span" type="supporting">{copy.syncStaleDescription}</Text> : null}
       {!isHealthy && onRetry ? <Button label={copy.retry} variant="secondary" onClick={onRetry} /> : null}
-    </div>
+    </SafeHStack>
   )
 }
 
 function StateContent({ state, copy, onRetry }: { readonly state: BoardViewState; readonly copy: BoardMessages; readonly onRetry?: () => void }) {
   if (state.kind === "loading") {
     return (
-      <div className={styles.statusPanel} role="status" aria-live="polite" data-testid="board-loading">
-        <p className={styles.loadingMarker}>{copy.loading}</p>
-      </div>
+      <SafeVStack as="section" gap={2} className="min-w-0 min-h-32 content-center border border-border bg-surface p-5" role="status" aria-live="polite" data-testid="board-loading">
+        <Skeleton size="row" className="max-w-sm" />
+        <Text as="p" type="supporting">{copy.loading}</Text>
+      </SafeVStack>
     )
   }
 
@@ -217,15 +232,15 @@ function StateContent({ state, copy, onRetry }: { readonly state: BoardViewState
 
   if (state.kind === "error" || state.kind === "offline") {
     return (
-      <div className={styles.errorContainer}>
+      <SafeVStack as="section" className="min-w-0 max-w-full" role="group" aria-label={state.kind === "error" ? copy.errorTitle : copy.offlineTitle}>
         <Banner
           status={state.kind === "error" ? "error" : "warning"}
           title={state.kind === "error" ? copy.errorTitle : copy.offlineTitle}
-          description={<span className={styles.errorCopy}>{state.message ?? copy.offlineTitle}</span>}
+          description={state.message ?? copy.offlineTitle}
           endContent={onRetry ? <Button label={copy.retry} variant="secondary" onClick={onRetry} /> : undefined}
           data-testid={`board-${state.kind}`}
         />
-      </div>
+      </SafeVStack>
     )
   }
 
@@ -259,9 +274,9 @@ function TaskCard({
   const requiredStepsIncomplete = controller !== undefined && (task.status === "running" || task.status === "review") && !canCompleteTask(task)
 
   return (
-    <Card
+    <SafeCard
       ref={controller ? (element) => controller.onTaskRef(task.id, element) : undefined}
-      className={styles.taskCard}
+      className={`min-w-0 border-border-strong bg-surface shadow-none transition-colors hover:border-accent hover:bg-surface ${focusRingClass}`}
       padding={3}
       data-testid="board-task"
       data-task-id={task.id}
@@ -278,88 +293,88 @@ function TaskCard({
       onDragEnd={controller ? () => controller.onDragEnd(task.id) : undefined}
       onKeyDown={controller ? (event) => controller.onTaskKeyDown(task, event) : undefined}
     >
-      <div className={styles.taskHeader}>
-        <span className={styles.taskRef} translate="no">
-          {task.ref}
-        </span>
+      <SafeHStack as="div" justify="between" align="start" gap={3} className="min-w-0">
+        <code className="min-w-0 break-words text-xs" translate="no">{task.ref}</code>
         <Badge variant={priorityVariant(task.priority)} label={copy.priorityLabel(task.priority)} />
-      </div>
-      <Heading level={3} className={styles.taskTitle}>
+      </SafeHStack>
+      <Heading level={3} className="mt-2 min-w-0 break-words text-base">
         {onSelectTask ? (
-          <button type="button" className={styles.taskTitleButton} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>
+          <button type="button" className={`inline max-w-full break-words text-start text-inherit underline-offset-2 hover:text-accent hover:underline ${focusRingClass}`} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>
             {task.title}
           </button>
         ) : task.title}
       </Heading>
-      <dl className={styles.taskSummary} data-testid="board-task-summary">
-        <div className={styles.taskDetailsRow}>
+      <dl className="mt-2 grid min-w-0 gap-1 text-xs text-secondary" data-testid="board-task-summary">
+        <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
           <dt>{copy.statusLabel}</dt>
-          <dd translate="no" data-status={task.status}>{task.status}</dd>
-        </div>
-        <div className={styles.taskDetailsRow}>
+          <dd className="m-0 min-w-0 break-words text-primary" translate="no" data-status={task.status}>{task.status}</dd>
+        </SafeHStack>
+        <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
           <dt>{copy.assigneeLabel}</dt>
-          <dd>{task.assignee ?? copy.unassigned}</dd>
-        </div>
-        <div className={styles.taskDetailsRow}>
+          <dd className="m-0 min-w-0 break-words text-primary">{task.assignee ?? copy.unassigned}</dd>
+        </SafeHStack>
+        <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
           <dt>{copy.readinessLabel}</dt>
-          <dd className={styles.readinessFacts}>
-            <span className={styles.readinessFact}>
+          <dd className="m-0 min-w-0 text-primary">
+            <SafeHStack as="div" wrap="wrap" gap={2} className="min-w-0">
+              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2">
               {copy.dependencyLabel}：{dependencyText}
-            </span>
-            <span className={styles.readinessFact}>
+              </Text>
+              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2">
               {copy.planLabel}：{copy.planState[task.readiness.executionPlanState]}
-            </span>
-            <span className={styles.readinessFact}>
+              </Text>
+              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2">
               {copy.requiredStepsLabel}：{task.readiness.completedRequiredStepCount} / {task.readiness.requiredStepCount}
-            </span>
+              </Text>
+            </SafeHStack>
           </dd>
-        </div>
+        </SafeHStack>
       </dl>
-      <details className={styles.taskDetailsDisclosure} data-testid="board-task-secondary">
+      <details className="mt-2 min-w-0 border-t border-border pt-2" data-testid="board-task-secondary">
         <summary onKeyDown={(event) => event.stopPropagation()}>
           {copy.statusReasonLabel} · {copy.scheduledLabel} · {copy.labelsLabel}
         </summary>
-        <dl className={styles.taskDetails}>
-          <div className={styles.taskDetailsRow}>
+        <dl className="mt-2 grid min-w-0 gap-1 text-xs text-secondary">
+          <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
             <dt>{copy.statusReasonLabel}</dt>
-            <dd data-testid="board-task-status-reason">{statusReason}</dd>
-          </div>
-          <div className={styles.taskDetailsRow}>
+            <dd className="m-0 min-w-0 break-words text-primary" data-testid="board-task-status-reason">{statusReason}</dd>
+          </SafeHStack>
+          <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
             <dt>{copy.scheduledLabel}</dt>
-            <dd data-testid="board-task-scheduled">
+            <dd className="m-0 min-w-0 break-words text-primary" data-testid="board-task-scheduled">
               {scheduledAt ? <time dateTime={scheduledAt.iso}>{scheduledAt.display}</time> : copy.notAvailable}
             </dd>
-          </div>
-          <div className={styles.taskDetailsRow}>
+          </SafeHStack>
+          <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
             <dt>{copy.dueLabel}</dt>
-            <dd data-testid="board-task-due">
+            <dd className="m-0 min-w-0 break-words text-primary" data-testid="board-task-due">
               {dueAt ? <time dateTime={dueAt.iso}>{dueAt.display}</time> : copy.notAvailable}
             </dd>
-          </div>
-          <div className={styles.taskDetailsRow}>
+          </SafeHStack>
+          <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
             <dt>{copy.lastHeartbeatLabel}</dt>
-            <dd data-testid="board-task-heartbeat">
+            <dd className="m-0 min-w-0 break-words text-primary" data-testid="board-task-heartbeat">
               {lastHeartbeatAt ? <time dateTime={lastHeartbeatAt.iso}>{lastHeartbeatAt.display}</time> : copy.notAvailable}
             </dd>
-          </div>
-          <div className={styles.taskDetailsRow}>
+          </SafeHStack>
+          <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
             <dt>{copy.labelsLabel}</dt>
-            <dd className={styles.taskLabels} data-testid="board-task-labels">
+            <dd className="m-0 min-w-0 text-primary" data-testid="board-task-labels">
               {labels.length === 0 ? copy.noLabels : labels.map((label) => (
-                <span className={styles.taskLabel} key={label.id} data-label-id={label.id}>{label.name}</span>
+                <Text as="span" type="supporting" className="me-1 inline-flex max-w-full break-words rounded-md border border-border-strong bg-surface px-2 py-0.5" key={label.id} data-label-id={label.id}>{label.name}</Text>
               ))}
             </dd>
-          </div>
-          <div className={styles.taskDetailsRow}>
+          </SafeHStack>
+          <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
             <dt>{copy.optionalStepsLabel}</dt>
-            <dd>{task.readiness.optionalStepCount}</dd>
-          </div>
+            <dd className="m-0 min-w-0 break-words text-primary">{task.readiness.optionalStepCount}</dd>
+          </SafeHStack>
         </dl>
       </details>
       {controller ? (
-        <details className={styles.taskActionsDisclosure} data-testid="board-task-actions">
+        <details className="mt-3 min-w-0 border-t border-border pt-2" data-testid="board-task-actions">
           <summary onKeyDown={(event) => event.stopPropagation()}>{copy.transitionLabel}</summary>
-          <div className={styles.taskActions} role="group" aria-label={copy.transitionLabel} aria-busy={pending || undefined}>
+          <SafeHStack as="div" wrap="wrap" gap={2} className="mt-2 min-w-0" role="group" aria-label={copy.transitionLabel} aria-busy={pending || undefined}>
             <Button
               label={copy.editTask}
               variant="secondary"
@@ -380,13 +395,13 @@ function TaskCard({
                 data-testid={`task-transition-${option.action}-${task.id}`}
               />
             ))}
-            {promoteNotReady ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.promoteNotReady}</span> : null}
-            {requiredStepsIncomplete ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.requiredStepsIncomplete}</span> : null}
-            {pending ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.mutationPending}</span> : null}
-          </div>
+            {promoteNotReady ? <Text as="span" type="supporting" role="status" aria-live="polite">{copy.promoteNotReady}</Text> : null}
+            {requiredStepsIncomplete ? <Text as="span" type="supporting" role="status" aria-live="polite">{copy.requiredStepsIncomplete}</Text> : null}
+            {pending ? <Text as="span" type="supporting" role="status" aria-live="polite">{copy.mutationPending}</Text> : null}
+          </SafeHStack>
         </details>
       ) : null}
-    </Card>
+    </SafeCard>
   )
 }
 
@@ -426,48 +441,48 @@ function BoardColumns({
 
   return (
     <>
-      <div className={styles.attentionBar} role="group" aria-label={copyForAttention.label} data-testid="board-attention-lens">
-        <span className={styles.attentionLabel}>{copyForAttention.label}</span>
+      <SafeHStack as="div" wrap="wrap" align="center" gap={2} className="min-w-0 border-b border-border pb-3" role="group" aria-label={copyForAttention.label} data-testid="board-attention-lens">
+        <Text as="span" type="supporting" weight="semibold">{copyForAttention.label}</Text>
         {attentionLenses.map((lens) => (
           <button
             key={lens}
             type="button"
-            className={`${styles.attentionChip} ${attentionLens === lens ? styles.attentionChipActive : ""}`}
+            className={`inline-flex min-h-8 items-center gap-1 rounded-full border border-border-strong bg-surface px-2 text-xs text-primary hover:border-accent ${focusRingClass} ${attentionLens === lens ? "border-accent bg-accent text-inverted" : ""}`}
             aria-pressed={attentionLens === lens}
             data-testid={`board-attention-${lens}`}
             onClick={() => setAttentionLens(attentionLens === lens ? null : lens)}
           >
-            <span>{copyForAttention.statuses[lens]}</span>
-            <span className={styles.attentionCount} data-testid={`board-attention-count-${lens}`}>{counts[lens]}</span>
+            <Text as="span" type="supporting">{copyForAttention.statuses[lens]}</Text>
+            <Text as="span" type="supporting" className="min-w-5 rounded-full bg-muted px-1 text-center" data-testid={`board-attention-count-${lens}`}>{counts[lens]}</Text>
           </button>
         ))}
         {attentionLens !== null ? (
-          <div className={styles.activeFilter} data-testid="board-attention-active-filter">
-            <span>{copyForAttention.active(copyForAttention.statuses[attentionLens])}</span>
-            <button type="button" data-testid="board-attention-clear" onClick={() => setAttentionLens(null)}>{copyForAttention.clear}</button>
-          </div>
+          <SafeHStack as="div" align="center" gap={2} className="min-w-0 text-xs text-secondary" data-testid="board-attention-active-filter">
+            <Text as="span" type="supporting">{copyForAttention.active(copyForAttention.statuses[attentionLens])}</Text>
+            <button type="button" className={`rounded-md border border-border-strong bg-surface px-2 py-1 text-xs text-primary hover:border-accent ${focusRingClass}`} data-testid="board-attention-clear" onClick={() => setAttentionLens(null)}>{copyForAttention.clear}</button>
+          </SafeHStack>
         ) : null}
-      </div>
-      <p className={styles.boardTotal} data-testid="board-task-total" data-total={boardTaskTotal}>
+      </SafeHStack>
+      <Text as="p" type="supporting" className="m-0 tabular-nums" data-testid="board-task-total" data-total={boardTaskTotal}>
         {copy.boardTaskTotal(boardTaskTotal)}
-      </p>
+      </Text>
       {attentionLens !== null && boardTaskTotal === 0 ? (
-        <div className={styles.attentionNoResults} data-testid="board-attention-empty" role="status" aria-live="polite">
+        <SafeVStack as="section" gap={1} className="min-w-0 border border-border-strong bg-surface p-4" data-testid="board-attention-empty" role="status" aria-live="polite">
           <strong>{copyForAttention.noMatches}</strong>
-          <span>{copyForAttention.active(copyForAttention.statuses[attentionLens])}</span>
-        </div>
+          <Text as="span" type="supporting">{copyForAttention.active(copyForAttention.statuses[attentionLens])}</Text>
+        </SafeVStack>
       ) : null}
-      <nav className={styles.columnNavigation} aria-label={copy.columnNavigationLabel}>
-        <ul className={styles.columnNavigationList}>
+      <nav className="min-w-0 overflow-x-auto" aria-label={copy.columnNavigationLabel}>
+        <ul className="flex min-w-max gap-3 m-0 list-none p-0">
           {displayColumns.map(({ column }, index) => (
             <li key={column.id}>
-              <a href={`#${columnAnchorId(rootId, index)}`}>{column.title}</a>
+              <a className={`inline-flex min-h-8 items-center border-b border-border-strong px-1 text-sm text-secondary no-underline hover:border-accent hover:text-primary ${focusRingClass}`} href={`#${columnAnchorId(rootId, index)}`}>{column.title}</a>
             </li>
           ))}
         </ul>
       </nav>
-      <div className={styles.boardColumns} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
-        <div className={styles.columnsGrid}>
+      <SafeVStack as="div" className={`boardColumns min-w-0 max-w-full overflow-x-auto pb-2 overscroll-x-contain ${focusRingClass}`} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
+        <SafeHStack as="div" align="stretch" gap={2} className="min-w-max">
           {displayColumns.map(({ column, tasks }, index) => {
             const headingId = `${columnAnchorId(rootId, index)}-heading`
             const requestedPage = pagesByColumn[column.id] ?? 1
@@ -478,7 +493,7 @@ function BoardColumns({
 
             return (
               <section
-                className={styles.column}
+                className={`grid w-72 min-w-60 content-start gap-2 rounded-md border border-border bg-muted ${focusRingClass}`}
                 key={column.id}
                 id={columnAnchorId(rootId, index)}
                 aria-labelledby={headingId}
@@ -491,36 +506,40 @@ function BoardColumns({
                 aria-dropeffect={controller ? "move" : undefined}
                 aria-label={controller ? `${column.title}；${copy.dropTargetLabel(column.title)}` : undefined}
               >
-                <header className={styles.columnHeader}>
-                  <Heading level={2} id={headingId} tabIndex={-1}>
+                <SafeVStack as="header" gap={1} className="min-w-0 border-b border-border px-3 py-2">
+                  <Heading level={2} id={headingId} tabIndex={-1} className="min-w-0 break-words text-base">
                     {column.title}
                   </Heading>
-                  <p className={styles.columnCount} data-testid="board-column-total" data-total={tasks.length}>
+                  <Text as="p" type="supporting" className="m-0 tabular-nums" data-testid="board-column-total" data-total={tasks.length}>
                     {copy.columnTaskCount(tasks.length)}
-                  </p>
-                </header>
-                <ul className={styles.taskList} aria-label={column.title} data-testid={controller ? `board-drop-target-${column.status}` : undefined}>
+                  </Text>
+                </SafeVStack>
+                <ul className="m-0 grid min-w-0 gap-2 list-none px-2 pb-2" aria-label={column.title} data-testid={controller ? `board-drop-target-${column.status}` : undefined}>
                   {visibleTasks.length === 0 ? (
-                    <li className={styles.emptyColumn}>
+                    <li className="min-h-20 border border-dashed border-border p-4">
                       <p role="status" aria-live="polite">{copy.emptyColumn}</p>
                     </li>
                 ) : (
                   visibleTasks.map((task) => (
-                    <li className={styles.taskListItem} key={task.id}>
+                    <li className="min-w-0" key={task.id}>
                         <TaskCard task={task} copy={copy} controller={controller} onSelectTask={onSelectTask} />
                     </li>
                   ))
                 )}
                 </ul>
                 {tasks.length > BOARD_PAGE_SIZE ? (
-                  <nav
-                    className={styles.pagination}
+                  <SafeVStack
+                    as="nav"
+                    gap={2}
+                    className="mx-2 mb-2 min-w-0 border-t border-border pt-3"
                     aria-label={copy.pageNavigationLabel(column.title)}
                     data-testid="board-column-pagination"
                     data-column-id={column.id}
                   >
-                    <span
-                      className={styles.pageRange}
+                    <Text
+                      as="span"
+                      type="supporting"
+                      className="tabular-nums"
                       aria-live="polite"
                       data-testid="board-column-page"
                       data-page={pageWindow.page}
@@ -530,11 +549,11 @@ function BoardColumns({
                       data-total={tasks.length}
                     >
                       {copy.pageRange(rangeStart, rangeEnd, tasks.length)}
-                    </span>
-                    <div className={styles.pageActions}>
+                    </Text>
+                    <SafeHStack as="div" wrap="wrap" gap={2} className="min-w-0">
                       <button
                         type="button"
-                        className={styles.pageButton}
+                        className={`min-h-9 rounded-md border border-border-strong bg-surface px-3 text-sm text-primary hover:border-accent disabled:cursor-not-allowed disabled:opacity-50 ${focusRingClass}`}
                         disabled={pageWindow.page <= 1}
                         aria-label={copy.pagePreviousLabel(column.title)}
                         data-testid="board-page-previous"
@@ -544,7 +563,7 @@ function BoardColumns({
                       </button>
                       <button
                         type="button"
-                        className={styles.pageButton}
+                        className={`min-h-9 rounded-md border border-border-strong bg-surface px-3 text-sm text-primary hover:border-accent disabled:cursor-not-allowed disabled:opacity-50 ${focusRingClass}`}
                         disabled={pageWindow.page >= pageWindow.totalPages}
                         aria-label={copy.pageNextLabel(column.title)}
                         data-testid="board-page-next"
@@ -552,14 +571,14 @@ function BoardColumns({
                       >
                         {copy.pageNext}
                       </button>
-                    </div>
-                  </nav>
+                    </SafeHStack>
+                  </SafeVStack>
                 ) : null}
               </section>
             )
           })}
-        </div>
-      </div>
+        </SafeHStack>
+      </SafeVStack>
     </>
   )
 }
@@ -578,11 +597,38 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
     displayModel !== null && !validation.valid
       ? { kind: "error", message: copy.invalidModelDescription }
       : state
-  const presentationClassName = presentation === "embedded" ? styles.boardEmbedded : ""
-  const rootClassName = [styles.board, presentationClassName, className].filter(Boolean).join(" ")
+  const rootClassName = [
+    "grid min-w-0 max-w-full gap-3 text-primary",
+    presentation === "embedded" ? "gap-2" : "",
+    className ?? "",
+  ].filter(Boolean).join(" ")
+  const embeddedHeader = (
+    <Heading level={headingLevel} id={titleId} className={visuallyHiddenClass}>
+      {board?.name ?? copy.boardTitle}
+    </Heading>
+  )
+  const embeddedToolbar = controller?.openCreate ? (
+    <SafeHStack as="div" justify="end" align="center" gap={2} className="min-w-0">
+      <Button
+        label={copy.createTask}
+        variant="primary"
+        size="sm"
+        isDisabled={controller.isMutationPending}
+        onClick={(event) => controller.openCreate?.(event.currentTarget)}
+        data-testid="task-create"
+      />
+    </SafeHStack>
+  ) : null
+  const syncAndNotices = (
+    <SafeVStack as="div" gap={2} className="min-w-0">
+      {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
+      {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
+    </SafeVStack>
+  )
 
   return (
-    <section
+    <SafeVStack
+      as="section"
       className={rootClassName}
       id={id}
       aria-labelledby={titleId}
@@ -593,42 +639,28 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       data-board-id={board?.id}
       data-board-slug={board?.slug}
     >
-      <a className={styles.skipLink} href={`#${id}-columns`}>
+      <a className={`absolute z-10 -translate-y-full rounded-md border border-border-strong bg-surface px-3 py-2 text-primary focus:translate-y-0 ${focusRingClass}`} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
-      {presentation === "embedded" ? (
-        <>
-          <Heading level={headingLevel} id={titleId} className={styles.visuallyHidden}>
-            {board?.name ?? copy.boardTitle}
-          </Heading>
-          {controller?.openCreate ? (
-            <div className={styles.embeddedActionRow}>
-              <Button
-                label={copy.createTask}
-                variant="primary"
-                size="sm"
-                isDisabled={controller.isMutationPending}
-                onClick={(event) => controller.openCreate?.(event.currentTarget)}
-                data-testid="task-create"
-              />
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />
-      )}
-      {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
-      {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
-      {controller?.isMutationPending ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</p> : null}
-      {controller ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</p> : null}
-      <div className={styles.boardContent} id={`${id}-columns`} tabIndex={-1}>
-        {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (
-          <BoardColumns key={displayModel.board.id} model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} onSelectTask={onSelectTask} />
-        ) : (
-          <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
-        )}
-      </div>
+      <PageFrame
+        frame="workspace"
+        bodyLabel={copy.boardColumnsLabel}
+        bodyOverflow="none"
+        header={presentation === "embedded" ? embeddedHeader : <BoardHeader board={board} titleId={titleId} copy={copy} headingLevel={headingLevel} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />}
+        toolbar={presentation === "embedded" ? <SafeVStack as="div" gap={2} className="min-w-0">{embeddedToolbar}{syncAndNotices}</SafeVStack> : syncAndNotices}
+        toolbarLabel={copy.boardTitle}
+      >
+        {controller?.isMutationPending ? <Text as="p" className={visuallyHiddenClass} type="supporting" role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</Text> : null}
+        {controller ? <Text as="p" className={visuallyHiddenClass} type="supporting" role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</Text> : null}
+        <SafeVStack as="div" className="min-w-0 max-w-full" id={`${id}-columns`} tabIndex={-1}>
+          {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (
+            <BoardColumns key={displayModel.board.id} model={displayModel} copy={copy} rootId={id} controller={controller ?? undefined} onSelectTask={onSelectTask} />
+          ) : (
+            <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
+          )}
+        </SafeVStack>
+      </PageFrame>
       {controller ? <MutationDialog controller={controller} copy={copy} /> : null}
-    </section>
+    </SafeVStack>
   )
 }

@@ -181,7 +181,7 @@ describe("BoardView", () => {
     expect(markup).toContain('data-presentation="embedded"')
     expect(markup).toContain('data-board-id="b-1"')
     expect(markup).toContain('data-board-slug="roadmap"')
-    expect(markup).toMatch(/<h[1-3][^>]*class="[^"]*visuallyHidden[^"]*"[^>]*>产品路线图<\/h[1-3]>/)
+    expect(markup).toMatch(/<h[1-3][^>]*class="[^"]*sr-only[^"]*"[^>]*>产品路线图<\/h[1-3]>/)
     expect(markup).not.toContain('data-testid="board-identity-slug"')
     expect(markup).not.toContain('data-testid="board-identity-details"')
   })
@@ -352,7 +352,7 @@ describe("BoardView", () => {
   test("键盘可到达列 section、heading 和横向滚动 region", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
 
-    expect(markup).toMatch(/<div class="[^"]*boardContent[^"]*" id="astryx-board-columns"/)
+    expect(markup).toMatch(/<div class="[^"]*astryx-stack[^"]*"[^>]*id="astryx-board-columns"/)
     expect(markup).toContain('role="region"')
     expect(markup).toContain('aria-label="看板列内容"')
     expect(markup).toContain('role="region" aria-label="看板列内容" tabindex="0"')

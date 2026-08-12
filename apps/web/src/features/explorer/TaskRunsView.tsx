@@ -134,7 +134,6 @@ function RunRow({ run, copy, locale }: { readonly run: TaskRunsReadModel["runs"]
   return (
     <ListItem
       data-testid="run-row"
-      density="compact"
       label={machineToken(run.id, "—")}
       endContent={<Badge variant={statusVariant(run.status)} label={copy.status[run.status]} />}
       description={(

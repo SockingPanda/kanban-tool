@@ -57,7 +57,7 @@ export interface FileInputProps
   readonly chooseFilesText: string
   readonly clearLabel: string
   readonly clearText: string
-  readonly invalidTypeMessage: string | ((file: File) => string)
+  readonly invalidTypeMessage?: string | ((file: File) => string)
   readonly sizeLimitMessage:
     | string
     | ((file: File, maxSize: number, formattedSize: string) => string)
@@ -102,7 +102,6 @@ function validateFiles(
   accept: string | undefined,
   maxSize: number | undefined,
   maxFiles: number | undefined,
-  isMultiple: boolean,
   invalidTypeMessage: string | ((file: File) => string) | undefined,
   sizeLimitMessage:
     | string
@@ -142,7 +141,7 @@ function validateFiles(
     }
   }
 
-  if (isMultiple && maxFiles != null && valid.length > maxFiles) {
+  if (maxFiles != null && valid.length > maxFiles) {
     return {
       valid: [],
       message: resolveMessage(maxFilesMessage, maxFiles),
@@ -235,7 +234,6 @@ export function FileInput({
         accept,
         maxSize,
         maxFiles,
-        isMultiple,
         invalidTypeMessage,
         sizeLimitMessage,
         maxFilesMessage,

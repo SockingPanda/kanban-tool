@@ -132,10 +132,27 @@ export function FieldHarness() {
 
       <FileInput
         {...fileCopy}
+        id="single-max-files-file"
+        label="Single maximum file"
+        value={null}
+        maxFiles={1}
+        onChange={(files) => {
+          log({field: "single-max-files-file", kind: "change", value: oneFile(files)?.name ?? "null"})
+        }}
+        onValidationError={(error) => {
+          log({field: "single-max-files-file", kind: "error", reason: error.reason})
+        }}
+        changeAction={() => {
+          log({field: "single-max-files-file", kind: "action"})
+        }}
+      />
+
+      <FileInput
+        {...fileCopy}
         id="size-file"
         label="Size limited file"
         value={null}
-        maxSize={1}
+        maxSize={384 * 1024}
         onChange={(files) => {
           log({field: "size-file", kind: "change", value: oneFile(files)?.name ?? "null"})
         }}

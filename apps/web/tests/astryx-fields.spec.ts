@@ -80,13 +80,19 @@ test("safe field callbacks, native reset, refs, IDREFs, and status live regions 
   const validInput = page.locator("#valid-file")
   await validInput.setInputFiles({
     name: "notes.txt",
-    mimeType: "text/plain",
+    mimeType: "application/octet-stream",
     buffer: Buffer.from("notes"),
   })
   await expect(validInput).toHaveValue("")
   await expect(page.locator("#valid-file-file-names")).toHaveText("notes.txt")
   await expect(validInput).toHaveAttribute("aria-describedby", /valid-file-file-names/)
+  await expect(validInput).not.toHaveAttribute("accept")
   await expect.poll(async () => page.evaluate(() => window.__astryxFieldRef?.id)).toBe("valid-file")
+  await expect.poll(async () => logs(page)).toContainEqual({
+    field: "valid-file",
+    kind: "action",
+    value: "notes.txt",
+  })
 
   await page.getByRole("button", {name: "Clear files"}).click()
   await expect(validInput).toBeFocused()
@@ -127,11 +133,29 @@ test("safe field callbacks, native reset, refs, IDREFs, and status live regions 
   })
   await expect.poll(async () => (await logs(page)).filter((entry) => entry.field === "max-files-file" && entry.kind !== "error")).toHaveLength(0)
 
+  const singleMaxFilesInput = page.locator("#single-max-files-file")
+  await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>("#single-max-files-file")
+    if (!input) throw new Error("single-max-files-file not found")
+    const transfer = new DataTransfer()
+    transfer.items.add(new File(["1"], "first.txt", {type: "text/plain"}))
+    transfer.items.add(new File(["2"], "second.txt", {type: "text/plain"}))
+    Object.defineProperty(input, "files", {configurable: true, value: transfer.files})
+    input.dispatchEvent(new Event("change", {bubbles: true}))
+  })
+  await expect(singleMaxFilesInput).toHaveValue("")
+  await expect.poll(async () => logs(page)).toContainEqual({
+    field: "single-max-files-file",
+    kind: "error",
+    reason: "max-files",
+  })
+  await expect.poll(async () => (await logs(page)).filter((entry) => entry.field === "single-max-files-file" && entry.kind !== "error")).toHaveLength(0)
+
   const sizeInput = page.locator("#size-file")
   await sizeInput.setInputFiles({
     name: "too-large.txt",
     mimeType: "text/plain",
-    buffer: Buffer.from("12"),
+    buffer: Buffer.alloc(384 * 1024 + 1, 1),
   })
   await expect(sizeInput).toHaveValue("")
   await expect.poll(async () => logs(page)).toContainEqual({

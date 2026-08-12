@@ -172,6 +172,23 @@ describe("CSP-safe field contracts", () => {
         onChange={() => undefined}
       />,
     )
+    const singleFileMarkup = renderToStaticMarkup(
+      <FileInput
+        id="single-file"
+        label="Single file"
+        value={null}
+        maxFiles={1}
+        chooseFileText="Choose one"
+        chooseFilesText="Choose many"
+        clearLabel="Remove attachment"
+        clearText="Remove"
+        invalidTypeMessage="Invalid file"
+        sizeLimitMessage="File too large"
+        maxFilesMessage="Too many files"
+        formatFileSize={(bytes) => `${bytes} bytes`}
+        onChange={() => undefined}
+      />,
+    )
 
     expect(checkboxMarkup).toContain('type="checkbox"')
     expect(checkboxMarkup).toContain('name="terms"')
@@ -188,6 +205,7 @@ describe("CSP-safe field contracts", () => {
     expect(selectedFileMarkup).toContain('aria-describedby="selected-file-file-names"')
     expect(selectedFileMarkup).toContain('id="selected-file-file-names"')
     expect(selectedFileMarkup).toContain("notes.txt")
+    expect(singleFileMarkup).not.toContain('multiple=""')
   })
 
   test("keeps caller-owned copy visible and does not invent English defaults", () => {

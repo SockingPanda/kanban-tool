@@ -112,4 +112,23 @@ test.describe("CSP-safe selector browser contracts", () => {
     await expect(page.getByText("New result")).toHaveCount(0)
     await expect(page.getByTestId("open-events")).toHaveText("2")
   })
+
+  test("closes Typeahead on outside blur and keeps its two-stage Escape contract", async ({ page }) => {
+    const typeahead = page.getByTestId("typeahead")
+    await page.getByTestId("swap-source").click()
+    await typeahead.fill("new")
+    await expect(page.getByText("New result")).toBeVisible()
+    await page.getByTestId("outside").click()
+    await expect(typeahead).toHaveAttribute("aria-expanded", "false")
+    await expect(page.getByTestId("open-events")).toHaveText("2")
+
+    await typeahead.fill("new")
+    await expect(page.getByText("New result")).toBeVisible()
+    await typeahead.press("Escape")
+    await expect(typeahead).toHaveAttribute("aria-expanded", "false")
+    await expect(typeahead).toHaveValue("new")
+    await typeahead.press("Escape")
+    await expect(typeahead).toHaveValue("")
+    await expect(page.getByTestId("open-events")).toHaveText("4")
+  })
 })

@@ -18,6 +18,7 @@ import {
   supportsNativePopover,
   useOverlayInteraction,
 } from "./overlay-runtime"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type PopoverPlacement = "above" | "below" | "start" | "end"
 export type PopoverAlignment = "start" | "center" | "end"
@@ -293,7 +294,7 @@ export function Popover({
     <section ref={rootRef} className="relative inline-flex overflow-visible" aria-label={label ?? ariaLabel}>
       {trigger}
       <aside
-        {...props}
+        {...pickCspSafeDomProps(props)}
         ref={popupRef}
         id={popupId}
         role={role}

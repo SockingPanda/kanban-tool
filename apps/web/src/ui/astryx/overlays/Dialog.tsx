@@ -10,6 +10,7 @@ import {
 } from "react"
 
 import { classNames, isTopOverlay, useOverlayInteraction } from "./overlay-runtime"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type DialogSize = "sm" | "md" | "lg" | "xl" | "full"
 export type DialogPlacement = "center" | "top" | "bottom"
@@ -199,7 +200,7 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
 
   return (
     <dialog
-      {...props}
+      {...pickCspSafeDomProps(props)}
       ref={(node) => {
         dialogRef.current = node
         setRef(forwardedRef, node)

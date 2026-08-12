@@ -8,10 +8,8 @@ import {
   type Ref,
 } from "react"
 
-import {
-  guardNoRuntimeStyleProps,
-  type NoRuntimeStyleProps,
-} from "./safe-core"
+import type {NoRuntimeStyleProps} from "./safe-core"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type CodeBlockHeight = "none" | "compact" | "evidence"
 export type CodeBlockContainer = "card" | "section"
@@ -92,6 +90,7 @@ export function CodeBlock({
   copyLabel,
   copiedLabel,
   errorLabel,
+  id,
   onCopy,
   onCopyError,
   className,
@@ -138,7 +137,7 @@ export function CodeBlock({
     onCopy?.()
   }, [code, markCopied, markCopyError, onCopy])
 
-  const safeRest = guardNoRuntimeStyleProps(rest)
+  const safeRest = pickCspSafeDomProps(rest)
   const resolvedLabel = label
   const currentCopyLabel = copyState === "copied"
     ? copiedLabel
@@ -150,6 +149,7 @@ export function CodeBlock({
   return (
     <section
       ref={ref}
+      id={id}
       className={classNames(
         "relative min-w-0 overflow-hidden",
         CODE_BLOCK_CONTAINER_CLASSES[container],

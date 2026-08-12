@@ -1,10 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { HTMLAttributes } from "react"
 
-import {
-  guardNoRuntimeStyleProps,
-  type NoRuntimeStyleProps,
-} from "./safe-core"
+import type {NoRuntimeStyleProps} from "./safe-core"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type SkeletonSize = "text" | "row" | "card"
 
@@ -32,6 +30,7 @@ function classNames(...values: Array<string | false | null | undefined>): string
 /** Static geometry placeholder for strict-CSP loading states. */
 export function Skeleton({
   className,
+  id,
   size = "row",
   ref,
   ...rest
@@ -39,10 +38,11 @@ export function Skeleton({
   const legacySafeRest = {...rest} as Record<string, unknown>
   delete legacySafeRest.index
   delete legacySafeRest["aria-hidden"]
-  const safeRest = guardNoRuntimeStyleProps(legacySafeRest)
+  const safeRest = pickCspSafeDomProps(legacySafeRest)
   return (
     <section
       ref={ref}
+      id={id}
       className={classNames(
         "motion-safe:animate-pulse bg-skeleton",
         SKELETON_SIZE_CLASSES[size],

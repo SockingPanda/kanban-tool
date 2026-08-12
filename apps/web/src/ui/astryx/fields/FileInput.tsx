@@ -18,6 +18,7 @@ import {
   mergeClasses,
   mergeDescribedBy,
 } from "./shared"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type FileInputStatus = FieldStatus
 export type FileInputStatusVariant = FieldStatusVariant
@@ -355,7 +356,7 @@ export function FileInput({
       statusVariant={statusVariant}
     >
       <input
-        {...rest}
+        {...pickCspSafeDomProps(rest)}
         ref={(node) => {
           internalRef.current = node
           if (typeof forwardedRef === "function") {

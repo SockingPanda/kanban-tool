@@ -16,6 +16,7 @@ import {
   mergeDescribedBy,
   statusControlClasses,
 } from "./shared"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type CheckboxInputSize = "sm" | "md"
 export type CheckboxInputStatus = FieldStatus
@@ -152,7 +153,7 @@ export function CheckboxInput({
       statusVariant={statusVariant}
     >
       <input
-        {...rest}
+        {...pickCspSafeDomProps(rest)}
         ref={(node) => {
           if (node) {
             node.indeterminate = isIndeterminate

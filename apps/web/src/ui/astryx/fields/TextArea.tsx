@@ -18,6 +18,7 @@ import {
   statusControlClasses,
   TEXTAREA_CLASSES,
 } from "./shared"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type TextAreaStatus = FieldStatus
 export type TextAreaStatusVariant = FieldStatusVariant
@@ -156,7 +157,7 @@ export function TextArea({
       statusVariant={statusVariant}
     >
       <textarea
-        {...rest}
+        {...pickCspSafeDomProps(rest)}
         ref={(node) => {
           assignRef(forwardedRef, node)
         }}

@@ -17,6 +17,7 @@ import {
   mergeDescribedBy,
   statusControlClasses,
 } from "./shared"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type TextInputType = "text" | "password" | "email" | "search" | "url" | "tel"
 export type TextInputStatus = FieldStatus
@@ -161,7 +162,7 @@ export function TextInput({
 
   const input = (
     <input
-      {...rest}
+      {...pickCspSafeDomProps(rest)}
       ref={(node) => {
         inputRef.current = node
         assignRef(forwardedRef, node)

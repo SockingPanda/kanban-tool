@@ -12,6 +12,8 @@ import {
   type Ref,
 } from "react"
 
+import {pickCspSafeDomProps} from "../dom-props"
+
 export type ISODateTimeString = string & {
   readonly __brand: "ISODateTimeString"
 }
@@ -60,19 +62,6 @@ const STATUS_MESSAGE_VARIANT_CLASSES: Readonly<Record<DateTimeInputStatusType, s
   success: "border-success bg-success-muted text-success",
 }
 
-const ROOT_FORWARD_KEYS = new Set([
-  "dir",
-  "draggable",
-  "hidden",
-  "inert",
-  "lang",
-  "role",
-  "tabIndex",
-  "title",
-])
-
-type RootForwardProps = Record<string, unknown>
-
 function joinClasses(
   ...classes: ReadonlyArray<string | false | null | undefined>
 ): string | undefined {
@@ -104,14 +93,6 @@ function assignRef<T>(ref: Ref<T> | undefined, value: T | null): void {
   } else if (ref) {
     ref.current = value
   }
-}
-
-function pickRootProps(props: RootForwardProps): RootForwardProps {
-  return Object.fromEntries(
-    Object.entries(props).filter(([key]) =>
-      key.startsWith("aria-") || key.startsWith("data-") || ROOT_FORWARD_KEYS.has(key),
-    ),
-  )
 }
 
 function daysInMonth(year: number, month: number): number {
@@ -406,7 +387,7 @@ function DateTimeInputImpl(
   const interactiveDisabled = isDisabled || isLoading
   const disabledMessageId = interactiveDisabled && disabledMessage ? `${controlId}-disabled` : undefined
   const describedBy = joinIds(callerDescribedBy, descriptionId, statusId, disabledMessageId)
-  const rootProps = pickRootProps(rest)
+  const rootProps = pickCspSafeDomProps(rest)
 
   useEffect(() => {
     const next = parseISODateTime(value, hasSeconds)

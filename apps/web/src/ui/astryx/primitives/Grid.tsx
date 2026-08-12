@@ -2,10 +2,8 @@
 import type { ReactNode } from "react"
 import type { HTMLAttributes } from "react"
 
-import {
-  guardNoRuntimeStyleProps,
-  type NoRuntimeStyleProps,
-} from "./safe-core"
+import type {NoRuntimeStyleProps} from "./safe-core"
+import {pickCspSafeDomProps} from "../dom-props"
 
 /**
  * Finite column contracts. The `auto-*` variants select viewport breakpoints;
@@ -87,11 +85,12 @@ export function Grid({
   columns = "single",
   density,
   gap,
+  id,
   label,
   ref,
   ...rest
 }: GridProps) {
-  const safeRest = guardNoRuntimeStyleProps(rest)
+  const safeRest = pickCspSafeDomProps(rest)
   const gapClass = gap == null
     ? density == null
       ? "gap-3"
@@ -101,6 +100,7 @@ export function Grid({
   return (
     <section
       ref={ref}
+      id={id}
       className={classNames(
         "grid min-w-0",
         GRID_COLUMN_CLASSES[columns],

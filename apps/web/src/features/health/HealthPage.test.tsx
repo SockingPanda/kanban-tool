@@ -32,6 +32,7 @@ describe("HealthPage", () => {
 
     expect(markup).toContain('data-testid="health-page"')
     expect(markup).toContain('data-frame="content"')
+    expect(markup.match(/<header\b/g) ?? []).toHaveLength(1)
     expect(markup).toContain('data-testid="health-metric-ok"')
     expect(markup).toContain("true")
     expect(markup).toContain("sha256:test")
@@ -45,7 +46,7 @@ describe("HealthPage", () => {
 
     expect(markup).toContain('data-testid="health-loading"')
     expect(markup).toContain('aria-busy="true"')
-    expect(markup).toMatch(/<header[^>]*aria-busy="true"[^>]*>[\s\S]*data-testid="health-refresh"/)
+    expect(markup).toMatch(/<div[^>]*aria-busy="true"[^>]*>[\s\S]*data-testid="health-refresh"/)
     expect([...markup.matchAll(/<button\b[^>]*>/g)].every(([tag]) => !tag.includes("aria-busy"))).toBe(true)
     expect(markup).not.toContain("style=")
     expect(markup).not.toContain('data-testid="health-metric-ok"')
@@ -54,6 +55,7 @@ describe("HealthPage", () => {
   test("keeps runtime source free of upstream loading spinners", () => {
     const source = readFileSync(new URL("./HealthPage.tsx", import.meta.url), "utf8")
     expect(source).not.toMatch(/\bisLoading\s*=/)
+    expect(source).not.toContain('as="header"')
     expect(source).toContain("aria-busy")
   })
 

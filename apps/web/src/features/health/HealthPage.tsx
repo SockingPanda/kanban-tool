@@ -93,7 +93,7 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
       bodyLabelledBy="health-heading"
       data-testid="health-page"
       header={(
-        <SafeHStack as="header" gap={4} align="start" justify="between" wrap="wrap" aria-busy={pending || undefined}>
+        <SafeHStack gap={4} align="start" justify="between" wrap="wrap" aria-busy={pending || undefined}>
           <SafeVStack gap={1.5} className="min-w-0">
             <Heading level={1} id="health-heading">{t("healthHeading")}</Heading>
             <Text as="p" type="body" color="secondary" textWrap="pretty">{t("healthDescription")}</Text>

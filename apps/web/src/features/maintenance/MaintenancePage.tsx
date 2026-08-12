@@ -427,7 +427,7 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
       bodyLabelledBy="maintenance-heading"
       data-testid="maintenance-page"
       header={(
-        <SafeHStack as="header" gap={4} justify="between" align="start" wrap="wrap" aria-busy={status.kind === "loading" || undefined}>
+        <SafeHStack gap={4} justify="between" align="start" wrap="wrap" aria-busy={status.kind === "loading" || undefined}>
           <SafeVStack gap={1} className="min-w-0">
             <Text as="p" type="supporting" display="block">{t("productKicker")}</Text>
             <Heading level={1} id="maintenance-heading">{t("maintenanceHeading")}</Heading>

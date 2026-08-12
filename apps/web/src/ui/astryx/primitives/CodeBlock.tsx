@@ -35,6 +35,8 @@ export interface CodeBlockProps
   readonly maxHeight?: CodeBlockHeight
   readonly label?: string
   readonly hasCopy?: boolean
+  readonly copyLabel?: string
+  readonly copiedLabel?: string
   readonly onCopy?: () => void
   readonly "data-testid"?: string
   readonly ref?: Ref<HTMLElement>
@@ -60,6 +62,8 @@ export function CodeBlock({
   maxHeight = "none",
   label,
   hasCopy = true,
+  copyLabel = "Copy code",
+  copiedLabel = "Copied",
   onCopy,
   className,
   ref,
@@ -110,14 +114,14 @@ export function CodeBlock({
         <button
           type="button"
           className="absolute end-2 top-2 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-primary"
-          aria-label={copied ? "Copied" : "Copy code"}
+          aria-label={copied ? copiedLabel : copyLabel}
           onClick={() => void copy()}
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? copiedLabel : copyLabel}
         </button>
       ) : null}
       <p className="sr-only" aria-live="polite" aria-atomic="true" data-copy-status>
-        {copied ? "Copied" : ""}
+        {copied ? copiedLabel : ""}
       </p>
     </section>
   )

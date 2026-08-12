@@ -1,3 +1,5 @@
+import { createElement, type ComponentType } from "react"
+
 import type { CardProps } from "@astryxdesign/core/Card"
 import { Card as AstryxCard } from "@astryxdesign/core/Card"
 import type { HStackProps } from "@astryxdesign/core/HStack"
@@ -78,6 +80,16 @@ export function guardNoRuntimeStyleProps<Props extends Record<string, unknown>>(
 /** Alias for callers that prefer an explicit strip verb. */
 export const stripNoRuntimeStyleProps = guardNoRuntimeStyleProps
 
+function staticFacade<SafeProps extends object, CoreProps extends object>(
+  component: ComponentType<CoreProps>,
+): ComponentType<SafeProps> {
+  return ((props: SafeProps) =>
+    createElement(
+      component,
+      guardNoRuntimeStyleProps(props as Record<string, unknown>) as unknown as CoreProps,
+    )) as ComponentType<SafeProps>
+}
+
 /** Remove runtime sizing and styling props while preserving the core API. */
 export type StaticCoreProps<Props extends object> = Omit<
   Props,
@@ -100,31 +112,31 @@ export type SafeVStackProps = StaticCoreProps<VStackProps>
 /**
  * Static-safe aliases for Astryx compositions.
  *
- * These aliases deliberately do not wrap or fork Astryx. Their companion
- * prop types remove the runtime-style escape hatches for callers that opt into
- * the CSP-safe facade.
+ * These facades do not fork Astryx. Their companion prop types remove the
+ * runtime-style escape hatches, and the tiny adapter strips them at runtime
+ * for JavaScript/spread-object callers as well.
  */
-export const SafeCard = AstryxCard
-export const StaticCard = AstryxCard
-export const SafeHStack = AstryxHStack
-export const StaticHStack = AstryxHStack
-export const SafeLayout = AstryxLayout
-export const StaticLayout = AstryxLayout
-export const SafeLayoutContent = AstryxLayoutContent
-export const StaticLayoutContent = AstryxLayoutContent
-export const SafeLayoutFooter = AstryxLayoutFooter
-export const StaticLayoutFooter = AstryxLayoutFooter
-export const SafeLayoutHeader = AstryxLayoutHeader
-export const StaticLayoutHeader = AstryxLayoutHeader
-export const SafeLayoutPanel = AstryxLayoutPanel
-export const StaticLayoutPanel = AstryxLayoutPanel
-export const SafeMetadataList = AstryxMetadataList
-export const StaticMetadataList = AstryxMetadataList
-export const SafeMetadataListItem = AstryxMetadataListItem
-export const StaticMetadataListItem = AstryxMetadataListItem
-export const SafeSection = AstryxSection
-export const StaticSection = AstryxSection
-export const SafeStack = AstryxStack
-export const StaticStack = AstryxStack
-export const SafeVStack = AstryxVStack
-export const StaticVStack = AstryxVStack
+export const SafeCard = staticFacade<SafeCardProps, CardProps>(AstryxCard)
+export const StaticCard = SafeCard
+export const SafeHStack = staticFacade<SafeHStackProps, HStackProps>(AstryxHStack)
+export const StaticHStack = SafeHStack
+export const SafeLayout = staticFacade<SafeLayoutProps, LayoutProps>(AstryxLayout)
+export const StaticLayout = SafeLayout
+export const SafeLayoutContent = staticFacade<SafeLayoutContentProps, LayoutContentProps>(AstryxLayoutContent)
+export const StaticLayoutContent = SafeLayoutContent
+export const SafeLayoutFooter = staticFacade<SafeLayoutFooterProps, LayoutFooterProps>(AstryxLayoutFooter)
+export const StaticLayoutFooter = SafeLayoutFooter
+export const SafeLayoutHeader = staticFacade<SafeLayoutHeaderProps, LayoutHeaderProps>(AstryxLayoutHeader)
+export const StaticLayoutHeader = SafeLayoutHeader
+export const SafeLayoutPanel = staticFacade<SafeLayoutPanelProps, LayoutPanelProps>(AstryxLayoutPanel)
+export const StaticLayoutPanel = SafeLayoutPanel
+export const SafeMetadataList = staticFacade<SafeMetadataListProps, MetadataListProps>(AstryxMetadataList)
+export const StaticMetadataList = SafeMetadataList
+export const SafeMetadataListItem = staticFacade<SafeMetadataListItemProps, MetadataListItemProps>(AstryxMetadataListItem)
+export const StaticMetadataListItem = SafeMetadataListItem
+export const SafeSection = staticFacade<SafeSectionProps, SectionProps>(AstryxSection)
+export const StaticSection = SafeSection
+export const SafeStack = staticFacade<SafeStackProps, StackProps>(AstryxStack)
+export const StaticStack = SafeStack
+export const SafeVStack = staticFacade<SafeVStackProps, VStackProps>(AstryxVStack)
+export const StaticVStack = SafeVStack

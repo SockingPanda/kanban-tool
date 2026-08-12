@@ -21,7 +21,6 @@ export {
 } from "./CodeBlock"
 export {
   Skeleton,
-  SKELETON_DELAY_CLASSES,
   SKELETON_SIZE_CLASSES,
   type SkeletonIndex,
   type SkeletonProps,

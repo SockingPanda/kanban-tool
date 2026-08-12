@@ -15,15 +15,6 @@ export const SKELETON_SIZE_CLASSES: Readonly<Record<SkeletonSize, string>> = {
   card: "h-32 w-full rounded-md",
 }
 
-export const SKELETON_DELAY_CLASSES: Readonly<Record<SkeletonIndex, string>> = {
-  0: "delay-0",
-  1: "delay-100",
-  2: "delay-200",
-  3: "delay-300",
-  4: "delay-500",
-  5: "delay-700",
-}
-
 export interface SkeletonProps
   extends Omit<HTMLAttributes<HTMLElement>, "children" | "style">,
     NoRuntimeStyleProps {
@@ -52,7 +43,6 @@ export function Skeleton({
       className={classNames(
         "animate-pulse bg-skeleton",
         SKELETON_SIZE_CLASSES[size],
-        SKELETON_DELAY_CLASSES[index],
         className,
       )}
       {...safeRest}

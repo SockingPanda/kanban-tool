@@ -8,7 +8,10 @@ import {
   Grid,
   guardNoRuntimeStyleProps,
   Skeleton,
-  SKELETON_DELAY_CLASSES,
+  SafeCard,
+  type SafeCardProps,
+  SafeLayout,
+  type SafeLayoutProps,
 } from "./index"
 
 describe("CSP-safe Astryx primitives", () => {
@@ -32,8 +35,10 @@ describe("CSP-safe Astryx primitives", () => {
         code={'const value = "strict-csp"'}
         language="typescript"
         maxHeight="compact"
-        hasCopy={false}
+        hasCopy
         label="Evidence JSON"
+        copyLabel="复制代码"
+        copiedLabel="已复制"
       />,
     )
 
@@ -46,17 +51,20 @@ describe("CSP-safe Astryx primitives", () => {
     expect(markup).not.toContain("<style")
     expect(markup).not.toContain("astryx-token-")
     expect(markup).not.toMatch(/(?:slate|gray|neutral)-\d+/)
+    expect(markup).toContain('aria-label="复制代码"')
+    expect(markup).toContain(">复制代码</button>")
+    expect(markup).not.toContain("已复制")
   })
 
   test("Skeleton exposes only finite geometry and delay variants", () => {
     const markup = renderToStaticMarkup(<Skeleton size="card" index={3} />)
 
     expect(markup).toContain("h-32 w-full")
-    expect(markup).toContain(SKELETON_DELAY_CLASSES[3])
     expect(markup).toContain('data-size="card"')
     expect(markup).toContain('data-delay="3"')
     expect(markup).not.toContain("style=")
     expect(markup).not.toMatch(/(?:slate|gray|neutral)-\d+/)
+    expect(markup).not.toMatch(/delay-\d+/)
   })
 
   test("runtime guard strips style and dynamic sizing escape hatches", () => {
@@ -70,5 +78,37 @@ describe("CSP-safe Astryx primitives", () => {
     })
 
     expect(safe).toEqual({ className: "safe" })
+  })
+
+  test("safe facade types reject runtime styling and dimensions", () => {
+    const safeCard: SafeCardProps = { children: "safe", variant: "default" }
+    const safeLayout: SafeLayoutProps = { children: "safe" }
+    expect(safeCard.children).toBe("safe")
+    expect(safeLayout.children).toBe("safe")
+
+    // @ts-expect-error Static facade must not expose dynamic width.
+    const width = <SafeCard width={320} />
+    // @ts-expect-error Static facade must not expose inline style.
+    const style = <SafeCard style={{ color: "red" }} />
+    // @ts-expect-error Layout contentWidth is a runtime style escape hatch.
+    const contentWidth = <SafeLayout contentWidth={960} />
+    expect(width).toBeDefined()
+    expect(style).toBeDefined()
+    expect(contentWidth).toBeDefined()
+  })
+
+  test("safe facade strips runtime escape hatches from spread objects", () => {
+    const markup = renderToStaticMarkup(
+      <SafeCard
+        {...({
+          children: "safe",
+          width: 320,
+          style: { color: "red" },
+        } as unknown as SafeCardProps)}
+      />,
+    )
+
+    expect(markup).toContain("safe")
+    expect(markup).not.toContain("style=")
   })
 })

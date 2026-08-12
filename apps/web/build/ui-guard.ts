@@ -278,6 +278,23 @@ function validateUiGuardManifestProvenance(manifest: UiGuardManifest, projectRoo
       throw new Error(`Astryx manifest swizzle provenance does not match ${manifest.source.package}: ${swizzle.component}`)
     }
   }
+  for (const entry of manifest.cssImports) {
+    if (!isRegularFile(path.join(projectRoot, entry.importer))) {
+      throw new Error(`Astryx manifest CSS importer must be an existing file: ${entry.importer}`)
+    }
+    if (isAppRelativeCssPath(entry.path) && !isRegularFile(path.join(projectRoot, entry.path))) {
+      throw new Error(`Astryx manifest CSS path must be an existing app file: ${entry.path}`)
+    }
+  }
+  for (const entry of manifest.unsafeImportBaseline) {
+    if (!isRegularFile(path.join(projectRoot, entry.importer))) {
+      throw new Error(`Astryx manifest unsafe import baseline importer must be an existing file: ${entry.importer}`)
+    }
+  }
+}
+
+function isAppRelativeCssPath(value: string): boolean {
+  return value.startsWith("src/") || value.startsWith(".storybook/")
 }
 
 function escapeRegExp(value: string): string {
@@ -610,7 +627,7 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
   }
 
   const visit = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && ts.isCallExpression(node.initializer) && isBareCoreLoader(node.initializer)) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && isBareCoreLoaderExpression(node.initializer)) {
       namespaceAliases.add(node.name.text)
     }
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@astryxdesign/core") {
@@ -621,12 +638,15 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
         for (const element of bindings.elements) {
           reportUnsafe(element.propertyName?.text ?? element.name.text, `@astryxdesign/core/${element.propertyName?.text ?? element.name.text}`, element)
         }
+      } else if (bindings === undefined) {
+        reportUnsafeStar(node)
       }
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@astryxdesign/core") {
       const clause = node.exportClause
       if (clause === undefined) {
         reportUnsafeStar(node)
       } else if (ts.isNamespaceExport(clause)) {
+        reportUnsafeStar(node)
         namespaceAliases.add(clause.name.text)
       } else if (ts.isNamedExports(clause)) {
         for (const element of clause.elements) {
@@ -634,12 +654,13 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
         }
       }
     }
+    if (ts.isCallExpression(node) && isBareCoreLoader(node)) reportUnsafeStar(node)
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
       const component = memberName(node)
       if (component !== undefined && ts.isIdentifier(node.expression) && namespaceAliases.has(node.expression.text)) {
         reportUnsafe(component, "@astryxdesign/core", node)
       }
-      if (component !== undefined && ts.isCallExpression(node.expression) && isBareCoreLoader(node.expression)) {
+      if (component !== undefined && isBareCoreLoaderExpression(node.expression)) {
         reportUnsafe(component, "@astryxdesign/core", node)
       }
     }
@@ -651,6 +672,12 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
 function isBareCoreLoader(node: ts.CallExpression): boolean {
   if (node.arguments.length === 0 || !ts.isStringLiteral(node.arguments[0]) || node.arguments[0].text !== "@astryxdesign/core") return false
   return node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === "require")
+}
+
+function isBareCoreLoaderExpression(expression: ts.Expression): boolean {
+  let candidate = expression
+  while (ts.isParenthesizedExpression(candidate) || ts.isAwaitExpression(candidate)) candidate = candidate.expression
+  return ts.isCallExpression(candidate) && isBareCoreLoader(candidate)
 }
 
 function isAssignmentOperator(kind: ts.SyntaxKind): boolean {

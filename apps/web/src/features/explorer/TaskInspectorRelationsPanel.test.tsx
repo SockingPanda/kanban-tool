@@ -153,8 +153,8 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain("scope_mismatch")
     expect(markup).toContain("Linked task is outside board scope")
     expect(markup).toContain("link_scope_mismatch")
-    expect(markup).toMatch(/data-testid="task-inspector-create-step"[^>]*disabled=""/)
-    expect(markup).toMatch(/data-testid="task-inspector-link-step"[^>]*disabled=""/)
+    expect(markup).toMatch(/<button(?=[^>]*data-testid="task-inspector-create-step")(?=[^>]*disabled="")/)
+    expect(markup).toMatch(/<button(?=[^>]*data-testid="task-inspector-link-step")(?=[^>]*disabled="")/)
     expect(markup).toContain('role="alert"')
   })
 
@@ -166,12 +166,13 @@ describe("TaskInspectorRelationsPanel", () => {
       />,
     )
 
-    expect(markup).toMatch(/<button type="submit" disabled="">添加评论<\/button>/)
-    expect(markup).toMatch(/<button type="submit" disabled="">添加父依赖<\/button>/)
+    expect((markup.match(/<button[^>]*type="submit"[^>]*disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(2)
+    expect(markup).toContain("添加评论")
+    expect(markup).toContain("添加父依赖")
     expect(markup).toMatch(/disabled=""[^>]*aria-label="移除父依赖：Parent"/)
-    expect(markup).toMatch(/data-testid="task-inspector-create-step"[^>]*disabled=""/)
-    expect(markup).toMatch(/data-testid="task-inspector-link-step"[^>]*disabled=""/)
-    expect(markup).toMatch(/data-testid="task-inspector-mark-plan-not-required"[^>]*disabled=""/)
+    expect(markup).toMatch(/<button(?=[^>]*data-testid="task-inspector-create-step")(?=[^>]*disabled="")/)
+    expect(markup).toMatch(/<button(?=[^>]*data-testid="task-inspector-link-step")(?=[^>]*disabled="")/)
+    expect(markup).toMatch(/<button(?=[^>]*data-testid="task-inspector-mark-plan-not-required")(?=[^>]*disabled="")/)
     expect(markup).not.toContain('data-retry-key="reload:t_current"')
   })
 

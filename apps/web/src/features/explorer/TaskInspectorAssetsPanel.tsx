@@ -1,12 +1,26 @@
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { Banner } from "@astryxdesign/core/Banner"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { List, ListItem } from "@astryxdesign/core/List"
+import { Text } from "@astryxdesign/core/Text"
 
 import type { Locale } from "../../lib/preferences"
 import type { TaskInspectorMutationSnapshot } from "./task-inspector-mutation-state"
+import {
+  FileInput,
+  SafeHStack,
+  SafeMetadataList,
+  SafeMetadataListItem,
+  SafeVStack,
+  TextInput,
+} from "@/ui/astryx"
 import {
   createAttachmentUploadIntent,
   createInspectorAssetsActions,
   exactAttachmentBytes,
   formatAttachmentSize,
+  MAX_ATTACHMENT_UPLOAD_BYTES,
   advanceInspectorAssetsScope,
   isInspectorAssetsScopeCurrent,
   isAttachmentRetryDraftCurrent,
@@ -22,7 +36,6 @@ import {
   type InspectorAssetsScopeIdentity,
   type SuggestLabelsHandler,
 } from "./TaskInspectorAssetsPanel.logic"
-import styles from "./TaskInspectorAssetsPanel.module.css"
 
 export type { InspectorAssetAttachment, InspectorAssetLabel, InspectorAssetsActions, InspectorAssetsMutationHandlers, InspectorAssetsScopeIdentity, InspectorLabelSuggestionResult, SuggestLabelsHandler }
 
@@ -49,6 +62,7 @@ type AssetsCopy = {
   readonly labelName: string
   readonly labelPlaceholder: string
   readonly addLabel: string
+  readonly addingLabel: string
   readonly removeLabel: (name: string) => string
   readonly suggestLabels: string
   readonly refreshSuggestions: string
@@ -87,6 +101,10 @@ type AssetsCopy = {
   readonly retry: string
   readonly retrying: string
   readonly error: string
+  readonly clearFile: string
+  readonly invalidFileType: string
+  readonly fileTooLarge: (size: string) => string
+  readonly fileCountExceeded: string
 }
 
 const copies: Record<Locale, AssetsCopy> = {
@@ -98,6 +116,7 @@ const copies: Record<Locale, AssetsCopy> = {
     labelName: "标签名称",
     labelPlaceholder: "输入标签名称…",
     addLabel: "添加标签",
+    addingLabel: "正在添加标签…",
     removeLabel: (name) => `移除标签 ${name}`,
     suggestLabels: "建议标签",
     refreshSuggestions: "刷新建议",
@@ -136,6 +155,10 @@ const copies: Record<Locale, AssetsCopy> = {
     retry: "重试原提交",
     retrying: "正在重试原提交…",
     error: "操作失败，请重试。",
+    clearFile: "清除已选文件",
+    invalidFileType: "文件类型不受支持。",
+    fileTooLarge: (size) => `文件超过 ${size} 上传上限。`,
+    fileCountExceeded: "一次只能选择一个文件。",
   },
   en: {
     title: "Labels & attachments",
@@ -145,6 +168,7 @@ const copies: Record<Locale, AssetsCopy> = {
     labelName: "Label name",
     labelPlaceholder: "Enter a label name…",
     addLabel: "Add label",
+    addingLabel: "Adding label…",
     removeLabel: (name) => `Remove label ${name}`,
     suggestLabels: "Suggest labels",
     refreshSuggestions: "Refresh suggestions",
@@ -183,6 +207,10 @@ const copies: Record<Locale, AssetsCopy> = {
     retry: "Retry original submission",
     retrying: "Retrying original submission…",
     error: "Operation failed. Try again.",
+    clearFile: "Clear selected file",
+    invalidFileType: "This file type is not supported.",
+    fileTooLarge: (size) => `The file exceeds the ${size} upload limit.`,
+    fileCountExceeded: "Choose one file at a time.",
   },
 }
 
@@ -246,8 +274,20 @@ function attachmentTime(value: number, locale: Locale): { readonly iso: string; 
 
 function Evidence({ entry }: { readonly entry: InspectorLabelSuggestionResult["selected_labels"][number] }) {
   const atoms = [...entry.evidence_atoms, ...entry.negative_evidence_atoms]
-  if (atoms.length === 0) return <span className={styles.evidence}>—</span>
-  return <>{atoms.map((atom, index) => <span key={`${atom.polarity}-${atom.atom_id}-${index}`} className={styles.evidence} title={atom.text}>{atom.text}</span>)}</>
+  if (atoms.length === 0) return <Text type="supporting">—</Text>
+  return (
+    <SafeVStack gap={1}>
+      {atoms.map((atom, index) => (
+        <Text
+          key={`${atom.polarity}-${atom.atom_id}-${index}`}
+          type="supporting"
+          wordBreak="break-word"
+        >
+          {atom.text}
+        </Text>
+      ))}
+    </SafeVStack>
+  )
 }
 
 function SuggestionRow({
@@ -264,28 +304,51 @@ function SuggestionRow({
   readonly onApply: (name: string) => void
 }) {
   return (
-    <li className={styles.suggestionItem}>
-      <div className={styles.suggestionBody}>
-        <strong title={entry.label_name}>{entry.label_name}</strong>
-        <span>{copy.score(entry.score.toFixed(3))}</span>
-        <Evidence entry={entry} />
-      </div>
-      <button type="button" className={styles.smallButton} data-testid="label-suggestion-apply" disabled={disabled} aria-label={`${applied ? copy.applied : copy.apply} ${entry.label_name}`} onClick={() => onApply(entry.label_name)}>{applied ? copy.applied : copy.apply}</button>
-    </li>
+    <ListItem
+      label={<Text type="label" wordBreak="break-word">{entry.label_name}</Text>}
+      description={(
+        <SafeVStack gap={1}>
+          <Text type="supporting">{copy.score(entry.score.toFixed(3))}</Text>
+          <Evidence entry={entry} />
+        </SafeVStack>
+      )}
+      endContent={(
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          label={`${applied ? copy.applied : copy.apply} ${entry.label_name}`}
+          aria-label={`${applied ? copy.applied : copy.apply} ${entry.label_name}`}
+          data-testid="label-suggestion-apply"
+          isDisabled={disabled}
+          onClick={() => onApply(entry.label_name)}
+        />
+      )}
+    />
   )
 }
 
 function AttachmentMetadata({ attachment, copy, locale }: { readonly attachment: InspectorAssetAttachment; readonly copy: AssetsCopy; readonly locale: Locale }) {
   const createdAt = attachmentTime(attachment.created_at, locale)
   return (
-    <dl className={styles.metadata}>
-      <div><dt>{copy.filename}</dt><dd translate="no">{attachment.filename}</dd></div>
-      <div><dt>{copy.contentType}</dt><dd translate="no">{attachment.content_type ?? "—"}</dd></div>
-      <div><dt>{copy.size}</dt><dd>{formatAttachmentSize(attachment.size_bytes)}</dd></div>
-      <div><dt>{copy.sha256}</dt><dd translate="no">{attachment.sha256 ?? "—"}</dd></div>
-      <div><dt>{copy.createdBy}</dt><dd translate="no">{attachment.created_by}</dd></div>
-      <div><dt>{copy.createdAt}</dt><dd><time dateTime={createdAt.iso}>{createdAt.display}</time></dd></div>
-    </dl>
+    <SafeMetadataList columns="single" label={{ position: "start" }}>
+      <SafeMetadataListItem label={copy.filename}>
+        <Text type="code" wordBreak="break-word">{attachment.filename}</Text>
+      </SafeMetadataListItem>
+      <SafeMetadataListItem label={copy.contentType}>
+        <Text type="code" wordBreak="break-word">{attachment.content_type ?? "—"}</Text>
+      </SafeMetadataListItem>
+      <SafeMetadataListItem label={copy.size}>{formatAttachmentSize(attachment.size_bytes)}</SafeMetadataListItem>
+      <SafeMetadataListItem label={copy.sha256}>
+        <Text type="code" wordBreak="break-word">{attachment.sha256 ?? "—"}</Text>
+      </SafeMetadataListItem>
+      <SafeMetadataListItem label={copy.createdBy}>
+        <Text type="code" wordBreak="break-word">{attachment.created_by}</Text>
+      </SafeMetadataListItem>
+      <SafeMetadataListItem label={copy.createdAt}>
+        <time dateTime={createdAt.iso}>{createdAt.display}</time>
+      </SafeMetadataListItem>
+    </SafeMetadataList>
   )
 }
 
@@ -430,7 +493,7 @@ export function TaskInspectorAssetsPanel({
     event.preventDefault()
     void addLabel()
   }, [addLabel])
-  const removeLabel = useCallback((labelId: string) => {
+  const removeLabelAction = useCallback((labelId: string) => {
     void runAction("removeLabel", () => actions.removeLabel(labelId))
   }, [actions, runAction])
 
@@ -576,73 +639,287 @@ export function TaskInspectorAssetsPanel({
   }, [uploadFocusError])
 
   return (
-    <section className={styles.panel} data-testid="inspector-assets" aria-labelledby={`${panelId}-heading`} aria-busy={panelBusy}>
-      <header className={styles.heading}>
-        <h2 id={`${panelId}-heading`}>{copy.title}</h2>
-        <p className={styles.taskId} translate="no">{taskId}</p>
-      </header>
+    <SafeVStack
+      as="section"
+      gap={5}
+      data-testid="inspector-assets"
+      aria-labelledby={`${panelId}-heading`}
+      aria-busy={panelBusy}
+    >
+      <SafeHStack as="header" justify="between" align="center" wrap="wrap" gap={2}>
+        <Heading level={2} id={`${panelId}-heading`}>{copy.title}</Heading>
+        <Text type="code" wordBreak="break-word">{taskId}</Text>
+      </SafeHStack>
 
       {snapshotErrors.length > 0 ? (
-        <div className={styles.mutationErrors} data-testid="inspector-mutation-errors">
-          {snapshotErrors.map(([key, error]) => (
-            <div key={key} className={styles.mutationError} data-testid="inspector-mutation-error" data-operation-key={key} role="alert">
-              <p id={key === actionKey("addLabel", taskId) ? labelErrorId : key === actionKey("uploadAttachment", taskId) ? attachmentErrorId : undefined}><strong>{error.operation === "reload" ? copy.reloadStale : copy.mutationError}:</strong> {error.message}</p>
-              {canRetrySnapshotError(key, error.operation) ? <button type="button" className={styles.smallButton} data-testid="inspector-retry" data-retry-key={key} disabled={retryBusy.has(key) || pending.has(key) || writePending} onClick={() => retryMutation(key)}>{retryBusy.has(key) ? "…" : copy.retry}</button> : null}
-            </div>
-          ))}
-        </div>
+        <SafeVStack gap={2} data-testid="inspector-mutation-errors">
+          {snapshotErrors.map(([key, error]) => {
+            const errorId = key === actionKey("addLabel", taskId)
+              ? labelErrorId
+              : key === actionKey("uploadAttachment", taskId)
+                ? attachmentErrorId
+                : undefined
+            const retryable = canRetrySnapshotError(key, error.operation)
+            return (
+              <Banner
+                key={key}
+                id={errorId}
+                data-testid="inspector-mutation-error"
+                data-operation-key={key}
+                status={error.operation === "reload" ? "warning" : "error"}
+                role="alert"
+                aria-live="polite"
+                title={error.operation === "reload" ? copy.reloadStale : copy.mutationError}
+                description={error.message}
+                endContent={retryable ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    label={retryBusy.has(key) ? copy.retrying : copy.retry}
+                    data-testid="inspector-retry"
+                    data-retry-key={key}
+                    isDisabled={retryBusy.has(key) || pending.has(key) || writePending}
+                    isLoading={retryBusy.has(key)}
+                    onClick={() => retryMutation(key)}
+                  />
+                ) : undefined}
+              />
+            )
+          })}
+        </SafeVStack>
       ) : null}
-      {retrying ? <p className={styles.state} data-testid="inspector-retry-status" role="status" aria-live="polite">{copy.retrying}</p> : null}
+      {retrying ? (
+        <Text as="p" type="supporting" data-testid="inspector-retry-status" role="status" aria-live="polite">
+          {copy.retrying}
+        </Text>
+      ) : null}
 
-      <section className={styles.section} data-testid="inspector-labels" aria-labelledby={`${panelId}-labels-heading`}>
-        <h3 id={`${panelId}-labels-heading`}>{copy.labels}</h3>
+      <SafeVStack as="section" gap={3} data-testid="inspector-labels" aria-labelledby={`${panelId}-labels-heading`}>
+        <Heading level={3} id={`${panelId}-labels-heading`}>{copy.labels}</Heading>
         {labels.length > 0 ? (
-          <ul className={styles.labelList}>
-            {labels.map((label) => <li key={label.id} className={styles.labelChip}><span className={styles.labelName} title={label.name}>{label.name}</span><button type="button" className={styles.iconButton} data-testid="label-remove" disabled={writePending} aria-label={copy.removeLabel(label.name)} onClick={() => removeLabel(label.id)}>×</button></li>)}
-          </ul>
-        ) : <p className={styles.empty} data-testid="labels-empty" role="status">{copy.noLabels}</p>}
-        <form className={styles.labelForm} onSubmit={onLabelSubmit}>
-          <label htmlFor={labelInputId}>{copy.labelName}</label>
-          <div className={styles.inputRow}>
-            <input id={labelInputId} name="label-name" autoComplete="off" value={labelInput} placeholder={copy.labelPlaceholder} disabled={writePending} aria-describedby={labelsError || addLabelSnapshotError ? labelErrorId : undefined} ref={labelInputElementRef} onChange={(event) => setLabelInput(event.currentTarget.value)} />
-            <button type="submit" className={styles.actionButton} data-testid="label-add" disabled={!labelInput.trim() || existingLabelNames.has(normalizedLabelName(labelInput)) || writePending || addLabelRetryLocked}>{isPending("addLabel") ? "…" : copy.addLabel}</button>
-          </div>
+          <List density="compact" hasDividers data-testid="inspector-label-list">
+            {labels.map((label) => {
+              const removeLabel = copy.removeLabel(label.name)
+              return (
+                <ListItem
+                  key={label.id}
+                  label={<Text wordBreak="break-word">{label.name}</Text>}
+                  endContent={(
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      label={removeLabel}
+                      aria-label={removeLabel}
+                      data-testid="label-remove"
+                      isDisabled={writePending}
+                      onClick={() => removeLabelAction(label.id)}
+                    />
+                  )}
+                />
+              )
+            })}
+          </List>
+        ) : (
+          <Text as="p" type="supporting" data-testid="labels-empty" role="status">{copy.noLabels}</Text>
+        )}
+        <form onSubmit={onLabelSubmit} aria-busy={writePending || undefined}>
+          <SafeHStack align="end" gap={2} wrap="wrap">
+            <TextInput
+              id={labelInputId}
+              label={copy.labelName}
+              value={labelInput}
+              onChange={(value) => setLabelInput(value)}
+              placeholder={copy.labelPlaceholder}
+              htmlName="label-name"
+              autoComplete="off"
+              isDisabled={writePending}
+              status={addLabelFocusError ? { type: "error" } : undefined}
+              aria-describedby={addLabelFocusError ? labelErrorId : undefined}
+              ref={labelInputElementRef}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              variant="primary"
+              label={isPending("addLabel") ? copy.addingLabel : copy.addLabel}
+              data-testid="label-add"
+              isDisabled={!labelInput.trim() || existingLabelNames.has(normalizedLabelName(labelInput)) || writePending || addLabelRetryLocked}
+              isLoading={isPending("addLabel")}
+            />
+          </SafeHStack>
         </form>
-        {labelsError ? <p id={labelErrorId} className={styles.error} role="alert">{labelsError}</p> : null}
-        <div className={styles.suggestionActions}>
-          <button type="button" className={styles.actionButton} data-testid="label-suggestion-request" disabled={suggestionPending} onClick={requestSuggestions}>{suggestionPending ? copy.suggesting : suggestionRequested || suggestionLocalRequested || currentSuggestions ? copy.refreshSuggestions : copy.suggestLabels}</button>
-        </div>
+        {labelsError ? <Banner id={labelErrorId} status="error" role="alert" title={copy.mutationError} description={labelsError} container="section" /> : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          label={suggestionPending ? copy.suggesting : suggestionRequested || suggestionLocalRequested || currentSuggestions ? copy.refreshSuggestions : copy.suggestLabels}
+          data-testid="label-suggestion-request"
+          isDisabled={suggestionPending}
+          isLoading={suggestionPending}
+          onClick={requestSuggestions}
+        />
         {showSuggestions ? (
-          <div className={styles.suggestionPanel} data-testid="label-suggestions">
-            {currentSuggestions ? <p className={styles.metrics}>{copy.coverage(suggestionPercent(currentSuggestions.coverage), suggestionPercent(currentSuggestions.coverage_cosine), suggestionResidual(currentSuggestions.residual_norm))}</p> : null}
-            {suggestionPending && !currentSuggestions ? <p className={styles.state} role="status" aria-live="polite">{copy.suggesting}</p> : null}
-            {suggestionsError ? <p className={styles.error} role="alert">{suggestionsError}</p> : null}
+          <SafeVStack as="section" gap={3} data-testid="label-suggestions">
             {currentSuggestions ? (
-              <div className={styles.provenance} data-testid="label-suggestion-provenance">
-                <p><span className={styles.metaLabel}>{copy.reasonCodes}:</span> {currentSuggestions.reason_codes.length ? currentSuggestions.reason_codes.join(", ") : "—"}</p>
-                <p><span className={styles.metaLabel}>{copy.diagnostics}:</span> {currentSuggestions.diagnostics.length ? currentSuggestions.diagnostics.join(", ") : "—"}</p>
-              </div>
+              <Text type="supporting">
+                {copy.coverage(suggestionPercent(currentSuggestions.coverage), suggestionPercent(currentSuggestions.coverage_cosine), suggestionResidual(currentSuggestions.residual_norm))}
+              </Text>
             ) : null}
-            {currentSuggestions?.degraded ? <div className={styles.degraded} role="alert"><strong>{copy.degraded}</strong><p>{copy.degradedDescription}</p></div> : null}
-            {duplicateSuggestionIds.size > 0 ? <p className={styles.error} data-testid="label-suggestion-duplicates" role="alert">{copy.duplicateSuggestion(duplicateIdsText)}</p> : null}
-            {selectedSuggestions.length > 0 ? <div className={styles.suggestionGroup}><h4>{copy.selected}</h4><ul className={styles.suggestionList}>{selectedSuggestions.map((entry) => <SuggestionRow key={`selected-${entry.label_id}-${entry.label_name}`} entry={entry} copy={copy} applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))} disabled={writePending || entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name))} onApply={applySuggestion} />)}</ul></div> : null}
-            {candidateSuggestions.length > 0 ? <div className={styles.suggestionGroup}><h4>{copy.candidates}</h4><ul className={styles.suggestionList}>{candidateSuggestions.map((entry) => <SuggestionRow key={`candidate-${entry.label_id}-${entry.label_name}`} entry={entry} copy={copy} applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))} disabled={writePending || entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name))} onApply={applySuggestion} />)}</ul></div> : null}
-            {!suggestionPending && !suggestionsError && (suggestionRequested || suggestionLocalRequested) && (!currentSuggestions || (selectedSuggestions.length === 0 && candidateSuggestions.length === 0)) ? <p className={styles.empty} role="status">{copy.noSuggestions}</p> : null}
-          </div>
+            {suggestionPending && !currentSuggestions ? <Text as="p" type="supporting" role="status" aria-live="polite">{copy.suggesting}</Text> : null}
+            {suggestionsError ? <Banner status="error" role="alert" title={copy.mutationError} description={suggestionsError} container="section" /> : null}
+            {currentSuggestions ? (
+              <SafeMetadataList data-testid="label-suggestion-provenance" columns="single" label={{ position: "start" }}>
+                <SafeMetadataListItem label={copy.reasonCodes}>{currentSuggestions.reason_codes.length ? currentSuggestions.reason_codes.join(", ") : "—"}</SafeMetadataListItem>
+                <SafeMetadataListItem label={copy.diagnostics}>{currentSuggestions.diagnostics.length ? currentSuggestions.diagnostics.join(", ") : "—"}</SafeMetadataListItem>
+              </SafeMetadataList>
+            ) : null}
+            {currentSuggestions?.degraded ? (
+              <Banner
+                status="warning"
+                role="alert"
+                title={copy.degraded}
+                description={copy.degradedDescription}
+                container="section"
+              />
+            ) : null}
+            {duplicateSuggestionIds.size > 0 ? (
+              <Banner
+                status="error"
+                role="alert"
+                data-testid="label-suggestion-duplicates"
+                title={copy.duplicateSuggestion(duplicateIdsText)}
+                container="section"
+              />
+            ) : null}
+            {selectedSuggestions.length > 0 ? (
+              <SafeVStack as="section" gap={2}>
+                <Heading level={4}>{copy.selected}</Heading>
+                <List density="compact" hasDividers>
+                  {selectedSuggestions.map((entry) => (
+                    <SuggestionRow
+                      key={`selected-${entry.label_id}-${entry.label_name}`}
+                      entry={entry}
+                      copy={copy}
+                      applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))}
+                      disabled={writePending || entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name))}
+                      onApply={applySuggestion}
+                    />
+                  ))}
+                </List>
+              </SafeVStack>
+            ) : null}
+            {candidateSuggestions.length > 0 ? (
+              <SafeVStack as="section" gap={2}>
+                <Heading level={4}>{copy.candidates}</Heading>
+                <List density="compact" hasDividers>
+                  {candidateSuggestions.map((entry) => (
+                    <SuggestionRow
+                      key={`candidate-${entry.label_id}-${entry.label_name}`}
+                      entry={entry}
+                      copy={copy}
+                      applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))}
+                      disabled={writePending || entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name))}
+                      onApply={applySuggestion}
+                    />
+                  ))}
+                </List>
+              </SafeVStack>
+            ) : null}
+            {!suggestionPending && !suggestionsError && (suggestionRequested || suggestionLocalRequested) && (!currentSuggestions || (selectedSuggestions.length === 0 && candidateSuggestions.length === 0)) ? (
+              <Text as="p" type="supporting" role="status">{copy.noSuggestions}</Text>
+            ) : null}
+          </SafeVStack>
         ) : null}
-      </section>
+      </SafeVStack>
 
-      <section className={styles.section} data-testid="inspector-attachments" aria-labelledby={`${panelId}-attachments-heading`}>
-        <h3 id={`${panelId}-attachments-heading`}>{copy.attachments}</h3>
-        <div className={styles.uploadBox}>
-          <label htmlFor={attachmentFileId}>{copy.chooseFile}</label>
-          <input id={attachmentFileId} name="attachment-file" data-testid="attachment-file" key={fileInputKey} type="file" aria-label={copy.chooseFile} aria-describedby={attachmentsError || uploadSnapshotError ? attachmentErrorId : undefined} ref={fileInputElementRef} disabled={writePending} onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] ?? null)} />
-          <button type="button" className={styles.actionButton} data-testid="attachment-upload" disabled={!selectedFile || writePending || uploadRetryLocked} onClick={uploadFile}>{uploadPending ? copy.uploading : copy.upload}</button>
-        </div>
-        {attachmentLoading ? <p className={styles.state} data-testid="attachments-loading" role="status" aria-live="polite">{copy.loadingAttachments}</p> : null}
-        {attachmentsError ? <p id={attachmentErrorId} className={styles.error} data-testid="attachments-error" role="alert"><strong>{copy.attachmentError}:</strong> {attachmentsError}</p> : null}
-        {attachments.length > 0 ? <ul className={styles.attachmentList}>{attachments.map((attachment) => <li key={attachment.id} className={styles.attachmentItem} data-testid="attachment-row"><div className={styles.attachmentMain}><strong className={styles.attachmentName} title={attachment.filename} translate="no">{attachment.filename}</strong><AttachmentMetadata attachment={attachment} copy={copy} locale={locale} /></div><div className={styles.attachmentActions}><button type="button" className={styles.smallButton} data-testid="attachment-download" disabled={isPending("downloadAttachment")} aria-label={copy.download(attachment.filename)} onClick={() => downloadAttachment(attachment)}>{isPending("downloadAttachment") ? copy.downloading : copy.download(attachment.filename)}</button><button type="button" className={styles.dangerButton} data-testid="attachment-delete" disabled={writePending} aria-label={copy.deleteAttachment(attachment.filename)} onClick={() => deleteAttachment(attachment.id)}>{isPending("deleteAttachment") ? copy.deleting : copy.deleteAttachment(attachment.filename)}</button></div></li>)}</ul> : <p className={styles.empty} data-testid="attachments-empty" role="status">{copy.noAttachments}</p>}
-      </section>
-    </section>
+      <SafeVStack as="section" gap={3} data-testid="inspector-attachments" aria-labelledby={`${panelId}-attachments-heading`}>
+        <Heading level={3} id={`${panelId}-attachments-heading`}>{copy.attachments}</Heading>
+        <SafeHStack align="end" gap={2} wrap="wrap">
+          <FileInput
+            key={fileInputKey}
+            id={attachmentFileId}
+            htmlName="attachment-file"
+            data-testid="attachment-file"
+            label={copy.chooseFile}
+            value={selectedFile}
+            onChange={(files) => setSelectedFile(Array.isArray(files) ? files[0] ?? null : files)}
+            maxSize={MAX_ATTACHMENT_UPLOAD_BYTES}
+            isDisabled={writePending}
+            isLoading={uploadPending}
+            status={uploadFocusError ? { type: "error" } : undefined}
+            aria-label={copy.chooseFile}
+            aria-describedby={uploadFocusError ? attachmentErrorId : undefined}
+            chooseFileText={copy.chooseFile}
+            chooseFilesText={copy.chooseFile}
+            clearLabel={copy.clearFile}
+            clearText={copy.clearFile}
+            invalidTypeMessage={copy.invalidFileType}
+            sizeLimitMessage={(_file, _maxSize, formattedSize) => copy.fileTooLarge(formattedSize)}
+            maxFilesMessage={copy.fileCountExceeded}
+            formatFileSize={formatAttachmentSize}
+            ref={fileInputElementRef}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="primary"
+            label={uploadPending ? copy.uploading : copy.upload}
+            data-testid="attachment-upload"
+            isDisabled={!selectedFile || writePending || uploadRetryLocked}
+            isLoading={uploadPending}
+            onClick={uploadFile}
+          />
+        </SafeHStack>
+        {attachmentLoading ? <Text as="p" type="supporting" data-testid="attachments-loading" role="status" aria-live="polite">{copy.loadingAttachments}</Text> : null}
+        {attachmentsError ? <Banner id={attachmentErrorId} status="error" role="alert" data-testid="attachments-error" title={copy.attachmentError} description={attachmentsError} container="section" /> : null}
+        {attachments.length > 0 ? (
+          <List density="compact" hasDividers data-testid="attachment-list">
+            {attachments.map((attachment) => {
+              const downloadLabel = copy.download(attachment.filename)
+              const deleteLabel = copy.deleteAttachment(attachment.filename)
+              return (
+                <ListItem
+                  key={attachment.id}
+                  data-testid="attachment-row"
+                  label={<Text type="code" wordBreak="break-word">{attachment.filename}</Text>}
+                  description={<AttachmentMetadata attachment={attachment} copy={copy} locale={locale} />}
+                  endContent={(
+                    <SafeHStack gap={1} wrap="wrap" justify="end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        label={isPending("downloadAttachment") ? copy.downloading : downloadLabel}
+                        aria-label={downloadLabel}
+                        data-testid="attachment-download"
+                        isDisabled={isPending("downloadAttachment")}
+                        isLoading={isPending("downloadAttachment")}
+                        onClick={() => downloadAttachment(attachment)}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        label={isPending("deleteAttachment") ? copy.deleting : deleteLabel}
+                        aria-label={deleteLabel}
+                        data-testid="attachment-delete"
+                        isDisabled={writePending}
+                        isLoading={isPending("deleteAttachment")}
+                        onClick={() => deleteAttachment(attachment.id)}
+                      />
+                    </SafeHStack>
+                  )}
+                />
+              )
+            })}
+          </List>
+        ) : (
+          <Text as="p" type="supporting" data-testid="attachments-empty" role="status">{copy.noAttachments}</Text>
+        )}
+      </SafeVStack>
+    </SafeVStack>
   )
 }

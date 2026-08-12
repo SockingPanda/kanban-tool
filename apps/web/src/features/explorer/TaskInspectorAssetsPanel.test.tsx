@@ -471,8 +471,9 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(markup).toContain("negative evidence")
     expect((markup.match(/data-testid="label-suggestion-apply"/g) ?? []).length).toBe(2)
     expect((markup.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(2)
-    expect(markup).toContain("Reason codes:</span> —")
-    expect(markup).toContain("Diagnostics:</span> —")
+    expect(markup).toContain("Reason codes")
+    expect(markup).toContain("Diagnostics")
+    expect(markup).toContain("—")
   })
 
   test("preserves the exact bytes represented by an attachment download view", () => {

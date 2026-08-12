@@ -1,4 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
+import { Badge } from "@astryxdesign/core/Badge"
+import { Banner } from "@astryxdesign/core/Banner"
+import { Button } from "@astryxdesign/core/Button"
+import { Collapsible } from "@astryxdesign/core/Collapsible"
+import { Heading } from "@astryxdesign/core/Heading"
+import { List, ListItem } from "@astryxdesign/core/List"
+import { Text } from "@astryxdesign/core/Text"
 
 import {
   inspectorMutationKey,
@@ -8,7 +15,15 @@ import {
   type TaskInspectorMutationSnapshot,
 } from "./task-inspector-mutation-state"
 import { buildCommentInput, buildPlanInput, buildStepSubmission, commentDraftMatchesRetry, commentPageState, dependencyDraftMatchesRetry, formatCommentDateTime, planDraftMatchesRetry, resolveTaskSelector, scopeEpochMatches, shouldClearDraft, shouldClearRetryDraft, stepDraftMatchesRetry, type CommentSortOrder, type InspectorScopeEpoch, type TaskSelectorResolver } from "./TaskInspectorRelationsPanel.logic"
-import styles from "./TaskInspectorRelationsPanel.module.css"
+import {
+  CheckboxInput,
+  CodeBlock,
+  SafeHStack,
+  SafeVStack,
+  Selector,
+  TextArea,
+  TextInput,
+} from "@/ui/astryx"
 
 export type TaskInspectorRelationTaskStatus =
   | "triage"
@@ -89,6 +104,7 @@ type RelationsCopy = {
   readonly newest: string
   readonly oldest: string
   readonly commentSortLabel: string
+  readonly loading: string
   readonly commentCount: (count: number) => string
   readonly commentKind: string
   readonly commentBody: string
@@ -140,6 +156,9 @@ type RelationsCopy = {
   readonly retrying: string
   readonly status: Readonly<Record<TaskInspectorRelationTaskStatus, string>>
   readonly commentKindLabel: Readonly<Record<TaskInspectorCommentKind, string>>
+  readonly copyCode: string
+  readonly copiedCode: string
+  readonly copyCodeError: string
 }
 
 const copy: Record<"zh" | "en", RelationsCopy> = {
@@ -150,6 +169,7 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     newest: "最新优先",
     oldest: "最早优先",
     commentSortLabel: "评论排序",
+    loading: "正在加载…",
     commentCount: (count) => `${count} 条评论`,
     commentKind: "类型",
     commentBody: "评论内容",
@@ -201,6 +221,9 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     retrying: "正在重试…",
     status: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     commentKindLabel: { note: "备注", decision: "决策", signal: "信号" },
+    copyCode: "复制",
+    copiedCode: "已复制",
+    copyCodeError: "复制失败",
   },
   en: {
     comments: "Comments",
@@ -209,6 +232,7 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     newest: "Newest first",
     oldest: "Oldest first",
     commentSortLabel: "Comment sort order",
+    loading: "Loading…",
     commentCount: (count) => `${count} comments`,
     commentKind: "Kind",
     commentBody: "Comment body",
@@ -260,6 +284,9 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     retrying: "Retrying…",
     status: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     commentKindLabel: { note: "Note", decision: "Decision", signal: "Signal" },
+    copyCode: "Copy",
+    copiedCode: "Copied",
+    copyCodeError: "Copy failed",
   },
 }
 
@@ -349,53 +376,58 @@ function RetryButton({ retry }: { readonly retry: RetryConfig }) {
   if (!retry.snapshot.retries.has(retry.key)) return null
   const pending = retry.snapshot.pending.has(retry.key)
   return (
-    <button
-      className={styles.retryButton}
+    <Button
       type="button"
       data-testid={`task-inspector-retry-${retry.key}`}
       data-retry-key={retry.key}
-      disabled={retry.disabled || pending}
+      size="sm"
+      variant="secondary"
+      label={pending ? retry.pendingLabel : retry.label}
+      isDisabled={retry.disabled || pending}
+      isLoading={pending}
       onClick={() => {
         void retry.handlers.retry(retry.key)
           .then((outcome) => retry.onOutcome?.(outcome))
           .catch(() => undefined)
       }}
-    >
-      {pending ? retry.pendingLabel : retry.label}
-    </button>
+    />
   )
 }
 
 function Feedback({ error, pendingLabel, retry }: { readonly error: TaskInspectorMutationError | null; readonly pendingLabel?: string; readonly retry?: RetryConfig }) {
   return (
-    <>
-      {pendingLabel ? <p className={styles.pending} role="status" aria-live="polite">{pendingLabel}</p> : null}
+    <SafeVStack gap={2}>
+      {pendingLabel ? <Text as="p" type="supporting" role="status" aria-live="polite">{pendingLabel}</Text> : null}
       {error ? (
-        <p className={styles.error} role="alert" aria-live="polite">
-          {error.message}{error.code ? ` [${error.code}]` : ""}
-        </p>
+        <Banner
+          status="error"
+          role="alert"
+          aria-live="polite"
+          title={error.code ? `${error.message} [${error.code}]` : error.message}
+          container="section"
+        />
       ) : null}
       {retry ? <RetryButton retry={retry} /> : null}
-    </>
+    </SafeVStack>
   )
-}
-
-function StatusLabel({ status, currentCopy }: { readonly status: TaskInspectorStepView["status"]; readonly currentCopy: RelationsCopy }) {
-  return currentCopy[status]
 }
 
 function RelationTaskButton({ task, onSelectTask, localeCopy }: { readonly task: TaskInspectorRelationTaskView; readonly onSelectTask: (taskId: string) => void; readonly localeCopy: RelationsCopy }) {
   return (
-    <button
+    <Button
       type="button"
-      className={styles.taskLink}
+      size="sm"
+      variant="ghost"
+      label={`${task.ref} ${task.title}`}
       onClick={() => onSelectTask(task.id)}
       aria-label={`${task.ref} ${task.title}`}
     >
-      <span className={styles.ref} translate="no">{task.ref}</span>
-      <span className={styles.taskTitle}>{task.title}</span>
-      <span className={styles.muted}>{localeCopy.status[task.status]}</span>
-    </button>
+      <SafeHStack gap={2} align="center" wrap="wrap">
+        <Text type="code" wordBreak="break-word">{task.ref}</Text>
+        <Text type="body" wordBreak="break-word">{task.title}</Text>
+        <Badge variant="neutral" label={localeCopy.status[task.status]} />
+      </SafeHStack>
+    </Button>
   )
 }
 
@@ -467,94 +499,153 @@ function CommentsPanel({
   }
 
   return (
-    <section className={styles.section} data-testid="task-inspector-comments">
-      <div className={styles.sectionHeading}>
-        <h2>{localeCopy.comments}</h2>
-        <span className={styles.muted}>{localeCopy.commentCount(comments.length)}</span>
-      </div>
-      {comments.length === 0 ? <p className={styles.empty} role="status">{localeCopy.noComments}</p> : (
-        <>
-          <div className={styles.toolbar}>
-            <label className={styles.inlineField} htmlFor="task-inspector-comments-sort">
-              <span className={styles.visuallyHidden}>{localeCopy.commentSortLabel}</span>
-              <select
-                id="task-inspector-comments-sort"
-                data-testid="task-inspector-comments-sort"
-                name="comments-sort"
-                value={sortOrder}
-                aria-label={localeCopy.commentSortLabel}
-                onChange={(event) => {
-                  setSortOrder(event.currentTarget.value as CommentSortOrder)
-                  setPage(0)
-                }}
-              >
-                <option value="newest">{localeCopy.newest}</option>
-                <option value="oldest">{localeCopy.oldest}</option>
-              </select>
-            </label>
-          </div>
-          <ul className={styles.list}>
-            {pageState.comments.map((comment) => (
-              <li className={styles.card} key={comment.id}>
-                <div className={styles.cardMeta}>
-                  <span><strong>{comment.author}</strong><span className={styles.muted}> · {localeCopy.commentKindLabel[comment.kind]}</span></span>
-                  {(() => {
-                    const renderedTime = formatCommentDateTime(comment.createdAt, locale)
-                    return <time dateTime={renderedTime.iso || undefined}>{renderedTime.label}</time>
-                  })()}
-                </div>
-                <p className={styles.body}>{comment.body}</p>
-                <details className={styles.metadata}>
-                  <summary>{localeCopy.metadata}</summary>
-                  <pre>{safeJson(comment.metadata)}</pre>
-                </details>
-              </li>
-            ))}
-          </ul>
+    <SafeVStack as="section" gap={3} data-testid="task-inspector-comments">
+      <SafeHStack as="header" justify="between" align="center" wrap="wrap" gap={2}>
+        <Heading level={2}>{localeCopy.comments}</Heading>
+        <Text type="supporting">{localeCopy.commentCount(comments.length)}</Text>
+      </SafeHStack>
+      {comments.length === 0 ? <Text as="p" type="supporting" role="status">{localeCopy.noComments}</Text> : (
+        <SafeVStack gap={3}>
+          <Selector
+            id="task-inspector-comments-sort"
+            data-testid="task-inspector-comments-sort"
+            label={localeCopy.commentSortLabel}
+            isLabelHidden
+            options={[
+              { value: "newest", label: localeCopy.newest },
+              { value: "oldest", label: localeCopy.oldest },
+            ]}
+            value={sortOrder}
+            onChange={(value) => {
+              setSortOrder(value as CommentSortOrder)
+              setPage(0)
+            }}
+            placeholder={localeCopy.commentSortLabel}
+            loadingText={localeCopy.loading}
+            htmlName="comments-sort"
+          />
+          <List density="compact" hasDividers>
+            {pageState.comments.map((comment) => {
+              const renderedTime = formatCommentDateTime(comment.createdAt, locale)
+              return (
+                <ListItem
+                  key={comment.id}
+                  label={(
+                    <SafeHStack justify="between" align="center" gap={2} wrap="wrap">
+                      <Text type="label" wordBreak="break-word">
+                        {comment.author} · {localeCopy.commentKindLabel[comment.kind]}
+                      </Text>
+                      <time dateTime={renderedTime.iso || undefined}>{renderedTime.label}</time>
+                    </SafeHStack>
+                  )}
+                  description={(
+                    <SafeVStack gap={2}>
+                      <Text as="p" type="body" wordBreak="break-word">{comment.body}</Text>
+                      <Collapsible trigger={localeCopy.metadata} defaultIsOpen={false}>
+                        <CodeBlock
+                          code={safeJson(comment.metadata)}
+                          language="json"
+                          isWrapped
+                          container="section"
+                          maxHeight="compact"
+                          label={localeCopy.metadata}
+                          copyLabel={localeCopy.copyCode}
+                          copiedLabel={localeCopy.copiedCode}
+                          errorLabel={localeCopy.copyCodeError}
+                        />
+                      </Collapsible>
+                    </SafeVStack>
+                  )}
+                />
+              )
+            })}
+          </List>
           {pageState.pageCount > 1 ? (
-            <div className={styles.pager}>
-              <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={!pageState.hasPreviousPage}>{localeCopy.previous}</button>
-              <span aria-live="polite">{localeCopy.page(pageState.page + 1, pageState.pageCount)}</span>
-              <button data-testid="task-inspector-comments-next" type="button" onClick={() => setPage((value) => Math.min(pageState.pageCount - 1, value + 1))} disabled={!pageState.hasNextPage}>{localeCopy.next}</button>
-            </div>
+            <SafeHStack justify="between" align="center" gap={2} wrap="wrap">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                label={localeCopy.previous}
+                isDisabled={!pageState.hasPreviousPage}
+                onClick={() => setPage((value) => Math.max(0, value - 1))}
+              />
+              <Text type="supporting" role="status" aria-live="polite">{localeCopy.page(pageState.page + 1, pageState.pageCount)}</Text>
+              <Button
+                data-testid="task-inspector-comments-next"
+                type="button"
+                size="sm"
+                variant="secondary"
+                label={localeCopy.next}
+                isDisabled={!pageState.hasNextPage}
+                onClick={() => setPage((value) => Math.min(pageState.pageCount - 1, value + 1))}
+              />
+            </SafeHStack>
           ) : null}
-        </>
+        </SafeVStack>
       )}
-      <form className={styles.form} onSubmit={(event) => void submit(event)} aria-busy={writePending || undefined}>
-        <label>
-          <span>{localeCopy.commentKind}</span>
-          <select name="comment-kind" value={kind} onChange={(event) => setKind(event.currentTarget.value as TaskInspectorCommentKind)}>
-            <option value="note">{localeCopy.commentKindLabel.note}</option>
-            <option value="decision">{localeCopy.commentKindLabel.decision}</option>
-            <option value="signal">{localeCopy.commentKindLabel.signal}</option>
-          </select>
-        </label>
-        <label>
-          <span>{localeCopy.commentBody}</span>
-          <textarea ref={bodyRef} name="comment-body" autoComplete="off" required aria-required="true" aria-invalid={bodyError ? "true" : "false"} aria-describedby={bodyError ? "task-inspector-comment-body-error" : undefined} value={body} onChange={(event) => { setBody(event.currentTarget.value); setBodyError(null) }} onInvalid={() => setBodyError(localeCopy.requiredCommentBody)} placeholder={localeCopy.commentPlaceholder} />
-        </label>
-        {bodyError ? <p id="task-inspector-comment-body-error" className={styles.error} role="alert" aria-live="polite">{bodyError}</p> : null}
-        <button type="submit" disabled={writePending || retryMatches}>{pending ? localeCopy.addingComment : localeCopy.addComment}</button>
-        <Feedback
-          error={error}
-          pendingLabel={pending ? localeCopy.addingComment : undefined}
-          retry={{
-            key: operationKey,
-            handlers,
-            snapshot,
-            disabled: writePending,
-            label: localeCopy.retry,
-            pendingLabel: localeCopy.retrying,
-            onOutcome: (outcome) => {
-              if (!scopeEpochMatches(renderEpoch, scopeEpochRef.current) || !shouldClearRetryDraft(outcome, commentDraftMatchesRetry(draftRef.current.kind, draftRef.current.body, retryInput))) return
-              setBody("")
-              setKind("note")
-              setBodyError(null)
-            },
-          }}
-        />
+      <form onSubmit={(event) => void submit(event)} aria-busy={writePending || undefined}>
+        <SafeVStack gap={2}>
+          <Selector
+            label={localeCopy.commentKind}
+            options={[
+              { value: "note", label: localeCopy.commentKindLabel.note },
+              { value: "decision", label: localeCopy.commentKindLabel.decision },
+              { value: "signal", label: localeCopy.commentKindLabel.signal },
+            ]}
+            value={kind}
+            onChange={(value) => setKind(value as TaskInspectorCommentKind)}
+            placeholder={localeCopy.commentKind}
+            loadingText={localeCopy.loading}
+            htmlName="comment-kind"
+            isDisabled={writePending}
+          />
+          <TextArea
+            ref={bodyRef}
+            label={localeCopy.commentBody}
+            value={body}
+            onChange={(value) => { setBody(value); setBodyError(null) }}
+            onInvalid={() => setBodyError(localeCopy.requiredCommentBody)}
+            htmlName="comment-body"
+            autoComplete="off"
+            isRequired
+            isDisabled={writePending}
+            isLoading={pending}
+            status={bodyError ? { type: "error" } : undefined}
+            aria-describedby={bodyError ? "task-inspector-comment-body-error" : undefined}
+            placeholder={localeCopy.commentPlaceholder}
+            rows={3}
+          />
+          {bodyError ? <Banner id="task-inspector-comment-body-error" status="error" role="alert" title={bodyError} container="section" /> : null}
+          <Button
+            type="submit"
+            size="sm"
+            variant="primary"
+            label={pending ? localeCopy.addingComment : localeCopy.addComment}
+            isDisabled={writePending || retryMatches}
+            isLoading={pending}
+          />
+          <Feedback
+            error={error}
+            pendingLabel={pending ? localeCopy.addingComment : undefined}
+            retry={{
+              key: operationKey,
+              handlers,
+              snapshot,
+              disabled: writePending,
+              label: localeCopy.retry,
+              pendingLabel: localeCopy.retrying,
+              onOutcome: (outcome) => {
+                if (!scopeEpochMatches(renderEpoch, scopeEpochRef.current) || !shouldClearRetryDraft(outcome, commentDraftMatchesRetry(draftRef.current.kind, draftRef.current.body, retryInput))) return
+                setBody("")
+                setKind("note")
+                setBodyError(null)
+              },
+            }}
+          />
+        </SafeVStack>
       </form>
-    </section>
+    </SafeVStack>
   )
 }
 
@@ -636,62 +727,96 @@ function DependenciesPanel({
   }
 
   return (
-    <section className={styles.section} data-testid="task-inspector-dependencies">
-      <h2>{localeCopy.dependencies}</h2>
-      <div className={styles.dependencyGroup}>
-        <h3>{localeCopy.parent}</h3>
-        {dependencies.parents.length === 0 ? <p className={styles.empty} role="status">{localeCopy.noDependencies}</p> : (
-          <ul className={styles.list}>
-            {dependencies.parents.map((task) => (
-              <li className={styles.relationRow} key={task.id}>
-                <RelationTaskButton task={task} onSelectTask={onSelectTask} localeCopy={localeCopy} />
-                <button type="button" className={styles.removeButton} disabled={writePending} onClick={() => void remove(task.id)} aria-label={localeCopy.removeParent(task.title)}>
-                  {removePending ? localeCopy.removingDependency : "×"}
-                </button>
-              </li>
+    <SafeVStack as="section" gap={3} data-testid="task-inspector-dependencies">
+      <Heading level={2}>{localeCopy.dependencies}</Heading>
+      <SafeVStack as="section" gap={2}>
+        <Heading level={3}>{localeCopy.parent}</Heading>
+        {dependencies.parents.length === 0 ? <Text as="p" type="supporting" role="status">{localeCopy.noDependencies}</Text> : (
+          <List density="compact" hasDividers>
+            {dependencies.parents.map((task) => {
+              const removeLabel = localeCopy.removeParent(task.title)
+              return (
+                <ListItem
+                  key={task.id}
+                  label={<RelationTaskButton task={task} onSelectTask={onSelectTask} localeCopy={localeCopy} />}
+                  endContent={(
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      label={removePending ? localeCopy.removingDependency : removeLabel}
+                      aria-label={removeLabel}
+                      isDisabled={writePending}
+                      isLoading={removePending}
+                      onClick={() => void remove(task.id)}
+                    />
+                  )}
+                />
+              )
+            })}
+          </List>
+        )}
+      </SafeVStack>
+      <SafeVStack as="section" gap={2}>
+        <Heading level={3}>{localeCopy.child}</Heading>
+        {dependencies.children.length === 0 ? <Text as="p" type="supporting" role="status">{localeCopy.noDependencies}</Text> : (
+          <List density="compact" hasDividers>
+            {dependencies.children.map((task) => (
+              <ListItem key={task.id} label={<RelationTaskButton task={task} onSelectTask={onSelectTask} localeCopy={localeCopy} />} />
             ))}
-          </ul>
+          </List>
         )}
-      </div>
-      <div className={styles.dependencyGroup}>
-        <h3>{localeCopy.child}</h3>
-        {dependencies.children.length === 0 ? <p className={styles.empty} role="status">{localeCopy.noDependencies}</p> : (
-          <ul className={styles.list}>
-            {dependencies.children.map((task) => <li className={styles.relationRow} key={task.id}><RelationTaskButton task={task} onSelectTask={onSelectTask} localeCopy={localeCopy} /></li>)}
-          </ul>
-        )}
-      </div>
-      <form className={styles.form} onSubmit={(event) => void add(event)} aria-busy={writePending || undefined}>
-        <label>
-          <span>{localeCopy.dependencyInput}</span>
-          <input ref={inputRef} name="dependency-parent" autoComplete="off" required aria-required="true" aria-invalid={resolutionError ? "true" : "false"} aria-describedby={resolutionError ? "task-inspector-dependency-error" : undefined} value={input} onChange={(event) => { setInput(event.currentTarget.value); setResolutionError(null) }} onInvalid={() => setResolutionError(localeCopy.requiredDependency)} placeholder={localeCopy.dependencyPlaceholder} />
-        </label>
-        <button type="submit" disabled={writePending || retryMatches}>{addPending ? localeCopy.addingDependency : localeCopy.addDependency}</button>
-        <Feedback
-          error={addError}
-          pendingLabel={addPending ? localeCopy.addingDependency : undefined}
-          retry={{
-            key: addKey,
-            handlers,
-            snapshot,
-            disabled: writePending,
-            label: localeCopy.retry,
-            pendingLabel: localeCopy.retrying,
-            onOutcome: (outcome) => {
-              if (!scopeEpochMatches(renderEpoch, scopeEpochRef.current) || !shouldClearRetryDraft(outcome, dependencyDraftMatchesRetry(draftRef.current, retryParentTaskId, resolveSelector))) return
-              setInput("")
-              setResolutionError(null)
-            },
-          }}
-        />
-        <Feedback
-          error={removeError}
-          pendingLabel={removePending ? localeCopy.removingDependency : undefined}
-          retry={{ key: removeKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying }}
-        />
-        {resolutionError ? <p id="task-inspector-dependency-error" className={styles.error} role="alert" aria-live="polite">{resolutionError}</p> : null}
+      </SafeVStack>
+      <form onSubmit={(event) => void add(event)} aria-busy={writePending || undefined}>
+        <SafeVStack gap={2}>
+          <TextInput
+            ref={inputRef}
+            label={localeCopy.dependencyInput}
+            value={input}
+            onChange={(value) => { setInput(value); setResolutionError(null) }}
+            onInvalid={() => setResolutionError(localeCopy.requiredDependency)}
+            htmlName="dependency-parent"
+            autoComplete="off"
+            isRequired
+            isDisabled={writePending}
+            status={resolutionError ? { type: "error" } : undefined}
+            aria-describedby={resolutionError ? "task-inspector-dependency-error" : undefined}
+            placeholder={localeCopy.dependencyPlaceholder}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            variant="primary"
+            label={addPending ? localeCopy.addingDependency : localeCopy.addDependency}
+            isDisabled={writePending || retryMatches}
+            isLoading={addPending}
+          />
+          <Feedback
+            error={addError}
+            pendingLabel={addPending ? localeCopy.addingDependency : undefined}
+            retry={{
+              key: addKey,
+              handlers,
+              snapshot,
+              disabled: writePending,
+              label: localeCopy.retry,
+              pendingLabel: localeCopy.retrying,
+              onOutcome: (outcome) => {
+                if (!scopeEpochMatches(renderEpoch, scopeEpochRef.current) || !shouldClearRetryDraft(outcome, dependencyDraftMatchesRetry(draftRef.current, retryParentTaskId, resolveSelector))) return
+                setInput("")
+                setResolutionError(null)
+              },
+            }}
+          />
+          <Feedback
+            error={removeError}
+            pendingLabel={removePending ? localeCopy.removingDependency : undefined}
+            retry={{ key: removeKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying }}
+          />
+          {resolutionError ? <Banner id="task-inspector-dependency-error" status="error" role="alert" aria-live="polite" title={resolutionError} container="section" /> : null}
+        </SafeVStack>
       </form>
-    </section>
+    </SafeVStack>
   )
 }
 
@@ -833,78 +958,150 @@ function StepsPanel({
   }
 
   return (
-    <section className={styles.section} data-testid="task-inspector-steps">
-      <div className={styles.sectionHeading}>
-        <h2>{localeCopy.steps}</h2>
-        {plan ? <span className={styles.badge}>{localeCopy.plan}: {localeCopy.planState[plan.state]}</span> : null}
-      </div>
-      {stepsView.steps.length === 0 ? <p className={styles.empty} role="status">{localeCopy.noSteps}</p> : (
-        <ul className={styles.list}>
+    <SafeVStack as="section" gap={3} data-testid="task-inspector-steps">
+      <SafeHStack as="header" justify="between" align="center" wrap="wrap" gap={2}>
+        <Heading level={2}>{localeCopy.steps}</Heading>
+        {plan ? <Badge variant="neutral" label={`${localeCopy.plan}: ${localeCopy.planState[plan.state]}`} /> : null}
+      </SafeHStack>
+      {stepsView.steps.length === 0 ? <Text as="p" type="supporting" role="status">{localeCopy.noSteps}</Text> : (
+        <List density="compact" hasDividers>
           {stepsView.steps.map((step) => (
-            <li className={styles.card} key={step.id}>
-              <div className={styles.cardMeta}>
-                <strong>{step.title}</strong>
-                <span className={styles.badge}>{step.required ? localeCopy.required : localeCopy.optional} · <StatusLabel status={step.status} currentCopy={localeCopy} /></span>
-              </div>
-              {step.body ? <p className={styles.body}>{step.body}</p> : null}
-              {step.linkedTask ? (
-                <div className={styles.linkedTask}>
-                  <span className={styles.muted}>{localeCopy.linkedTask}</span>
-                  <RelationTaskButton task={step.linkedTask} onSelectTask={onSelectTask} localeCopy={localeCopy} />
-                </div>
-              ) : null}
-            </li>
+            <ListItem
+              key={step.id}
+              label={<Text type="label" wordBreak="break-word">{step.title}</Text>}
+              description={(
+                <SafeVStack gap={2}>
+                  {step.body ? <Text as="p" type="body" wordBreak="break-word">{step.body}</Text> : null}
+                  {step.linkedTask ? (
+                    <SafeHStack gap={2} align="center" wrap="wrap">
+                      <Text type="supporting">{localeCopy.linkedTask}</Text>
+                      <RelationTaskButton task={step.linkedTask} onSelectTask={onSelectTask} localeCopy={localeCopy} />
+                    </SafeHStack>
+                  ) : null}
+                </SafeVStack>
+              )}
+              endContent={<Badge variant="neutral" label={`${step.required ? localeCopy.required : localeCopy.optional} · ${localeCopy[step.status]}`} />}
+            />
           ))}
-        </ul>
+        </List>
       )}
-      <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void submitStep(false) }} aria-busy={writePending || undefined}>
-        <label>
-          <span>{localeCopy.stepTitle}</span>
-          <input ref={titleRef} data-testid="task-inspector-step-title" name="step-title" autoComplete="off" required aria-required="true" aria-invalid={titleError ? "true" : "false"} aria-describedby={titleError ? "task-inspector-step-title-error" : undefined} value={title} onChange={(event) => { setTitle(event.currentTarget.value); setTitleError(null) }} onInvalid={() => setTitleError(localeCopy.requiredStepTitle)} />
-        </label>
-        {titleError ? <p id="task-inspector-step-title-error" className={styles.error} role="alert" aria-live="polite">{titleError}</p> : null}
-        <label>
-          <span>{localeCopy.stepBody}</span>
-          <textarea name="step-body" autoComplete="off" value={body} onChange={(event) => setBody(event.currentTarget.value)} placeholder={localeCopy.stepBodyPlaceholder} />
-        </label>
-        <label className={styles.checkbox}>
-          <input type="checkbox" name="step-required" checked={required} onChange={(event) => setRequired(event.currentTarget.checked)} />
-          <span>{localeCopy.required}</span>
-        </label>
-        <label>
-          <span>{localeCopy.stepLink}</span>
-          <input ref={linkedTaskRefInput} name="step-linked-task" autoComplete="off" aria-invalid={linkedTaskResolutionError ? "true" : "false"} aria-describedby={linkedTaskResolutionError ? "task-inspector-step-link-error" : undefined} value={linkedTaskRef} onChange={(event) => { setLinkedTaskRef(event.currentTarget.value); setLinkedTaskResolutionError(null) }} placeholder={localeCopy.stepLinkPlaceholder} />
-        </label>
-        <div className={styles.buttonRow}>
-          <button data-testid="task-inspector-create-step" type="button" disabled={writePending || createRetryMatches} onClick={() => void submitStep(false)}>{stepPending ? localeCopy.creatingStep : localeCopy.createStep}</button>
-          <button data-testid="task-inspector-link-step" type="button" disabled={writePending || linkRetryMatches} onClick={() => void submitStep(true)}>{stepPending ? localeCopy.creatingStep : localeCopy.createAndLinkStep}</button>
-        </div>
-        <Feedback
-          error={createError}
-          pendingLabel={createPending ? localeCopy.creatingStep : undefined}
-          retry={{ key: createKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying, onOutcome: (outcome) => clearStepDraftOnRetry(outcome, createRetryInput) }}
-        />
-        <Feedback
-          error={linkError}
-          pendingLabel={linkPending ? localeCopy.creatingStep : undefined}
-          retry={{ key: linkKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying, onOutcome: (outcome) => clearStepDraftOnRetry(outcome, linkRetryInput) }}
-        />
-        {linkedTaskResolutionError ? <p id="task-inspector-step-link-error" className={styles.error} role="alert" aria-live="polite">{linkedTaskResolutionError}</p> : null}
+      <form onSubmit={(event) => { event.preventDefault(); void submitStep(false) }} aria-busy={writePending || undefined}>
+        <SafeVStack gap={2}>
+          <TextInput
+            ref={titleRef}
+            data-testid="task-inspector-step-title"
+            label={localeCopy.stepTitle}
+            value={title}
+            onChange={(value) => { setTitle(value); setTitleError(null) }}
+            onInvalid={() => setTitleError(localeCopy.requiredStepTitle)}
+            htmlName="step-title"
+            autoComplete="off"
+            isRequired
+            isDisabled={writePending}
+            status={titleError ? { type: "error" } : undefined}
+            aria-describedby={titleError ? "task-inspector-step-title-error" : undefined}
+          />
+          {titleError ? <Banner id="task-inspector-step-title-error" status="error" role="alert" aria-live="polite" title={titleError} container="section" /> : null}
+          <TextArea
+            label={localeCopy.stepBody}
+            value={body}
+            onChange={(value) => setBody(value)}
+            htmlName="step-body"
+            autoComplete="off"
+            isDisabled={writePending}
+            placeholder={localeCopy.stepBodyPlaceholder}
+            rows={3}
+          />
+          <CheckboxInput
+            label={localeCopy.required}
+            value={required}
+            onChange={(value) => setRequired(value)}
+            htmlName="step-required"
+            isDisabled={writePending}
+            isLoading={stepPending}
+            size="sm"
+          />
+          <TextInput
+            ref={linkedTaskRefInput}
+            label={localeCopy.stepLink}
+            value={linkedTaskRef}
+            onChange={(value) => { setLinkedTaskRef(value); setLinkedTaskResolutionError(null) }}
+            htmlName="step-linked-task"
+            autoComplete="off"
+            isDisabled={writePending}
+            aria-invalid={linkedTaskResolutionError ? "true" : "false"}
+            aria-describedby={linkedTaskResolutionError ? "task-inspector-step-link-error" : undefined}
+            placeholder={localeCopy.stepLinkPlaceholder}
+          />
+          <SafeHStack gap={2} wrap="wrap">
+            <Button
+              data-testid="task-inspector-create-step"
+              type="button"
+              size="sm"
+              variant="primary"
+              label={stepPending ? localeCopy.creatingStep : localeCopy.createStep}
+              isDisabled={writePending || createRetryMatches}
+              isLoading={createPending}
+              onClick={() => void submitStep(false)}
+            />
+            <Button
+              data-testid="task-inspector-link-step"
+              type="button"
+              size="sm"
+              variant="secondary"
+              label={stepPending ? localeCopy.creatingStep : localeCopy.createAndLinkStep}
+              isDisabled={writePending || linkRetryMatches}
+              isLoading={linkPending}
+              onClick={() => void submitStep(true)}
+            />
+          </SafeHStack>
+          <Feedback
+            error={createError}
+            pendingLabel={createPending ? localeCopy.creatingStep : undefined}
+            retry={{ key: createKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying, onOutcome: (outcome) => clearStepDraftOnRetry(outcome, createRetryInput) }}
+          />
+          <Feedback
+            error={linkError}
+            pendingLabel={linkPending ? localeCopy.creatingStep : undefined}
+            retry={{ key: linkKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying, onOutcome: (outcome) => clearStepDraftOnRetry(outcome, linkRetryInput) }}
+          />
+          {linkedTaskResolutionError ? <Banner id="task-inspector-step-link-error" status="error" role="alert" aria-live="polite" title={linkedTaskResolutionError} container="section" /> : null}
+        </SafeVStack>
       </form>
-      <form className={styles.form} onSubmit={(event) => void submitPlan(event)} aria-busy={writePending || undefined}>
-        <label>
-          <span>{localeCopy.planReason}</span>
-          <input ref={planReasonRef} name="plan-not-required-reason" autoComplete="off" required aria-required="true" aria-invalid={planReasonError ? "true" : "false"} aria-describedby={planReasonError ? "task-inspector-plan-reason-error" : undefined} value={planReason} onChange={(event) => { setPlanReason(event.currentTarget.value); setPlanReasonError(null) }} onInvalid={() => setPlanReasonError(localeCopy.requiredPlanReason)} placeholder={localeCopy.planReasonPlaceholder} />
-        </label>
-        {planReasonError ? <p id="task-inspector-plan-reason-error" className={styles.error} role="alert" aria-live="polite">{planReasonError}</p> : null}
-        <button data-testid="task-inspector-mark-plan-not-required" type="submit" disabled={writePending || planRetryMatches || plan?.state === "not_required"}>{planPending ? localeCopy.markingPlanNotRequired : localeCopy.markPlanNotRequired}</button>
-        <Feedback
-          error={planError}
-          pendingLabel={planPending ? localeCopy.markingPlanNotRequired : undefined}
-          retry={{ key: planKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying, onOutcome: clearPlanDraftOnRetry }}
-        />
+      <form onSubmit={(event) => void submitPlan(event)} aria-busy={writePending || undefined}>
+        <SafeVStack gap={2}>
+          <TextInput
+            ref={planReasonRef}
+            label={localeCopy.planReason}
+            value={planReason}
+            onChange={(value) => { setPlanReason(value); setPlanReasonError(null) }}
+            onInvalid={() => setPlanReasonError(localeCopy.requiredPlanReason)}
+            htmlName="plan-not-required-reason"
+            autoComplete="off"
+            isRequired
+            isDisabled={writePending}
+            aria-invalid={planReasonError ? "true" : "false"}
+            aria-describedby={planReasonError ? "task-inspector-plan-reason-error" : undefined}
+            placeholder={localeCopy.planReasonPlaceholder}
+          />
+          {planReasonError ? <Banner id="task-inspector-plan-reason-error" status="error" role="alert" aria-live="polite" title={planReasonError} container="section" /> : null}
+          <Button
+            data-testid="task-inspector-mark-plan-not-required"
+            type="submit"
+            size="sm"
+            variant="secondary"
+            label={planPending ? localeCopy.markingPlanNotRequired : localeCopy.markPlanNotRequired}
+            isDisabled={writePending || planRetryMatches || plan?.state === "not_required"}
+            isLoading={planPending}
+          />
+          <Feedback
+            error={planError}
+            pendingLabel={planPending ? localeCopy.markingPlanNotRequired : undefined}
+            retry={{ key: planKey, handlers, snapshot, disabled: writePending, label: localeCopy.retry, pendingLabel: localeCopy.retrying, onOutcome: clearPlanDraftOnRetry }}
+          />
+        </SafeVStack>
       </form>
-    </section>
+    </SafeVStack>
   )
 }
 
@@ -923,10 +1120,10 @@ export function TaskInspectorRelationsPanel({
   const localeCopy = copy[locale]
   const safePageSize = Number.isSafeInteger(commentPageSize) && commentPageSize > 0 ? commentPageSize : 10
   return (
-    <div className={styles.relations} data-testid="task-inspector-relations">
+    <SafeVStack as="section" gap={5} data-testid="task-inspector-relations">
       <CommentsPanel taskId={taskId} comments={comments} handlers={handlers} snapshot={snapshot} localeCopy={localeCopy} locale={locale} pageSize={safePageSize} />
       <DependenciesPanel taskId={taskId} dependencies={dependencies} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} resolveSelector={resolveSelector} localeCopy={localeCopy} />
       <StepsPanel taskId={taskId} stepsInput={steps} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} resolveSelector={resolveSelector} localeCopy={localeCopy} />
-    </div>
+    </SafeVStack>
   )
 }

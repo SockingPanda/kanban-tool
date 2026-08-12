@@ -137,7 +137,6 @@ export function CodeBlock({
     onCopy?.()
   }, [code, markCopied, markCopyError, onCopy])
 
-  const safeRest = pickCspSafeDomProps(rest)
   const resolvedLabel = label
   const currentCopyLabel = copyState === "copied"
     ? copiedLabel
@@ -155,7 +154,7 @@ export function CodeBlock({
         CODE_BLOCK_CONTAINER_CLASSES[container],
         className,
       )}
-      {...safeRest}
+      {...pickCspSafeDomProps(rest)}
       aria-label={resolvedLabel}
       data-language={language}
       data-container={container}

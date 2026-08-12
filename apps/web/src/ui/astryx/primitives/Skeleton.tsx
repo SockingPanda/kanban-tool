@@ -38,7 +38,6 @@ export function Skeleton({
   const legacySafeRest = {...rest} as Record<string, unknown>
   delete legacySafeRest.index
   delete legacySafeRest["aria-hidden"]
-  const safeRest = pickCspSafeDomProps(legacySafeRest)
   return (
     <section
       ref={ref}
@@ -48,7 +47,7 @@ export function Skeleton({
         SKELETON_SIZE_CLASSES[size],
         className,
       )}
-      {...safeRest}
+      {...pickCspSafeDomProps(legacySafeRest)}
       aria-hidden="true"
       data-size={size}
     />

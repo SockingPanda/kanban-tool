@@ -387,8 +387,6 @@ function DateTimeInputImpl(
   const interactiveDisabled = isDisabled || isLoading
   const disabledMessageId = interactiveDisabled && disabledMessage ? `${controlId}-disabled` : undefined
   const describedBy = joinIds(callerDescribedBy, descriptionId, statusId, disabledMessageId)
-  const rootProps = pickCspSafeDomProps(rest)
-
   useEffect(() => {
     const next = parseISODateTime(value, hasSeconds)
     setDateValue(next?.date ?? "")
@@ -449,7 +447,7 @@ function DateTimeInputImpl(
 
   return (
     <fieldset
-      {...rootProps}
+      {...pickCspSafeDomProps(rest)}
       aria-busy={ariaBusy}
       aria-describedby={describedBy}
       aria-disabled={ariaDisabled}

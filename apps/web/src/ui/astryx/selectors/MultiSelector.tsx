@@ -34,6 +34,7 @@ import {
   type SelectorOptionData,
   type SelectorStatus,
 } from "./shared"
+import {pickCspSafeDomProps} from "../dom-props"
 
 export type { SelectorOptionData, SelectorOptionType, SelectorOption, SelectorStatus } from "./shared"
 
@@ -389,7 +390,7 @@ function MultiSelectorImpl(
       </label>
       {description ? <p id={descriptionId} className={descriptionClass}>{description}</p> : null}
       <button
-        {...domProps}
+        {...pickCspSafeDomProps(domProps)}
         ref={setTriggerRef}
         id={triggerId}
         type="button"

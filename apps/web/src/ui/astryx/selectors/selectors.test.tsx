@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { describe, expect, test, vi } from "vitest"
+import type {ComponentProps} from "react"
+import {describe, expect, test, vi} from "vitest"
 
 import { MultiSelector } from "./MultiSelector"
 import { createStaticSource } from "./search-source"
@@ -43,6 +44,62 @@ describe("CSP-safe selector family", () => {
     expect(markup).not.toContain('style="')
     expect(markup).not.toContain("<div")
     expect(markup).not.toContain("<span")
+  })
+
+  test("sanitizes intrinsic spreads for every selector control", () => {
+    const unsafe = {
+      style: {color: "red"},
+      xstyle: {color: "red"},
+      dangerouslySetInnerHTML: {__html: "<style>body{color:red}</style>"},
+      "data-testid": "sanitized-selector",
+    }
+    const selectorMarkup = renderToStaticMarkup(
+      <Selector
+        {...(unsafe as unknown as ComponentProps<typeof Selector>)}
+        label="Status"
+        options={["ready"]}
+        value="ready"
+        placeholder="Choose a status"
+        loadingText="Loading statuses"
+      />,
+    )
+    const multiMarkup = renderToStaticMarkup(
+      <MultiSelector
+        {...(unsafe as unknown as ComponentProps<typeof MultiSelector>)}
+        label="Statuses"
+        options={["ready"]}
+        value={[]}
+        onChange={vi.fn()}
+        placeholder="Choose statuses"
+        loadingText="Loading statuses"
+        noOptionsText="Nothing"
+        selectedText={(count) => `${count} statuses`}
+      />,
+    )
+    const typeaheadMarkup = renderToStaticMarkup(
+      <Typeahead
+        {...(unsafe as unknown as ComponentProps<typeof Typeahead>)}
+        label="Project"
+        searchSource={createStaticSource([])}
+        value={null}
+        onChange={vi.fn()}
+        placeholder="Find project"
+        searchLabel="Find project"
+        listboxLabel="Project matches"
+        loadingText="Loading projects"
+        clearLabel="Clear project"
+        emptySearchResultsText="No project matches"
+        errorText="Project search failed"
+      />,
+    )
+
+    for (const markup of [selectorMarkup, multiMarkup, typeaheadMarkup]) {
+      expect(markup).toContain('data-testid="sanitized-selector"')
+      expect(markup).not.toContain('style=')
+      expect(markup).not.toContain('xstyle')
+      expect(markup).not.toContain('dangerouslySetInnerHTML')
+      expect(markup).not.toContain('<style>')
+    }
   })
 
   test("uses a same-wrapper static listbox and one hidden name per multi value", () => {

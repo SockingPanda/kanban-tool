@@ -27,6 +27,7 @@ import {
   type SafeDomProps,
   type SelectorStatus,
 } from "./shared"
+import {pickCspSafeDomProps} from "../dom-props"
 import type { SearchableItem, SearchSource } from "./search-source"
 
 export type { SearchableItem, SearchSource } from "./search-source"
@@ -405,7 +406,7 @@ function TypeaheadImpl<T extends SearchableItem>(
       {description ? <p id={descriptionId} className={descriptionClass}>{description}</p> : null}
       {value && query.length === 0 ? <output className="text-sm text-secondary">{value.label}</output> : null}
       <input
-        {...domProps}
+        {...pickCspSafeDomProps(domProps)}
         ref={setInputRef}
         id={inputId}
         className={inputClasses[size]}

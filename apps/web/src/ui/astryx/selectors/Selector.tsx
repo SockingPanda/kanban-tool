@@ -1,5 +1,7 @@
 import { forwardRef, useId, useState, type ChangeEvent, type Ref } from "react"
 
+import {pickCspSafeDomProps} from "../dom-props"
+
 import {
   descriptionClass,
   fieldClass,
@@ -125,7 +127,7 @@ function SelectorImpl(
       </label>
       {description ? <p id={descriptionId} className={descriptionClass}>{description}</p> : null}
       <select
-        {...domProps}
+        {...pickCspSafeDomProps(domProps)}
         ref={ref}
         id={controlId}
         className={selectorControlClasses[variant][size]}

@@ -90,7 +90,6 @@ export function Grid({
   ref,
   ...rest
 }: GridProps) {
-  const safeRest = pickCspSafeDomProps(rest)
   const gapClass = gap == null
     ? density == null
       ? "gap-3"
@@ -108,7 +107,7 @@ export function Grid({
         GRID_ALIGN_CLASSES[align],
         className,
       )}
-      {...safeRest}
+      {...pickCspSafeDomProps(rest)}
       aria-label={label}
       data-columns={columns}
       data-density={density}

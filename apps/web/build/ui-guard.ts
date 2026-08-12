@@ -571,7 +571,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
       if (ts.isJsxAttribute(attribute) && jsxAttributeNameText(attribute.name) === "dangerouslySetInnerHTML") {
         addViolation("inline-style", attribute, "dangerouslySetInnerHTML is forbidden under the static CSP style policy.")
       }
-      if (isIntrinsicJsxTagName(tagName) && ts.isJsxSpreadAttribute(attribute) && !cspSafeDomPropModel.isSafeExpression(attribute.expression, attribute) && spreadMayCarryStyle(attribute.expression, staticObjectModel, attribute)) {
+      if (isIntrinsicJsxTagName(tagName) && ts.isJsxSpreadAttribute(attribute) && !cspSafeDomPropModel.isSafeExpression(attribute.expression) && spreadMayCarryStyle(attribute.expression, staticObjectModel, attribute)) {
         addViolation("inline-style", attribute, "JSX spread props may inject inline style; use explicit static props instead.")
       }
     }
@@ -613,7 +613,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
 const CSP_SAFE_DOM_PROPS_MODULE = "src/ui/astryx/dom-props"
 const CSP_SAFE_DOM_PROPS_HELPER = "pickCspSafeDomProps"
 
-type CspSafeDomPropBindingKind = "helper" | "namespace" | "safe-result" | "other"
+type CspSafeDomPropBindingKind = "helper" | "namespace" | "other"
 
 type CspSafeDomPropBinding = {
   readonly name: string
@@ -628,14 +628,16 @@ type CspSafeDomPropScope = {
 }
 
 type CspSafeDomPropModel = {
-  readonly isSafeExpression: (expression: ts.Expression, useNode: ts.Node) => boolean
+  readonly isSafeExpression: (expression: ts.Expression) => boolean
 }
 
 /**
  * Resolve the one canonical runtime DOM-prop helper without trusting a local
  * function that merely happens to use the same name. The model intentionally
  * understands only a named/namespace import from `src/ui/astryx/dom-props`
- * and a direct `const result = pickCspSafeDomProps(...)` binding.
+ * and an inline direct call at the intrinsic JSX spread site. Results stored in
+ * variables are deliberately not trusted: mutation, escaping, and aliases are
+ * difficult to prove safe without reimplementing a full data-flow analysis.
  */
 function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: string): CspSafeDomPropModel {
   const root: CspSafeDomPropScope = {node: sourceFile, parent: undefined, bindings: new Map()}
@@ -747,7 +749,7 @@ function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: str
   const visit = (node: ts.Node, parentScope: CspSafeDomPropScope): void => {
     // Function/class declarations bind in their containing scope and can
     // shadow the canonical import with a same-named local implementation.
-    if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
+    if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) && node.name !== undefined) {
       registerBinding(parentScope, node.name.text, node.name, "other")
     }
 
@@ -766,14 +768,9 @@ function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: str
     }
 
     if (ts.isVariableDeclaration(node)) {
-      const declarationList = node.parent
-      const isConst = ts.isVariableDeclarationList(declarationList) && (declarationList.flags & ts.NodeFlags.Const) !== 0
       const identifiers = identifiersInBindingName(node.name)
       for (const identifier of identifiers) {
-        const binding = registerBinding(scope, identifier.text, identifier, "other")
-        if (identifiers.length === 1 && isConst && node.initializer !== undefined && binding.declaration === identifier && isSafeCall(node.initializer)) {
-          binding.kind = "safe-result"
-        }
+        registerBinding(scope, identifier.text, identifier, "other")
       }
     }
 
@@ -782,10 +779,10 @@ function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: str
   visit(sourceFile, root)
 
   return {
-    isSafeExpression(expression, useNode) {
+    isSafeExpression(expression) {
       const candidate = unwrap(expression)
       if (isSafeCall(candidate)) return true
-      return ts.isIdentifier(candidate) && resolveBinding(candidate, useNode)?.kind === "safe-result"
+      return false
     },
   }
 }

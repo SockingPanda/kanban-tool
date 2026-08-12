@@ -166,7 +166,7 @@ describe("Astryx CSP UI guard", () => {
     }
   })
 
-  test("only trusts calls and const results from the canonical DOM-prop helper", () => {
+  test("only trusts inline calls from the canonical DOM-prop helper", () => {
     const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-guard-dom-props-"))
     try {
       const sourceDirectory = path.join(temporaryRoot, "src/ui/astryx/fields")
@@ -174,9 +174,20 @@ describe("Astryx CSP UI guard", () => {
       writeFileSync(path.join(sourceDirectory, "safe.tsx"), [
         'import {pickCspSafeDomProps} from "../dom-props"',
         'declare const props: Record<string, unknown>',
-        'const safe = pickCspSafeDomProps(props)',
         'const Direct = () => <input {...pickCspSafeDomProps({style: {color: "red"}})} />',
-        'const Result = () => <input {...safe} />',
+      ].join("\n"))
+      writeFileSync(path.join(sourceDirectory, "unsafe-results.tsx"), [
+        'import {pickCspSafeDomProps} from "../dom-props"',
+        'declare const props: Record<string, unknown>',
+        'const safe = pickCspSafeDomProps(props)',
+        'safe.style = {color: "red"}',
+        'Object.assign(safe, {style: {color: "red"}})',
+        'declare function sink(value: unknown): void; sink(safe)',
+        'const alias = safe',
+        'const Mutated = () => <input {...safe} />',
+        'const Polluted = () => <input {...safe} />',
+        'const Escaped = () => <input {...safe} />',
+        'const Aliased = () => <input {...alias} />',
       ].join("\n"))
       writeFileSync(path.join(sourceDirectory, "same-name.tsx"), [
         'const pickCspSafeDomProps = (props: Record<string, unknown>) => props',
@@ -186,6 +197,11 @@ describe("Astryx CSP UI guard", () => {
         'import {pickCspSafeDomProps} from "./other-dom-props"',
         'const Bad = () => <input {...pickCspSafeDomProps({style: {color: "red"}})} />',
       ].join("\n"))
+      writeFileSync(path.join(sourceDirectory, "same-class-name.tsx"), [
+        'import {pickCspSafeDomProps} from "../dom-props"',
+        'class pickCspSafeDomProps {}',
+        'const Bad = () => <input {...pickCspSafeDomProps({style: {color: "red"}})} />',
+      ].join("\n"))
 
       const report = scanUiSource({
         projectRoot: temporaryRoot,
@@ -193,8 +209,10 @@ describe("Astryx CSP UI guard", () => {
         mode: "enforce",
       })
       expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/safe.tsx" && error.code === "inline-style")).toHaveLength(0)
+      expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/unsafe-results.tsx" && error.code === "inline-style")).toHaveLength(4)
       expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/same-name.tsx" && error.code === "inline-style")).toHaveLength(1)
       expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/wrong-module.tsx" && error.code === "inline-style")).toHaveLength(1)
+      expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/same-class-name.tsx" && error.code === "inline-style")).toHaveLength(1)
     } finally {
       rmSync(temporaryRoot, {recursive: true, force: true})
     }

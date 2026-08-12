@@ -91,6 +91,10 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain("Linked")
     expect(markup).toContain("必需")
     expect(markup).toContain("已规划")
+
+    const parentRelationButton = markup.match(/<button\b[^>]*aria-label="default#1 Parent"[^>]*>[\s\S]*?<\/button>/)?.[0]
+    expect(parentRelationButton).toBeDefined()
+    expect(parentRelationButton).not.toContain("<div")
   })
 
   test("renders safe text for comment bodies and metadata", () => {

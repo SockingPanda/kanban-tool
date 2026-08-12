@@ -422,8 +422,8 @@ function RelationTaskButton({ task, onSelectTask, localeCopy }: { readonly task:
       onClick={() => onSelectTask(task.id)}
       aria-label={`${task.ref} ${task.title}`}
     >
-      <SafeHStack gap={2} align="center" wrap="wrap">
-        <Text type="code" wordBreak="break-word">{task.ref}</Text>
+      <SafeHStack as="span" gap={2} align="center" wrap="wrap">
+        <Text type="code" className="min-w-0 break-words">{task.ref}</Text>
         <Text type="body" wordBreak="break-word">{task.title}</Text>
         <Badge variant="neutral" label={localeCopy.status[task.status]} />
       </SafeHStack>

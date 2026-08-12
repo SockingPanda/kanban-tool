@@ -2,11 +2,12 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 
 import { Badge, type BadgeProps } from "@astryxdesign/core/Badge"
 import { Card } from "@astryxdesign/core/Card"
-import { Grid } from "@astryxdesign/core/Grid"
 import { HStack } from "@astryxdesign/core/HStack"
 import { Icon } from "@astryxdesign/core/Icon"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
+
+import { Grid } from "../../ui/astryx/primitives/Grid"
 
 import { CatalogPage, CatalogSection, CliEvidence } from "./AstryxCatalog"
 
@@ -78,7 +79,7 @@ export const SemanticVariants: Story = {
   render: (args) => (
     <CatalogPage title="Badge semantic variants" description="语义色只标记值得注意的系统状态。">
       <CatalogSection title="neutral · info · success · warning · error" description="文本承担含义，颜色只加速扫描。">
-        <Grid columns={{ minWidth: 180, repeat: "fit" }} gap={3}>
+        <Grid label="Badge semantic variants" columns="auto-sm" gap={3}>
           {SEMANTIC_VARIANTS.map((variant) => (
             <Card variant="muted" padding={4} key={variant}>
               <VStack gap={3}>
@@ -97,7 +98,7 @@ export const PaletteVariants: Story = {
   render: (args) => (
     <CatalogPage title="Badge palette variants" description="非语义 palette 只负责项目、类型或领域分类。">
       <CatalogSection title="Named palette" description="分类色不能代替系统状态语义。">
-        <Grid columns={{ minWidth: 150, repeat: "fit" }} gap={3}>
+        <Grid label="Badge palette variants" columns="auto-sm" gap={3}>
           {PALETTE_VARIANTS.map((variant) => (
             <Card variant="muted" padding={4} key={variant}>
               <VStack gap={3}><Text type="code">{variant}</Text><Badge {...args} variant={variant} label={variant} /></VStack>
@@ -113,7 +114,7 @@ export const Content: Story = {
   render: (args) => (
     <CatalogPage title="Badge content" description="Icon 是辅助信号；label 始终承担主要含义。">
       <CatalogSection title="Short label · count · icon" description="日期、时长和解释性文本应使用 Text。">
-        <Grid columns={{ minWidth: 190, repeat: "fit" }} gap={3}>
+        <Grid label="Badge content examples" columns="auto-sm" gap={3}>
           <Card variant="muted" padding={4}><VStack gap={3}><Text type="supporting">status + icon</Text><Badge {...args} variant="success" label="已同步" icon={<Icon icon="check" size="sm" />} /></VStack></Card>
           <Card variant="muted" padding={4}><VStack gap={3}><Text type="supporting">numeric context</Text><Badge {...args} variant="info" label={12} /></VStack></Card>
           <Card variant="muted" padding={4}><VStack gap={3}><Text type="supporting">attention</Text><Badge {...args} variant="warning" label="等待中" icon={<Icon icon="warning" size="sm" />} /></VStack></Card>
@@ -128,7 +129,7 @@ export const BadgeOrText: Story = {
   render: () => (
     <CatalogPage title="Badge or Text" description="把注意力留给例外，不让每一行都变成彩色胶囊。">
       <CatalogSection title="Status is a badge; metadata is text">
-        <Grid columns={{ minWidth: 260, repeat: "fit" }} gap={3}>
+        <Grid label="Badge versus text" columns="auto-md" gap={3}>
           <Card variant="muted" padding={4}>
             <VStack gap={3}>
               <Badge variant="error" label="需要处理" icon={<Icon icon="error" size="sm" />} />

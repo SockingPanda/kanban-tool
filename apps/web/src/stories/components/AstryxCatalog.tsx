@@ -2,13 +2,14 @@ import type { ReactNode } from "react"
 
 import { Badge } from "@astryxdesign/core/Badge"
 import { Card } from "@astryxdesign/core/Card"
-import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
 import { HStack } from "@astryxdesign/core/HStack"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Section } from "@astryxdesign/core/Section"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
+
+import { Grid } from "../../ui/astryx/primitives/Grid"
 
 export interface AstryxCliEvidence {
   readonly package: string
@@ -63,7 +64,7 @@ export function CatalogSection({ title, description, children }: {
 export function CliEvidence({ evidence }: { readonly evidence: AstryxCliEvidence }) {
   return (
     <CatalogSection title="Astryx CLI evidence" description="这些命令是本页结构、组件选择和行为说明的来源；升级 Astryx 后重新运行。">
-      <Grid columns={{ minWidth: 280, repeat: "fit" }} gap={3}>
+      <Grid label="Astryx CLI evidence" columns="auto-md" gap={3}>
         <Card variant="muted" padding={4}>
           <VStack gap={2}>
             <Text weight="semibold">Discovery commands</Text>

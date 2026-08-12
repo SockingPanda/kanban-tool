@@ -2,13 +2,14 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 
 import { Badge } from "@astryxdesign/core/Badge"
 import { Card } from "@astryxdesign/core/Card"
-import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
 import { HStack } from "@astryxdesign/core/HStack"
 import { Icon } from "@astryxdesign/core/Icon"
 import { Layout } from "@astryxdesign/core/Layout"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
+
+import { Grid } from "../../ui/astryx/primitives/Grid"
 
 import { CatalogPage, CatalogSection } from "../components/AstryxCatalog"
 
@@ -89,14 +90,14 @@ export const Workflow: Story = {
         </HStack>
       </CatalogSection>
       <CatalogSection title="CLI-first delivery loop" description="这些命令构成页面迁移和 Storybook 证据更新的默认顺序。">
-        <Grid columns={{ minWidth: 260, repeat: "fit" }} gap={3}>
+        <Grid label="Astryx delivery workflow" columns="auto-md" gap={3}>
           <CommandGroup title="1 · Discover" description="确认组件、props、模板与文档。" commands={ASTRYX_INTEGRATION.discovery} />
           <CommandGroup title="2 · Compose" description="从 intent、template 和 layout grammar 生成可审查骨架。" commands={ASTRYX_INTEGRATION.delivery} />
           <CommandGroup title="3 · Own deliberately" description="swizzle 是源码所有权切换，不是默认安装步骤。" commands={ASTRYX_INTEGRATION.ownership} />
         </Grid>
       </CatalogSection>
       <CatalogSection title="Storybook evidence contract" description="每个 Astryx component story 都必须可由人和 MCP/CLI 同时检索。">
-        <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={3}>
+        <Grid label="Storybook evidence contract" columns="auto-md" gap={3}>
           {[
             ["component", "绑定真实 Astryx export，生成 Props/Controls 与 componentPath。"],
             ["parameters.astryx", "记录 package、importPath、执行过的 CLI 命令与采纳契约。"],
@@ -120,7 +121,7 @@ export const DoctorStatus: Story = {
   render: () => (
     <CatalogPage title="Astryx doctor" description="最近一次本地诊断：6 pass、1 warn、0 fail、1 info。">
       <CatalogSection title="Current evidence" description="Core/CLI 对齐、配置、agent docs 与 peer dependencies 均通过。">
-        <Grid columns={{ minWidth: 240, repeat: "fit" }} gap={3}>
+        <Grid label="Astryx doctor status" columns="auto-md" gap={3}>
           <Card variant="muted" padding={4}>
             <VStack gap={3}>
               <HStack gap={2}><Icon icon="success" color="success" /><Heading level={3}>Passing</Heading></HStack>
@@ -144,7 +145,7 @@ export const SwizzleBoundary: Story = {
   render: () => (
     <CatalogPage title="Swizzle boundary" description="swizzle 表示项目开始拥有一份组件源码；只有 contract 无法满足需求时使用。">
       <CatalogSection title="Decision gate">
-        <Grid columns={{ minWidth: 260, repeat: "fit" }} gap={3}>
+        <Grid label="Astryx swizzle decision" columns="auto-md" gap={3}>
           <CommandGroup
             title="Prefer composition"
             description="先组合公开 props、slots、Layout、Stack、Grid、Section、Card 与 semantic components。"

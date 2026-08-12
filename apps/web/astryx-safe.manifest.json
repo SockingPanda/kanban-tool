@@ -37,16 +37,10 @@
     "@astryxdesign/core/Skeleton"
   ],
   "unsafeImportBaseline": [
-    { "importer": "src/stories/components/AstryxCatalog.tsx", "path": "@astryxdesign/core/Grid" },
-    { "importer": "src/stories/components/Badge.stories.tsx", "path": "@astryxdesign/core/Grid" },
-    { "importer": "src/stories/components/Button.stories.tsx", "path": "@astryxdesign/core/Grid" },
-    { "importer": "src/stories/components/Card.stories.tsx", "path": "@astryxdesign/core/Grid" },
-    { "importer": "src/stories/components/IconButton.stories.tsx", "path": "@astryxdesign/core/Grid" },
     { "importer": "src/stories/components/TextInput.stories.tsx", "path": "@astryxdesign/core/Grid" },
     { "importer": "src/stories/components/TextInput.stories.tsx", "path": "@astryxdesign/core/TextInput" },
     { "importer": "src/stories/components/Tooltip.stories.tsx", "path": "@astryxdesign/core/Grid" },
-    { "importer": "src/stories/components/Tooltip.stories.tsx", "path": "@astryxdesign/core/Tooltip" },
-    { "importer": "src/stories/design-system/AstryxIntegration.stories.tsx", "path": "@astryxdesign/core/Grid" }
+    { "importer": "src/stories/components/Tooltip.stories.tsx", "path": "@astryxdesign/core/Tooltip" }
   ],
   "ownedPaths": [
     "src/styles.css",

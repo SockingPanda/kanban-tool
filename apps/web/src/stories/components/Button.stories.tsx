@@ -3,12 +3,13 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 import { Badge } from "@astryxdesign/core/Badge"
 import { Button, type ButtonProps } from "@astryxdesign/core/Button"
 import { Card } from "@astryxdesign/core/Card"
-import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
 import { HStack } from "@astryxdesign/core/HStack"
 import { Icon } from "@astryxdesign/core/Icon"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
+
+import { Grid } from "../../ui/astryx/primitives/Grid"
 
 import { CatalogPage, CatalogSection, CliEvidence } from "./AstryxCatalog"
 
@@ -98,7 +99,7 @@ export const Variants: Story = {
   render: (args) => (
     <CatalogPage title="Button variants" description="变体表达动作优先级；同一视图只保留一个 primary。">
       <CatalogSection title="All variants" description="来自 Astryx ButtonVariants template 的四级动作矩阵。">
-        <Grid columns={{ minWidth: 200, repeat: "fit" }} gap={3}>
+        <Grid label="Button variants" columns="auto-sm" gap={3}>
           {BUTTON_VARIANTS.map((variant) => (
             <Card variant="muted" padding={4} key={variant}>
               <VStack gap={3}>
@@ -137,7 +138,7 @@ export const States: Story = {
   render: (args) => (
     <CatalogPage title="Button states" description="状态必须可感知、可读出，并阻止不安全的重复动作。">
       <CatalogSection title="Resting · loading · disabled" description="Loading 包含 live-region 语义；disabled 保留可访问 label。">
-        <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={3}>
+        <Grid label="Button states" columns="auto-md" gap={3}>
           <Card variant="muted" padding={4}>
             <VStack gap={3}>
               <Heading level={3}>Resting</Heading>

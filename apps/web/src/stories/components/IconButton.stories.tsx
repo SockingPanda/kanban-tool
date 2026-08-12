@@ -1,13 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 
 import { Card } from "@astryxdesign/core/Card"
-import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
 import { HStack } from "@astryxdesign/core/HStack"
 import { Icon } from "@astryxdesign/core/Icon"
 import { IconButton, type IconButtonProps } from "@astryxdesign/core/IconButton"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
+
+import { Grid } from "../../ui/astryx/primitives/Grid"
 
 import { CatalogPage, CatalogSection, CliEvidence } from "./AstryxCatalog"
 
@@ -91,7 +92,7 @@ export const Variants: Story = {
   render: (args) => (
     <CatalogPage title="IconButton variants" description="Icon-only 动作仍按优先级与风险选择变体。">
       <CatalogSection title="All variants" description="图标本身不决定层级；动作语义决定 variant。">
-        <Grid columns={{ minWidth: 180, repeat: "fit" }} gap={3}>
+        <Grid label="IconButton variants" columns="auto-sm" gap={3}>
           {ICON_BUTTON_VARIANTS.map((variant) => (
             <Card variant="muted" padding={4} key={variant}>
               <VStack gap={3}>
@@ -135,7 +136,7 @@ export const States: Story = {
   render: (args) => (
     <CatalogPage title="IconButton states" description="状态不能只靠色彩；名称、tooltip 与 loading 反馈始终存在。">
       <CatalogSection title="Resting · loading · disabled">
-        <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={3}>
+        <Grid label="IconButton states" columns="auto-md" gap={3}>
           <Card variant="muted" padding={4}>
             <VStack gap={3}>
               <Heading level={3}>Resting</Heading>
@@ -167,7 +168,7 @@ export const SemanticIcons: Story = {
   render: (args) => (
     <CatalogPage title="IconButton semantic icons" description="优先使用 Astryx semantic Icon 名称，避免各 story 维护自己的 SVG 语言。">
       <CatalogSection title="Every icon has a label and tooltip">
-        <Grid columns={{ minWidth: 150, repeat: "fit" }} gap={3}>
+        <Grid label="IconButton semantic icons" columns="auto-sm" gap={3}>
           {(["search", "wrench", "moreHorizontal", "close", "info"] as const).map((icon) => (
             <Card variant="muted" padding={4} key={icon}>
               <VStack gap={3}>

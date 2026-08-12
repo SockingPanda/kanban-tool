@@ -3,13 +3,14 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 import { Badge } from "@astryxdesign/core/Badge"
 import { Button } from "@astryxdesign/core/Button"
 import { Card, type CardVariant } from "@astryxdesign/core/Card"
-import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
 import { HStack } from "@astryxdesign/core/HStack"
 import { Layout, LayoutContent, LayoutFooter, LayoutHeader } from "@astryxdesign/core/Layout"
 import { Section } from "@astryxdesign/core/Section"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
+
+import { Grid } from "../../ui/astryx/primitives/Grid"
 
 import { CatalogPage, CatalogSection, CliEvidence } from "./AstryxCatalog"
 
@@ -241,7 +242,7 @@ export const Variants: Story = {
     return (
       <CatalogPage title={`${copy.title} · ${copy.variants}`} description={copy.intro}>
         <CatalogSection title={copy.variants} description={copy.variantsDescription}>
-          <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={3}>
+          <Grid label={copy.variants} columns="auto-md" gap={3}>
             {variants.map((variant) => (
               <Card key={variant} variant={variant} padding={4}>
                 <VStack gap={2}>
@@ -271,7 +272,7 @@ export const Padding: Story = {
     return (
       <CatalogPage title={`${copy.title} · ${copy.padding}`} description={copy.intro}>
         <CatalogSection title={copy.padding} description={copy.paddingDescription}>
-          <Grid columns={{ minWidth: 200, repeat: "fit" }} gap={3}>
+          <Grid label={copy.padding} columns="auto-sm" gap={3}>
             {PADDINGS.map((padding) => (
               <Card key={padding} variant="default" padding={padding} minHeight={120}>
                 <VStack gap={2}>
@@ -295,7 +296,7 @@ export const Elevation: Story = {
     return (
       <CatalogPage title={`${copy.title} · ${copy.elevation}`} description={copy.intro}>
         <CatalogSection title={copy.elevation} description={copy.elevationDescription}>
-          <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={3}>
+          <Grid label={copy.elevation} columns="auto-md" gap={3}>
             {ELEVATIONS.map((elevation) => (
               <Card key={elevation} variant="default" padding={4} elevation={elevation} minHeight={140}>
                 <VStack gap={2}>
@@ -333,7 +334,7 @@ export const Siblings: Story = {
     return (
       <CatalogPage title={`${copy.title} · ${copy.siblings}`} description={copy.intro}>
         <CatalogSection title={copy.siblings} description={copy.siblingsDescription}>
-          <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={3}>
+          <Grid label={copy.siblings} columns="auto-md" gap={3}>
             {items.map(([title, description, variant]) => (
               <Card key={title} variant={variant as CardVariant} padding={4}>
                 <CardBody locale={locale} title={title} description={description} variant={variant as CardVariant} compact />
@@ -411,7 +412,7 @@ export const AllVariants: Story = {
     return (
       <CatalogPage title={`${copy.title} · ${copy.allVariants}`} description={copy.intro}>
         <CatalogSection title={copy.allVariants} description={copy.allVariantsDescription}>
-          <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={3}>
+          <Grid label={copy.allVariants} columns="auto-md" gap={3}>
             {VARIANTS.map((variant) => (
               <Card key={variant} variant={variant} padding={3} minHeight={132}>
                 <CardBody locale={locale} variant={variant} compact />

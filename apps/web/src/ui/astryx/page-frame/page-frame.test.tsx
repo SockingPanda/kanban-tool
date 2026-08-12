@@ -70,6 +70,9 @@ describe("CSP-safe PageFrame", () => {
 
     expect(source).not.toMatch(/<div|<span|<main|<style>/)
     expect(source).not.toMatch(/style\s*=|xstyle\b/)
+    expect(source).not.toMatch(/bodyAriaProps|\.\.\.bodyLabelProps/)
+    expect(source).toContain("aria-label={bodyLabel}")
+    expect(source).toContain("aria-labelledby={bodyLabelledBy}")
     expect(source).not.toMatch(/className=\{[^}\n]*(?:\$\{|`)/)
     expect(source).not.toMatch(/(?:bg|text|border|p|m)-\[[^\]]+\]/)
     expect(source).toContain('export type PageFrameMode = "content" | "workspace"')

@@ -95,19 +95,6 @@ export type WorkspacePageFrameProps = PageFrameRootProps &
 
 export type PageFrameProps = ContentPageFrameProps | WorkspacePageFrameProps
 
-function bodyAriaProps(
-  bodyLabel: string | undefined,
-  bodyLabelledBy: string | undefined,
-): { readonly "aria-label"?: string; readonly "aria-labelledby"?: string } {
-  if (bodyLabel !== undefined) {
-    return {"aria-label": bodyLabel}
-  }
-  if (bodyLabelledBy !== undefined) {
-    return {"aria-labelledby": bodyLabelledBy}
-  }
-  return {}
-}
-
 /**
  * Static, strict-CSP page frame for content and dense workspace surfaces.
  *
@@ -134,7 +121,6 @@ export function PageFrame(props: PageFrameProps) {
 
   const hasHeader = header !== undefined && header !== null
   const hasToolbar = toolbar !== undefined && toolbar !== null
-  const bodyLabelProps = bodyAriaProps(bodyLabel, bodyLabelledBy)
   const bodyClassName = frame === "workspace"
     ? PAGE_FRAME_BODY_OVERFLOW_CLASSES[bodyOverflow]
     : PAGE_FRAME_CLASSES.body.content
@@ -161,7 +147,8 @@ export function PageFrame(props: PageFrameProps) {
       ) : null}
       {frame === "workspace" ? (
         <section
-          {...bodyLabelProps}
+          aria-label={bodyLabel}
+          aria-labelledby={bodyLabelledBy}
           className={bodyClassName}
           data-body-overflow={bodyOverflow}
           role="region"
@@ -169,7 +156,11 @@ export function PageFrame(props: PageFrameProps) {
           {children}
         </section>
       ) : (
-        <article {...bodyLabelProps} className={bodyClassName}>
+        <article
+          aria-label={bodyLabel}
+          aria-labelledby={bodyLabelledBy}
+          className={bodyClassName}
+        >
           {children}
         </article>
       )}

@@ -1,11 +1,25 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type ComponentProps } from "react"
+import { useEffect, useMemo, useState, type ComponentProps } from "react"
 
 import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
-import { Card } from "@astryxdesign/core/Card"
+import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
+import { List, ListItem } from "@astryxdesign/core/List"
+import { Spinner } from "@astryxdesign/core/Spinner"
 import { Text } from "@astryxdesign/core/Text"
+
+import { TextInput } from "../../ui/astryx/fields"
+import { PageFrame } from "../../ui/astryx/page-frame"
+import {
+  CodeBlock,
+  Grid,
+  SafeCard,
+  SafeHStack,
+  SafeMetadataList,
+  SafeMetadataListItem,
+  SafeVStack,
+} from "../../ui/astryx/primitives"
 
 import type {
   SignalListQuery,
@@ -18,8 +32,6 @@ import type { SignalsRouteFilters } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
 import { reconcileSelection, useReadState, type ReadPhase, type ReadState } from "../read-state"
 import { localizedErrorMessage } from "../safe-error"
-
-import styles from "./SignalsScreen.module.css"
 
 const SIGNAL_STATUSES = ["review", "open", "confirmed", "resolved", "rejected", "superseded", "all"] as const
 
@@ -234,98 +246,116 @@ export function SignalsScreenView({
     ? list.data.filter((signal) => signal.id !== selectedSignalId)
     : list.data
   return (
-      <section className={styles.screen} aria-labelledby="signals-title" data-testid="signals-screen">
-      <header className={styles.hero}>
-        <div>
-          <Text as="p" type="supporting" className={styles.eyebrow}>{copy.eyebrow}</Text>
-          <Heading level={1} id="signals-title">{copy.heading}</Heading>
-          <Text as="p" type="supporting" className={styles.lede}>{copy.lede}</Text>
-          <Text as="p" type="supporting" className={styles.boardContext}>{copy.board} · <code translate="no">{boardName}</code></Text>
-        </div>
-        <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} isLoading={list.phase === "loading" || list.phase === "refreshing"} />
-      </header>
+    <PageFrame
+      frame="workspace"
+      data-testid="signals-screen"
+      aria-labelledby="signals-title"
+      header={(
+        <SafeHStack gap={4} justify="between" align="start" wrap="wrap">
+            <SafeVStack gap={1}>
+              <Heading level={1} id="signals-title">{copy.heading}</Heading>
+              <Text as="p" type="supporting">{copy.lede}</Text>
+              <Text as="p" type="supporting">{copy.board} · <code translate="no">{boardName}</code></Text>
+            </SafeVStack>
+            <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} isLoading={list.phase === "loading" || list.phase === "refreshing"} />
+        </SafeHStack>
+      )}
+      toolbarLabel={copy.filters}
+      toolbar={(
+        <SafeVStack gap={2}>
+          <SafeHStack gap={1} wrap="wrap" role="group" aria-label={copy.status}>
+            {SIGNAL_STATUSES.map((candidate) => (
+              <Button
+                key={candidate}
+                label={candidate === "review" ? copy.openConfirmed : candidate === "all" ? copy.all : copy.statusLabels[candidate]}
+                variant={status === candidate ? "primary" : "ghost"}
+                size="sm"
+                aria-pressed={status === candidate}
+                onClick={() => onFiltersChange({ ...filters, status: candidate })}
+              />
+            ))}
+          </SafeHStack>
+          <SafeHStack gap={2} wrap="wrap" align="end">
+            <SafeVStack className="min-w-0 flex-1">
+              <TextInput
+                label={copy.kind}
+                value={kindsValue}
+                placeholder={copy.kindPlaceholder}
+                onChange={(value) => onFiltersChange({ ...filters, kinds: value.split(",").map((item) => item.trim()).filter(Boolean) })}
+                htmlName="signal-kind"
+                size="sm"
+              />
+            </SafeVStack>
+            <SafeVStack className="min-w-0 flex-1">
+              <TextInput
+                label={copy.taskRef}
+                value={filters.task ?? ""}
+                placeholder={copy.taskRefPlaceholder}
+                onChange={(value) => onFiltersChange({ ...filters, task: value.trim() || undefined })}
+                htmlName="signal-task-ref"
+                size="sm"
+              />
+            </SafeVStack>
+          </SafeHStack>
+        </SafeVStack>
+      )}
+      bodyLabel={copy.heading}
+      bodyOverflow="none"
+    >
+      <SafeVStack gap={4} padding={4}>
+            {!online ? (
+              <Banner container="section" status="warning" title={copy.offline} description={stale ? copy.offlineStale : copy.offlineConnect} />
+            ) : null}
+            {list.error ? (
+              <Banner
+                container="section"
+                status="error"
+                title={copy.loadError}
+                description={stale ? `${localizedErrorMessage(list.error, copy.unreadableResponse, locale)} · ${copy.staleRows}` : localizedErrorMessage(list.error, copy.unreadableResponse, locale)}
+                endContent={<Button label={copy.retryList} variant="ghost" size="sm" onClick={onRefreshList} />}
+              />
+            ) : null}
 
-      {!online ? (
-        <Banner status="warning" title={copy.offline} description={stale ? copy.offlineStale : copy.offlineConnect} />
-      ) : null}
-      {list.error ? (
-        <Banner
-          status="error"
-          title={copy.loadError}
-          description={stale ? `${localizedErrorMessage(list.error, copy.unreadableResponse, locale)} · ${copy.staleRows}` : localizedErrorMessage(list.error, copy.unreadableResponse, locale)}
-          endContent={<Button label={copy.retryList} variant="ghost" size="sm" onClick={onRefreshList} />}
-        />
-      ) : null}
-
-      <section className={styles.filterBar} aria-label={copy.filters}>
-        <div className={styles.statusFilters} role="group" aria-label={copy.status}>
-          {SIGNAL_STATUSES.map((candidate) => (
-            <Button
-              key={candidate}
-              label={candidate === "review" ? copy.openConfirmed : candidate === "all" ? copy.all : copy.statusLabels[candidate]}
-              variant={status === candidate ? "primary" : "ghost"}
-              size="sm"
-              aria-pressed={status === candidate}
-              onClick={() => onFiltersChange({ ...filters, status: candidate })}
-            />
-          ))}
-        </div>
-        <label className={styles.filterField}>
-          <span>{copy.kind}</span>
-          <input
-            name="signal-kind"
-            autoComplete="off"
-            aria-label={copy.kind}
-            value={kindsValue}
-            placeholder={copy.kindPlaceholder}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => onFiltersChange({ ...filters, kinds: event.currentTarget.value.split(",").map((value) => value.trim()).filter(Boolean) })}
-          />
-        </label>
-        <label className={styles.filterField}>
-          <span>{copy.taskRef}</span>
-          <input
-            name="signal-task-ref"
-            autoComplete="off"
-            aria-label={copy.taskRef}
-            value={filters.task ?? ""}
-            placeholder={copy.taskRefPlaceholder}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => onFiltersChange({ ...filters, task: event.currentTarget.value.trim() || undefined })}
-          />
-        </label>
-      </section>
-
-      <section className={styles.workspace}>
-        <Card className={styles.listPanel} padding={0}>
-          <div className={styles.panelHeader}>
-            <div>
-              <Heading level={2}>{copy.signalRows}</Heading>
-              <Text as="p" type="supporting">{copy.loadedCount(viewSignals.length)}</Text>
-            </div>
-            {list.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
-          </div>
-          <SignalListView
-            phase={list.phase}
-            signals={viewSignals}
-            selectedSignalId={selectedSignalId}
-            onSelectSignal={onSelectSignal}
-            locale={locale}
-            copy={copy}
-          />
-        </Card>
-
-        <Card className={styles.detailPanel} padding={0}>
-          <div className={styles.panelHeader}>
-            <div>
-              <Heading level={2}>{copy.detail}</Heading>
-              <Text as="p" type="supporting">{selectedSignalId === null ? copy.noneSelected : <span translate="no">{selectedSignalId}</span>}</Text>
-            </div>
-            {selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null}
-            {detail.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
-          </div>
-          <SignalDetailView loading={detail.phase === "loading"} signal={detail.data} error={detail.error} onRetry={onRefreshDetail} locale={locale} copy={copy} />
-        </Card>
-      </section>
-    </section>
+            <Grid label={`${copy.signalRows} / ${copy.detail}`} columns="auto-md" gap={4}>
+              <SafeCard padding={0}>
+                <SafeVStack gap={0}>
+                    <SafeHStack padding={4} gap={2} justify="between" align="start" wrap="wrap">
+                      <SafeVStack gap={1}>
+                        <Heading level={2}>{copy.signalRows}</Heading>
+                        <Text as="p" type="supporting">{copy.loadedCount(viewSignals.length)}</Text>
+                      </SafeVStack>
+                      {list.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
+                    </SafeHStack>
+                    <SignalListView
+                      phase={list.phase}
+                      signals={viewSignals}
+                      selectedSignalId={selectedSignalId}
+                      onSelectSignal={onSelectSignal}
+                      locale={locale}
+                      copy={copy}
+                    />
+                </SafeVStack>
+              </SafeCard>
+              <SafeCard padding={0}>
+                <SafeVStack gap={0}>
+                    <SafeHStack padding={4} gap={2} justify="between" align="start" wrap="wrap">
+                      <SafeVStack gap={1}>
+                        <Heading level={2}>{copy.detail}</Heading>
+                        <Text as="p" type="supporting">
+                          {selectedSignalId === null ? copy.noneSelected : <span translate="no">{selectedSignalId}</span>}
+                        </Text>
+                      </SafeVStack>
+                      <SafeHStack gap={1} wrap="wrap">
+                        {selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null}
+                        {detail.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
+                      </SafeHStack>
+                    </SafeHStack>
+                    <SignalDetailView loading={detail.phase === "loading"} signal={detail.data} error={detail.error} onRetry={onRefreshDetail} locale={locale} copy={copy} />
+                </SafeVStack>
+              </SafeCard>
+            </Grid>
+      </SafeVStack>
+    </PageFrame>
   )
 }
 
@@ -345,55 +375,60 @@ export function SignalListView({
   readonly copy?: SignalsCopy
 }) {
   if (phase === "loading" && signals.length === 0) {
-    return <div className={styles.loadingList} role="status" aria-label={copy.loading}><span /><span /><span /></div>
+    return <SafeVStack padding={4} role="status" aria-label={copy.loading}><Spinner size="sm" label={copy.loading} /></SafeVStack>
   }
   if (signals.length === 0) {
-    return <div className={styles.emptyState}>{copy.noSignals}</div>
+    return <EmptyState title={copy.noSignals} isCompact />
   }
   return (
-    <div className={styles.signalList}>
+    <List density="compact" hasDividers data-testid="signals-list">
       {signals.map((signal) => (
-        <button
+        <ListItem
           key={signal.id}
-          type="button"
-          className={`${styles.signalRow} ${signal.id === selectedSignalId ? styles.signalRowSelected : ""}`}
-          aria-pressed={signal.id === selectedSignalId}
+          label={(
+            <SafeHStack gap={1} wrap="wrap" align="center">
+              <MachineBadge variant={statusVariant(signal.status)} label={signal.status} />
+              <Text weight="semibold" maxLines={1}>{signal.title}</Text>
+            </SafeHStack>
+          )}
+          description={(
+            <SafeVStack gap={1}>
+              <Text type="supporting" maxLines={2}>{signal.summary}</Text>
+              <Text as="span" type="code" maxLines={1}><span translate="no">{signal.kind} · {signalTask(signal)} · {timestamp(signal.created_at, locale)}</span></Text>
+            </SafeVStack>
+          )}
+          isSelected={signal.id === selectedSignalId}
           onClick={() => onSelectSignal(signal.id)}
-        >
-          <span className={styles.rowTitle}>
-            <MachineBadge variant={statusVariant(signal.status)} label={signal.status} />
-            <strong>{signal.title}</strong>
-          </span>
-          <span className={styles.rowSummary}>{signal.summary}</span>
-          <span className={styles.rowMeta} translate="no">{signal.kind} · {signalTask(signal)} · {timestamp(signal.created_at, locale)}</span>
-        </button>
+        />
       ))}
-    </div>
+    </List>
   )
 }
 
 export function SignalDetailView({ loading, signal, error, onRetry, locale = "en", copy = featureCopyForLocale("en").signals }: { readonly loading: boolean; readonly signal: SignalRecord | null; readonly error?: unknown | null; readonly onRetry?: () => void; readonly locale?: Locale; readonly copy?: SignalsCopy }) {
   if (loading && signal === null) {
-    return <div className={styles.detailLoading} role="status" aria-label={copy.loading}><span /><span /><span /></div>
+    return <SafeVStack padding={4} role="status" aria-label={copy.loading}><Spinner size="sm" label={copy.loading} /></SafeVStack>
   }
   if (errorStatus(error) === 404) {
-    return <div className={styles.emptyState}>{copy.unavailable}</div>
+    return <EmptyState title={copy.unavailable} isCompact />
   }
   if (signal === null) {
-    if (error) return <div className={styles.emptyState}><Banner status="error" title={copy.detailError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
-    return <div className={styles.emptyState}>{copy.selectDetail}</div>
+    if (error) {
+      return <SafeVStack padding={4}><Banner container="section" status="error" title={copy.detailError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></SafeVStack>
+    }
+    return <EmptyState title={copy.selectDetail} isCompact />
   }
   return (
-    <article className={styles.detail} aria-label={copy.detail}>
-      {error ? <Banner status="warning" title={copy.staleDetail} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /> : null}
-      <div className={styles.detailBadges}>
+    <SafeVStack as="article" gap={4} padding={4} aria-label={copy.detail}>
+      {error ? <Banner container="section" status="warning" title={copy.staleDetail} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /> : null}
+      <SafeHStack gap={1} wrap="wrap">
         <MachineBadge variant={statusVariant(signal.status)} label={signal.status} />
         <MachineBadge variant="neutral" label={signal.severity} />
         <MachineBadge variant="neutral" label={signal.kind} />
-      </div>
+      </SafeHStack>
       <Heading level={3}>{signal.title}</Heading>
-      <Text as="p" type="supporting" className={styles.detailSummary}>{signal.summary}</Text>
-      <dl className={styles.facts}>
+      <Text as="p" type="supporting">{signal.summary}</Text>
+      <SafeMetadataList columns="multi" label={{ position: "top" }}>
         <Fact label={copy.signalId} value={signal.id} />
         <Fact label={copy.observationId} value={signal.observation_id} />
         <Fact label={copy.task} value={signalTask(signal)} />
@@ -402,15 +437,26 @@ export function SignalDetailView({ loading, signal, error, onRetry, locale = "en
         <Fact label={copy.agentType} value={signal.observation.agent_type ?? "—"} />
         <Fact label={copy.dedupeKey} value={signal.dedupe_key ?? "—"} />
         <Fact label={copy.created} value={timestamp(signal.created_at, locale)} />
-      </dl>
-      <div className={styles.evidence}>
+      </SafeMetadataList>
+      <SafeVStack as="section" gap={2}>
         <Heading level={4}>{copy.evidence}</Heading>
-        <pre>{JSON.stringify(signal.observation.evidence, null, 2)}</pre>
-      </div>
-    </article>
+        <CodeBlock
+          code={JSON.stringify(signal.observation.evidence, null, 2)}
+          language="json"
+          label={copy.evidence}
+          hasCopy={false}
+          copyLabel={copy.evidence}
+          copiedLabel={copy.evidence}
+          errorLabel={copy.evidence}
+          isWrapped
+          maxHeight="evidence"
+          container="section"
+        />
+      </SafeVStack>
+    </SafeVStack>
   )
 }
 
 function Fact({ label, value }: { readonly label: string; readonly value: string }) {
-  return <div><dt>{label}</dt><dd translate="no">{value}</dd></div>
+  return <SafeMetadataListItem label={label}><Text as="span" type="code"><span translate="no">{value}</span></Text></SafeMetadataListItem>
 }

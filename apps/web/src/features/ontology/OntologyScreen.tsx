@@ -1,11 +1,26 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type FormEvent, type ReactNode } from "react"
 
 import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
-import { Card } from "@astryxdesign/core/Card"
+import { ButtonGroup } from "@astryxdesign/core/ButtonGroup"
+import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
+import { List, ListItem } from "@astryxdesign/core/List"
 import { Text } from "@astryxdesign/core/Text"
+
+import { TextArea, TextInput } from "../../ui/astryx/fields"
+import { PageFrame } from "../../ui/astryx/page-frame"
+import {
+  Grid,
+  SafeCard,
+  SafeHStack,
+  SafeMetadataList,
+  SafeMetadataListItem,
+  SafeSection,
+  SafeVStack,
+  Skeleton,
+} from "../../ui/astryx/primitives"
 
 import type {
   LabelAtomExplainRecord,
@@ -30,8 +45,6 @@ import {
   type OntologyLifecycleIdentity,
 } from "./ontology-lifecycle"
 import { ONTOLOGY_SIGNAL_SCOPE_LIMIT, scopeReviewGroupsToKnownSignals } from "./ontology-review-scope"
-
-import styles from "./OntologyScreen.module.css"
 
 export type { LifecycleAction } from "./ontology-lifecycle"
 
@@ -402,118 +415,191 @@ export function OntologyScreenView({
     ? signals.data.filter((signal) => signal.id !== selectedSignalId)
     : signals.data
   return (
-    <section className={styles.screen} aria-labelledby="ontology-title" data-testid="ontology-screen">
-      <header className={styles.hero}>
-        <div>
-          <Text as="p" type="supporting" className={styles.eyebrow}>{copy.eyebrow}</Text>
-          <Heading level={1} id="ontology-title">{copy.heading}</Heading>
-          <Text as="p" type="supporting" className={styles.lede}>{copy.lede}</Text>
-          <Text as="p" type="supporting" className={styles.boardContext}>{copy.board} · <code translate="no">{boardName}</code></Text>
-        </div>
-        <div className={styles.heroActions}>
-          <Button label={includeAll ? copy.allHistory : copy.openConfirmed} variant={includeAll ? "primary" : "secondary"} size="sm" aria-pressed={includeAll} onClick={() => onFiltersChange({ ...filters, includeAll: !includeAll })} />
-          <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} isLoading={signals.phase === "loading" || groups.phase === "loading" || signals.phase === "refreshing" || groups.phase === "refreshing"} />
-        </div>
-      </header>
+    <PageFrame
+      frame="workspace"
+      aria-labelledby="ontology-title"
+      data-testid="ontology-screen"
+      bodyLabel={copy.heading}
+      bodyOverflow="none"
+      header={(
+        <SafeHStack gap={4} justify="between" align="start" wrap="wrap">
+          <SafeVStack gap={1}>
+            <Heading level={1} id="ontology-title">{copy.heading}</Heading>
+            <Text as="p" type="supporting">{copy.lede}</Text>
+            <Text as="p" type="supporting">{copy.board} · <MachineText>{boardName}</MachineText></Text>
+          </SafeVStack>
+          <SafeHStack gap={1} wrap="wrap">
+            <Button label={includeAll ? copy.allHistory : copy.openConfirmed} variant={includeAll ? "primary" : "secondary"} size="sm" aria-pressed={includeAll} onClick={() => onFiltersChange({ ...filters, includeAll: !includeAll })} />
+            <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} isLoading={signals.phase === "loading" || groups.phase === "loading" || signals.phase === "refreshing" || groups.phase === "refreshing"} />
+          </SafeHStack>
+        </SafeHStack>
+      )}
+    >
+      <SafeVStack gap={4} padding={4}>
+        {!online ? <Banner status="warning" title={copy.offline} description={stale ? copy.offlineStale : copy.offlineConnect} /> : null}
+        {signals.error ? <Banner status="error" title={copy.rowsError} description={localizedErrorMessage(signals.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryRows} variant="ghost" size="sm" onClick={onRefreshRows} />} /> : null}
+        {groups.error ? <Banner status="error" title={copy.groupsError} description={localizedErrorMessage(groups.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryGroups} variant="ghost" size="sm" onClick={onRefreshGroups} />} /> : null}
 
-      {!online ? <Banner status="warning" title={copy.offline} description={stale ? copy.offlineStale : copy.offlineConnect} /> : null}
-      {signals.error ? <Banner status="error" title={copy.rowsError} description={localizedErrorMessage(signals.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryRows} variant="ghost" size="sm" onClick={onRefreshRows} />} /> : null}
-      {groups.error ? <Banner status="error" title={copy.groupsError} description={localizedErrorMessage(groups.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryGroups} variant="ghost" size="sm" onClick={onRefreshGroups} />} /> : null}
-
-      <section className={styles.workspace}>
-        <Card className={styles.signalPanel} padding={0}>
-          <PanelHeader title={copy.signalRows} meta={copy.loadedCount(viewSignals.length)} refreshing={signals.phase === "refreshing"} copy={copy} />
-          <OntologySignalListView phase={signals.phase} signals={viewSignals} selectedSignalId={selectedSignalId} onSelectSignal={onSelectSignal} copy={copy} />
-        </Card>
-        <Card className={styles.groupPanel} padding={0}>
-          <div className={styles.panelHeader}>
-            <div><Heading level={2}>{copy.groupedReview}</Heading><Text as="p" type="supporting">{copy.groupsCount(groups.data.length)}</Text></div>
-            {groups.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
-          </div>
-          <div className={styles.tabs} role="group" aria-label={copy.groupBy}>
-            {(["label", "candidate_atom", "proposed_label"] as const).map((candidate) => <Button key={candidate} label={candidate === "candidate_atom" ? copy.atom : candidate === "proposed_label" ? copy.proposal : copy.label} variant={groupBy === candidate ? "primary" : "ghost"} size="sm" aria-pressed={groupBy === candidate} onClick={() => onFiltersChange({ ...filters, groupBy: candidate })} />)}
-          </div>
-          <ReviewGroupsView phase={groups.phase} groups={groups.data} onSelectSignal={onSelectSignal} copy={copy} />
-        </Card>
-        <div className={styles.detailColumn}>
-          <Card className={styles.detailPanel} padding={0}>
-            <div className={styles.panelHeader}>
-              <div><Heading level={2}>{copy.signalDetail}</Heading><Text as="p" type="supporting">{localizedSignalStatus(detail.data?.signal.status, copy)}</Text></div>
-              {selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null}
-            {detail.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
-            </div>
+        <Grid label={`${copy.signalRows} / ${copy.groupedReview} / ${copy.signalDetail}`} columns="auto-lg" gap={4}>
+        <SafeCard padding={0}>
+          <SafeVStack gap={0}>
+            <PanelHeader title={copy.signalRows} meta={copy.loadedCount(viewSignals.length)} refreshing={signals.phase === "refreshing"} copy={copy} />
+            <OntologySignalListView phase={signals.phase} signals={viewSignals} selectedSignalId={selectedSignalId} onSelectSignal={onSelectSignal} copy={copy} />
+          </SafeVStack>
+        </SafeCard>
+        <SafeCard padding={0}>
+          <SafeVStack gap={0}>
+            <PanelHeader title={copy.groupedReview} meta={copy.groupsCount(groups.data.length)} refreshing={groups.phase === "refreshing"} copy={copy} />
+            <SafeHStack gap={1} padding={3} wrap="wrap" role="group" aria-label={copy.groupBy}>
+              {(["label", "candidate_atom", "proposed_label"] as const).map((candidate) => <Button key={candidate} label={candidate === "candidate_atom" ? copy.atom : candidate === "proposed_label" ? copy.proposal : copy.label} variant={groupBy === candidate ? "primary" : "ghost"} size="sm" aria-pressed={groupBy === candidate} onClick={() => onFiltersChange({ ...filters, groupBy: candidate })} />)}
+            </SafeHStack>
+            <ReviewGroupsView phase={groups.phase} groups={groups.data} onSelectSignal={onSelectSignal} copy={copy} />
+          </SafeVStack>
+        </SafeCard>
+        <SafeVStack gap={4}>
+          <SafeCard padding={0}>
+            <PanelHeader title={copy.signalDetail} meta={localizedSignalStatus(detail.data?.signal.status, copy)} refreshing={detail.phase === "refreshing"} copy={copy} endContent={selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null} />
             <OntologySignalDetailView phase={detail.phase} detail={detail.data} error={detail.error} actionError={actionError} onRetryAction={onRetryAction} actionReason={actionReason} actionPending={actionPending} lifecycleEnabled={lifecycleEnabled} onActionReasonChange={onActionReasonChange} onLifecycleAction={onLifecycleAction} onExplainAtom={onExplainAtom} locale={locale} copy={copy} onRetry={onRefreshDetail} />
-          </Card>
-          <Card className={styles.atomPanel} padding={0}>
+          </SafeCard>
+          <SafeCard padding={0}>
             <PanelHeader title={copy.atomExplain} meta={atom.phase === "refreshing" ? copy.refreshing : atomRef || copy.none} refreshing={atom.phase === "refreshing"} copy={copy} />
-            <form className={styles.atomSearch} onSubmit={onAtomSearch}>
-              <label>
-                <span className={styles.visuallyHidden}>{copy.atomInput}</span>
-                <input name="atom-ref" autoComplete="off" aria-label={copy.atomInput} value={atomDraft} onChange={(event: ChangeEvent<HTMLInputElement>) => onAtomDraftChange?.(event.currentTarget.value)} placeholder={copy.atomInput} />
-              </label>
-              <Button label={copy.explain} type="submit" variant="secondary" size="sm" isDisabled={!atomDraft.trim()} />
+            <form onSubmit={onAtomSearch}>
+              <SafeHStack gap={2} padding={4} align="end" wrap="wrap">
+                <SafeVStack className="min-w-0 flex-1">
+                  <TextInput label={copy.atomInput} isLabelHidden value={atomDraft} onChange={(value) => onAtomDraftChange?.(value)} placeholder={copy.atomInput} htmlName="atom-ref" />
+                </SafeVStack>
+                <Button label={copy.explain} type="submit" variant="secondary" size="sm" isDisabled={!atomDraft.trim()} />
+              </SafeHStack>
             </form>
             <AtomExplainView phase={atom.phase} explain={atom.data} error={atom.error} onRetry={onRefreshAtom} locale={locale} copy={copy} />
-          </Card>
-        </div>
-      </section>
-    </section>
+          </SafeCard>
+        </SafeVStack>
+        </Grid>
+      </SafeVStack>
+    </PageFrame>
   )
 }
 
-function PanelHeader({ title, meta, refreshing, copy = featureCopyForLocale("en").ontology }: { readonly title: string; readonly meta: string; readonly refreshing: boolean; readonly copy?: OntologyCopy }) {
-  return <div className={styles.panelHeader}><div><Heading level={2}>{title}</Heading><Text as="p" type="supporting">{meta}</Text></div>{refreshing ? <Badge variant="warning" label={copy.refreshing} /> : null}</div>
+function PanelHeader({ title, meta, refreshing, endContent, copy = featureCopyForLocale("en").ontology }: { readonly title: string; readonly meta: string; readonly refreshing: boolean; readonly endContent?: ReactNode; readonly copy?: OntologyCopy }) {
+  return <SafeHStack padding={4} gap={2} justify="between" align="start" wrap="wrap"><SafeVStack gap={1}><Heading level={2}>{title}</Heading><Text type="supporting">{meta}</Text></SafeVStack><SafeHStack gap={1} wrap="wrap">{endContent}{refreshing ? <Badge variant="warning" label={copy.refreshing} /> : null}</SafeHStack></SafeHStack>
 }
 
 export function OntologySignalListView({ phase, signals, selectedSignalId, onSelectSignal, copy = featureCopyForLocale("en").ontology }: { readonly phase: ReadPhase; readonly signals: readonly LabelOntologySignalRecord[]; readonly selectedSignalId: string | null; readonly onSelectSignal: (signalId: string) => void; readonly copy?: OntologyCopy }) {
-  if (phase === "loading" && signals.length === 0) return <div className={styles.loading} role="status" aria-label={copy.signalRows}><span /><span /><span /></div>
-  if (signals.length === 0) return <div className={styles.empty}>{copy.noRows}</div>
-  return <div className={styles.scrollList}>{signals.map((signal) => <button key={signal.id} type="button" className={`${styles.ontologyRow} ${selectedSignalId === signal.id ? styles.selected : ""}`} aria-pressed={selectedSignalId === signal.id} onClick={() => onSelectSignal(signal.id)}><div className={styles.rowTop}><strong>{signalTitle(signal)}</strong><MachineBadge variant={statusVariant(signal.status)} label={signal.status} /></div><span className={styles.rowMeta} translate="no">{signal.id} · {signal.kind}</span><div className={styles.rowBadges}><MachineBadge variant="neutral" label={signal.proposed_action} />{signal.suggest_score === null ? null : <Badge variant="neutral" label={`${copy.recordedScore} ${formatScore(signal.suggest_score)}`} />}</div></button>)}</div>
+  if (phase === "loading" && signals.length === 0) return <LoadingState label={copy.signalRows} />
+  if (signals.length === 0) return <EmptyState title={copy.noRows} isCompact />
+  return <List density="compact" hasDividers>
+    {signals.map((signal) => (
+      <ListItem
+        key={signal.id}
+        label={<SafeHStack gap={1} wrap="wrap"><Text weight="semibold">{signalTitle(signal)}</Text><MachineBadge variant={statusVariant(signal.status)} label={signal.status} /></SafeHStack>}
+        description={<SafeVStack gap={1} align="start"><Text type="code"><MachineText>{signal.id} · {signal.kind}</MachineText></Text><SafeHStack gap={1} wrap="wrap"><MachineBadge variant="neutral" label={signal.proposed_action} />{signal.suggest_score === null ? null : <Badge variant="neutral" label={`${copy.recordedScore} ${formatScore(signal.suggest_score)}`} />}</SafeHStack></SafeVStack>}
+        isSelected={selectedSignalId === signal.id}
+        onClick={() => onSelectSignal(signal.id)}
+      />
+    ))}
+  </List>
 }
 
 export function ReviewGroupsView({ phase, groups, onSelectSignal, copy = featureCopyForLocale("en").ontology }: { readonly phase: ReadPhase; readonly groups: readonly LabelOntologyReviewGroup[]; readonly onSelectSignal: (signalId: string) => void; readonly copy?: OntologyCopy }) {
-  if (phase === "loading" && groups.length === 0) return <div className={styles.loading} role="status" aria-label={copy.groupedReview}><span /><span /><span /></div>
-  if (groups.length === 0) return <div className={styles.empty}>{copy.noGroups}</div>
-  return <div className={styles.scrollList}>{groups.map((group) => <article key={`${group.group_by}:${group.key}`} className={styles.group}><div className={styles.rowTop}><div><strong>{groupTitle(group)}</strong><span className={styles.rowMeta} translate="no">{group.sample_task_refs.length ? group.sample_task_refs.join(", ") : group.key}</span></div><Badge variant="warning" label={copy.sourceTasks(group.task_count)} /></div>{group.candidate_text ? <Text as="p" type="supporting">{group.candidate_text}</Text> : null}<div className={styles.metrics}><span><b>{group.signal_count}</b> {copy.signalCount(group.signal_count).replace(String(group.signal_count), "").trim()}</span><span><b>{group.open_count}</b> {copy.openCount(group.open_count).replace(String(group.open_count), "").trim()}</span><span><b>{group.confirmed_count}</b> {copy.confirmedCount(group.confirmed_count).replace(String(group.confirmed_count), "").trim()}</span><span><b>{group.action_count}</b> {copy.actionCountLabel(group.action_count).replace(String(group.action_count), "").trim()}</span></div><div className={styles.groupSignals}>{group.signal_ids.slice(0, 4).map((id) => <Button key={id} label={shortId(id)} variant="ghost" size="sm" onClick={() => onSelectSignal(id)} />)}</div></article>)}</div>
+  if (phase === "loading" && groups.length === 0) return <LoadingState label={copy.groupedReview} />
+  if (groups.length === 0) return <EmptyState title={copy.noGroups} isCompact />
+  return <List density="spacious" hasDividers>
+    {groups.map((group) => (
+      <ListItem
+        key={`${group.group_by}:${group.key}`}
+        label={groupTitle(group)}
+        endContent={<Badge variant="warning" label={copy.sourceTasks(group.task_count)} />}
+        description={(
+          <SafeVStack gap={3} paddingBlock={2}>
+            <Text type="code"><MachineText>{group.sample_task_refs.length ? group.sample_task_refs.join(", ") : group.key}</MachineText></Text>
+            {group.candidate_text ? <Text type="supporting">{group.candidate_text}</Text> : null}
+            <SafeMetadataList columns="multi" label={{ position: "top" }}>
+              <SafeMetadataListItem label={copy.signalCount(group.signal_count).replace(String(group.signal_count), "").trim()}>{group.signal_count}</SafeMetadataListItem>
+              <SafeMetadataListItem label={copy.openCount(group.open_count).replace(String(group.open_count), "").trim()}>{group.open_count}</SafeMetadataListItem>
+              <SafeMetadataListItem label={copy.confirmedCount(group.confirmed_count).replace(String(group.confirmed_count), "").trim()}>{group.confirmed_count}</SafeMetadataListItem>
+              <SafeMetadataListItem label={copy.actionCountLabel(group.action_count).replace(String(group.action_count), "").trim()}>{group.action_count}</SafeMetadataListItem>
+            </SafeMetadataList>
+            <SafeHStack gap={1} wrap="wrap">
+              {group.signal_ids.slice(0, 4).map((id) => <Button key={id} label={shortId(id)} variant="ghost" size="sm" onClick={() => onSelectSignal(id)} />)}
+            </SafeHStack>
+          </SafeVStack>
+        )}
+      />
+    ))}
+  </List>
 }
 
 export function OntologySignalDetailView({ phase, detail, error, actionError, onRetry, onRetryAction, actionReason, actionPending, lifecycleEnabled = false, onActionReasonChange, onLifecycleAction, onExplainAtom, locale = "en", copy = featureCopyForLocale("en").ontology }: { readonly phase: ReadPhase; readonly detail: LabelOntologySignalDetail | null; readonly error?: unknown | null; readonly actionError?: unknown | null; readonly onRetry?: () => void; readonly onRetryAction?: () => void; readonly actionReason: string; readonly actionPending: boolean; readonly lifecycleEnabled?: boolean; readonly onActionReasonChange: (value: string) => void; readonly onLifecycleAction: (action: LifecycleAction) => void; readonly onExplainAtom: (atomRef: string | null | undefined) => void; readonly locale?: Locale; readonly copy?: OntologyCopy }) {
-  if (phase === "loading" && detail === null) return <div className={styles.loading} role="status" aria-label={copy.signalDetail}><span /><span /><span /></div>
-  if (errorStatus(error) === 404) return <div className={styles.empty}>{copy.unavailable}</div>
+  if (phase === "loading" && detail === null) return <LoadingState label={copy.signalDetail} />
+  if (errorStatus(error) === 404) return <EmptyState title={copy.unavailable} isCompact />
   if (detail === null) {
-    if (error) return <div className={styles.empty}><Banner status="error" title={copy.detailError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
-    return <div className={styles.empty}>{copy.selectDetail}</div>
+    if (error) return <SafeVStack padding={4}><Banner status="error" title={copy.detailError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></SafeVStack>
+    return <EmptyState title={copy.selectDetail} isCompact />
   }
   const signal = detail.signal
   const ready = Boolean(actionReason.trim()) && !actionPending && lifecycleEnabled
   const canConfirm = ready && signal.status === "open"
   const canReview = ready && (signal.status === "open" || signal.status === "confirmed")
-  return <article className={styles.detail}>
-    <div className={styles.detailBadges}><MachineBadge variant={statusVariant(signal.status)} label={signal.status} /><MachineBadge variant="neutral" label={signal.kind} /><MachineBadge variant="neutral" label={signal.proposed_action} />{detail.observation.suggest_degraded ? <Badge variant="warning" label={copy.observationDegraded} /> : null}</div>
+  return <SafeVStack as="article" gap={3} padding={4} aria-label={copy.signalDetail}>
+    <SafeHStack gap={1} wrap="wrap"><MachineBadge variant={statusVariant(signal.status)} label={signal.status} /><MachineBadge variant="neutral" label={signal.kind} /><MachineBadge variant="neutral" label={signal.proposed_action} />{detail.observation.suggest_degraded ? <Badge variant="warning" label={copy.observationDegraded} /> : null}</SafeHStack>
     <Heading level={3}>{signalTitle(signal)}</Heading>
     <Text as="p" type="supporting">{signal.rationale || copy.rationaleMissing}</Text>
-    <dl className={styles.facts}><Fact label={copy.sourceTask} value={detail.observation.task_ref_snapshot} /><Fact label={copy.target} value={signal.target_label_name_snapshot ?? signal.proposed_label_name ?? "—"} /><Fact label={copy.suggest} value={signal.suggest_state ?? "—"} /><Fact label={copy.recordedScore} value={formatScore(signal.suggest_score)} /><Fact label={copy.rank} value={signal.suggest_rank === null ? "—" : String(signal.suggest_rank)} /><Fact label={copy.recordedConfidence} value={formatScore(signal.confidence)} /></dl>
-    {signal.candidate_text ? <div className={styles.candidate}><div className={styles.candidateHeader}><Text as="span" type="label">{copy.candidateAtom}</Text><Button label={copy.explainHash} variant="ghost" size="sm" onClick={() => onExplainAtom(signal.candidate_content_hash)} /></div><Text as="p">{signal.candidate_text}</Text><span className={styles.rowMeta} translate="no">{signal.candidate_atom_polarity ?? "—"} / {signal.candidate_atom_kind ?? "—"} / {signal.candidate_content_hash ?? "—"}</span></div> : null}
-    <div className={styles.actionArea}>{actionError ? <Banner status="error" title={copy.actionError} description={`${localizedErrorMessage(actionError, copy.unreadableResponse, locale)} ${copy.actionNextStep}`} endContent={onRetryAction ? <Button label={copy.retryAction} variant="ghost" size="sm" onClick={onRetryAction} /> : undefined} /> : null}<label><span>{copy.reviewReason}</span><textarea name="ontology-action-reason" autoComplete="off" aria-label={copy.reviewReason} value={actionReason} onChange={(event) => onActionReasonChange(event.currentTarget.value)} placeholder={copy.reasonPlaceholder} /></label><div className={styles.actionButtons}><Button label={copy.confirm} variant="primary" isDisabled={!canConfirm} isLoading={actionPending} onClick={() => onLifecycleAction("confirm")} /><Button label={copy.resolveNoChange} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("resolve_no_change")} /><Button label={copy.reject} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("reject")} /></div></div>
+    <SafeMetadataList columns="multi" label={{ position: "top" }}>
+      <Fact label={copy.sourceTask} value={detail.observation.task_ref_snapshot} />
+      <Fact label={copy.target} value={signal.target_label_name_snapshot ?? signal.proposed_label_name ?? "—"} />
+      <Fact label={copy.suggest} value={signal.suggest_state ?? "—"} />
+      <Fact label={copy.recordedScore} value={formatScore(signal.suggest_score)} />
+      <Fact label={copy.rank} value={signal.suggest_rank === null ? "—" : String(signal.suggest_rank)} />
+      <Fact label={copy.recordedConfidence} value={formatScore(signal.confidence)} />
+    </SafeMetadataList>
+    {signal.candidate_text ? <SafeSection variant="muted" padding={3}><SafeVStack gap={2}><SafeHStack gap={2} justify="between" align="center" wrap="wrap"><Text type="label">{copy.candidateAtom}</Text><Button label={copy.explainHash} variant="ghost" size="sm" onClick={() => onExplainAtom(signal.candidate_content_hash)} /></SafeHStack><Text as="p">{signal.candidate_text}</Text><MachineText>{signal.candidate_atom_polarity ?? "—"} / {signal.candidate_atom_kind ?? "—"} / {signal.candidate_content_hash ?? "—"}</MachineText></SafeVStack></SafeSection> : null}
+    <SafeVStack gap={3}>
+      {actionError ? <Banner status="error" title={copy.actionError} description={`${localizedErrorMessage(actionError, copy.unreadableResponse, locale)} ${copy.actionNextStep}`} endContent={onRetryAction ? <Button label={copy.retryAction} variant="ghost" size="sm" onClick={onRetryAction} /> : undefined} /> : null}
+      <TextArea label={copy.reviewReason} value={actionReason} onChange={(value) => onActionReasonChange(value)} placeholder={copy.reasonPlaceholder} rows={3} htmlName="ontology-action-reason" />
+      <ButtonGroup label={copy.reviewReason} size="sm">
+        <Button label={copy.confirm} variant="primary" isDisabled={!canConfirm} isLoading={actionPending} onClick={() => onLifecycleAction("confirm")} />
+        <Button label={copy.resolveNoChange} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("resolve_no_change")} />
+        <Button label={copy.reject} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("reject")} />
+      </ButtonGroup>
+    </SafeVStack>
     <ActionHistory actions={detail.actions} onExplainAtom={onExplainAtom} copy={copy} />
-  </article>
+  </SafeVStack>
 }
 
 function ActionHistory({ actions, onExplainAtom, copy = featureCopyForLocale("en").ontology }: { readonly actions: readonly LabelOntologyActionRecord[]; readonly onExplainAtom: (atomRef: string | null | undefined) => void; readonly copy?: OntologyCopy }) {
   if (actions.length === 0) return <Text as="p" type="supporting">{copy.noActions}</Text>
-  return <section className={styles.history}><Heading level={4}>{copy.actions}</Heading>{actions.map((action) => <article key={action.id} className={styles.historyRow}><div className={styles.rowBadges}><MachineBadge variant="neutral" label={action.action_type} /><MachineBadge variant="neutral" label={copy.requiresValidation(action.validation_requirement)} /><MachineBadge variant={validationVariant(action.validation_effective_outcome)} label={action.validation_effective_outcome} /><span className={styles.rowMeta} translate="no">{shortId(action.id)}</span></div><Text as="p" type="supporting">{action.reason}</Text>{action.result_atom_id || action.result_atom_content_hash ? <div className={styles.groupSignals}>{action.result_atom_id ? <Button label={copy.atomRef(shortId(action.result_atom_id))} variant="ghost" size="sm" onClick={() => onExplainAtom(action.result_atom_id)} /> : null}{action.result_atom_content_hash ? <Button label={copy.hashRef(shortId(action.result_atom_content_hash))} variant="ghost" size="sm" onClick={() => onExplainAtom(action.result_atom_content_hash)} /> : null}</div> : null}</article>)}</section>
+  return <SafeSection variant="transparent" dividers={["top"]} padding={4}><SafeVStack gap={2}><Heading level={4}>{copy.actions}</Heading><List density="compact" hasDividers>{actions.map((action) => <ListItem key={action.id} label={<SafeHStack gap={1} wrap="wrap"><MachineBadge variant="neutral" label={action.action_type} /><MachineBadge variant="neutral" label={copy.requiresValidation(action.validation_requirement)} /><MachineBadge variant={validationVariant(action.validation_effective_outcome)} label={action.validation_effective_outcome} /><MachineText>{shortId(action.id)}</MachineText></SafeHStack>} description={<SafeVStack gap={1}><Text as="p" type="supporting">{action.reason}</Text>{action.result_atom_id || action.result_atom_content_hash ? <SafeHStack gap={1} wrap="wrap">{action.result_atom_id ? <Button label={copy.atomRef(shortId(action.result_atom_id))} variant="ghost" size="sm" onClick={() => onExplainAtom(action.result_atom_id)} /> : null}{action.result_atom_content_hash ? <Button label={copy.hashRef(shortId(action.result_atom_content_hash))} variant="ghost" size="sm" onClick={() => onExplainAtom(action.result_atom_content_hash)} /> : null}</SafeHStack> : null}</SafeVStack>} />)}</List></SafeVStack></SafeSection>
 }
 
 export function AtomExplainView({ phase, explain, error, onRetry, locale = "en", copy = featureCopyForLocale("en").ontology }: { readonly phase: ReadPhase; readonly explain: LabelAtomExplainRecord | null; readonly error?: unknown | null; readonly onRetry?: () => void; readonly locale?: Locale; readonly copy?: OntologyCopy }) {
-  if (phase === "loading" && explain === null) return <div className={styles.loading} role="status" aria-label={copy.atomExplain}><span /><span /></div>
+  if (phase === "loading" && explain === null) return <LoadingState label={copy.atomExplain} count={2} />
   if (explain === null) {
-    if (error) return <div className={styles.empty}><Banner status="error" title={copy.atomError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryAtom} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
-    return <div className={styles.empty}>{copy.enterAtom}</div>
+    if (error) return <SafeVStack padding={4}><Banner status="error" title={copy.atomError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryAtom} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></SafeVStack>
+    return <EmptyState title={copy.enterAtom} isCompact />
   }
-  if (error) return <article className={styles.atomExplain}><Banner status="warning" title={copy.atomError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryAtom} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></article>
-  return <article className={styles.atomExplain}><div className={styles.detailBadges}><Badge variant={explain.legacy_untracked ? "warning" : "success"} label={explain.legacy_untracked ? copy.legacyUntracked : copy.hasProvenance} />{explain.atom ? <Badge variant="neutral" label={explain.atom.label_name} /> : null}</div>{explain.atom ? <div className={styles.atomCard}><span className={styles.rowMeta} translate="no">{explain.atom.kind}</span><Text as="p" type="supporting">{explain.atom.text}</Text><span className={styles.rowMeta} translate="no">{explain.atom.id} / {explain.atom.content_hash}</span></div> : <Text as="p" type="supporting">{copy.noCurrentAtom(explain.query)}</Text>}{explain.legacy_reason ? <Text as="p" type="supporting">{explain.legacy_reason}</Text> : null}<div className={styles.metrics}><span><b>{explain.provenance_actions.length}</b> {copy.actionCount(explain.provenance_actions.length).replace(String(explain.provenance_actions.length), "").trim()}</span><span><b>{explain.supporting_signals.length}</b> {copy.supportingCount(explain.supporting_signals.length).replace(String(explain.supporting_signals.length), "").trim()}</span><span><b>{explain.validation_history.length}</b> {copy.validationCount(explain.validation_history.length).replace(String(explain.validation_history.length), "").trim()}</span></div>{explain.provenance_actions.slice(0, 4).map((entry) => <div key={entry.action.id} className={styles.historyRow}><div className={styles.rowBadges}><MachineBadge variant="neutral" label={entry.action.action_type} /><span className={styles.rowMeta} translate="no">{entry.matched_by}</span></div><Text as="p" type="supporting">{entry.action.reason}</Text></div>)}{explain.validation_history.slice(0, 4).map((entry) => <div key={entry.action.id} className={styles.historyRow}><div className={styles.rowBadges}><MachineBadge variant={validationVariant(entry.validation_status)} label={entry.validation_status} /><span className={styles.rowMeta} translate="no">{copy.parentRef(shortId(entry.parent_action_id))}</span></div>{entry.warnings.length ? <Text as="p" type="supporting">{entry.warnings.join("; ")}</Text> : null}</div>)}</article>
+  if (error) return <SafeVStack as="article" padding={4}><Banner status="warning" title={copy.atomError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryAtom} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></SafeVStack>
+  return <SafeVStack as="article" gap={3} padding={4}>
+    <SafeHStack gap={1} wrap="wrap"><Badge variant={explain.legacy_untracked ? "warning" : "success"} label={explain.legacy_untracked ? copy.legacyUntracked : copy.hasProvenance} />{explain.atom ? <Badge variant="neutral" label={explain.atom.label_name} /> : null}</SafeHStack>
+    {explain.atom ? <SafeSection variant="muted" padding={3}><SafeVStack gap={1}><MachineText>{explain.atom.kind}</MachineText><Text as="p" type="supporting">{explain.atom.text}</Text><MachineText>{explain.atom.id} / {explain.atom.content_hash}</MachineText></SafeVStack></SafeSection> : <Text as="p" type="supporting">{copy.noCurrentAtom(explain.query)}</Text>}
+    {explain.legacy_reason ? <Text as="p" type="supporting">{explain.legacy_reason}</Text> : null}
+    <SafeMetadataList columns="multi" label={{ position: "top" }}>
+      <SafeMetadataListItem label={copy.actionCount(explain.provenance_actions.length).replace(String(explain.provenance_actions.length), "").trim()}>{explain.provenance_actions.length}</SafeMetadataListItem>
+      <SafeMetadataListItem label={copy.supportingCount(explain.supporting_signals.length).replace(String(explain.supporting_signals.length), "").trim()}>{explain.supporting_signals.length}</SafeMetadataListItem>
+      <SafeMetadataListItem label={copy.validationCount(explain.validation_history.length).replace(String(explain.validation_history.length), "").trim()}>{explain.validation_history.length}</SafeMetadataListItem>
+    </SafeMetadataList>
+    {explain.provenance_actions.length > 0 ? <List density="compact" hasDividers>{explain.provenance_actions.slice(0, 4).map((entry) => <ListItem key={entry.action.id} label={<SafeHStack gap={1} wrap="wrap"><MachineBadge variant="neutral" label={entry.action.action_type} /><MachineText>{entry.matched_by}</MachineText></SafeHStack>} description={<Text as="p" type="supporting">{entry.action.reason}</Text>} />)}</List> : null}
+    {explain.validation_history.length > 0 ? <List density="compact" hasDividers>{explain.validation_history.slice(0, 4).map((entry) => <ListItem key={entry.action.id} label={<SafeHStack gap={1} wrap="wrap"><MachineBadge variant={validationVariant(entry.validation_status)} label={entry.validation_status} /><MachineText>{copy.parentRef(shortId(entry.parent_action_id))}</MachineText></SafeHStack>} description={entry.warnings.length ? <Text as="p" type="supporting">{entry.warnings.join("; ")}</Text> : undefined} />)}</List> : null}
+  </SafeVStack>
+}
+
+function LoadingState({ label, count = 3 }: { readonly label: string; readonly count?: number }) {
+  return <SafeVStack gap={2} padding={4} role="status" aria-label={label}>{Array.from({ length: count }, (_, index) => <Skeleton key={index} size="row" />)}</SafeVStack>
+}
+
+function MachineText({ children }: { readonly children: ReactNode }) {
+  return <span translate="no">{children}</span>
 }
 
 function Fact({ label, value }: { readonly label: string; readonly value: string }) {
-  return <div><dt>{label}</dt><dd translate="no">{value}</dd></div>
+  return <SafeMetadataListItem label={label}><MachineText>{value}</MachineText></SafeMetadataListItem>
 }

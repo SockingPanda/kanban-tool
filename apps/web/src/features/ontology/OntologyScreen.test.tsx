@@ -502,7 +502,7 @@ describe("Ontology screen presentation", () => {
   })
 })
 
-type ButtonProps = { type?: "button"; onClick?: () => void; isDisabled?: boolean; children?: ReactNode; label?: string }
+type ButtonProps = { type?: "button"; onClick?: () => void; isDisabled?: boolean; children?: ReactNode; description?: ReactNode; endContent?: ReactNode; label?: string }
 
 function findButtonByText(node: ReactNode, text: string): ReactElement<ButtonProps> | null {
   if (Array.isArray(node)) {
@@ -515,7 +515,7 @@ function findButtonByText(node: ReactNode, text: string): ReactElement<ButtonPro
   if (!isValidElement(node)) return null
   const element = node as ReactElement<ButtonProps>
   if (element.props.label === text) return element
-  return findButtonByText(element.props.children, text)
+  return findButtonByText([element.props.children, element.props.description, element.props.endContent], text)
 }
 
 function findButtonByLabel(node: unknown, text: string): ReactElement<ButtonProps> | null {

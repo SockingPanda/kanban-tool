@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test } from "vitest"
 
@@ -43,7 +44,15 @@ describe("HealthPage", () => {
     const markup = renderToStaticMarkup(<PreferencesProvider><HealthPage runtime={runtime} /></PreferencesProvider>)
 
     expect(markup).toContain('data-testid="health-loading"')
+    expect(markup).toContain('aria-busy="true"')
+    expect(markup).not.toContain("style=")
     expect(markup).not.toContain('data-testid="health-metric-ok"')
+  })
+
+  test("keeps runtime source free of upstream loading spinners", () => {
+    const source = readFileSync(new URL("./HealthPage.tsx", import.meta.url), "utf8")
+    expect(source).not.toMatch(/\bisLoading\s*=/)
+    expect(source).toContain("aria-busy")
   })
 
   test("treats the production turso database identity as healthy when the report is healthy", () => {

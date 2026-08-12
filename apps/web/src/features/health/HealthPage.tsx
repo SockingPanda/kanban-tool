@@ -93,7 +93,7 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
       bodyLabelledBy="health-heading"
       data-testid="health-page"
       header={(
-        <SafeHStack as="header" gap={4} align="start" justify="between" wrap="wrap">
+        <SafeHStack as="header" gap={4} align="start" justify="between" wrap="wrap" aria-busy={pending || undefined}>
           <SafeVStack gap={1.5} className="min-w-0">
             <Heading level={1} id="health-heading">{t("healthHeading")}</Heading>
             <Text as="p" type="body" color="secondary" textWrap="pretty">{t("healthDescription")}</Text>
@@ -102,8 +102,8 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
             type="button"
             label={pending ? t("loading") : t("refresh")}
             variant="secondary"
-            isLoading={pending}
             isDisabled={pending}
+            aria-busy={pending || undefined}
             onClick={refresh}
             data-testid="health-refresh"
           />
@@ -215,15 +215,16 @@ function HealthErrorBanner({
       container="section"
       data-testid={testId}
       endContent={(
-        <Button
-          type="button"
-          label={pending ? t("loading") : t("retry")}
-          variant="ghost"
-          isLoading={pending}
-          isDisabled={pending}
-          onClick={onRetry}
-          data-testid={retryTestId}
-        />
+        <SafeHStack gap={1} aria-busy={pending || undefined}>
+          <Button
+            type="button"
+            label={pending ? t("loading") : t("retry")}
+            variant="ghost"
+            isDisabled={pending}
+            onClick={onRetry}
+            data-testid={retryTestId}
+          />
+        </SafeHStack>
       )}
     />
   )

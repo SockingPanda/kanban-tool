@@ -253,6 +253,48 @@ describe("Astryx CSP UI guard", () => {
     }
   })
 
+  test("fails closed for destructured namespace members, transparent aliases, and escapes", () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-guard-destructure-"))
+    try {
+      writeFileSync(path.join(temporaryRoot, "unsafe.tsx"), [
+        'import * as Core from "@astryxdesign/core"',
+        'const { Grid } = Core',
+        'const { Grid: RenamedGrid } = Core',
+        'const { "Grid": QuotedGrid } = Core',
+        'const { Layout: { Grid: NestedGrid } } = Core',
+        'const wrapped = (Core as typeof Core) satisfies typeof Core',
+        'const { Grid: WrappedGrid } = wrapped',
+        'const { Grid = fallback } = Core',
+        'const { ...rest } = Core',
+        'let Assigned: unknown; Assigned = Core; void (Assigned as typeof Core).Grid',
+        'export { Core }',
+        'export { Core as UnsafeCoreAlias }',
+        'export { Alias as AliasCore }',
+        'export const UnsafeCore = Core',
+        'export default Core',
+        'void Grid; void RenamedGrid; void NestedGrid; void WrappedGrid; void rest',
+        'consume(Core)',
+      ].join("\n"))
+      writeFileSync(path.join(temporaryRoot, "safe.tsx"), 'const SafeBaseline = () => "safe"')
+      const report = scanUiSource({ projectRoot: temporaryRoot, sourcePaths: ["unsafe.tsx", "safe.tsx"], mode: "enforce" })
+      const unsafeErrors = report.errors.filter((error) => error.code === "unsafe-direct-import")
+      expect(unsafeErrors.length).toBeGreaterThanOrEqual(7)
+      expect(unsafeErrors.some((error) => error.message.includes("Grid"))).toBe(true)
+      expect(report.errors.filter((error) => error.path === "safe.tsx" && error.code === "unsafe-direct-import")).toHaveLength(0)
+
+      const safeBaseline = cloneManifest()
+      const textInput = componentEntry(safeBaseline, "TextInput") as Record<string, unknown>
+      textInput.origin = "app-owned"
+      delete textInput.upstream
+      delete textInput.cli
+      const baselineReport = scanUiSource({ projectRoot: temporaryRoot, sourcePaths: ["unsafe.tsx", "safe.tsx"], mode: "enforce", manifest: safeBaseline })
+      expect(baselineReport.errors.some((error) => error.code === "unsafe-direct-import")).toBe(true)
+      expect(baselineReport.errors.filter((error) => error.path === "safe.tsx" && error.code === "unsafe-direct-import")).toHaveLength(0)
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true })
+    }
+  })
+
   test("blocks CSS edges outside the importer/path baseline", () => {
     const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-css-baseline-"))
     try {

@@ -1348,6 +1348,50 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
     return node.argumentExpression !== undefined && ts.isStringLiteral(node.argumentExpression) ? node.argumentExpression.text : undefined
   }
 
+  const namespaceRoot = (expression: ts.Expression): ts.Identifier | undefined => {
+    let candidate = expression
+    while (isTransparentExpression(candidate)) candidate = candidate.expression
+    if (ts.isIdentifier(candidate)) return candidate
+    if (ts.isPropertyAccessExpression(candidate) || ts.isElementAccessExpression(candidate)) return namespaceRoot(candidate.expression)
+    return undefined
+  }
+
+  const isBindingPattern = (name: ts.BindingName): name is ts.BindingPattern => ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name)
+
+  const isUnsafeNamespaceExpression = (expression: ts.Expression): boolean => {
+    let candidate = expression
+    while (isTransparentExpression(candidate)) candidate = candidate.expression
+    return (ts.isIdentifier(candidate) && namespaceAliases.has(candidate.text)) || isBareCoreLoaderExpression(candidate)
+  }
+
+  const inspectNamespaceBinding = (pattern: ts.BindingPattern, sourceNode: ts.Node): void => {
+    if (ts.isArrayBindingPattern(pattern)) {
+      reportUnsafeStar(sourceNode)
+      return
+    }
+    for (const element of pattern.elements) {
+      if (element.dotDotDotToken !== undefined) {
+        reportUnsafeStar(element)
+        continue
+      }
+      const propertyName = element.propertyName
+      if (propertyName !== undefined && ts.isComputedPropertyName(propertyName)) {
+        reportUnsafeStar(element)
+        continue
+      }
+      const component = propertyName !== undefined
+        ? ts.isIdentifier(propertyName) || ts.isStringLiteral(propertyName) ? propertyName.text : undefined
+        : ts.isIdentifier(element.name) ? element.name.text : undefined
+      if (component === undefined) {
+        reportUnsafeStar(element)
+        continue
+      }
+      reportUnsafe(component, "@astryxdesign/core", propertyName ?? element.name)
+      if (element.initializer !== undefined) reportUnsafeStar(element)
+      if (isBindingPattern(element.name)) inspectNamespaceBinding(element.name, element)
+    }
+  }
+
   const registerDirectNamespaceAliases = (): void => {
     const visitDirect = (node: ts.Node): void => {
       if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@astryxdesign/core") {
@@ -1367,8 +1411,10 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
     while (changed) {
       changed = false
       const visitAlias = (node: ts.Node): void => {
-        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && ts.isIdentifier(node.initializer)) {
-          if (namespaceAliases.has(node.initializer.text) && !namespaceAliases.has(node.name.text)) {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined) {
+          let initializer = node.initializer
+          while (isTransparentExpression(initializer)) initializer = initializer.expression
+          if (ts.isIdentifier(initializer) && namespaceAliases.has(initializer.text) && !namespaceAliases.has(node.name.text)) {
             namespaceAliases.add(node.name.text)
             changed = true
           }
@@ -1386,6 +1432,14 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && isBareCoreLoaderExpression(node.initializer)) {
       namespaceAliases.add(node.name.text)
     }
+    if (ts.isVariableDeclaration(node) && ts.isBindingName(node.name) && node.initializer !== undefined && isUnsafeNamespaceExpression(node.initializer)) {
+      if (isBindingPattern(node.name)) inspectNamespaceBinding(node.name, node.name)
+      const statement = node.parent.parent
+      if (ts.isVariableStatement(statement) && hasExportModifier(statement)) reportUnsafeStar(node)
+    }
+    if (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind) && ts.isIdentifier(node.left) && node.right !== undefined && isUnsafeNamespaceExpression(node.right)) {
+      namespaceAliases.add(node.left.text)
+    }
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@astryxdesign/core") {
       const bindings = node.importClause?.namedBindings
       if (bindings !== undefined && ts.isNamespaceImport(bindings)) {
@@ -1396,6 +1450,13 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
         }
       } else if (bindings === undefined) {
         reportUnsafeStar(node)
+      }
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier === undefined) {
+      const clause = node.exportClause
+      if (clause !== undefined && ts.isNamedExports(clause)) for (const element of clause.elements) {
+        const local = element.propertyName ?? element.name
+        const localName = ts.isIdentifier(local) || ts.isStringLiteral(local) ? local.text : undefined
+        if (localName !== undefined && namespaceAliases.has(localName)) reportUnsafeStar(element)
       }
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@astryxdesign/core") {
       const clause = node.exportClause
@@ -1410,15 +1471,20 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
         }
       }
     }
+    if (ts.isExportAssignment(node) && isUnsafeNamespaceExpression(node.expression)) reportUnsafeStar(node)
     if (ts.isCallExpression(node) && isBareCoreLoader(node)) reportUnsafeStar(node)
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
       const component = memberName(node)
-      if (component !== undefined && ts.isIdentifier(node.expression) && namespaceAliases.has(node.expression.text)) {
+      const root = namespaceRoot(node.expression)
+      if (component !== undefined && root !== undefined && namespaceAliases.has(root.text)) {
         reportUnsafe(component, "@astryxdesign/core", node)
       }
       if (component !== undefined && isBareCoreLoaderExpression(node.expression)) {
         reportUnsafe(component, "@astryxdesign/core", node)
       }
+    }
+    if (ts.isIdentifier(node) && namespaceAliases.has(node.text) && !isHandledNamespaceReference(node)) {
+      reportUnsafeStar(node)
     }
     ts.forEachChild(node, visit)
   }
@@ -1432,8 +1498,40 @@ function isBareCoreLoader(node: ts.CallExpression): boolean {
 
 function isBareCoreLoaderExpression(expression: ts.Expression): boolean {
   let candidate = expression
-  while (ts.isParenthesizedExpression(candidate) || ts.isAwaitExpression(candidate)) candidate = candidate.expression
+  while (isTransparentExpression(candidate)) candidate = candidate.expression
   return ts.isCallExpression(candidate) && isBareCoreLoader(candidate)
+}
+
+function isTransparentExpression(expression: ts.Expression): expression is ts.ParenthesizedExpression | ts.AwaitExpression | ts.AsExpression | ts.TypeAssertion | ts.NonNullExpression | ts.SatisfiesExpression {
+  return ts.isParenthesizedExpression(expression)
+    || ts.isAwaitExpression(expression)
+    || ts.isAsExpression(expression)
+    || ts.isTypeAssertionExpression(expression)
+    || ts.isNonNullExpression(expression)
+    || ts.isSatisfiesExpression(expression)
+}
+
+function hasExportModifier(node: ts.Node): boolean {
+  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined
+  return modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false
+}
+
+function isHandledNamespaceReference(node: ts.Identifier): boolean {
+  const parent = node.parent
+  if (parent === undefined) return false
+  if (ts.isNamespaceImport(parent) || ts.isNamespaceExport(parent) || ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent)) return true
+  if (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) return parent.expression === node || (ts.isPropertyAccessExpression(parent) && parent.name === node)
+  if (ts.isVariableDeclaration(parent)) {
+    if (parent.name === node) return true
+    if (parent.initializer !== undefined) {
+      let candidate = parent.initializer
+      while (isTransparentExpression(candidate)) candidate = candidate.expression
+      if (candidate === node) return true
+    }
+  }
+  if (ts.isBinaryExpression(parent) && parent.left === node && isAssignmentOperator(parent.operatorToken.kind)) return true
+  if (ts.isPropertyAssignment(parent) && parent.name === node) return true
+  return false
 }
 
 function isAssignmentOperator(kind: ts.SyntaxKind): boolean {

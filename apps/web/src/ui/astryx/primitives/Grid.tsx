@@ -7,6 +7,10 @@ import {
   type NoRuntimeStyleProps,
 } from "./safe-core"
 
+/**
+ * Finite column contracts. The `auto-*` variants select viewport breakpoints;
+ * they are not intrinsic-content or `auto-fit` sizing modes.
+ */
 export type GridColumns =
   | "single"
   | "two"
@@ -19,7 +23,7 @@ export type GridGap = 0 | 1 | 2 | 3 | 4 | 5 | 6
 export type GridDensity = "compact" | "comfortable"
 export type GridAlign = "start" | "center" | "end" | "stretch"
 
-/** Finite column variants are mapped to literals so no runtime CSS is built. */
+/** Finite viewport variants map to literal classes; no runtime CSS is built. */
 export const GRID_COLUMN_CLASSES: Readonly<Record<GridColumns, string>> = {
   single: "grid-cols-1",
   two: "grid-cols-2",

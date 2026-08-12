@@ -25,7 +25,6 @@ export {
 export {
   Skeleton,
   SKELETON_SIZE_CLASSES,
-  type SkeletonIndex,
   type SkeletonProps,
   type SkeletonSize,
 } from "./Skeleton"

@@ -7,7 +7,6 @@ import {
 } from "./safe-core"
 
 export type SkeletonSize = "text" | "row" | "card"
-export type SkeletonIndex = 0 | 1 | 2 | 3 | 4 | 5
 
 export const SKELETON_SIZE_CLASSES: Readonly<Record<SkeletonSize, string>> = {
   text: "h-4 w-24 rounded-sm",
@@ -19,7 +18,6 @@ export interface SkeletonProps
   extends Omit<HTMLAttributes<HTMLElement>, "children" | "style">,
     NoRuntimeStyleProps {
   readonly size?: SkeletonSize
-  readonly index?: SkeletonIndex
   readonly ref?: React.Ref<HTMLElement>
 }
 
@@ -30,7 +28,6 @@ function classNames(...values: Array<string | false | null | undefined>): string
 /** Static geometry placeholder for strict-CSP loading states. */
 export function Skeleton({
   className,
-  index = 0,
   size = "row",
   ref,
   ...rest
@@ -47,7 +44,6 @@ export function Skeleton({
       )}
       {...safeRest}
       data-size={size}
-      data-delay={index}
     />
   )
 }

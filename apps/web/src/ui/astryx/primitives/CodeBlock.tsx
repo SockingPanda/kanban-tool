@@ -55,7 +55,7 @@ export interface CodeBlockProps
   readonly isWrapped?: boolean
   readonly container?: CodeBlockContainer
   readonly maxHeight?: CodeBlockHeight
-  readonly label?: string
+  readonly label: string
   readonly hasCopy?: boolean
   readonly copyLabel: string
   readonly copiedLabel: string
@@ -136,7 +136,7 @@ export function CodeBlock({
   }, [code, markCopied, markCopyError, onCopy])
 
   const safeRest = guardNoRuntimeStyleProps(rest)
-  const resolvedLabel = label ?? `${language} code`
+  const resolvedLabel = label
   const currentCopyLabel = copyState === "copied"
     ? copiedLabel
     : copyState === "error"

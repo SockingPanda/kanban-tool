@@ -70,12 +70,12 @@ describe("CSP-safe Astryx primitives", () => {
   })
 
   test("Skeleton exposes finite geometry and a reduced-motion-safe animation", () => {
-    const markup = renderToStaticMarkup(<Skeleton size="card" index={3} />)
+    const markup = renderToStaticMarkup(<Skeleton size="card" />)
 
     expect(markup).toContain("motion-safe:animate-pulse")
     expect(markup).toContain("h-32 w-full")
     expect(markup).toContain('data-size="card"')
-    expect(markup).toContain('data-delay="3"')
+    expect(markup).not.toContain("data-delay")
     expect(markup).not.toContain("style=")
     expect(markup).not.toMatch(/(?:slate|gray|neutral)-\d+/)
     expect(markup).not.toMatch(/delay-\d+/)
@@ -110,7 +110,7 @@ describe("CSP-safe Astryx primitives", () => {
 
     // @ts-expect-error A section landmark must have an accessible label.
     const unlabeledGrid = <Grid><p>safe</p></Grid>
-    // @ts-expect-error Copy feedback labels are required for localization.
+    // @ts-expect-error CodeBlock requires a caller-provided accessible label and copy feedback labels.
     const unlabeledCodeBlock = <CodeBlock code="safe" />
     // @ts-expect-error Static facade must not expose dynamic width.
     const width = <SafeCard width={320} />

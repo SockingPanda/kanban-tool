@@ -49,6 +49,19 @@ test.describe("CSP-safe selector browser contracts", () => {
     await expect(page.getByText("Loading projects")).toHaveCount(0)
   })
 
+  test("invalidates a deferred focus bootstrap after immediate blur", async ({ page }) => {
+    const typeahead = page.getByTestId("typeahead")
+    await page.getByTestId("deferred-source").click()
+    await typeahead.focus()
+    await expect(typeahead).toHaveAttribute("aria-busy", "true")
+    await page.getByTestId("outside").click()
+    await expect(typeahead).toHaveAttribute("aria-expanded", "false")
+    await page.getByTestId("resolve-bootstrap").click()
+    await expect(page.getByText("New result")).toHaveCount(0)
+    await expect(typeahead).toHaveAttribute("aria-expanded", "false")
+    await expect(typeahead).not.toHaveAttribute("aria-busy", "true")
+  })
+
   test("keeps search editing keys native and uses two-stage Escape", async ({ page }) => {
     const trigger = page.getByTestId("multi-selector")
     await trigger.click()

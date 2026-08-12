@@ -9,6 +9,7 @@ type FixtureItem = { readonly id: string; readonly label: string }
 const oldItem: FixtureItem = { id: "old", label: "Old result" }
 const newItem: FixtureItem = { id: "new", label: "New result" }
 let resolveOld: ((items: FixtureItem[]) => void) | undefined
+let resolveBootstrap: ((items: FixtureItem[]) => void) | undefined
 
 const sourceA: SearchSource<FixtureItem> = {
   search: () => new Promise((resolve) => {
@@ -20,6 +21,13 @@ const sourceA: SearchSource<FixtureItem> = {
 const sourceB: SearchSource<FixtureItem> = {
   search: () => [newItem],
   bootstrap: () => [newItem],
+}
+
+const deferredSource: SearchSource<FixtureItem> = {
+  search: () => [newItem],
+  bootstrap: () => new Promise((resolve) => {
+    resolveBootstrap = resolve
+  }),
 }
 
 export function Fixture() {
@@ -36,7 +44,9 @@ export function Fixture() {
       <button type="button" data-testid="toggle-multi-disabled" onClick={() => setMultiDisabled((current) => !current)}>Toggle multi disabled</button>
       <button type="button" data-testid="toggle-typeahead-disabled" onClick={() => setTypeaheadDisabled((current) => !current)}>Toggle typeahead disabled</button>
       <button type="button" data-testid="swap-source" onClick={() => setSource(sourceB)}>Swap source</button>
+      <button type="button" data-testid="deferred-source" onClick={() => setSource(deferredSource)}>Deferred source</button>
       <button type="button" data-testid="resolve-old" onClick={() => resolveOld?.([oldItem])}>Resolve old</button>
+      <button type="button" data-testid="resolve-bootstrap" onClick={() => resolveBootstrap?.([newItem])}>Resolve bootstrap</button>
       <output data-testid="open-events">{openEvents}</output>
       <MultiSelector
         label="Statuses"

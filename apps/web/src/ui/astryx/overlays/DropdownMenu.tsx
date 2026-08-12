@@ -40,19 +40,28 @@ export interface DropdownMenuSection {
 
 export type DropdownMenuOption = DropdownMenuItemData | DropdownMenuDivider | DropdownMenuSection
 
-export interface DropdownMenuButtonProps {
-  readonly label?: string
+type DropdownMenuButtonBase = {
   readonly icon?: ReactNode
   readonly variant?: "primary" | "secondary" | "ghost"
   readonly size?: "sm" | "md" | "lg"
   readonly isDisabled?: boolean
-  readonly isIconOnly?: boolean
   readonly className?: string
-  readonly "aria-label"?: string
 }
 
+export type DropdownMenuButtonProps =
+  | (DropdownMenuButtonBase & {
+      readonly isIconOnly?: false
+      readonly label: string
+      readonly "aria-label"?: string
+    })
+  | (DropdownMenuButtonBase & {
+      readonly isIconOnly: true
+      readonly label?: string
+      readonly "aria-label": string
+    })
+
 export interface DropdownMenuProps {
-  readonly button?: DropdownMenuButtonProps
+  readonly button: DropdownMenuButtonProps
   readonly items: readonly DropdownMenuOption[]
   readonly isMenuOpen?: boolean
   readonly isOpen?: boolean
@@ -84,7 +93,7 @@ function itemButtonClass(disabled: boolean): string {
 }
 
 export function DropdownMenu({
-  button = { label: "Menu" },
+  button,
   items,
   isMenuOpen,
   isOpen,
@@ -286,8 +295,8 @@ export function DropdownMenu({
     )
   }
 
-  const label = button.label ?? ""
-  const triggerLabel = button["aria-label"] ?? (label || undefined)
+  const label = button.label ?? button["aria-label"]
+  const triggerLabel = button["aria-label"] ?? button.label
 
   return (
     <section className="relative inline-flex">

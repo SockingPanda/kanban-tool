@@ -11,7 +11,7 @@ import {
 
 export interface MoreMenuProps {
   readonly items: readonly DropdownMenuOption[]
-  readonly label?: string
+  readonly label: string
   readonly variant?: "primary" | "secondary" | "ghost"
   readonly size?: "sm" | "md" | "lg"
   readonly icon?: ReactNode
@@ -29,7 +29,7 @@ function MoreDots(): ReactNode {
 export const MoreMenu = forwardRef<HTMLButtonElement, MoreMenuProps>(function MoreMenu(
   {
     items,
-    label = "More options",
+    label,
     variant = "ghost",
     size = "md",
     icon,

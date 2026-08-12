@@ -59,6 +59,7 @@ export interface PopoverTriggerRenderProps {
 }
 
 export interface PopoverProps extends NativePopoverProps {
+  /** DOM-contained, non-modal static placement. Use Dialog for modal semantics. */
   readonly children?: ReactNode | ((props: PopoverTriggerRenderProps) => ReactNode)
   readonly anchorRef?: RefObject<HTMLElement | null>
   readonly content: ReactNode
@@ -70,7 +71,6 @@ export interface PopoverProps extends NativePopoverProps {
   readonly isEnabled?: boolean
   readonly label?: string
   readonly role?: "dialog" | "none"
-  readonly isModal?: boolean
   readonly hasAutoFocus?: boolean
   readonly hasLightDismiss?: boolean
   readonly hasEscapeDismiss?: boolean
@@ -120,7 +120,6 @@ export function Popover({
   isEnabled = true,
   label,
   role = "dialog",
-  isModal = false,
   hasAutoFocus = true,
   hasLightDismiss = true,
   hasEscapeDismiss = true,
@@ -174,7 +173,7 @@ export function Popover({
     onEscape: () => {
       if (hasEscapeDismiss && popupRef.current && isTopOverlay(popupRef.current)) closeRef.current()
     },
-    trapFocus: isModal,
+    trapFocus: false,
     autoFocus: hasAutoFocus,
   })
 
@@ -285,7 +284,6 @@ export function Popover({
         role={role}
         aria-label={label ?? ariaLabel}
         aria-labelledby={ariaLabelledBy}
-        aria-modal={role === "dialog" && isModal ? "true" : undefined}
         aria-hidden={!open}
         data-open={open ? "true" : "false"}
         data-testid={testId}

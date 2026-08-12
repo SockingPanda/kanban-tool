@@ -48,9 +48,29 @@ describe("Astryx CSP-safe overlays", () => {
     expect(runtime).toContain("registerOverlay(node)")
     expect(runtime).toContain("shouldRestoreFocus")
     expect(popover).toContain("supportsNativePopover")
-    expect(popover).toContain("trapFocus: isModal")
+    expect(popover).toContain("trapFocus: false")
     expect(runtime).toContain("showPopover()")
     expect(runtime).toContain("hidePopover()")
+    expect(popover).toContain("DOM-contained, non-modal static placement")
+    expect(popover).not.toMatch(/\bisModal\b/)
+    expect(popover).not.toContain("aria-modal")
+  })
+
+  test("requires caller-owned accessible labels instead of English defaults", () => {
+    const dropdown = readFileSync(new URL("./DropdownMenu.tsx", import.meta.url), "utf8")
+    const moreMenu = readFileSync(new URL("./MoreMenu.tsx", import.meta.url), "utf8")
+    expect(dropdown).not.toContain('label: "Menu"')
+    expect(dropdown).not.toContain('"Menu"')
+    expect(moreMenu).not.toContain('"More options"')
+
+    const markup = renderToStaticMarkup(
+      <DropdownMenu
+        button={{ isIconOnly: true, "aria-label": "更多操作" }}
+        items={[{ label: "运行", onClick: vi.fn() }]}
+      />,
+    )
+    expect(markup).toContain('aria-label="更多操作"')
+    expect(markup).not.toContain("Menu")
   })
 
   test("renders a named native dialog on the server without inline styling", () => {

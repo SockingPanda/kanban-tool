@@ -116,7 +116,7 @@ export function useOverlayInteraction(
     }
 
     const onFocusIn = (event: FocusEvent) => {
-      if (!isTopOverlay(node)) return
+      if (!trapFocus || !isTopOverlay(node)) return
       const target = event.target
       if (!(target instanceof Node) || node.contains(target)) return
       focusFirstOrLast(node, false)
@@ -151,23 +151,15 @@ export function supportsNativePopover(node: HTMLElement | null): boolean {
 export function openNativePopover(node: HTMLElement): boolean {
   if (!supportsNativePopover(node)) return false
   const popover = node as HTMLElement & { showPopover: () => void }
-  try {
-    popover.showPopover()
-    return true
-  } catch {
-    return false
-  }
+  popover.showPopover()
+  return true
 }
 
 export function closeNativePopover(node: HTMLElement): boolean {
   if (!supportsNativePopover(node)) return false
   const popover = node as HTMLElement & { hidePopover: () => void }
-  try {
-    popover.hidePopover()
-    return true
-  } catch {
-    return false
-  }
+  popover.hidePopover()
+  return true
 }
 
 export function classNames(...values: Array<string | false | null | undefined>): string {

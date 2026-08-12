@@ -29,8 +29,26 @@ describe("Astryx CSP-safe overlays", () => {
     expect(source).not.toMatch(/<(?:div|span)\b/)
     expect(source).not.toMatch(/\b(?:style|xstyle|anchorName|positionArea)\s*[:=]/)
     expect(source).not.toMatch(/(?:bg|text|border)-(?:slate|sky|white|black)\b/)
+    expect(source).not.toMatch(/(?:bg-accent-strong|text-on-inverted|bg-inverted-strong)/)
+    expect(source).toMatch(/(?:bg-surface|bg-popover|bg-muted|bg-inverted|bg-accent-bg|text-primary|text-secondary|border-border|border-border-strong|outline-accent)/)
     expect(source).not.toMatch(/dark:/)
     expect(source.split(/\s+/).some((token) => token.includes("-["))).toBe(false)
+  })
+
+  test("keeps native focus and keyboard paths explicit", () => {
+    const dialog = readFileSync(new URL("./Dialog.tsx", import.meta.url), "utf8")
+    const runtime = readFileSync(new URL("./overlay-runtime.ts", import.meta.url), "utf8")
+    const popover = readFileSync(new URL("./Popover.tsx", import.meta.url), "utf8")
+    expect(dialog).toContain("dialog.showModal()")
+    expect(dialog).toContain("dialog.close()")
+    expect(runtime).toContain('event.key === "Escape"')
+    expect(runtime).toContain('event.key !== "Tab"')
+    expect(runtime).toContain('document.addEventListener("focusin"')
+    expect(runtime).toContain("restoreFocusRef")
+    expect(runtime).toContain("registerOverlay(node)")
+    expect(popover).toContain("supportsNativePopover")
+    expect(runtime).toContain("showPopover()")
+    expect(runtime).toContain("hidePopover()")
   })
 
   test("renders a named native dialog on the server without inline styling", () => {
@@ -46,6 +64,19 @@ describe("Astryx CSP-safe overlays", () => {
     expect(markup).toContain('data-testid="confirm-dialog"')
     expect(markup).not.toContain(" style=")
     expect(markup).not.toContain("<style")
+  })
+
+  test("keeps a closed dialog hydration-safe on the server", () => {
+    const markup = renderToStaticMarkup(
+      <Dialog isOpen={false} onOpenChange={vi.fn()} aria-label="Confirm" data-testid="closed-dialog">
+        <button type="button">Confirm</button>
+      </Dialog>,
+    )
+
+    expect(markup).toContain('data-open="false"')
+    expect(markup).toContain('data-testid="closed-dialog"')
+    expect(markup).not.toContain(" open")
+    expect(markup).not.toContain(" style=")
   })
 
   test("keeps a controlled popover DOM-contained with static placement classes", () => {
@@ -65,7 +96,8 @@ describe("Astryx CSP-safe overlays", () => {
     expect(markup).toContain('aria-expanded="true"')
     expect(markup).toContain('aria-haspopup="dialog"')
     expect(markup).toContain('role="dialog"')
-    expect(markup).toContain('popover="auto"')
+    expect(markup).not.toContain('aria-modal="true"')
+    expect(markup).toContain('class="relative inline-flex"')
     expect(markup).toContain("top-full")
     expect(markup).toContain('data-testid="filters-popover"')
     expect(markup).not.toContain(" style=")
@@ -82,6 +114,9 @@ describe("Astryx CSP-safe overlays", () => {
     expect(markup).toContain('id="detail-tip"')
     expect(markup).toContain('role="tooltip"')
     expect(markup).toContain("More detail")
+    expect(markup).toContain("sr-only")
+    expect(markup).not.toContain('aria-hidden="true"')
+    expect(markup).not.toContain('class="hidden"')
     expect(markup).not.toContain(" style=")
   })
 

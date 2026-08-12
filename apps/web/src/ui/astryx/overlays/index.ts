@@ -29,6 +29,7 @@ export {
   AstryxDropdownMenu,
   DropdownMenu,
   DROPDOWN_MENU_ALIGNMENT_CLASSES,
+  DROPDOWN_MENU_BUTTON_SIZE_CLASSES,
   DROPDOWN_MENU_PLACEMENT_CLASSES,
   type DropdownMenuButtonProps,
   type DropdownMenuDivider,

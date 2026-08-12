@@ -10,9 +10,7 @@ import {
 
 import {
   classNames,
-  closeNativePopover,
   isTopOverlay,
-  openNativePopover,
   supportsNativePopover,
   useOverlayInteraction,
 } from "./overlay-runtime"
@@ -72,6 +70,11 @@ export interface DropdownMenuProps {
 
 export const DROPDOWN_MENU_PLACEMENT_CLASSES = POPOVER_PLACEMENT_CLASSES
 export const DROPDOWN_MENU_ALIGNMENT_CLASSES = POPOVER_ALIGNMENT_CLASSES
+export const DROPDOWN_MENU_BUTTON_SIZE_CLASSES: Readonly<Record<NonNullable<DropdownMenuButtonProps["size"]>, string>> = Object.freeze({
+  sm: "text-xs",
+  md: "text-sm",
+  lg: "text-base",
+})
 
 function itemButtonClass(disabled: boolean): string {
   return classNames(
@@ -108,6 +111,8 @@ export function DropdownMenu({
   const openRef = useRef(open)
   const callbackRef = useRef(onOpenChange)
   const lastHideRef = useRef(0)
+  const focusOnOpenRef = useRef<"first" | "last">("first")
+  const typeaheadRef = useRef({ value: "", at: 0 })
   openRef.current = open
   callbackRef.current = onOpenChange
 
@@ -121,6 +126,10 @@ export function DropdownMenu({
     if (!controlled) setInternalOpen(next)
     callbackRef.current?.(next)
   }
+  const openMenu = (focus: "first" | "last" = "first") => {
+    focusOnOpenRef.current = focus
+    setOpen(true)
+  }
   const close = () => {
     if (!openRef.current) return
     lastHideRef.current = Date.now()
@@ -129,11 +138,10 @@ export function DropdownMenu({
   const toggle = () => {
     if (button.isDisabled || Date.now() - lastHideRef.current < 50) return
     onClick?.()
-    setOpen(!openRef.current)
+    if (openRef.current) close()
+    else openMenu()
   }
-  const setOpenRef = useRef(setOpen)
   const closeRef = useRef(close)
-  setOpenRef.current = setOpen
   closeRef.current = close
 
   useOverlayInteraction(menuRef, {
@@ -149,26 +157,9 @@ export function DropdownMenu({
   useEffect(() => {
     const menu = menuRef.current
     if (!menu) return
-    menu.setAttribute("popover", "auto")
-    const native = supportsNativePopover(menu)
-    if (open) {
-      if (!native || menu.matches(":popover-open")) return
-      openNativePopover(menu)
-    } else if (native && menu.matches(":popover-open")) {
-      closeNativePopover(menu)
-    }
-  }, [open])
-
-  useEffect(() => {
-    const menu = menuRef.current
-    if (!menu) return
-    const handleToggle = (event: Event) => {
-      const nextState = (event as Event & { newState?: string }).newState
-      if (nextState === "open" && !openRef.current) setOpenRef.current(true)
-      if (nextState === "closed" && openRef.current) closeRef.current()
-    }
-    menu.addEventListener("toggle", handleToggle)
-    return () => menu.removeEventListener("toggle", handleToggle)
+    // Keep menu geometry DOM-contained; native popover support is recorded for
+    // diagnostics because its top-layer positioning cannot use our static map.
+    menu.dataset.popoverSupport = supportsNativePopover(menu) ? "native" : "fallback"
   }, [])
 
   useEffect(() => {
@@ -186,9 +177,17 @@ export function DropdownMenu({
 
   useEffect(() => {
     if (!open) return
+    const focusMenuItem = () => {
+      const menu = menuRef.current
+      if (!menu) return
+      const targets = Array.from(menu.querySelectorAll<HTMLElement>("[role=menuitem]:not([aria-disabled=\"true\"])"))
+      const target = focusOnOpenRef.current === "last" ? targets[targets.length - 1] : targets[0]
+      target?.focus({ preventScroll: true })
+      if (!target) menu.focus({ preventScroll: true })
+    }
     const frame = typeof requestAnimationFrame === "function"
-      ? requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>("[role=menuitem]:not([aria-disabled=\"true\"])")?.focus({ preventScroll: true }))
-      : window.setTimeout(() => menuRef.current?.querySelector<HTMLElement>("[role=menuitem]:not([aria-disabled=\"true\"])")?.focus({ preventScroll: true }), 0)
+      ? requestAnimationFrame(focusMenuItem)
+      : window.setTimeout(focusMenuItem, 0)
     return () => {
       if (typeof frame === "number") {
         if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame)
@@ -223,24 +222,36 @@ export function DropdownMenu({
       event.preventDefault()
       targets[targets.length - 1]?.focus({ preventScroll: true })
     } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      const match = targets.find((target) => target.textContent?.trim().toLocaleLowerCase().startsWith(event.key.toLocaleLowerCase()))
-      match?.focus({ preventScroll: true })
+      const now = Date.now()
+      const previous = typeaheadRef.current
+      const value = now - previous.at < 500 ? `${previous.value}${event.key.toLocaleLowerCase()}` : event.key.toLocaleLowerCase()
+      typeaheadRef.current = { value, at: now }
+      const matches = targets.filter((target) => target.textContent?.trim().toLocaleLowerCase().startsWith(value))
+      const fallbackMatches = matches.length > 0
+        ? matches
+        : targets.filter((target) => target.textContent?.trim().toLocaleLowerCase().startsWith(event.key.toLocaleLowerCase()))
+      const next = fallbackMatches.find((target) => targets.indexOf(target) > index) ?? fallbackMatches[0]
+      next?.focus({ preventScroll: true })
     }
   }
 
   const renderOptions = () => {
     let actionIndex = 0
     return items.map((item, index) => {
-      if (item.type === "divider") {
-        return <li key={`divider-${index}`} role="separator" className="my-1 border-t border-border" />
-      }
-      if (item.type === "section") {
-        return (
-          <li key={`section-${index}`} role="group" aria-label={item.title}>
-            {item.title ? <p className="px-2 py-1 text-xs font-medium text-secondary">{item.title}</p> : null}
-            {item.items.map((entry) => renderAction(entry, actionIndex++))}
-          </li>
-        )
+      if ("type" in item) {
+        if (item.type === "divider") {
+          return <li key={`divider-${index}`} role="separator" className="my-1 border-t border-border" />
+        }
+        if (item.type === "section") {
+          return (
+            <li key={`section-${index}`} role="none">
+              <menu role="group" aria-label={item.title}>
+                {item.title ? <p className="px-2 py-1 text-xs font-medium text-secondary">{item.title}</p> : null}
+                {item.items.map((entry) => renderAction(entry, actionIndex++))}
+              </menu>
+            </li>
+          )
+        }
       }
       return renderAction(item, actionIndex++)
     })
@@ -249,29 +260,30 @@ export function DropdownMenu({
   const renderAction = (item: DropdownMenuItemData, index: number) => {
     const disabled = Boolean(item.isDisabled || !item.onClick)
     return (
-      <button
-        key={`${item.label}-${index}`}
-        type="button"
-        role="menuitem"
-        tabIndex={-1}
-        aria-disabled={disabled ? "true" : undefined}
-        disabled={disabled}
-        className={itemButtonClass(disabled)}
-        onClick={() => {
-          if (!disabled) {
-            item.onClick?.()
-            close()
-          }
-        }}
-      >
-        {item.icon ?? null}
-        {renderItem ? renderItem(item) : item.label}
-      </button>
+      <li key={`${item.label}-${index}`} role="none">
+        <button
+          type="button"
+          role="menuitem"
+          tabIndex={-1}
+          aria-disabled={disabled ? "true" : undefined}
+          disabled={disabled}
+          className={itemButtonClass(disabled)}
+          onClick={() => {
+            if (!disabled) {
+              item.onClick?.()
+              close()
+            }
+          }}
+        >
+          {item.icon ?? null}
+          {renderItem ? renderItem(item) : item.label}
+        </button>
+      </li>
     )
   }
 
-  const label = button.label ?? "Menu"
-  const triggerLabel = button["aria-label"] ?? label
+  const label = button.label ?? ""
+  const triggerLabel = button["aria-label"] ?? (label || undefined)
 
   return (
     <section className="relative inline-flex">
@@ -285,15 +297,19 @@ export function DropdownMenu({
         disabled={button.isDisabled}
         className={classNames(
           button.isIconOnly ? "inline-flex items-center justify-center" : "inline-flex items-center gap-2",
-          "rounded-md px-2 py-1.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-          button.variant === "primary" ? "bg-accent text-on-accent hover:bg-accent-strong" : button.variant === "secondary" ? "border border-border-strong bg-surface text-primary hover:bg-muted" : "text-primary hover:bg-muted",
+          "rounded-md px-2 py-1.5 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+          DROPDOWN_MENU_BUTTON_SIZE_CLASSES[button.size ?? "md"],
+          button.variant === "primary" ? "bg-accent-bg text-on-accent hover:bg-accent-bg" : button.variant === "secondary" ? "border border-border-strong bg-surface text-primary hover:bg-muted" : "text-primary hover:bg-muted",
           button.className,
         )}
         onClick={toggle}
         onKeyDown={(event) => {
           if (!open && (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ")) {
             event.preventDefault()
-            setOpen(true)
+            openMenu()
+          } else if (!open && event.key === "ArrowUp") {
+            event.preventDefault()
+            openMenu("last")
           }
         }}
       >
@@ -307,9 +323,9 @@ export function DropdownMenu({
         role="menu"
         aria-label={label}
         aria-hidden={!open}
+        tabIndex={-1}
         data-open={open ? "true" : "false"}
         data-testid={testId}
-        popover="auto"
         className={classNames(
           open ? "block" : "hidden",
           "absolute z-40 min-w-40 rounded-lg border border-border bg-popover p-1 text-primary shadow-lg",

@@ -105,11 +105,11 @@ export function Tooltip({
     else showTimer.current = setTimeout(() => setOpenRef.current(true), delay)
   }, [delay, isEnabled])
   const scheduleHide = useCallback(() => {
-    if (!isEnabled || isControlled && openRef.current) return
+    if (!isEnabled) return
     if (showTimer.current !== null) clearTimeout(showTimer.current)
     if (hideDelay <= 0) setOpenRef.current(false)
     else hideTimer.current = setTimeout(() => setOpenRef.current(false), hideDelay)
-  }, [hideDelay, isControlled, isEnabled])
+  }, [hideDelay, isEnabled])
 
   useEffect(() => clearTimers, [])
 
@@ -153,10 +153,6 @@ export function Tooltip({
     const focusEnabled = focusTrigger === "always" || (focusTrigger === "auto" && canFocus)
     return cloneElement(element as ReactElement<Record<string, unknown>>, {
       "aria-describedby": mergeDescribedBy(childProps["aria-describedby"], tooltipId),
-      className: classNames(
-        (element.props as { className?: string }).className,
-        "",
-      ),
       onMouseEnter: (event: MouseEvent<HTMLElement>) => {
         childProps.onMouseEnter?.(event)
         if (!event.defaultPrevented) scheduleShow()
@@ -200,12 +196,11 @@ export function Tooltip({
       <aside
         id={tooltipId}
         role="tooltip"
-        aria-hidden={!open}
         data-open={open ? "true" : "false"}
         data-testid={testId}
         className={classNames(
-          open ? "block" : "hidden",
-          "absolute z-50 max-w-xs rounded-md bg-inverted px-2 py-1 text-xs text-on-inverted shadow-md",
+          open ? "block" : "sr-only",
+          "absolute z-50 max-w-xs rounded-md bg-inverted px-2 py-1 text-xs text-primary shadow-md",
           POPOVER_PLACEMENT_CLASSES[placement],
           POPOVER_ALIGNMENT_CLASSES[alignment],
           className,

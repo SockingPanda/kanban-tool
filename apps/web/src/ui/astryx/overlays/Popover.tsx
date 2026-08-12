@@ -14,9 +14,7 @@ import {
 
 import {
   classNames,
-  closeNativePopover,
   isTopOverlay,
-  openNativePopover,
   supportsNativePopover,
   useOverlayInteraction,
 } from "./overlay-runtime"
@@ -122,7 +120,7 @@ export function Popover({
   isEnabled = true,
   label,
   role = "dialog",
-  isModal = true,
+  isModal = false,
   hasAutoFocus = true,
   hasLightDismiss = true,
   hasEscapeDismiss = true,
@@ -137,8 +135,9 @@ export function Popover({
 }: PopoverProps) {
   const generatedId = useId()
   const popupId = id ?? generatedId
-  const popupRef = useRef<HTMLDivElement | null>(null)
-  const rootRef = useRef<HTMLSpanElement | null>(null)
+  const popupRef = useRef<HTMLElement | null>(null)
+  const rootRef = useRef<HTMLElement | null>(null)
+  const triggerRef = useRef<HTMLElement | null>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
   const [internalOpen, setInternalOpen] = useState(false)
   const isControlled = controlledOpen !== undefined
@@ -164,10 +163,8 @@ export function Popover({
     if (!isEnabled || Date.now() - lastHideRef.current < 50) return
     setOpen(!openRef.current)
   }
-  const setOpenRef = useRef(setOpen)
   const closeRef = useRef(close)
   const toggleRef = useRef(toggle)
-  setOpenRef.current = setOpen
   closeRef.current = close
   toggleRef.current = toggle
 
@@ -183,12 +180,13 @@ export function Popover({
 
   useEffect(() => {
     if (!open || !hasAutoFocus || !initialFocusRef?.current) return
+    const initialFocus = initialFocusRef.current
     const frame = typeof requestAnimationFrame === "function"
       ? requestAnimationFrame(() => {
-        if (popupRef.current?.contains(initialFocusRef.current)) initialFocusRef.current.focus({ preventScroll: true })
+        if (popupRef.current?.contains(initialFocus)) initialFocus.focus({ preventScroll: true })
       })
       : window.setTimeout(() => {
-        if (popupRef.current?.contains(initialFocusRef.current)) initialFocusRef.current.focus({ preventScroll: true })
+        if (popupRef.current?.contains(initialFocus)) initialFocus.focus({ preventScroll: true })
       }, 0)
     return () => {
       if (typeof frame === "number") {
@@ -201,28 +199,10 @@ export function Popover({
   useEffect(() => {
     const popup = popupRef.current
     if (!popup) return
-    popup.setAttribute("popover", hasLightDismiss ? "auto" : "manual")
-    const native = supportsNativePopover(popup)
-
-    if (open) {
-      if (!native || popup.matches(":popover-open")) return
-      openNativePopover(popup)
-    } else if (native && popup.matches(":popover-open")) {
-      closeNativePopover(popup)
-    }
-  }, [hasLightDismiss, open])
-
-  useEffect(() => {
-    const popup = popupRef.current
-    if (!popup) return
-
-    const handleToggle = (event: Event) => {
-      const nextState = (event as Event & { newState?: string }).newState
-      if (nextState === "open" && !openRef.current) setOpenRef.current(true)
-      if (nextState === "closed" && openRef.current) closeRef.current()
-    }
-    popup.addEventListener("toggle", handleToggle)
-    return () => popup.removeEventListener("toggle", handleToggle)
+    // Anchorless native popovers enter the viewport top layer and cannot honor
+    // this component's finite placement map. Detect support for diagnostics,
+    // then keep the visible surface DOM-contained for deterministic geometry.
+    popup.dataset.popoverSupport = supportsNativePopover(popup) ? "native" : "fallback"
   }, [])
 
   useEffect(() => {
@@ -230,13 +210,14 @@ export function Popover({
     const onPointerDown = (event: PointerEvent) => {
       const popup = popupRef.current
       const root = rootRef.current
+      const anchor = anchorRef?.current
       if (!popup || !root || !isTopOverlay(popup)) return
       const target = event.target
-      if (target instanceof Node && !root.contains(target)) closeRef.current()
+      if (target instanceof Node && !root.contains(target) && !anchor?.contains(target)) closeRef.current()
     }
     document.addEventListener("pointerdown", onPointerDown, true)
     return () => document.removeEventListener("pointerdown", onPointerDown, true)
-  }, [hasLightDismiss, open])
+  }, [anchorRef, hasLightDismiss, open])
 
   useEffect(() => {
     const anchor = anchorRef?.current
@@ -248,7 +229,7 @@ export function Popover({
     anchor.setAttribute("aria-expanded", String(open))
     anchor.setAttribute("aria-haspopup", role === "dialog" ? "dialog" : "true")
     const onClick = () => toggleRef.current()
-    const onKeyDown = (event: KeyboardEvent) => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault()
         toggleRef.current()
@@ -278,6 +259,7 @@ export function Popover({
   }
 
   const triggerProps: PopoverTriggerRenderProps = {
+    ref: triggerRef,
     onClick: toggle,
     "aria-haspopup": role === "dialog" ? "dialog" : "true",
     "aria-expanded": open,
@@ -287,7 +269,7 @@ export function Popover({
   let trigger: ReactNode = null
   if (!anchorRef && typeof children === "function") {
     trigger = children(triggerProps)
-  } else if (!anchorRef && children !== undefined) {
+  } else if (!anchorRef && children !== undefined && typeof children !== "function") {
     trigger = isValidElement(children)
       ? mergeTriggerElement(children, open, popupId, toggle, handleTriggerKeyDown, role)
       : children
@@ -307,7 +289,6 @@ export function Popover({
         aria-hidden={!open}
         data-open={open ? "true" : "false"}
         data-testid={testId}
-        popover={hasLightDismiss ? "auto" : "manual"}
         className={classNames(
           open ? "block" : "hidden",
           "absolute z-40 rounded-lg border border-border bg-popover p-3 text-primary shadow-lg",

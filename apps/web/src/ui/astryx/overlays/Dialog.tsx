@@ -46,6 +46,7 @@ export interface DialogProps extends NativeDialogProps {
   readonly className?: string
   readonly returnFocusRef?: { current: HTMLElement | null }
   readonly initialFocusRef?: { current: HTMLElement | null }
+  readonly onRuntimeError?: (error: unknown) => void
   readonly "data-testid"?: string
 }
 
@@ -81,6 +82,7 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
     className,
     returnFocusRef,
     initialFocusRef,
+    onRuntimeError,
     id,
     onClick,
     "aria-label": ariaLabel,
@@ -94,8 +96,10 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
   const callbackRef = useRef(onOpenChange)
+  const runtimeErrorRef = useRef(onRuntimeError)
   const closingRef = useRef(false)
   callbackRef.current = onOpenChange
+  runtimeErrorRef.current = onRuntimeError
 
   useOverlayInteraction(dialogRef, {
     enabled: isOpen,
@@ -116,10 +120,18 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
       if (!dialog.open) {
         restoreFocusRef.current = returnFocusRef?.current ??
           (document.activeElement instanceof HTMLElement ? document.activeElement : null)
+        if (typeof dialog.showModal !== "function") {
+          const error = new Error("AstryxDialog requires HTMLDialogElement.showModal")
+          runtimeErrorRef.current?.(error)
+          callbackRef.current(false)
+          return undefined
+        }
         try {
           dialog.showModal()
-        } catch {
-          // A disconnected node will be retried on the next connected render.
+        } catch (error) {
+          runtimeErrorRef.current?.(error)
+          callbackRef.current(false)
+          return undefined
         }
       }
       const frame = typeof requestAnimationFrame === "function"
@@ -135,7 +147,11 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
 
     if (dialog.open) {
       closingRef.current = true
-      dialog.close()
+      try {
+        dialog.close()
+      } catch (error) {
+        runtimeErrorRef.current?.(error)
+      }
       closingRef.current = false
     }
     return undefined

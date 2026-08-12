@@ -102,7 +102,6 @@ type AssetsCopy = {
   readonly retrying: string
   readonly error: string
   readonly clearFile: string
-  readonly invalidFileType: string
   readonly fileTooLarge: (size: string) => string
   readonly fileCountExceeded: string
 }
@@ -156,7 +155,6 @@ const copies: Record<Locale, AssetsCopy> = {
     retrying: "正在重试原提交…",
     error: "操作失败，请重试。",
     clearFile: "清除已选文件",
-    invalidFileType: "文件类型不受支持。",
     fileTooLarge: (size) => `文件超过 ${size} 上传上限。`,
     fileCountExceeded: "一次只能选择一个文件。",
   },
@@ -208,7 +206,6 @@ const copies: Record<Locale, AssetsCopy> = {
     retrying: "Retrying original submission…",
     error: "Operation failed. Try again.",
     clearFile: "Clear selected file",
-    invalidFileType: "This file type is not supported.",
     fileTooLarge: (size) => `The file exceeds the ${size} upload limit.`,
     fileCountExceeded: "Choose one file at a time.",
   },
@@ -333,17 +330,17 @@ function AttachmentMetadata({ attachment, copy, locale }: { readonly attachment:
   return (
     <SafeMetadataList columns="single" label={{ position: "start" }}>
       <SafeMetadataListItem label={copy.filename}>
-        <Text type="code" wordBreak="break-word">{attachment.filename}</Text>
+        <Text type="code" className="min-w-0 break-words">{attachment.filename}</Text>
       </SafeMetadataListItem>
       <SafeMetadataListItem label={copy.contentType}>
-        <Text type="code" wordBreak="break-word">{attachment.content_type ?? "—"}</Text>
+        <Text type="code" className="min-w-0 break-words">{attachment.content_type ?? "—"}</Text>
       </SafeMetadataListItem>
       <SafeMetadataListItem label={copy.size}>{formatAttachmentSize(attachment.size_bytes)}</SafeMetadataListItem>
       <SafeMetadataListItem label={copy.sha256}>
-        <Text type="code" wordBreak="break-word">{attachment.sha256 ?? "—"}</Text>
+        <Text type="code" className="min-w-0 break-words">{attachment.sha256 ?? "—"}</Text>
       </SafeMetadataListItem>
       <SafeMetadataListItem label={copy.createdBy}>
-        <Text type="code" wordBreak="break-word">{attachment.created_by}</Text>
+        <Text type="code" className="min-w-0 break-words">{attachment.created_by}</Text>
       </SafeMetadataListItem>
       <SafeMetadataListItem label={copy.createdAt}>
         <time dateTime={createdAt.iso}>{createdAt.display}</time>
@@ -847,6 +844,7 @@ export function TaskInspectorAssetsPanel({
             value={selectedFile}
             onChange={(files) => setSelectedFile(Array.isArray(files) ? files[0] ?? null : files)}
             maxSize={MAX_ATTACHMENT_UPLOAD_BYTES}
+            maxFiles={1}
             isDisabled={writePending}
             isLoading={uploadPending}
             status={uploadFocusError ? { type: "error" } : undefined}
@@ -856,7 +854,6 @@ export function TaskInspectorAssetsPanel({
             chooseFilesText={copy.chooseFile}
             clearLabel={copy.clearFile}
             clearText={copy.clearFile}
-            invalidTypeMessage={copy.invalidFileType}
             sizeLimitMessage={(_file, _maxSize, formattedSize) => copy.fileTooLarge(formattedSize)}
             maxFilesMessage={copy.fileCountExceeded}
             formatFileSize={formatAttachmentSize}
@@ -884,7 +881,7 @@ export function TaskInspectorAssetsPanel({
                 <ListItem
                   key={attachment.id}
                   data-testid="attachment-row"
-                  label={<Text type="code" wordBreak="break-word">{attachment.filename}</Text>}
+                  label={<Text type="code" className="min-w-0 break-words">{attachment.filename}</Text>}
                   description={<AttachmentMetadata attachment={attachment} copy={copy} locale={locale} />}
                   endContent={(
                     <SafeHStack gap={1} wrap="wrap" justify="end">

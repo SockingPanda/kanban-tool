@@ -178,6 +178,45 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(markup).toContain('aria-label="删除附件 report.txt"')
   })
 
+  test("keeps long attachment identifiers wrapped without runtime styles", () => {
+    const filename = `${"very-long-attachment-name-".repeat(8)}.txt`
+    const sha256 = "sha256:" + "a".repeat(128)
+    const markup = renderToStaticMarkup(
+      <TaskInspectorAssetsPanel
+        taskId="t_1"
+        labels={[]}
+        attachments={[{...attachment("a_long", filename), sha256}]}
+        suggestionResult={null}
+        suggestionRequested={false}
+        handlers={handlers()}
+        snapshot={snapshot()}
+      />,
+    )
+
+    expect(markup).toContain(filename)
+    expect(markup).toContain(sha256)
+    expect(markup).toContain("min-w-0 break-words")
+    expect(markup).not.toMatch(/ style=/)
+  })
+
+  test("keeps attachment input native single-select without inventing a MIME allowlist", () => {
+    const markup = renderToStaticMarkup(
+      <TaskInspectorAssetsPanel
+        taskId="t_1"
+        labels={[]}
+        attachments={[]}
+        suggestionResult={null}
+        suggestionRequested={false}
+        handlers={handlers()}
+        snapshot={snapshot()}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="attachment-file"')
+    expect(markup).not.toContain('accept="')
+    expect(markup).not.toContain('multiple=""')
+  })
+
   test("renders pending/error/empty states with accessible status regions", () => {
     const pending = renderToStaticMarkup(
       <TaskInspectorAssetsPanel

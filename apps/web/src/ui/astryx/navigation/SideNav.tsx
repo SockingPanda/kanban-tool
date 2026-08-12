@@ -2,6 +2,7 @@ import { useRef, useState, type Ref } from "react"
 
 import { joinClassNames } from "./classNames"
 import { SideNavContext } from "./context"
+import { NavigationIcon } from "./icons"
 import type { SideNavProps } from "./types"
 
 const navClasses = {
@@ -92,7 +93,7 @@ export function SideNav({
                 aria-expanded={!isCollapsed}
                 onClick={() => setCollapsed(!isCollapsed)}
               >
-                {isCollapsed ? <><i aria-hidden="true">‹</i><strong className="sr-only">{collapseLabel}</strong></> : collapseLabel}
+                {isCollapsed ? <><NavigationIcon name="chevron-left" /><strong className="sr-only">{collapseLabel}</strong></> : collapseLabel}
               </button>
             ) : null}
             {footerIcons !== undefined ? <menu className={navClasses.footerIcons} role="presentation">{footerIcons}</menu> : null}

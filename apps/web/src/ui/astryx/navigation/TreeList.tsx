@@ -4,6 +4,7 @@ import { useTreeFocus } from "@astryxdesign/core/hooks"
 
 import { joinClassNames } from "./classNames"
 import { TREE_GUIDE_CLASSES, TREE_LEVEL_CLASSES } from "./constants"
+import { NavigationIcon } from "./icons"
 import { isPrimaryNavigationClick } from "./interaction"
 import type {
   NavigationDensity,
@@ -202,7 +203,7 @@ function TreeItem({
             tabIndex={-1}
             onClick={() => onToggle(item, !expanded)}
           >
-            {expanded ? "−" : "+"}
+            <NavigationIcon name={expanded ? "minus" : "plus"} />
           </button>
         ) : null}
         {action}

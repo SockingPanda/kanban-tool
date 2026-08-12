@@ -12,8 +12,8 @@ let fixturePort = 1421
 
 const fixtureUrl = () => `http://127.0.0.1:${fixturePort}/app/tests/astryx-navigation.html`
 
-test.beforeAll(async (workerFixtures, testInfo) => {
-  void workerFixtures
+test.beforeAll(async ({ browserName }, testInfo) => {
+  void browserName
   const projectPortOffset = testInfo.project.name === "firefox" ? 10 : 0
   fixturePort = 1421 + projectPortOffset + testInfo.workerIndex
   viteProcess = spawn("pnpm", ["exec", "vite", "--host", "127.0.0.1", "--port", String(fixturePort)], {
@@ -43,6 +43,7 @@ test("SideNav preserves the focused section sibling and removes stale aria-contr
   const toggle = page.getByRole("button", { name: "收起项目" })
 
   await expect(parent).toHaveAttribute("aria-controls", "parent-children")
+  await expect(toggle.locator('svg[aria-hidden="true"]')).toHaveCount(1)
   await expect(page.locator("#parent-children")).toBeVisible()
   await toggle.click()
   await expect(page.getByRole("button", { name: "展开项目" })).toHaveAttribute("aria-expanded", "false")
@@ -56,6 +57,7 @@ test("SideNav preserves the focused section sibling and removes stale aria-contr
   await expect(page.getByTestId("parent-item")).toBeFocused()
   await expect(page.getByTestId("first-item")).not.toBeFocused()
   await expect(page.getByTestId("parent-item")).not.toHaveAttribute("aria-controls", "parent-children")
+  await expect(page.getByRole("button", { name: "展开导航" }).locator('svg[aria-hidden="true"]')).toHaveCount(1)
 })
 
 test("TreeList owns keyboard navigation and preserves modified anchor clicks", async ({ page }) => {
@@ -63,9 +65,11 @@ test("TreeList owns keyboard navigation and preserves modified anchor clicks", a
   const tree = page.getByRole("tree")
   const root = page.getByRole("treeitem", { name: /Tree root/ })
   const child = page.getByRole("treeitem", { name: /Tree child/ })
+  const rootToggle = page.getByRole("button", { name: "Collapse tree-root" })
 
   await root.focus()
   await expect(root).toBeFocused()
+  await expect(rootToggle.locator('svg[aria-hidden="true"]')).toHaveCount(1)
   await root.press("ArrowDown")
   await expect(child).toBeFocused()
   await child.press("Home")

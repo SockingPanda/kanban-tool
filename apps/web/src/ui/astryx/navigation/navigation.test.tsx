@@ -14,7 +14,7 @@ import { isPrimaryNavigationClick } from "./interaction"
 import type { TreeListItemData, TreeListProps } from "./types"
 
 const navigationSource = (): string => {
-  const sourceFiles = ["SideNav.tsx", "SideNavHeading.tsx", "SideNavItem.tsx", "SideNavSection.tsx", "TreeList.tsx", "constants.ts", "interaction.ts"]
+  const sourceFiles = ["SideNav.tsx", "SideNavHeading.tsx", "SideNavItem.tsx", "SideNavSection.tsx", "TreeList.tsx", "constants.ts", "icons.tsx", "interaction.ts"]
   return sourceFiles.map((fileName) => readFileSync(resolve(import.meta.dirname, fileName), "utf8")).join("\n")
 }
 
@@ -111,6 +111,8 @@ describe("CSP-safe Astryx navigation primitives", () => {
 
     expect(markup).toContain('aria-label="展开导航"')
     expect(markup).toContain('aria-expanded="false"')
+    expect(markup).toContain('<svg aria-hidden="true"')
+    expect(markup).not.toContain(">‹<")
     expect(markup).toContain('class="sr-only"')
     expect(markup).toContain("展开导航")
     expect(markup).not.toMatch(/Collapse navigation|Expand navigation/i)
@@ -181,6 +183,7 @@ describe("CSP-safe Astryx navigation primitives", () => {
     expect(markup).toContain('data-side-nav-primary="true"')
     expect(markup).toContain('aria-controls="projects-children"')
     expect(markup).toContain('aria-label="收起项目"')
+    expect(markup).toContain('<svg aria-hidden="true"')
     expect(markup).toContain('tabindex="0"')
     expect(markup).toContain('id="projects-children"')
     expect(markup).not.toContain('role="menu"')
@@ -218,6 +221,7 @@ describe("CSP-safe Astryx navigation primitives", () => {
     expect(markup).toContain('href="/app/boards/kanban"')
     expect(markup).toContain('target="_self"')
     expect(markup).toContain('data-testid="tree-kanban"')
+    expect(markup).toContain('<svg aria-hidden="true"')
     expect(markup).toContain('aria-label="收起 projects"')
     expect(markup).not.toContain('data-testid="projects"')
     expect(markup).not.toContain('role="menu"')
@@ -338,6 +342,10 @@ describe("CSP-safe Astryx navigation primitives", () => {
     expect(source).not.toContain((forbiddenOverlayWords[4] + forbiddenOverlayWords[5]).toLowerCase())
     expect(source).not.toContain("Collapse navigation")
     expect(source).not.toMatch(/`(?:Collapse|Expand)\s/)
+    expect(source).not.toContain(">‹<")
+    expect(source).not.toContain(">−<")
+    expect(source).not.toContain(">+<")
+    expect(source).toContain('aria-hidden="true"')
     expect(source).not.toMatch(/(?:collapseLabel|expandLabel)\s*\?\?\s*label/)
     expect(source).not.toMatch(/className=.*\$\{/)
     expect(source).not.toMatch(/(?:bg|text|border)-(?:neutral|sky|white)(?:-|\b)/)

@@ -2,6 +2,7 @@ import { cloneElement, isValidElement, useId, useLayoutEffect, useRef, useState,
 
 import { joinClassNames } from "./classNames"
 import { useSideNavContext } from "./context"
+import { NavigationIcon } from "./icons"
 import { isPrimaryNavigationClick } from "./interaction"
 import type { SideNavItemProps } from "./types"
 
@@ -178,7 +179,7 @@ export function SideNavItem({
           {action}
           {hasIndependentToggle ? (
             <button className={itemClasses.toggle} type="button" aria-label={expanded ? collapseLabel : expandLabel} aria-expanded={expanded} aria-controls={renderedAriaControls} onClick={toggleExpanded} tabIndex={0}>
-              {expanded ? "−" : "+"}
+              <NavigationIcon name={expanded ? "minus" : "plus"} />
             </button>
           ) : null}
         </menu>

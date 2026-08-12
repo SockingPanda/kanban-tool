@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test } from "vitest"
 
@@ -92,6 +93,8 @@ describe("MaintenancePage", () => {
     )
     expect(loading).toContain('data-testid="maintenance-loading"')
     expect(loading).toContain('data-frame="content"')
+    expect(loading).toContain('aria-busy="true"')
+    expect(loading).not.toContain("style=")
     expect(loading).toContain("维护")
 
     const ready = renderToStaticMarkup(
@@ -102,7 +105,32 @@ describe("MaintenancePage", () => {
     expect(ready).toContain('data-testid="maintenance-status"')
     expect(ready).toContain("db_fixture")
     expect(ready).toContain('data-testid="maintenance-legacy-import-unsupported"')
+    expect(ready).not.toContain("style=")
     expect(ready).not.toContain('data-testid="maintenance-import-v30-submit"')
+  })
+
+  test("keeps the closed confirmation dialog hydration-safe without inline styles", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <MaintenancePage runtime={runtime} boardSlug="default" initial={{ status }} />
+      </PreferencesProvider>,
+    )
+    expect(markup).toContain('data-testid="maintenance-confirm-dialog"')
+    expect(markup).toContain('data-open="false"')
+    expect(markup).toContain('role="alertdialog"')
+    expect(markup).toContain('data-testid="maintenance-confirm-cancel"')
+    expect(markup).not.toContain("style=")
+  })
+
+  test("keeps confirmation and mutation source on local dialog semantics", () => {
+    const source = readFileSync(new URL("./MaintenancePage.tsx", import.meta.url), "utf8")
+    expect(source).not.toContain("AlertDialog")
+    expect(source).not.toMatch(/\bisLoading\s*=/)
+    expect(source).toContain('import { Dialog } from "@/ui/astryx/overlays"')
+    expect(source).toContain("initialFocusRef={confirmCancelRef}")
+    expect(source).toContain("returnFocusRef={confirmOpenerRef}")
+    expect(source).toContain("closeOnBackdrop={false}")
+    expect(source).toContain("aria-busy")
   })
 
   test("renders actual server path and checksum in result fixtures", () => {

@@ -46,6 +46,8 @@ export interface DialogProps extends NativeDialogProps {
   readonly children: ReactNode
   readonly size?: DialogSize
   readonly placement?: DialogPlacement
+  /** Whether clicking the modal backdrop closes the dialog. */
+  readonly closeOnBackdrop?: boolean
   readonly className?: string
   readonly returnFocusRef?: { current: HTMLElement | null }
   readonly initialFocusRef?: { current: HTMLElement | null }
@@ -82,6 +84,7 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
     children,
     size = "md",
     placement = "center",
+    closeOnBackdrop = true,
     className,
     returnFocusRef,
     initialFocusRef,
@@ -194,7 +197,7 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
   const dialogId = id ?? generatedId
   const handleClick = (event: MouseEvent<HTMLDialogElement>) => {
     onClick?.(event)
-    if (event.target === event.currentTarget && isTopOverlay(event.currentTarget)) {
+    if (closeOnBackdrop && event.target === event.currentTarget && isTopOverlay(event.currentTarget)) {
       callbackRef.current(false)
     }
   }

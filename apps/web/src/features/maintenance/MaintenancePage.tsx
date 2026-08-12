@@ -1,4 +1,3 @@
-import { AlertDialog } from "@astryxdesign/core/AlertDialog"
 import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
@@ -12,6 +11,7 @@ import { createTranslator } from "../../lib/i18n"
 import { requestHealthRefresh } from "../../lib/health-refresh"
 import { usePreferences } from "../../lib/use-preferences"
 import { CheckboxInput, TextInput } from "../../ui/astryx/fields"
+import { Dialog } from "@/ui/astryx/overlays"
 import { PageFrame } from "../../ui/astryx/page-frame"
 import {
   Grid,
@@ -165,6 +165,7 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
   const [syncNotice, setSyncNotice] = useState<SyncNotice>(null)
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null)
   const confirmOpenerRef = useRef<HTMLElement | null>(null)
+  const confirmCancelRef = useRef<HTMLButtonElement | null>(null)
   const statusRequestRef = useRef<QueryRequest | null>(null)
   const diagnosticsRequestRef = useRef<QueryRequest | null>(null)
   const doctorRequestRef = useRef<QueryRequest | null>(null)
@@ -426,13 +427,13 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
       bodyLabelledBy="maintenance-heading"
       data-testid="maintenance-page"
       header={(
-        <SafeHStack as="header" gap={4} justify="between" align="start" wrap="wrap">
+        <SafeHStack as="header" gap={4} justify="between" align="start" wrap="wrap" aria-busy={status.kind === "loading" || undefined}>
           <SafeVStack gap={1} className="min-w-0">
             <Text as="p" type="supporting" display="block">{t("productKicker")}</Text>
             <Heading level={1} id="maintenance-heading">{t("maintenanceHeading")}</Heading>
             <Text as="p" type="supporting" display="block">{t("maintenanceDescription")}</Text>
           </SafeVStack>
-          <Button label={t("refresh")} variant="secondary" size="sm" isDisabled={isBusy || status.kind === "loading"} isLoading={status.kind === "loading"} onClick={refreshAll} data-testid="maintenance-refresh" />
+          <Button label={status.kind === "loading" ? t("loading") : t("refresh")} variant="secondary" size="sm" isDisabled={isBusy || status.kind === "loading"} aria-busy={status.kind === "loading" || undefined} onClick={refreshAll} data-testid="maintenance-refresh" />
         </SafeHStack>
       )}
     >
@@ -452,8 +453,8 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
             <SearchContent state={searchStatus} t={t} />
           </Panel>
           <Panel title={t("doctorHeading")} testId="maintenance-doctor">
-            <SafeVStack gap={3}>
-              <Button label={pendingAction === "doctor" ? t("loading") : t("runDoctor")} variant="secondary" size="sm" isDisabled={isBusy} isLoading={pendingAction === "doctor"} onClick={runDoctor} data-testid="maintenance-doctor-submit" />
+            <SafeVStack gap={3} aria-busy={pendingAction === "doctor" || undefined}>
+              <Button label={pendingAction === "doctor" ? t("loading") : t("runDoctor")} variant="secondary" size="sm" isDisabled={isBusy} aria-busy={pendingAction === "doctor" || undefined} onClick={runDoctor} data-testid="maintenance-doctor-submit" />
               {doctor.kind === "ready" ? <DoctorContent report={doctor.value} t={t} /> : null}
               {doctor.kind === "error" ? <InlineError error={doctor.error} t={t} action="doctor" actionError={actionError} /> : null}
             </SafeVStack>
@@ -483,14 +484,14 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
               <LiteralText type="code" display="block">{boardSlug}</LiteralText>
             </SafeHStack>
             <Grid label={t("maintenanceOperationsHeading")} columns="auto-md" gap={4}>
-              <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
-              <PathOperation label={t("exportPathLabel")} value={exportPath} onChange={setExportPath} buttonLabel={t("exportAction")} disabled={isBusy || !exportPath.trim()} loading={pendingAction === "export"} onClick={() => openConfirm({ kind: "export", path: exportPath.trim() })} testId="maintenance-export" />
+              <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} loadingLabel={t("loading")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
+              <PathOperation label={t("exportPathLabel")} value={exportPath} onChange={setExportPath} buttonLabel={t("exportAction")} loadingLabel={t("loading")} disabled={isBusy || !exportPath.trim()} loading={pendingAction === "export"} onClick={() => openConfirm({ kind: "export", path: exportPath.trim() })} testId="maintenance-export" />
               <SafeCard padding={4} role="group" aria-labelledby="maintenance-import-heading" data-testid="maintenance-import" aria-busy={pendingAction === "import"}>
                 <SafeVStack gap={3}>
                   <Heading level={3} id="maintenance-import-heading">{t("portableImportHeading")}</Heading>
                   <TextInput type="text" label={t("importPathLabel")} value={importPath} onChange={(value) => setImportPath(value)} placeholder={t("importPathPlaceholder")} htmlName="maintenance-import-path" data-testid="maintenance-import-path" />
                   <CheckboxInput label={t("replaceImportLabel")} value={replaceImport} onChange={(checked) => setReplaceImport(checked)} size="sm" htmlName="maintenance-replace-import" />
-                  <Button label={replaceImport ? t("replaceImportAction") : t("importAction")} variant={replaceImport ? "destructive" : "secondary"} size="sm" isDisabled={isBusy || !importPath.trim()} isLoading={pendingAction === "import"} onClick={() => openConfirm({ kind: "import", path: importPath.trim(), replace: replaceImport })} data-testid="maintenance-import-submit" />
+                  <Button label={pendingAction === "import" ? t("loading") : replaceImport ? t("replaceImportAction") : t("importAction")} variant={replaceImport ? "destructive" : "secondary"} size="sm" isDisabled={isBusy || !importPath.trim()} aria-busy={pendingAction === "import" || undefined} onClick={() => openConfirm({ kind: "import", path: importPath.trim(), replace: replaceImport })} data-testid="maintenance-import-submit" />
                   {resultFor(results.import, "import", t)}
                   <InlineError error={actionError?.action === "import" ? actionError.error : null} t={t} action="import" actionError={actionError} />
                 </SafeVStack>
@@ -501,10 +502,10 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
                   <Text as="p" type="supporting" display="block">{t("projectionMaintenanceDescription")}</Text>
                   <TextInput type="text" label={t("maintenanceOwnerLabel")} value={maintenanceOwner} onChange={(value) => setMaintenanceOwner(value)} placeholder={actor || runtime.actor} htmlName="maintenance-owner" data-testid="maintenance-owner" />
                   <SafeHStack gap={2} wrap="wrap">
-                    <Button label={t("runMaintenanceAction")} variant="secondary" size="sm" isDisabled={isBusy} isLoading={pendingAction === "run"} onClick={() => openConfirm({ kind: "run", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-run-submit" />
-                    <Button label={t("rebuildAction")} variant="destructive" size="sm" isDisabled={isBusy} isLoading={pendingAction === "rebuild"} onClick={() => openConfirm({ kind: "rebuild", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-rebuild-submit" />
-                    <Button label={t("cleanupAction")} variant="destructive" size="sm" isDisabled={isBusy} isLoading={pendingAction === "cleanup"} onClick={() => openConfirm({ kind: "cleanup", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-cleanup-submit" />
-                    <Button label={t("vacuumAction")} variant="destructive" size="sm" isDisabled={isBusy} isLoading={pendingAction === "vacuum"} onClick={() => openConfirm({ kind: "vacuum" })} data-testid="maintenance-vacuum-submit" />
+                    <Button label={pendingAction === "run" ? t("loading") : t("runMaintenanceAction")} variant="secondary" size="sm" isDisabled={isBusy} aria-busy={pendingAction === "run" || undefined} onClick={() => openConfirm({ kind: "run", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-run-submit" />
+                    <Button label={pendingAction === "rebuild" ? t("loading") : t("rebuildAction")} variant="destructive" size="sm" isDisabled={isBusy} aria-busy={pendingAction === "rebuild" || undefined} onClick={() => openConfirm({ kind: "rebuild", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-rebuild-submit" />
+                    <Button label={pendingAction === "cleanup" ? t("loading") : t("cleanupAction")} variant="destructive" size="sm" isDisabled={isBusy} aria-busy={pendingAction === "cleanup" || undefined} onClick={() => openConfirm({ kind: "cleanup", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-cleanup-submit" />
+                    <Button label={pendingAction === "vacuum" ? t("loading") : t("vacuumAction")} variant="destructive" size="sm" isDisabled={isBusy} aria-busy={pendingAction === "vacuum" || undefined} onClick={() => openConfirm({ kind: "vacuum" })} data-testid="maintenance-vacuum-submit" />
                   </SafeHStack>
                   {resultFor(results.run, "run", t)}
                   {resultFor(results.rebuild, "rebuild", t)}
@@ -517,7 +518,7 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
                 <SafeVStack gap={3}>
                   <Heading level={3} id="maintenance-checkpoint-heading">{t("checkpointHeading")}</Heading>
                   <Text as="p" type="supporting" display="block">{t("checkpointDescription")}</Text>
-                  <Button label={t("checkpointAction")} variant="secondary" size="sm" isDisabled={isBusy} isLoading={pendingAction === "checkpoint"} onClick={() => openConfirm({ kind: "checkpoint" })} data-testid="maintenance-checkpoint-submit" />
+                  <Button label={pendingAction === "checkpoint" ? t("loading") : t("checkpointAction")} variant="secondary" size="sm" isDisabled={isBusy} aria-busy={pendingAction === "checkpoint" || undefined} onClick={() => openConfirm({ kind: "checkpoint" })} data-testid="maintenance-checkpoint-submit" />
                   {resultFor(results.checkpoint, "checkpoint", t)}
                   <InlineError error={actionError?.action === "checkpoint" ? actionError.error : null} t={t} action="checkpoint" actionError={actionError} />
                 </SafeVStack>
@@ -531,18 +532,29 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
           </SafeVStack>
         </SafeSection>
 
-        <AlertDialog
+        <Dialog
           isOpen={confirm !== null}
           onOpenChange={(isOpen) => { if (!isOpen) { setConfirm(null); restoreConfirmFocus() } }}
-          title={confirm ? confirmTitle(confirm, t) : t("maintenanceHeading")}
-          description={confirm ? confirmDescription(confirm, t) : ""}
-          cancelLabel={t("cancel")}
-          actionLabel={t("continue")}
-          actionVariant={confirm && isDestructive(confirm) ? "destructive" : "primary"}
-          isActionLoading={pendingAction !== null}
-          onAction={confirmAction}
+          role="alertdialog"
+          aria-labelledby="maintenance-confirm-title"
+          aria-describedby="maintenance-confirm-description"
+          returnFocusRef={confirmOpenerRef}
+          initialFocusRef={confirmCancelRef}
+          closeOnBackdrop={false}
+          aria-busy={pendingAction !== null || undefined}
           data-testid="maintenance-confirm-dialog"
-        />
+        >
+          <SafeVStack as="section" gap={4} padding={6}>
+            <SafeVStack gap={1}>
+              <Heading level={2} id="maintenance-confirm-title">{confirm ? confirmTitle(confirm, t) : t("maintenanceHeading")}</Heading>
+              <Text as="p" type="body" color="secondary" id="maintenance-confirm-description">{confirm ? confirmDescription(confirm, t) : ""}</Text>
+            </SafeVStack>
+            <SafeHStack gap={2} justify="end" wrap="wrap">
+              <Button ref={confirmCancelRef} type="button" label={t("cancel")} variant="ghost" isDisabled={pendingAction !== null} data-autofocus data-testid="maintenance-confirm-cancel" onClick={() => { setConfirm(null); restoreConfirmFocus() }} />
+              <Button type="button" label={pendingAction !== null ? t("loading") : t("continue")} variant={confirm && isDestructive(confirm) ? "destructive" : "primary"} isDisabled={pendingAction !== null} aria-busy={pendingAction !== null || undefined} data-testid="maintenance-confirm-action" onClick={confirmAction} />
+            </SafeHStack>
+          </SafeVStack>
+        </Dialog>
       </SafeVStack>
     </PageFrame>
   )
@@ -552,12 +564,12 @@ function Panel({ title, testId, children }: { title: string; testId: string; chi
   return <SafeCard padding={4} role="region" aria-labelledby={`${testId}-heading`} data-testid={testId}><SafeVStack gap={3}><Heading level={2} id={`${testId}-heading`}>{title}</Heading>{children}</SafeVStack></SafeCard>
 }
 
-function PathOperation({ label, value, onChange, buttonLabel, disabled, loading, onClick, testId }: { label: string; value: string; onChange: (value: string) => void; buttonLabel: string; disabled: boolean; loading: boolean; onClick: () => void; testId: string }) {
+function PathOperation({ label, value, onChange, buttonLabel, loadingLabel, disabled, loading, onClick, testId }: { label: string; value: string; onChange: (value: string) => void; buttonLabel: string; loadingLabel: string; disabled: boolean; loading: boolean; onClick: () => void; testId: string }) {
   return <SafeCard padding={4} role="group" aria-labelledby={`${testId}-heading`} data-testid={testId} aria-busy={loading}>
     <SafeVStack gap={3}>
       <Heading level={3} id={`${testId}-heading`}>{label}</Heading>
       <TextInput type="text" label={label} value={value} onChange={(next) => onChange(next)} htmlName={`${testId}-path`} data-testid={`${testId}-path`} />
-      <Button label={buttonLabel} variant="secondary" size="sm" isDisabled={disabled} isLoading={loading} onClick={onClick} data-testid={`${testId}-submit`} />
+      <Button label={loading ? loadingLabel : buttonLabel} variant="secondary" size="sm" isDisabled={disabled} aria-busy={loading || undefined} onClick={onClick} data-testid={`${testId}-submit`} />
     </SafeVStack>
   </SafeCard>
 }

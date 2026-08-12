@@ -129,6 +129,17 @@ describe("Astryx CSP-safe overlays", () => {
     expect(markup).not.toContain(" style=")
   })
 
+  test("supports alert-dialog semantics that keep backdrop clicks inert", () => {
+    const markup = renderToStaticMarkup(
+      <Dialog isOpen={false} onOpenChange={vi.fn()} role="alertdialog" closeOnBackdrop={false} aria-label="Confirm">
+        <button type="button">Cancel</button>
+      </Dialog>,
+    )
+
+    expect(markup).toContain('role="alertdialog"')
+    expect(markup).not.toContain(" style=")
+  })
+
   test("keeps a controlled popover DOM-contained with static placement classes", () => {
     const markup = renderToStaticMarkup(
       <Popover

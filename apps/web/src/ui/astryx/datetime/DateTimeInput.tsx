@@ -384,39 +384,37 @@ function DateTimeInputImpl(
     assignRef(forwardedRef, node)
   }
 
-  const fireChange = (nextDate: string, nextTime: string) => {
+  const fireChange = (nextDate: string, nextTime: string): boolean => {
     const nextValue = parseDateTimeLocal(nextDate, nextTime, hasSeconds)
     if (!nextValue) {
       onChange?.(undefined)
-      return
+      return true
     }
 
     const nextParts = parseISODateTime(nextValue, hasSeconds)
-    if (!nextParts?.time || !isDateTimeWithinBounds(nextParts.date, nextParts.time, dateBounds, maxBounds, hasSeconds)) return
+    if (!nextParts?.time || !isDateTimeWithinBounds(nextParts.date, nextParts.time, dateBounds, maxBounds, hasSeconds)) return false
     onChange?.(nextValue)
+    return true
   }
 
   const handleDateChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (interactiveDisabled) return
     const nextDate = event.currentTarget.value.trim()
     if (nextDate && (!isISODate(nextDate) || !isDateWithinBounds(nextDate, dateBounds, maxBounds))) return
-    setDateValue(nextDate)
-    fireChange(nextDate, timeValue)
+    if (fireChange(nextDate, timeValue)) setDateValue(nextDate)
   }
 
   const handleTimeChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (interactiveDisabled) return
     const rawTime = event.currentTarget.value.trim()
     if (!rawTime) {
-      setTimeValue("")
-      fireChange(dateValue, "")
+      if (fireChange(dateValue, "")) setTimeValue("")
       return
     }
 
     const nextTime = normalizeISOTime(rawTime, hasSeconds)
     if (!nextTime || (dateValue && !isDateTimeWithinBounds(dateValue, nextTime, dateBounds, maxBounds, hasSeconds))) return
-    setTimeValue(nextTime)
-    fireChange(dateValue, nextTime)
+    if (fireChange(dateValue, nextTime)) setTimeValue(nextTime)
   }
 
   const handleClear = () => {

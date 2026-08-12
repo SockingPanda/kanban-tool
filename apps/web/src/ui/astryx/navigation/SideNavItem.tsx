@@ -71,6 +71,7 @@ export function SideNavItem({
   const hasPrimaryAction = href !== undefined || onClick !== undefined
   const hasIndependentToggle = canToggle && hasPrimaryAction
   const resolvedAriaControls = hasChildren ? ariaControls ?? `side-nav-item-${generatedId}` : undefined
+  const renderedAriaControls = !isCollapsed && hasChildren && expanded ? resolvedAriaControls : undefined
   useLayoutEffect(() => {
     if ((!expanded || isCollapsed) && nestedHadFocus.current) {
       primaryRef.current?.focus()
@@ -139,7 +140,7 @@ export function SideNavItem({
       aria-current={isSelected ? "page" : undefined}
       aria-disabled={isDisabled ? "true" : undefined}
       aria-label={canToggle && !hasPrimaryAction ? (expanded ? collapseLabel : expandLabel) : isCollapsed ? label : undefined}
-      aria-controls={resolvedAriaControls}
+      aria-controls={renderedAriaControls}
       aria-expanded={canToggle && !hasPrimaryAction ? expanded : undefined}
       data-side-nav-primary="true"
       data-testid={testId}
@@ -160,7 +161,7 @@ export function SideNavItem({
       aria-current={isSelected ? "page" : undefined}
       aria-disabled={isDisabled ? "true" : undefined}
       aria-label={canToggle && !hasPrimaryAction ? (expanded ? collapseLabel : expandLabel) : isCollapsed ? label : undefined}
-      aria-controls={resolvedAriaControls}
+      aria-controls={renderedAriaControls}
       aria-expanded={canToggle && !hasPrimaryAction ? expanded : undefined}
       data-side-nav-primary="true"
       data-testid={testId}
@@ -171,12 +172,12 @@ export function SideNavItem({
   )
 
   return (
-    <li className={itemClasses.item} data-collapsed={isCollapsed ? "true" : "false"}>
+    <li className={itemClasses.item} data-side-nav-item="true" data-collapsed={isCollapsed ? "true" : "false"}>
       {canToggle ? (
         <menu className="m-0 flex list-none items-center gap-1 p-0" role="presentation">
           {action}
           {hasIndependentToggle ? (
-            <button className={itemClasses.toggle} type="button" aria-label={expanded ? collapseLabel : expandLabel} aria-expanded={expanded} aria-controls={resolvedAriaControls} onClick={toggleExpanded} tabIndex={0}>
+            <button className={itemClasses.toggle} type="button" aria-label={expanded ? collapseLabel : expandLabel} aria-expanded={expanded} aria-controls={renderedAriaControls} onClick={toggleExpanded} tabIndex={0}>
               {expanded ? "−" : "+"}
             </button>
           ) : null}
@@ -185,7 +186,7 @@ export function SideNavItem({
       {!isCollapsed && hasChildren && expanded ? (
         <ul
           ref={nestedListRef}
-          id={resolvedAriaControls}
+          id={renderedAriaControls}
           className={itemClasses.nestedList}
           onFocus={() => { nestedHadFocus.current = true }}
           onBlur={(event: FocusEvent<HTMLUListElement>) => {

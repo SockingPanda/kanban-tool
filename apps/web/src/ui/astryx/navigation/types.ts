@@ -34,8 +34,9 @@ export type TreeListItemAdapterResult<TItem> = Omit<TreeListItemData, "children"
 export type TreeListItemAdapter<TItem> = (item: TItem) => TreeListItemAdapterResult<TItem>
 
 export type TreeListAccessibleLabel =
-  | { readonly "aria-label": string; readonly header?: ReactNode }
-  | { readonly "aria-label"?: never; readonly header: ReactNode }
+  | { readonly "aria-label": string; readonly "aria-labelledby"?: string; readonly header?: ReactNode }
+  | { readonly "aria-label"?: never; readonly "aria-labelledby": string; readonly header?: ReactNode }
+  | { readonly "aria-label"?: never; readonly "aria-labelledby"?: never; readonly header: ReactNode }
 
 type TreeListExpansionProps =
   | { readonly expandedIds: readonly string[]; readonly defaultExpandedIds?: never }
@@ -50,7 +51,6 @@ type TreeListCommonProps<TItem> = {
   readonly className?: string
   readonly "data-testid"?: string
   readonly id?: string
-  readonly "aria-labelledby"?: string
   readonly ref?: Ref<HTMLElement>
   readonly onExpandedChange?: (id: string, expanded: boolean) => void
   readonly onAction?: (item: TreeListItemData, event?: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => void

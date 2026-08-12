@@ -45,6 +45,12 @@ const adaptedDomainTree = <TreeList<DomainTreeItem>
   expandLabel={() => "展开"}
   collapseLabel={() => "收起"}
 />
+const labelledTree = <TreeList
+  aria-labelledby="projects-heading"
+  items={[{ id: "root", label: "Root" }]}
+  expandLabel={() => "展开"}
+  collapseLabel={() => "收起"}
+/>
 // @ts-expect-error non-Astryx item shapes require an adapter.
 const unsafeDomainTree = <TreeList<DomainTreeItem>
   aria-label="域树"
@@ -60,6 +66,7 @@ void unnamedTreeProps
 void booleanSideNav
 void unlabeledSideNavItem
 void adaptedDomainTree
+void labelledTree
 void unsafeDomainTree
 
 const treeLabels = {
@@ -125,6 +132,38 @@ describe("CSP-safe Astryx navigation primitives", () => {
     expect(markup).not.toMatch(/aria-label="(?:Expand|Collapse)/)
   })
 
+  test("only points aria-controls at a rendered SideNavItem region", () => {
+    const closed = renderToStaticMarkup(
+      <SideNavItem
+        label="Projects"
+        collapsible
+        defaultIsExpanded={false}
+        expandLabel="展开项目"
+        collapseLabel="收起项目"
+        aria-controls="projects-children"
+      >
+        <SideNavItem label="Kanban" href="/app/boards/kanban" />
+      </SideNavItem>,
+    )
+    const parentCollapsed = renderToStaticMarkup(
+      <SideNav collapsible={{ defaultIsCollapsed: true, hasButton: false }}>
+        <SideNavItem
+          label="Projects"
+          expandLabel="展开项目"
+          collapseLabel="收起项目"
+          aria-controls="projects-children"
+        >
+          <SideNavItem label="Kanban" href="/app/boards/kanban" />
+        </SideNavItem>
+      </SideNav>,
+    )
+
+    expect(closed).not.toContain('aria-controls="projects-children"')
+    expect(closed).not.toContain('id="projects-children"')
+    expect(parentCollapsed).not.toContain('aria-controls="projects-children"')
+    expect(parentCollapsed).not.toContain('id="projects-children"')
+  })
+
   test("keeps a primary item action and its expansion toggle independently reachable", () => {
     const markup = renderToStaticMarkup(
       <SideNavItem
@@ -184,6 +223,20 @@ describe("CSP-safe Astryx navigation primitives", () => {
     expect(markup).not.toContain('role="menu"')
     expect(markup).not.toContain("<aside")
     expect(markup).not.toContain(inlineStyleAttribute)
+  })
+
+  test("accepts an aria-labelledby-only tree name", () => {
+    const markup = renderToStaticMarkup(
+      <TreeList
+        aria-labelledby="projects-heading"
+        items={[{ id: "projects", label: "Projects" }]}
+        {...treeLabels}
+      />,
+    )
+
+    expect(markup).toContain('role="tree"')
+    expect(markup).toContain('aria-labelledby="projects-heading"')
+    expect(markup).not.toContain('aria-label=""')
   })
 
   test("applies density to each tree row and keeps line guides explicit", () => {

@@ -53,9 +53,9 @@ export function SideNav({
     if (next && navRef.current !== null && typeof document !== "undefined") {
       const active = document.activeElement
       if (active instanceof HTMLElement && navRef.current.contains(active)) {
-        const activeItem = active.closest<HTMLElement>("li")
-        const activePrimary = active.closest<HTMLElement>("[data-side-nav-primary]")
-        const ownerItem = activePrimary?.closest<HTMLElement>("li")?.parentElement?.closest<HTMLElement>("li") ?? activeItem
+        const activeItem = active.closest<HTMLElement>("li[data-side-nav-item]")
+        const nestedList = activeItem?.parentElement?.closest<HTMLElement>("ul[id]")
+        const ownerItem = nestedList?.closest<HTMLElement>("li[data-side-nav-item]") ?? activeItem
         const owner = ownerItem?.querySelector<HTMLElement>("[data-side-nav-primary]")
         owner?.focus()
       }

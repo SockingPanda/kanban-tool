@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+
+import { Badge } from "@astryxdesign/core/Badge"
+import { Banner } from "@astryxdesign/core/Banner"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Item } from "@astryxdesign/core/Item"
+import { List } from "@astryxdesign/core/List"
+import { Text } from "@astryxdesign/core/Text"
+
+import { CodeBlock, Grid, PageFrame, SafeHStack, SafeVStack } from "@/ui/astryx"
 
 import { ExplorerReadError, loadTaskRuns, type TaskRunsReadModel } from "../../lib/api/explorer-read-model"
 import type { Locale } from "../../lib/preferences"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
-import styles from "./TaskRunsView.module.css"
 
 export type TaskRunsReadState = {
   readonly data: TaskRunsReadModel | null
@@ -28,7 +37,6 @@ export interface TaskRunsViewProps {
 
 type RunsCopy = {
   readonly title: string
-  readonly kicker: string
   readonly selectTask: string
   readonly loading: string
   readonly empty: string
@@ -51,7 +59,6 @@ type RunsCopy = {
 const copies: Record<Locale, RunsCopy> = {
   zh: {
     title: "运行记录",
-    kicker: "任务运行记录",
     selectTask: "选择任务后查看运行记录。",
     loading: "正在加载运行记录…",
     empty: "当前任务暂无运行记录。",
@@ -72,7 +79,6 @@ const copies: Record<Locale, RunsCopy> = {
   },
   en: {
     title: "Runs",
-    kicker: "TASK RUNS",
     selectTask: "Select a task to inspect runs.",
     loading: "Loading runs…",
     empty: "No runs for the selected task.",
@@ -108,80 +114,155 @@ function timestamp(value: number | null, locale: Locale): string {
   }
 }
 
+type RunStatus = TaskRunsReadModel["runs"][number]["status"]
+
+function statusVariant(status: RunStatus): "neutral" | "info" | "success" | "warning" | "error" {
+  switch (status) {
+    case "running": return "info"
+    case "succeeded": return "success"
+    case "failed": return "error"
+    case "canceled":
+    case "expired": return "warning"
+    default: return "neutral"
+  }
+}
+
+function machineToken(value: string | null | undefined, fallback: string): ReactNode {
+  return value ? <code translate="no"><Text type="code">{value}</Text></code> : <Text type="supporting">{fallback}</Text>
+}
+
 function RunRow({ run, copy, locale }: { readonly run: TaskRunsReadModel["runs"][number]; readonly copy: RunsCopy; readonly locale: Locale }) {
   return (
-    <li className={styles.runRow} data-testid="run-row">
-      <header className={styles.runHeader}>
-        <span className={styles.runId} translate="no">{run.id}</span>
-        <span className={styles.statusBadge}>{copy.status[run.status]}</span>
-      </header>
-      <dl className={styles.facts}>
-        <div><dt>{copy.worker}</dt><dd>{run.worker_profile ?? copy.manual}</dd></div>
-        <div><dt>{copy.owner}</dt><dd>{run.claim_owner}</dd></div>
-        <div><dt>{copy.started}</dt><dd>{timestamp(run.started_at, locale)}</dd></div>
-        <div><dt>{copy.finished}</dt><dd>{timestamp(run.finished_at, locale)}</dd></div>
-        <div><dt>{copy.exit}</dt><dd>{run.exit_code === null ? "—" : String(run.exit_code)}</dd></div>
-      </dl>
-      {run.error ? <p className={styles.runError}>{run.error}</p> : null}
-    </li>
+    <Item
+      as="li"
+      data-testid="run-row"
+      density="compact"
+      label={machineToken(run.id, "—")}
+      endContent={<Badge variant={statusVariant(run.status)} label={copy.status[run.status]} />}
+      description={(
+        <Text as="p" type="supporting" wordBreak="break-word">
+          {copy.worker}: {machineToken(run.worker_profile, copy.manual)} · {copy.owner}: {machineToken(run.claim_owner, "—")} · {copy.started}: {timestamp(run.started_at, locale)} · {copy.finished}: {timestamp(run.finished_at, locale)} · {copy.exit}: {run.exit_code === null ? "—" : String(run.exit_code)}
+          {run.error ? <> · {run.error}</> : null}
+        </Text>
+      )}
+    />
   )
 }
 
 function LogPanel({ model, copy }: { readonly model: TaskRunsReadModel; readonly copy: RunsCopy }) {
-  if (!model.log) return <section className={styles.noLog} data-testid="runs-no-log" role="status"><p>{copy.noLog}</p></section>
+  if (!model.log) {
+    return (
+      <SafeVStack as="section" gap={2} padding={4} className="min-w-0" data-testid="runs-no-log" role="status">
+        <Text as="p" type="supporting">{copy.noLog}</Text>
+      </SafeVStack>
+    )
+  }
   return (
-    <section className={styles.logPanel} data-testid="runs-log" aria-labelledby="runs-log-heading">
-      <header className={styles.logHeader}>
-        <h2 id="runs-log-heading">{copy.runLog}</h2>
-        <span className={styles.runId} translate="no">{model.log.run_id}</span>
-        {model.log.truncated ? <span className={styles.logTruncated}>{copy.truncated}</span> : null}
-      </header>
-      <pre aria-label={copy.runLog}>{model.log.content || copy.emptyLog}</pre>
-    </section>
+    <SafeVStack as="section" gap={2} padding={3} className="min-w-0" data-testid="runs-log" aria-labelledby="runs-log-heading">
+      <SafeHStack as="header" gap={2} align="center" wrap="wrap">
+        <Heading level={3} id="runs-log-heading">{copy.runLog}</Heading>
+        {machineToken(model.log.run_id, "—")}
+        {model.log.truncated ? <Badge variant="warning" label={copy.truncated} /> : null}
+      </SafeHStack>
+      <CodeBlock
+        code={model.log.content || copy.emptyLog}
+        language="plaintext"
+        isWrapped
+        container="section"
+        maxHeight="evidence"
+        label={copy.runLog}
+        hasCopy={false}
+        copyLabel={copy.runLog}
+        copiedLabel={copy.runLog}
+        errorLabel={copy.runLog}
+        data-testid="runs-log-content"
+      />
+    </SafeVStack>
+  )
+}
+
+function StateBoundary({
+  testId,
+  role,
+  title,
+  description,
+  retry,
+}: {
+  readonly testId: string
+  readonly role: "status" | "alert"
+  readonly title?: string
+  readonly description: string
+  readonly retry?: { readonly label: string; readonly onClick: () => void }
+}) {
+  const headingId = `${testId}-heading`
+  return (
+    <SafeVStack as="section" gap={2} padding={4} data-testid={testId} role={role} aria-labelledby={title ? headingId : undefined}>
+      <PageFrame
+        frame="content"
+        bodyLabel={title ?? description}
+        header={title ? <Heading level={2} id={headingId}>{title}</Heading> : undefined}
+      >
+        <SafeVStack gap={2}>
+          <Text as="p" type="supporting">{description}</Text>
+          {retry ? <Button label={retry.label} variant="secondary" size="sm" onClick={retry.onClick} /> : null}
+        </SafeVStack>
+      </PageFrame>
+    </SafeVStack>
   )
 }
 
 export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRunsPresentationProps) {
   const copy = copies[locale]
   if (!taskId) {
-    return <section className={styles.state} data-testid="runs-no-task" role="status"><p>{copy.selectTask}</p></section>
+    return <StateBoundary testId="runs-no-task" role="status" description={copy.selectTask} />
   }
   const kind = errorKind(state.error instanceof Error ? state.error : null)
   if (state.error && !state.data) {
     const offline = kind === "offline"
-    return (
-      <section className={styles.state} data-testid={offline ? "runs-offline" : "runs-error"} role={offline ? "status" : "alert"}>
-        <h2>{offline ? copy.offline : copy.error}</h2>
-        {!offline ? <p>{state.error.message}</p> : null}
-        {onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}
-      </section>
-    )
+    return <StateBoundary testId={offline ? "runs-offline" : "runs-error"} role={offline ? "status" : "alert"} title={offline ? copy.offline : copy.error} description={offline ? copy.offline : state.error.message} retry={onRetry ? { label: copy.retry, onClick: onRetry } : undefined} />
   }
   if (state.loading && !state.data) {
-    return <section className={styles.state} data-testid="runs-loading" role="status"><p>{copy.loading}</p></section>
+    return <StateBoundary testId="runs-loading" role="status" description={copy.loading} />
   }
   if (!state.data || state.data.runs.length === 0) {
-    if (kind === "offline") return <section className={styles.state} data-testid="runs-offline" role="status"><p>{copy.offline}</p>{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</section>
-    return <section className={styles.state} data-testid="runs-empty" role="status"><p>{copy.empty}</p></section>
+    if (kind === "offline") return <StateBoundary testId="runs-offline" role="status" description={copy.offline} retry={onRetry ? { label: copy.retry, onClick: onRetry } : undefined} />
+    return <StateBoundary testId="runs-empty" role="status" description={copy.empty} />
   }
   return (
-    <section className={styles.runs} data-testid="runs-ready" aria-labelledby="runs-heading">
-      <header className={styles.heading}>
-        <p className={styles.kicker}>{copy.kicker}</p>
-        <h2 id="runs-heading">{copy.title}</h2>
-        <p className={styles.taskId} translate="no">{taskId}</p>
-      </header>
-      {state.error ? <div className={styles.refreshError} role={kind === "offline" ? "status" : "alert"}>{kind === "offline" ? copy.offline : state.error.message}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
-      <div className={styles.columns}>
-        <section className={styles.runListPanel} aria-labelledby="runs-list-heading" tabIndex={0}>
-          <h2 id="runs-list-heading" className={styles.visuallyHidden}>{copy.title}</h2>
-          <ul className={styles.runList}>
+    <PageFrame
+      frame="content"
+      data-testid="runs-ready"
+      aria-labelledby="runs-heading"
+      bodyLabel={copy.title}
+      header={(
+        <SafeVStack gap={1}>
+          <Heading level={2} id="runs-heading">{copy.title}</Heading>
+          <code translate="no"><Text type="code">{taskId}</Text></code>
+        </SafeVStack>
+      )}
+    >
+      <SafeVStack gap={4}>
+      {state.error ? (
+        <Banner
+          status={kind === "offline" ? "info" : "error"}
+          title={kind === "offline" ? copy.offline : copy.error}
+          description={kind === "offline" ? copy.offline : state.error.message}
+          container="section"
+          role={kind === "offline" ? "status" : "alert"}
+          endContent={onRetry ? <Button label={copy.retry} variant="ghost" size="sm" onClick={onRetry} /> : undefined}
+        />
+      ) : null}
+      <Grid label={copy.title} columns="single" gap={4} align="start" className="md:grid-cols-2">
+        <SafeVStack as="section" gap={0} className="min-w-0 max-h-96 overflow-auto overscroll-contain" aria-labelledby="runs-list-heading" tabIndex={0}>
+          <Heading level={3} id="runs-list-heading" className="sr-only">{copy.title}</Heading>
+          <List density="compact" hasDividers className="min-w-0">
             {state.data.runs.map((run) => <RunRow key={run.id} run={run} copy={copy} locale={locale} />)}
-          </ul>
-        </section>
+          </List>
+        </SafeVStack>
         <LogPanel model={state.data} copy={copy} />
-      </div>
-    </section>
+      </Grid>
+      </SafeVStack>
+    </PageFrame>
   )
 }
 

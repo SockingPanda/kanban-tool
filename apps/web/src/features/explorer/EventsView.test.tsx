@@ -57,7 +57,7 @@ describe("EventsView", () => {
     expect(markup).toContain('dateTime="2023-11-14T22:13:21.000Z"')
     expect(markup).toContain('type="button"')
     expect(markup).toContain("<form")
-    expect(markup).toContain(">Apply</button>")
+    expect(markup).toContain("Apply")
   })
 
   test("filters kinds without treating the filtered result as an API empty state", () => {

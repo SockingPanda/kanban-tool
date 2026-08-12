@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 
+import { Banner } from "@astryxdesign/core/Banner"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from "@astryxdesign/core/Table"
+import { Text } from "@astryxdesign/core/Text"
+
+import { PageFrame, SafeHStack, SafeVStack, TextInput } from "@/ui/astryx"
+
 import {
   ExplorerReadError,
   loadBoardEvents,
@@ -12,8 +20,6 @@ import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
-
-import styles from "./EventsView.module.css"
 
 export type EventsReadState = {
   readonly data: BoardEventsReadModel | null
@@ -52,7 +58,6 @@ export interface EventsViewProps {
 
 type EventsCopy = {
   readonly title: string
-  readonly kicker: string
   readonly board: string
   readonly task: string
   readonly kind: string
@@ -80,7 +85,6 @@ type EventsCopy = {
 const copies: Record<Locale, EventsCopy> = {
   zh: {
     title: "事件",
-    kicker: "看板事件",
     board: "看板",
     task: "任务",
     kind: "类型",
@@ -106,7 +110,6 @@ const copies: Record<Locale, EventsCopy> = {
   },
   en: {
     title: "Events",
-    kicker: "BOARD EVENTS",
     board: "Board",
     task: "Task",
     kind: "Kind",
@@ -153,27 +156,64 @@ function eventTimestamp(value: number, locale: Locale): { readonly display: stri
 }
 
 function machineToken(value: string | null | undefined, fallback: string): ReactNode {
-  return value ? <code className={styles.token} translate="no">{value}</code> : <span>{fallback}</span>
+  return value ? <code translate="no"><Text type="code">{value}</Text></code> : <Text type="supporting">{fallback}</Text>
 }
 
 function EventRow({ event, copy, locale, onSelectTask }: { readonly event: ExplorerEvent; readonly copy: EventsCopy; readonly locale: Locale; readonly onSelectTask?: (taskId: string) => void }) {
   const time = eventTimestamp(event.created_at, locale)
   return (
-    <tr data-testid="event-row" data-event-id={event.event_id}>
-      <td>{machineToken(event.kind, copy.unknown)}</td>
-      <td>
+    <TableRow data-testid="event-row" data-event-id={event.event_id}>
+      <TableCell>{machineToken(event.kind, copy.unknown)}</TableCell>
+      <TableCell>
         {event.task_id && onSelectTask ? (
-          <button type="button" className={styles.tokenButton} data-task-opener={taskOpenerKey(event.task_id as string)} onClick={() => onSelectTask(event.task_id as string)}>
+          <Button
+            type="button"
+            label={event.task_id}
+            variant="ghost"
+            size="sm"
+            data-task-opener={taskOpenerKey(event.task_id as string)}
+            onClick={() => onSelectTask(event.task_id as string)}
+          >
             {machineToken(event.task_id, copy.unknown)}
-          </button>
+          </Button>
         ) : machineToken(event.task_id, copy.unknown)}
-      </td>
-      <td>{machineToken(event.run_id, copy.unknown)}</td>
-      <td>
+      </TableCell>
+      <TableCell>{machineToken(event.run_id, copy.unknown)}</TableCell>
+      <TableCell>
         <time dateTime={time.iso} title={time.iso}>{time.display}</time>
-      </td>
-      <td>{machineToken(event.actor, copy.unknown)}</td>
-    </tr>
+      </TableCell>
+      <TableCell>{machineToken(event.actor, copy.unknown)}</TableCell>
+    </TableRow>
+  )
+}
+
+function StateBoundary({
+  testId,
+  role,
+  title,
+  description,
+  retry,
+}: {
+  readonly testId: string
+  readonly role: "status" | "alert"
+  readonly title: string
+  readonly description: string
+  readonly retry?: { readonly label: string; readonly onClick: () => void }
+}) {
+  return (
+    <SafeVStack as="section" gap={2} padding={4} data-testid={testId} role={role}>
+      <PageFrame
+        frame="content"
+        aria-labelledby={`${testId}-heading`}
+        bodyLabel={title}
+        header={<Heading level={2} id={`${testId}-heading`}>{title}</Heading>}
+      >
+        <SafeVStack gap={2}>
+          <Text as="p" type="supporting">{description}</Text>
+          {retry ? <Button label={retry.label} variant="secondary" size="sm" onClick={retry.onClick} /> : null}
+        </SafeVStack>
+      </PageFrame>
+    </SafeVStack>
   )
 }
 
@@ -193,25 +233,13 @@ export function EventsPresentation({
   const scopedData = state.data && (taskId === null || state.data.taskId === taskId) ? state.data : null
 
   if (!scopedData && (state.loading || !state.error) && !offline) {
-    return <section className={styles.state} data-testid="events-loading" role="status" aria-labelledby="events-loading-heading"><h2 id="events-loading-heading">{copy.title}</h2><p>{copy.loading}</p></section>
+    return <StateBoundary testId="events-loading" role="status" title={copy.title} description={copy.loading} />
   }
   if (!scopedData && offline) {
-    return (
-      <section className={styles.state} data-testid="events-offline" role="status">
-        <h2>{copy.offline}</h2>
-        <p>{copy.offlineDescription}</p>
-        <button type="button" onClick={onRefresh}>{copy.retry}</button>
-      </section>
-    )
+    return <StateBoundary testId="events-offline" role="status" title={copy.offline} description={copy.offlineDescription} retry={{ label: copy.retry, onClick: onRefresh }} />
   }
   if (!scopedData && error) {
-    return (
-      <section className={styles.state} data-testid="events-error" role="alert">
-        <h2>{copy.error}</h2>
-        <p>{error.message}</p>
-        <button type="button" onClick={onRefresh}>{copy.retry}</button>
-      </section>
-    )
+    return <StateBoundary testId="events-error" role="alert" title={copy.error} description={error.message} retry={{ label: copy.retry, onClick: onRefresh }} />
   }
   if (!scopedData) return null
 
@@ -222,61 +250,84 @@ export function EventsPresentation({
 
   if (scopedData.events.length === 0 && !state.error) {
     return (
-      <section className={styles.events} data-testid="events-empty" aria-labelledby="events-heading">
-        <header className={styles.heading}>
-          <p className={styles.kicker}>{copy.kicker}</p>
-          <h2 id="events-heading">{copy.title}</h2>
-          <p className={styles.boardContext}>{copy.board} · {machineToken(scopedData.board.slug, copy.unknown)}</p>
-          <button type="button" onClick={onRefresh}>{copy.refresh}</button>
-        </header>
-        <FilterBar copy={copy} value={kindFilter} onChange={onKindFilterChange} />
-        <p className={styles.empty} role="status">{copy.empty}</p>
-      </section>
+      <PageFrame
+        frame="content"
+        data-testid="events-empty"
+        aria-labelledby="events-heading"
+        bodyLabel={copy.title}
+        header={(
+          <SafeHStack as="section" justify="between" align="end" gap={4} wrap="wrap">
+            <SafeVStack gap={1}>
+              <Heading level={2} id="events-heading">{copy.title}</Heading>
+              <Text type="supporting">{copy.board} · {machineToken(scopedData.board.slug, copy.unknown)}</Text>
+            </SafeVStack>
+            <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} />
+          </SafeHStack>
+        )}
+      >
+        <SafeVStack gap={4}>
+          <FilterBar copy={copy} value={kindFilter} onChange={onKindFilterChange} />
+          <Text as="p" type="supporting" role="status">{copy.empty}</Text>
+        </SafeVStack>
+      </PageFrame>
     )
   }
 
   return (
-    <section className={styles.events} data-testid={degraded ? "events-degraded-stale" : "events-ready"} aria-labelledby="events-heading">
-      <header className={styles.heading}>
-        <div>
-          <p className={styles.kicker}>{copy.kicker}</p>
-          <h2 id="events-heading">{copy.title}</h2>
-          <p className={styles.boardContext}>{copy.board} · {machineToken(scopedData.board.slug, copy.unknown)}</p>
-          {taskId ? <p className={styles.boardContext}>{copy.task} · {machineToken(taskId, copy.unknown)}</p> : null}
-        </div>
-        <button type="button" data-testid="events-refresh" onClick={onRefresh} disabled={state.loading}>{copy.refresh}</button>
-      </header>
+    <PageFrame
+      frame="content"
+      data-testid={degraded ? "events-degraded-stale" : "events-ready"}
+      aria-labelledby="events-heading"
+      bodyLabel={copy.title}
+      header={(
+        <SafeHStack as="section" justify="between" align="end" gap={4} wrap="wrap">
+          <SafeVStack gap={1}>
+            <Heading level={2} id="events-heading">{copy.title}</Heading>
+            <Text type="supporting">{copy.board} · {machineToken(scopedData.board.slug, copy.unknown)}</Text>
+            {taskId ? <Text type="supporting">{copy.task} · {machineToken(taskId, copy.unknown)}</Text> : null}
+          </SafeVStack>
+          <Button label={copy.refresh} variant="secondary" size="sm" data-testid="events-refresh" onClick={onRefresh} isDisabled={state.loading} />
+        </SafeHStack>
+      )}
+    >
+      <SafeVStack gap={4}>
       {degraded ? (
-        <div className={styles.notice} role={offline ? "status" : "alert"} data-testid="events-stale-notice">
-          <strong>{offline ? copy.offline : copy.degraded}</strong>
-          <span>{offline ? copy.offlineDescription : state.error ? copy.refreshError : copy.degradedDescription}</span>
-        </div>
+        <Banner
+          status={offline ? "info" : state.error ? "error" : "warning"}
+          title={offline ? copy.offline : copy.degraded}
+          description={offline ? copy.offlineDescription : state.error ? copy.refreshError : copy.degradedDescription}
+          container="section"
+          role={offline ? "status" : "alert"}
+          data-testid="events-stale-notice"
+          endContent={<Button label={copy.refresh} variant="ghost" size="sm" onClick={onRefresh} isDisabled={state.loading} />}
+        />
       ) : null}
-      {state.error && !offline ? <p className={styles.errorDetail} role="alert">{state.error.message}</p> : null}
+      {state.error && !offline ? <Text as="p" type="supporting" role="alert">{state.error.message}</Text> : null}
       <FilterBar copy={copy} value={kindFilter} onChange={onKindFilterChange} />
       {visibleEvents.length === 0 ? (
-        <p className={styles.empty} role="status" data-testid="events-filter-empty">{copy.noMatches}</p>
+        <Text as="p" type="supporting" role="status" data-testid="events-filter-empty">{copy.noMatches}</Text>
       ) : (
-        <div className={styles.tableRegion} role="region" aria-label={copy.title} tabIndex={0}>
-          <table className={styles.table}>
-            <caption className={styles.visuallyHidden}>{copy.title}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{copy.kind}</th>
-                <th scope="col">{copy.task}</th>
-                <th scope="col">{copy.run}</th>
-                <th scope="col">{copy.time}</th>
-                <th scope="col">{copy.actor}</th>
-              </tr>
-            </thead>
-            <tbody>
+        <SafeVStack as="section" isScrollable className="min-w-0" role="region" aria-label={copy.title} tabIndex={0}>
+          <Table density="compact" dividers="rows" hasHover verticalAlign="top" textOverflow="wrap" aria-label={copy.title}>
+            <caption className="sr-only">{copy.title}</caption>
+            <TableHeader>
+              <TableRow isHeaderRow>
+                <TableHeaderCell scope="col">{copy.kind}</TableHeaderCell>
+                <TableHeaderCell scope="col">{copy.task}</TableHeaderCell>
+                <TableHeaderCell scope="col">{copy.run}</TableHeaderCell>
+                <TableHeaderCell scope="col">{copy.time}</TableHeaderCell>
+                <TableHeaderCell scope="col">{copy.actor}</TableHeaderCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {visibleEvents.map((event) => <EventRow key={`${event.id}:${event.event_id}`} event={event} copy={copy} locale={locale} onSelectTask={onSelectTask} />)}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </SafeVStack>
       )}
-      <p className={styles.count} aria-live="polite">{copy.count(visibleEvents.length)}</p>
-    </section>
+      <Text as="p" type="supporting" aria-live="polite">{copy.count(visibleEvents.length)}</Text>
+      </SafeVStack>
+    </PageFrame>
   )
 }
 
@@ -285,19 +336,20 @@ function FilterBar({ copy, value, onChange }: { readonly copy: EventsCopy; reado
   useEffect(() => setDraft(value), [value])
   if (!onChange) return null
   return (
-    <form className={styles.filterBar} onSubmit={(event) => { event.preventDefault(); onChange(draft) }}>
-      <label htmlFor="events-kind-filter">{copy.kindFilter}</label>
-      <input
+    <SafeHStack as="form" gap={2} align="end" wrap="wrap" aria-label={copy.kindFilter} onSubmit={(event) => { event.preventDefault(); onChange(draft) }}>
+      <TextInput
         id="events-kind-filter"
-        name="event-kind"
+        htmlName="event-kind"
         type="search"
         autoComplete="off"
         value={draft}
+        label={copy.kindFilter}
+        isLabelHidden
         placeholder={copy.kindFilterPlaceholder}
-        onChange={(event) => setDraft(event.currentTarget.value)}
+        onChange={(nextValue) => setDraft(nextValue)}
       />
-      <button type="submit">{copy.apply}</button>
-    </form>
+      <Button type="submit" label={copy.apply} variant="secondary" size="sm" />
+    </SafeHStack>
   )
 }
 

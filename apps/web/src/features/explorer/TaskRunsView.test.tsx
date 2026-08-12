@@ -66,7 +66,7 @@ describe("TaskRunsView", () => {
     expect(markup).toContain("hello from run log")
     expect(markup).not.toContain("<button")
     expect(markup).not.toContain("<a ")
-    expect(markup).toContain('<h2 id="runs-heading">')
+    expect(markup).toContain('id="runs-heading"')
     expect(markup).not.toContain("<h1")
   })
 

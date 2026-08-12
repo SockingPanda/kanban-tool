@@ -103,7 +103,6 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
             label={pending ? t("loading") : t("refresh")}
             variant="secondary"
             isDisabled={pending}
-            aria-busy={pending || undefined}
             onClick={refresh}
             data-testid="health-refresh"
           />

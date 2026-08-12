@@ -94,6 +94,8 @@ describe("MaintenancePage", () => {
     expect(loading).toContain('data-testid="maintenance-loading"')
     expect(loading).toContain('data-frame="content"')
     expect(loading).toContain('aria-busy="true"')
+    expect(loading).toMatch(/<header[^>]*aria-busy="true"[^>]*>[\s\S]*data-testid="maintenance-refresh"/)
+    expect([...loading.matchAll(/<button\b[^>]*>/g)].every(([tag]) => !tag.includes("aria-busy"))).toBe(true)
     expect(loading).not.toContain("style=")
     expect(loading).toContain("维护")
 

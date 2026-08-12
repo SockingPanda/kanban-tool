@@ -45,6 +45,8 @@ describe("HealthPage", () => {
 
     expect(markup).toContain('data-testid="health-loading"')
     expect(markup).toContain('aria-busy="true"')
+    expect(markup).toMatch(/<header[^>]*aria-busy="true"[^>]*>[\s\S]*data-testid="health-refresh"/)
+    expect([...markup.matchAll(/<button\b[^>]*>/g)].every(([tag]) => !tag.includes("aria-busy"))).toBe(true)
     expect(markup).not.toContain("style=")
     expect(markup).not.toContain('data-testid="health-metric-ok"')
   })

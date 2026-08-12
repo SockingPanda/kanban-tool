@@ -648,6 +648,16 @@ function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: str
     || ts.isCatchClause(node)
     || ts.isFunctionDeclaration(node)
     || ts.isFunctionExpression(node)
+    || ts.isClassExpression(node)
+    || ts.isArrowFunction(node)
+    || ts.isMethodDeclaration(node)
+    || ts.isGetAccessorDeclaration(node)
+    || ts.isSetAccessorDeclaration(node)
+    || ts.isConstructorDeclaration(node)
+
+  const isFunctionScopeNode = (node: ts.Node): boolean => node === sourceFile
+    || ts.isFunctionDeclaration(node)
+    || ts.isFunctionExpression(node)
     || ts.isArrowFunction(node)
     || ts.isMethodDeclaration(node)
     || ts.isGetAccessorDeclaration(node)
@@ -678,6 +688,12 @@ function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: str
       current = current.parent
     }
     return root
+  }
+
+  const varScopeFor = (scope: CspSafeDomPropScope): CspSafeDomPropScope => {
+    let current = scope
+    while (!isFunctionScopeNode(current.node) && current.parent !== undefined) current = current.parent
+    return current
   }
 
   const resolveBinding = (identifier: ts.Identifier, useNode: ts.Node): CspSafeDomPropBinding | undefined => {
@@ -757,6 +773,9 @@ function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: str
     if (node !== sourceFile && isScopeNode(node)) {
       scope = {node, parent: parentScope, bindings: new Map()}
       scopeByNode.set(node, scope)
+      if ((ts.isFunctionExpression(node) || ts.isClassExpression(node)) && node.name !== undefined) {
+        registerBinding(scope, node.name.text, node.name, "other")
+      }
       if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) || ts.isConstructorDeclaration(node)) {
         for (const parameter of node.parameters) {
           for (const identifier of identifiersInBindingName(parameter.name)) registerBinding(scope, identifier.text, identifier, "other")
@@ -768,9 +787,15 @@ function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: str
     }
 
     if (ts.isVariableDeclaration(node)) {
+      const declarationList = node.parent
+      // TypeScript represents `var` as the absence of the lexical `let`/`const`
+      // flags; `NodeFlags.Var` is not a reliable positive bit to test.
+      const isVar = ts.isVariableDeclarationList(declarationList)
+        && (declarationList.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0
+      const bindingScope = isVar ? varScopeFor(scope) : scope
       const identifiers = identifiersInBindingName(node.name)
       for (const identifier of identifiers) {
-        registerBinding(scope, identifier.text, identifier, "other")
+        registerBinding(bindingScope, identifier.text, identifier, "other")
       }
     }
 

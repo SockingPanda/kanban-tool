@@ -202,6 +202,15 @@ describe("Astryx CSP UI guard", () => {
         'class pickCspSafeDomProps {}',
         'const Bad = () => <input {...pickCspSafeDomProps({style: {color: "red"}})} />',
       ].join("\n"))
+      writeFileSync(path.join(sourceDirectory, "expression-shadows.tsx"), [
+        'import {pickCspSafeDomProps, pickCspSafeDomProps as sanitize} from "../dom-props"',
+        'const FunctionShadow = function pickCspSafeDomProps(props: Record<string, unknown>) { return <input {...pickCspSafeDomProps({style: {color: "red"}})} /> }',
+        'const AliasFunctionShadow = function sanitize(props: Record<string, unknown>) { return <input {...sanitize({style: {color: "red"}})} /> }',
+        'const ClassShadow = class pickCspSafeDomProps { render() { return <input {...pickCspSafeDomProps({style: {color: "red"}})} /> } }',
+        'const AliasClassShadow = class sanitize { render() { return <input {...sanitize({style: {color: "red"}})} /> } }',
+        'function VarShadow() { if (true) { var pickCspSafeDomProps = (props: Record<string, unknown>) => props }; return <input {...pickCspSafeDomProps({style: {color: "red"}})} /> }',
+        'function VarAliasShadow() { if (true) { var sanitize = (props: Record<string, unknown>) => props }; return <input {...sanitize({style: {color: "red"}})} /> }',
+      ].join("\n"))
 
       const report = scanUiSource({
         projectRoot: temporaryRoot,
@@ -213,6 +222,7 @@ describe("Astryx CSP UI guard", () => {
       expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/same-name.tsx" && error.code === "inline-style")).toHaveLength(1)
       expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/wrong-module.tsx" && error.code === "inline-style")).toHaveLength(1)
       expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/same-class-name.tsx" && error.code === "inline-style")).toHaveLength(1)
+      expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/expression-shadows.tsx" && error.code === "inline-style")).toHaveLength(6)
     } finally {
       rmSync(temporaryRoot, {recursive: true, force: true})
     }

@@ -29,6 +29,10 @@ describe("CSP-safe Astryx primitives", () => {
         columns="auto-md"
         density="compact"
         align="start"
+        dir="ltr"
+        role="region"
+        title="Evidence grid"
+        tabIndex={0}
         data-testid="grid"
       >
         <p>evidence</p>
@@ -37,6 +41,10 @@ describe("CSP-safe Astryx primitives", () => {
 
     expect(markup).toContain(`class="grid min-w-0 ${GRID_COLUMN_CLASSES["auto-md"]} gap-2 items-start"`)
     expect(markup).toContain('aria-label="Evidence grid"')
+    expect(markup).toContain('dir="ltr"')
+    expect(markup).toContain('role="region"')
+    expect(markup).toContain('title="Evidence grid"')
+    expect(markup).toContain('tabindex="0"')
     expect(markup).toContain('data-columns="auto-md"')
     expect(markup).toContain('data-density="compact"')
     expect(markup).not.toContain("style=")

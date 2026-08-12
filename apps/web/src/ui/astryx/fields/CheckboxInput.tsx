@@ -1,7 +1,6 @@
 import {
   type ChangeEvent,
   type FocusEventHandler,
-  type InputHTMLAttributes,
   type Ref,
   useId,
 } from "react"
@@ -22,42 +21,8 @@ export type CheckboxInputSize = "sm" | "md"
 export type CheckboxInputStatus = FieldStatus
 export type CheckboxInputStatusVariant = FieldStatusVariant
 
-type NativeCheckboxProps = Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  | "id"
-  | "name"
-  | "type"
-  | "value"
-  | "defaultValue"
-  | "checked"
-  | "defaultChecked"
-  | "onChange"
-  | "disabled"
-  | "readOnly"
-  | "required"
-  | "autoFocus"
-  | "className"
-  | "size"
-  | "aria-describedby"
-  | "aria-invalid"
-  | "aria-required"
-  | "aria-disabled"
-  | "aria-readonly"
-  | "aria-busy"
-  | "autoComplete"
-  | "translate"
-  | "onFocus"
-  | "onBlur"
-  | "onKeyDown"
-  | "onKeyUp"
-  | "onClick"
-  | "style"
-  | "width"
->
-
 export interface CheckboxInputProps
-  extends NativeCheckboxProps,
-    CommonFieldProps<HTMLInputElement> {
+  extends CommonFieldProps<HTMLInputElement> {
   readonly ref?: Ref<HTMLInputElement>
   readonly label: string
   readonly value: boolean | "indeterminate"

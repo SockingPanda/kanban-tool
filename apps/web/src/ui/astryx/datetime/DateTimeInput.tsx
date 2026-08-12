@@ -8,11 +8,13 @@ import {
   useState,
   type AriaAttributes,
   type ChangeEvent,
-  type FieldsetHTMLAttributes,
+  type FocusEventHandler,
+  type KeyboardEventHandler,
+  type MouseEventHandler,
   type Ref,
 } from "react"
 
-import {pickCspSafeDomProps} from "../dom-props"
+import {pickCspSafeDomProps, type CspSafeDomProps} from "../dom-props"
 
 export type ISODateTimeString = string & {
   readonly __brand: "ISODateTimeString"
@@ -270,20 +272,7 @@ function statusMessageOf(
   return typeof status === "object" ? status.message : undefined
 }
 
-type NativeFieldsetProps = Omit<
-  FieldsetHTMLAttributes<HTMLFieldSetElement>,
-  | "children"
-  | "className"
-  | "id"
-  | "name"
-  | "onChange"
-  | "style"
-  | "value"
-  | "disabled"
-  | "required"
->
-
-export interface DateTimeInputProps extends NativeFieldsetProps, DateTimeInputAriaDataProps {
+export interface DateTimeInputProps extends CspSafeDomProps<HTMLFieldSetElement> {
   readonly ref?: Ref<HTMLInputElement>
   readonly id?: string
   readonly className?: string
@@ -316,6 +305,12 @@ export interface DateTimeInputProps extends NativeFieldsetProps, DateTimeInputAr
   readonly max?: ISODateTimeString | string
   readonly autoComplete?: string
   readonly translate?: "yes" | "no"
+  readonly onFocus?: FocusEventHandler<HTMLFieldSetElement>
+  readonly onBlur?: FocusEventHandler<HTMLFieldSetElement>
+  readonly onClick?: MouseEventHandler<HTMLFieldSetElement>
+  readonly onKeyDown?: KeyboardEventHandler<HTMLFieldSetElement>
+  readonly onKeyUp?: KeyboardEventHandler<HTMLFieldSetElement>
+  readonly onMouseDown?: MouseEventHandler<HTMLFieldSetElement>
   readonly onDateChange?: never
 }
 

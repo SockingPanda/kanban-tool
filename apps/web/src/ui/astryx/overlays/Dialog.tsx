@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type MouseEvent,
+  type AriaRole,
   type ReactNode,
   type Ref,
 } from "react"
@@ -32,7 +33,7 @@ export const DIALOG_PLACEMENT_CLASSES: Readonly<Record<DialogPlacement, string>>
 type NativeDialogProps = {
   readonly id?: string
   readonly title?: string
-  readonly role?: string
+  readonly role?: AriaRole
   readonly "aria-label"?: string
   readonly "aria-labelledby"?: string
   readonly "aria-describedby"?: string

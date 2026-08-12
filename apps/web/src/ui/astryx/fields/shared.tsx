@@ -1,11 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
 import type {
   AriaAttributes,
-  FocusEventHandler,
-  KeyboardEventHandler,
-  MouseEventHandler,
   ReactNode,
 } from "react"
+
+import type {CspSafeDomProps} from "../dom-props"
 
 export type FieldStatusType = "warning" | "error" | "success"
 /** The safe shell renders status text as an attached sibling message. */
@@ -21,16 +20,10 @@ export type AriaDataProps = AriaAttributes & {
   readonly [name: `data-${string}`]: string | number | boolean | undefined
 }
 
-export interface CommonFieldProps<E extends HTMLElement> extends AriaDataProps {
+export type CommonFieldProps<E extends HTMLElement> = Omit<CspSafeDomProps<E>, "id" | "className"> & {
   readonly id?: string
   readonly className?: string
   readonly autoComplete?: string
-  readonly translate?: "yes" | "no"
-  readonly onFocus?: FocusEventHandler<E>
-  readonly onBlur?: FocusEventHandler<E>
-  readonly onKeyDown?: KeyboardEventHandler<E>
-  readonly onKeyUp?: KeyboardEventHandler<E>
-  readonly onClick?: MouseEventHandler<E>
 }
 
 /** Literal utility classes use only published Astryx token variables. */

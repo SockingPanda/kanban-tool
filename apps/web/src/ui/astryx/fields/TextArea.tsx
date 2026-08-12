@@ -3,7 +3,6 @@ import {
   type ClipboardEventHandler,
   type KeyboardEventHandler,
   type Ref,
-  type TextareaHTMLAttributes,
   useId,
 } from "react"
 
@@ -23,39 +22,8 @@ import {pickCspSafeDomProps} from "../dom-props"
 export type TextAreaStatus = FieldStatus
 export type TextAreaStatusVariant = FieldStatusVariant
 
-type NativeTextAreaProps = Omit<
-  TextareaHTMLAttributes<HTMLTextAreaElement>,
-  | "id"
-  | "name"
-  | "value"
-  | "defaultValue"
-  | "onChange"
-  | "disabled"
-  | "readOnly"
-  | "required"
-  | "autoFocus"
-  | "className"
-  | "maxLength"
-  | "rows"
-  | "aria-describedby"
-  | "aria-invalid"
-  | "aria-required"
-  | "aria-disabled"
-  | "aria-busy"
-  | "autoComplete"
-  | "translate"
-  | "onFocus"
-  | "onBlur"
-  | "onKeyDown"
-  | "onKeyUp"
-  | "onClick"
-  | "style"
-  | "width"
->
-
 export interface TextAreaProps
-  extends NativeTextAreaProps,
-    CommonFieldProps<HTMLTextAreaElement> {
+  extends CommonFieldProps<HTMLTextAreaElement> {
   readonly ref?: Ref<HTMLTextAreaElement>
   readonly label: string
   readonly value: string
@@ -74,6 +42,7 @@ export interface TextAreaProps
   readonly isDisabled?: boolean
   readonly disabledMessage?: string
   readonly isLoading?: boolean
+  readonly placeholder?: string
   readonly hasSpellCheck?: boolean
   readonly hasAutoFocus?: boolean
   readonly onPaste?: ClipboardEventHandler<HTMLTextAreaElement>
@@ -109,6 +78,7 @@ export function TextArea({
   isDisabled = false,
   disabledMessage,
   isLoading = false,
+  placeholder,
   hasSpellCheck = true,
   hasAutoFocus = false,
   onPaste,
@@ -186,7 +156,7 @@ export function TextArea({
         }}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
-        placeholder={rest.placeholder}
+        placeholder={placeholder}
         required={isRequired && !isOptional}
         rows={rows}
         spellCheck={hasSpellCheck}

@@ -1,9 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { ReactNode } from "react"
-import type { HTMLAttributes } from "react"
 
 import type {NoRuntimeStyleProps} from "./safe-core"
-import {pickCspSafeDomProps} from "../dom-props"
+import {pickCspSafeDomProps, type CspSafeDomProps} from "../dom-props"
 
 /**
  * Finite column contracts. The `auto-*` variants select viewport breakpoints;
@@ -55,7 +54,7 @@ export const GRID_ALIGN_CLASSES: Readonly<Record<GridAlign, string>> = {
 }
 
 export interface GridProps
-  extends Omit<HTMLAttributes<HTMLElement>, "children" | "style">,
+  extends CspSafeDomProps<HTMLElement>,
     NoRuntimeStyleProps {
   readonly children?: ReactNode
   /** Required accessible name because the primitive renders a section landmark. */
@@ -64,6 +63,8 @@ export interface GridProps
   readonly gap?: GridGap
   readonly density?: GridDensity
   readonly align?: GridAlign
+  readonly id?: string
+  readonly className?: string
   readonly ref?: React.Ref<HTMLElement>
 }
 

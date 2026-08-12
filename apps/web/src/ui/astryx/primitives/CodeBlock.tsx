@@ -4,12 +4,11 @@ import {
   useEffect,
   useRef,
   useState,
-  type HTMLAttributes,
   type Ref,
 } from "react"
 
 import type {NoRuntimeStyleProps} from "./safe-core"
-import {pickCspSafeDomProps} from "../dom-props"
+import {pickCspSafeDomProps, type CspSafeDomProps} from "../dom-props"
 
 export type CodeBlockHeight = "none" | "compact" | "evidence"
 export type CodeBlockContainer = "card" | "section"
@@ -47,8 +46,8 @@ export const CODE_BLOCK_SIZE_CLASSES = {
 
 export interface CodeBlockProps
   extends Omit<
-      HTMLAttributes<HTMLElement>,
-      "children" | "style" | "title" | "aria-label"
+      CspSafeDomProps<HTMLElement>,
+      "title" | "aria-label"
     >,
     NoRuntimeStyleProps {
   readonly code: string
@@ -63,6 +62,8 @@ export interface CodeBlockProps
   readonly errorLabel: string
   readonly onCopy?: () => void
   readonly onCopyError?: (error: unknown) => void
+  readonly id?: string
+  readonly className?: string
   readonly "data-testid"?: string
   readonly ref?: Ref<HTMLElement>
 }

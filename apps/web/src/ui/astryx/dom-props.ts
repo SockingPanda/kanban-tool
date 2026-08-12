@@ -1,3 +1,13 @@
+import type {
+  AriaAttributes,
+  AriaRole,
+  FocusEventHandler,
+  InputEventHandler,
+  KeyboardEventHandler,
+  MouseEventHandler,
+  ReactEventHandler,
+} from "react"
+
 /**
  * Runtime allowlist for props forwarded to native DOM elements.
  *
@@ -32,7 +42,35 @@ const SAFE_HANDLER_NAMES = new Set([
   "onInvalid",
 ])
 
-export type CspSafeDomProps = Record<string, unknown>
+/**
+ * The public prop surface accepted by {@link pickCspSafeDomProps}.
+ *
+ * This intentionally does not extend React's broad `HTMLAttributes`: every
+ * key here is either copied by the runtime allowlist or is an ARIA/data
+ * semantic attribute. Component-owned `id`, `className`, `children`, and
+ * `ref` values remain explicit at their element sites.
+ */
+export type CspSafeDomProps<E extends Element = HTMLElement> = AriaAttributes & {
+  readonly [name: `data-${string}`]: string | number | boolean | undefined
+  readonly dir?: string
+  readonly draggable?: boolean | "true" | "false"
+  readonly hidden?: boolean
+  readonly inert?: boolean
+  readonly lang?: string
+  readonly role?: AriaRole
+  readonly tabIndex?: number
+  readonly title?: string
+  readonly translate?: "yes" | "no"
+  readonly onFocus?: FocusEventHandler<E>
+  readonly onBlur?: FocusEventHandler<E>
+  readonly onKeyDown?: KeyboardEventHandler<E>
+  readonly onKeyUp?: KeyboardEventHandler<E>
+  readonly onKeyPress?: KeyboardEventHandler<E>
+  readonly onClick?: MouseEventHandler<E>
+  readonly onMouseDown?: MouseEventHandler<E>
+  readonly onInput?: InputEventHandler<E>
+  readonly onInvalid?: ReactEventHandler<E>
+}
 
 function isSafeHandlerName(name: string): boolean {
   return SAFE_HANDLER_NAMES.has(name)
@@ -46,10 +84,10 @@ function isSafeHandlerName(name: string): boolean {
  * component-owned values must be supplied explicitly at the element site.
  * Input objects are never mutated.
  */
-export function pickCspSafeDomProps(props: object | null | undefined): CspSafeDomProps {
+export function pickCspSafeDomProps<E extends Element = HTMLElement>(props: object | null | undefined): CspSafeDomProps<E> {
   if (props === null || props === undefined) return {}
 
-  const safe: CspSafeDomProps = {}
+  const safe: Record<string, unknown> = {}
   for (const [name, value] of Object.entries(props)) {
     if (name.startsWith("aria-") || name.startsWith("data-") || SAFE_ATTRIBUTE_NAMES.has(name)) {
       safe[name] = value
@@ -59,5 +97,5 @@ export function pickCspSafeDomProps(props: object | null | undefined): CspSafeDo
       safe[name] = value
     }
   }
-  return safe
+  return safe as CspSafeDomProps<E>
 }

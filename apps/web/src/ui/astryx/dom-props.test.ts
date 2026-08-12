@@ -1,6 +1,23 @@
 import {describe, expect, test, vi} from "vitest"
 
-import {pickCspSafeDomProps} from "./dom-props"
+import {pickCspSafeDomProps, type CspSafeDomProps} from "./dom-props"
+
+const typedSafeProps: CspSafeDomProps<HTMLInputElement> = {
+  "aria-label": "safe",
+  "data-state": "ready",
+  dir: "ltr",
+  onInput: () => undefined,
+  onInvalid: () => undefined,
+}
+
+// @ts-expect-error Presentation props are not part of the finite safe surface.
+const typedStyleProps: CspSafeDomProps<HTMLInputElement> = {style: {color: "red"}}
+// @ts-expect-error Handlers outside the runtime allowlist are not public props.
+const typedUnsafeHandlerProps: CspSafeDomProps<HTMLInputElement> = {onPaste: () => undefined}
+
+void typedSafeProps
+void typedStyleProps
+void typedUnsafeHandlerProps
 
 describe("pickCspSafeDomProps", () => {
   test("keeps semantic attributes and finite function handlers", () => {

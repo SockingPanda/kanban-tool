@@ -1,8 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import type { HTMLAttributes } from "react"
-
 import type {NoRuntimeStyleProps} from "./safe-core"
-import {pickCspSafeDomProps} from "../dom-props"
+import {pickCspSafeDomProps, type CspSafeDomProps} from "../dom-props"
 
 export type SkeletonSize = "text" | "row" | "card"
 
@@ -13,13 +11,15 @@ export const SKELETON_SIZE_CLASSES: Readonly<Record<SkeletonSize, string>> = {
 }
 
 export interface SkeletonProps
-  extends Omit<HTMLAttributes<HTMLElement>, "children" | "style" | "aria-hidden">,
+  extends Omit<CspSafeDomProps<HTMLElement>, "aria-hidden">,
     NoRuntimeStyleProps {
   readonly size?: SkeletonSize
   /** Legacy stagger input is rejected and stripped for JS spread callers. */
   readonly index?: never
   /** Skeletons are always decorative and cannot opt into an exposed name. */
   readonly "aria-hidden"?: never
+  readonly id?: string
+  readonly className?: string
   readonly ref?: React.Ref<HTMLElement>
 }
 

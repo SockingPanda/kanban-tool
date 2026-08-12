@@ -1,6 +1,5 @@
 import {
   type ChangeEvent,
-  type InputHTMLAttributes,
   type KeyboardEvent,
   type Ref,
   useId,
@@ -23,42 +22,8 @@ export type TextInputType = "text" | "password" | "email" | "search" | "url" | "
 export type TextInputStatus = FieldStatus
 export type TextInputStatusVariant = FieldStatusVariant
 
-type NativeTextInputProps = Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  | "id"
-  | "name"
-  | "type"
-  | "value"
-  | "defaultValue"
-  | "checked"
-  | "defaultChecked"
-  | "onChange"
-  | "disabled"
-  | "readOnly"
-  | "required"
-  | "autoFocus"
-  | "className"
-  | "size"
-  | "maxLength"
-  | "aria-describedby"
-  | "aria-invalid"
-  | "aria-required"
-  | "aria-disabled"
-  | "aria-busy"
-  | "autoComplete"
-  | "translate"
-  | "onFocus"
-  | "onBlur"
-  | "onKeyDown"
-  | "onKeyUp"
-  | "onClick"
-  | "style"
-  | "width"
->
-
 interface TextInputBaseProps
-  extends NativeTextInputProps,
-    CommonFieldProps<HTMLInputElement> {
+  extends CommonFieldProps<HTMLInputElement> {
   readonly ref?: Ref<HTMLInputElement>
   readonly type?: TextInputType
   readonly label: string

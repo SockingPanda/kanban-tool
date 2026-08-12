@@ -30,6 +30,9 @@ describe("CSP-safe field contracts", () => {
         maxLength={40}
         autoComplete="off"
         translate="no"
+        dir="ltr"
+        title="Project name"
+        onInput={() => undefined}
         hasClear
         clearLabel="Reset project name"
         clearText="Reset"
@@ -54,6 +57,8 @@ describe("CSP-safe field contracts", () => {
     expect(markup).toContain('maxLength="40"')
     expect(markup).toContain('autoComplete="off"')
     expect(markup).toContain('translate="no"')
+    expect(markup).toContain('dir="ltr"')
+    expect(markup).toContain('title="Project name"')
     expect(clearMarkup).toContain('aria-label="Reset project name"')
     expect(markup).toContain('data-testid="project-name"')
     expect(markup).toContain(
@@ -74,6 +79,7 @@ describe("CSP-safe field contracts", () => {
         label="Notes"
         value="abc"
         maxLength={10}
+        placeholder="Add a note"
         description="Keep this concise."
         status={{type: "warning", message: "Almost complete."}}
         hasSpellCheck={false}
@@ -85,6 +91,7 @@ describe("CSP-safe field contracts", () => {
     )
 
     expect(markup).toContain('maxLength="10"')
+    expect(markup).toContain('placeholder="Add a note"')
     expect(markup).toContain('spellCheck="false"')
     expect(markup).toContain('autoComplete="off"')
     expect(markup).toContain('translate="no"')

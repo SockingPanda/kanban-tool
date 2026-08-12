@@ -1,4 +1,6 @@
-import type { AriaAttributes, FocusEventHandler, KeyboardEventHandler, MouseEventHandler, ReactNode } from "react"
+import type { ReactNode } from "react"
+
+import type {CspSafeDomProps} from "../dom-props"
 
 export type SelectorOptionData = {
   readonly value: string
@@ -55,16 +57,9 @@ export type SelectorStatus = {
 }
 
 /** Shared data/ARIA surface for controls without inheriting presentation-bearing HTML props. */
-export type SafeDomProps = AriaAttributes & {
+export type SafeDomProps = CspSafeDomProps<HTMLElement> & {
   readonly id?: string
   readonly className?: string
-  readonly tabIndex?: number
-  readonly onBlur?: FocusEventHandler<HTMLElement>
-  readonly onFocus?: FocusEventHandler<HTMLElement>
-  readonly onKeyDown?: KeyboardEventHandler<HTMLElement>
-  readonly onMouseDown?: MouseEventHandler<HTMLElement>
-  readonly onClick?: MouseEventHandler<HTMLElement>
-  readonly [key: `data-${string}`]: string | number | boolean | undefined
 }
 
 export function isDivider(option: SelectorOption): option is SelectorDivider {

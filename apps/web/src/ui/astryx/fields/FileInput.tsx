@@ -1,6 +1,5 @@
 import {
   type ChangeEvent,
-  type InputHTMLAttributes,
   type Ref,
   useCallback,
   useId,
@@ -31,41 +30,8 @@ export interface FileInputValidationError {
   readonly maxFiles?: number
 }
 
-type NativeFileInputProps = Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  | "id"
-  | "name"
-  | "type"
-  | "value"
-  | "defaultValue"
-  | "checked"
-  | "defaultChecked"
-  | "onChange"
-  | "disabled"
-  | "required"
-  | "multiple"
-  | "accept"
-  | "className"
-  | "aria-describedby"
-  | "aria-invalid"
-  | "aria-required"
-  | "aria-disabled"
-  | "aria-busy"
-  | "autoComplete"
-  | "translate"
-  | "onFocus"
-  | "onBlur"
-  | "onKeyDown"
-  | "onKeyUp"
-  | "onClick"
-  | "onDrop"
-  | "style"
-  | "width"
->
-
 export interface FileInputProps
-  extends NativeFileInputProps,
-    CommonFieldProps<HTMLInputElement> {
+  extends CommonFieldProps<HTMLInputElement> {
   readonly ref?: Ref<HTMLInputElement>
   readonly label: string
   readonly value: File | File[] | null

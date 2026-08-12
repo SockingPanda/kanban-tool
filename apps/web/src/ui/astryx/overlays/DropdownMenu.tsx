@@ -298,6 +298,7 @@ export function DropdownMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
+        data-testid={testId}
         disabled={button.isDisabled}
         className={classNames(
           button.isIconOnly ? "inline-flex items-center justify-center" : "inline-flex items-center gap-2",
@@ -329,7 +330,6 @@ export function DropdownMenu({
         aria-hidden={!open}
         tabIndex={-1}
         data-open={open ? "true" : "false"}
-        data-testid={testId}
         className={classNames(
           open ? "block" : "hidden",
           "absolute z-40 min-w-40 rounded-lg border border-border bg-popover p-1 text-primary shadow-lg",

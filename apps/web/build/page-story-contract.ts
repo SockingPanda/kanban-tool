@@ -161,7 +161,8 @@ export function validatePageStoryContract(input: unknown): PageStoryValidationRe
   let contract: PageStoryContract | undefined
   const routeSpec = pathOk && route !== undefined ? PAGE_STORY_ROUTES.find((entry) => entry.path === route.path) : undefined
   if (pathOk && routeSpec === undefined) issues.push({ path: "route.path", code: "unknown-route", message: `route.path is not formal: ${route?.path}`, severity: "error" })
-  if (routeSpec !== undefined && kindOk && (route?.kind !== routeSpec.kind || route?.routerKind !== routeSpec.routerKind || route?.view !== routeSpec.view)) {
+  const routeSpecView = routeSpec !== undefined && "view" in routeSpec ? routeSpec.view : undefined
+  if (routeSpec !== undefined && kindOk && (route?.kind !== routeSpec.kind || route?.routerKind !== routeSpec.routerKind || route?.view !== routeSpecView)) {
     issues.push({ path: "route", code: "invalid-value", message: `route metadata does not match ${routeSpec.path}`, severity: "error" })
   }
   if (route !== undefined && fixture !== undefined && responsive !== undefined && astryx !== undefined && routeSpec !== undefined

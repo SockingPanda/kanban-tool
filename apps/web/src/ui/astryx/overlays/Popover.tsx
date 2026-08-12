@@ -174,7 +174,7 @@ export function Popover({
     onEscape: () => {
       if (hasEscapeDismiss && popupRef.current && isTopOverlay(popupRef.current)) closeRef.current()
     },
-    trapFocus: true,
+    trapFocus: isModal,
     autoFocus: hasAutoFocus,
   })
 

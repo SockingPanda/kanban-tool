@@ -453,8 +453,8 @@ function BoardColumns({
             data-testid={`board-attention-${lens}`}
             onClick={() => setAttentionLens(attentionLens === lens ? null : lens)}
           >
-            <Text as="span" type="supporting">{copyForAttention.statuses[lens]}</Text>
-            <Text as="span" type="supporting" className="min-w-5 rounded-full bg-muted px-1 text-center" data-testid={`board-attention-count-${lens}`}>{counts[lens]}</Text>
+            <Text as="span" type="supporting" color={attentionLens === lens ? "inherit" : undefined}>{copyForAttention.statuses[lens]}</Text>
+            <Text as="span" type="supporting" color={attentionLens === lens ? "inherit" : undefined} className="min-w-5 rounded-full bg-muted px-1 text-center" data-testid={`board-attention-count-${lens}`}>{counts[lens]}</Text>
           </button>
         ))}
         {attentionLens !== null ? (

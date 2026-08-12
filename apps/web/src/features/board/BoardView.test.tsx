@@ -383,6 +383,15 @@ describe("BoardView", () => {
     expect(source).not.toContain("<Spinner")
   })
 
+  test("active attention chip children inherit the accent contrast color", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+    const source = readFileSync(new URL("./BoardView.tsx", import.meta.url), "utf8")
+
+    expect(markup).toContain('data-testid="board-attention-ready"')
+    expect(source).toContain('color={attentionLens === lens ? "inherit" : undefined}')
+    expect((source.match(/color=\{attentionLens === lens \? "inherit" : undefined\}/g) ?? []).length).toBe(2)
+  })
+
   test("presentation 校验拒绝空白身份和异常 server columns", () => {
     const invalidModels: readonly BoardViewModel[] = [
       { ...model, board: { ...model.board, id: " " } },

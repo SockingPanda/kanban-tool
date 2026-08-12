@@ -71,6 +71,22 @@ describe("CSP-safe Astryx primitives", () => {
     expect(threeColumnMarkup).not.toContain("style=")
   })
 
+  test("Grid responsive split stays at two columns above lg", () => {
+    expect(GRID_COLUMN_CLASSES["responsive-split"]).toBe("grid-cols-1 lg:grid-cols-2")
+
+    const markup = renderToStaticMarkup(
+      <Grid label="Task map layout" columns="responsive-split">
+        <p>graph</p>
+        <p>inspector</p>
+      </Grid>,
+    )
+
+    expect(markup).toContain('data-columns="responsive-split"')
+    expect(markup).toContain("grid-cols-1 lg:grid-cols-2")
+    expect(markup).not.toContain("2xl:grid-cols-3")
+    expect(markup).not.toContain("style=")
+  })
+
   test("CodeBlock renders plain native pre/code with finite height and resident live status", () => {
     const markup = renderToStaticMarkup(
       <CodeBlock

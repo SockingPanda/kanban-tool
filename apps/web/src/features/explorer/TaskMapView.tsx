@@ -562,7 +562,7 @@ export function TaskMapPresentation({
         ) : null}
 
         {visibleGraph && visibleGraph.nodes.length > 0 ? (
-          <Grid label={copy.layout} columns="auto-lg" gap={4} className="min-w-0" data-testid="task-map-layout">
+          <Grid label={copy.layout} columns="responsive-split" gap={4} className="min-w-0" data-testid="task-map-layout">
             <SafeVStack className="min-w-0 gap-2" aria-labelledby="task-map-graph-heading">
               <Heading level={3} id="task-map-graph-heading" className="sr-only">{copy.graphHeading}</Heading>
               <SafeVStack as="div" className="min-w-0 max-h-96 overflow-auto overscroll-contain border border-border bg-body" data-testid="task-map-graph" role="region" aria-label={copy.graphRegion} tabIndex={0}>

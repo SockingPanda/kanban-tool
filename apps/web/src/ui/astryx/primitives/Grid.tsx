@@ -17,6 +17,7 @@ export type GridColumns =
   | "auto-sm"
   | "auto-md"
   | "auto-lg"
+  | "responsive-split"
 
 export type GridGap = 0 | 1 | 2 | 3 | 4 | 5 | 6
 export type GridDensity = "compact" | "comfortable"
@@ -32,6 +33,7 @@ export const GRID_COLUMN_CLASSES: Readonly<Record<GridColumns, string>> = {
   "auto-sm": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
   "auto-md": "grid-cols-1 md:grid-cols-2 xl:grid-cols-3",
   "auto-lg": "grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3",
+  "responsive-split": "grid-cols-1 lg:grid-cols-2",
 }
 
 /** Gap is also finite; arbitrary values cannot enter this primitive. */

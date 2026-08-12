@@ -429,14 +429,22 @@ function DateTimeInputImpl(
     if (interactiveDisabled) return
     const nextDate = event.currentTarget.value.trim()
     const resolution = fireChange(nextDate, timeValue)
-    if (resolution.accepted) setDateValue(resolution.date)
+    if (resolution.accepted) {
+      setDateValue(resolution.date)
+    } else {
+      event.currentTarget.value = dateValue
+    }
   }
 
   const handleTimeChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (interactiveDisabled) return
     const rawTime = event.currentTarget.value.trim()
     const resolution = fireChange(dateValue, rawTime)
-    if (resolution.accepted) setTimeValue(resolution.time)
+    if (resolution.accepted) {
+      setTimeValue(resolution.time)
+    } else {
+      event.currentTarget.value = timeValue
+    }
   }
 
   const handleClear = () => {

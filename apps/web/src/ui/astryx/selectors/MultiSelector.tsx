@@ -150,14 +150,18 @@ function MultiSelectorImpl(
   const generatedId = useId().replaceAll(":", "")
   const triggerId = id ?? `multi-selector-${generatedId}`
   const listboxId = `${triggerId}-listbox`
-  const descriptionId = description === undefined ? undefined : `${triggerId}-description`
-  const statusId = status?.message === undefined ? undefined : `${triggerId}-status`
+  const descriptionId = description ? `${triggerId}-description` : undefined
+  const statusId = status?.message ? `${triggerId}-status` : undefined
   const searchId = `${triggerId}-search`
   const triggerRef = useRef<HTMLButtonElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(isDefaultOpen)
   const [activeIndex, setActiveIndex] = useState(-1)
   const [searchQuery, setSearchQuery] = useState("")
+  const openRef = useRef(open)
+  const onOpenChangeRef = useRef(onOpenChange)
+  openRef.current = open
+  onOpenChangeRef.current = onOpenChange
   const allOptions = useMemo(() => flattenOptions(options), [options])
   const enabledOptions = useMemo(() => allOptions.filter((option) => !option.disabled), [allOptions])
   const selectAllValue = useMemo(() => {
@@ -166,19 +170,20 @@ function MultiSelectorImpl(
     while (values.has(candidate)) candidate = `${candidate}_`
     return candidate
   }, [allOptions])
+  const searchFilter = searchQuery.trim().toLocaleLowerCase()
+  const hasSearchFilter = searchFilter.length > 0
   const visibleOptions = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase()
-    if (query.length === 0) return allOptions
-    return allOptions.filter((option) => option.label.toLocaleLowerCase().includes(query))
-  }, [allOptions, searchQuery])
+    if (!hasSearchFilter) return allOptions
+    return allOptions.filter((option) => option.label.toLocaleLowerCase().includes(searchFilter))
+  }, [allOptions, hasSearchFilter, searchFilter])
   const clearText = clearLabel
   const selectAllText = selectAllLabel
   const searchText = searchLabel
   const selectAllOption = useMemo<SelectableOption>(() => ({ value: selectAllValue, label: selectAllText ?? "" }), [selectAllValue, selectAllText])
   const showSelectAll = hasSelectAll && enabledOptions.length > 0
   const activeOptions = useMemo(
-    () => showSelectAll && searchQuery.length === 0 ? [selectAllOption, ...visibleOptions] : visibleOptions,
-    [searchQuery.length, selectAllOption, showSelectAll, visibleOptions],
+    () => showSelectAll && !hasSearchFilter ? [selectAllOption, ...visibleOptions] : visibleOptions,
+    [hasSearchFilter, selectAllOption, showSelectAll, visibleOptions],
   )
   const selectedSet = useMemo(() => new Set(value), [value])
   const allSelected = enabledOptions.length > 0 && enabledOptions.every((option) => selectedSet.has(option.value))
@@ -189,6 +194,7 @@ function MultiSelectorImpl(
   const selected = useMemo(() => selectedLabels(allOptions, value), [allOptions, value])
   const describedBy = joinIds(domProps["aria-describedby"], descriptionId, statusId)
   const disabled = isDisabled || isLoading
+  const nativeRequired = required ?? isRequired
   const focusableIndices = useMemo(
     () => activeOptions.flatMap((option, index) => option.disabled ? [] : [index]),
     [activeOptions],
@@ -196,7 +202,7 @@ function MultiSelectorImpl(
   const firstFocusableIndex = focusableIndices[0] ?? -1
   const lastFocusableIndex = focusableIndices[focusableIndices.length - 1] ?? -1
   const activeOption = activeOptions[activeIndex]
-  const emptyOptions = activeOptions.length === (showSelectAll && searchQuery.length === 0 ? 1 : 0)
+  const emptyOptions = open && activeOptions.length === (showSelectAll && !hasSearchFilter ? 1 : 0)
   const emptyOptionsId = `${listboxId}-empty`
 
   useEffect(() => {
@@ -211,18 +217,18 @@ function MultiSelectorImpl(
 
   useEffect(() => {
     if (!disabled) return
-    setOpen((current) => {
-      if (current) onOpenChange?.(false)
-      return false
-    })
+    if (openRef.current) onOpenChangeRef.current?.(false)
+    openRef.current = false
+    setOpen(false)
     setActiveIndex(-1)
     setSearchQuery("")
-  }, [disabled, onOpenChange])
+  }, [disabled])
 
   const setOpenState = (next: boolean, restoreFocus = true, clearQuery = true) => {
-    if (disabled || next === open) return
+    if (disabled || next === openRef.current) return
+    openRef.current = next
     setOpen(next)
-    onOpenChange?.(next)
+    onOpenChangeRef.current?.(next)
     if (next) {
       setActiveIndex(firstFocusableIndex)
     } else {
@@ -378,7 +384,7 @@ function MultiSelectorImpl(
     >
       <label className={isLabelHidden ? hiddenLabelClass : labelClass} htmlFor={triggerId}>
         {label}
-        {isRequired ? <small aria-hidden="true"> *</small> : null}
+        {nativeRequired ? <small aria-hidden="true"> *</small> : null}
         {isOptional ? <small aria-hidden="true"> ({optionalLabel})</small> : null}
       </label>
       {description ? <p id={descriptionId} className={descriptionClass}>{description}</p> : null}
@@ -394,7 +400,7 @@ function MultiSelectorImpl(
         aria-controls={listboxId}
         aria-activedescendant={!hasSearch && open && activeOption && !activeOption.disabled ? `${listboxId}-option-${activeIndex}` : undefined}
         aria-describedby={describedBy}
-        aria-required={required || isRequired ? true : undefined}
+        aria-required={nativeRequired ? true : domProps["aria-required"]}
         aria-invalid={status?.type === "error" ? true : domProps["aria-invalid"]}
         aria-busy={isLoading || domProps["aria-busy"]}
         disabled={disabled}
@@ -445,12 +451,12 @@ function MultiSelectorImpl(
           aria-activedescendant={activeOption && !activeOption.disabled ? `${listboxId}-option-${activeIndex}` : undefined}
           aria-describedby={describedBy}
           aria-invalid={status?.type === "error" ? true : domProps["aria-invalid"]}
-          aria-required={required || isRequired ? true : domProps["aria-required"]}
+          aria-required={nativeRequired ? true : domProps["aria-required"]}
           aria-busy={isLoading || domProps["aria-busy"]}
           aria-disabled={disabled ? true : domProps["aria-disabled"]}
           autoComplete="off"
           disabled={disabled}
-          required={required || isRequired}
+          required={nativeRequired}
           data-testid={testId ? `${testId}-search` : undefined}
           onChange={handleSearchChange}
           onKeyDown={handleKeyDown}
@@ -465,7 +471,7 @@ function MultiSelectorImpl(
         aria-multiselectable="true"
         hidden={!open}
       >
-        {showSelectAll && searchQuery.length === 0 ? renderOptionItem(selectAllOption, 0) : null}
+        {showSelectAll && !hasSearchFilter ? renderOptionItem(selectAllOption, 0) : null}
         {renderedGroups}
       </ul>
       {emptyOptions ? <p id={emptyOptionsId} role="status" aria-live="polite" className="px-2 py-1 text-sm text-secondary">{noOptionsText}</p> : null}

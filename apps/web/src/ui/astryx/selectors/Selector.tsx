@@ -95,12 +95,13 @@ function SelectorImpl(
 ) {
   const generatedId = useId().replaceAll(":", "")
   const controlId = id ?? `selector-${generatedId}`
-  const descriptionId = description === undefined ? undefined : `${controlId}-description`
-  const statusId = status?.message === undefined ? undefined : `${controlId}-status`
+  const descriptionId = description ? `${controlId}-description` : undefined
+  const statusId = status?.message ? `${controlId}-status` : undefined
   const [internalValue, setInternalValue] = useState(defaultValue ?? "")
   const selectedValue = value === undefined ? internalValue : value
   const describedBy = joinIds(domProps["aria-describedby"], descriptionId, statusId)
   const disabled = isDisabled || isLoading
+  const nativeRequired = required ?? isRequired
   const groups = nativeOptionGroups(options)
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -119,7 +120,7 @@ function SelectorImpl(
     >
       <label className={isLabelHidden ? hiddenLabelClass : labelClass} htmlFor={controlId}>
         {label}
-        {isRequired ? <small aria-hidden="true"> *</small> : null}
+        {nativeRequired ? <small aria-hidden="true"> *</small> : null}
         {isOptional ? <small aria-hidden="true"> ({optionalLabel})</small> : null}
       </label>
       {description ? <p id={descriptionId} className={descriptionClass}>{description}</p> : null}
@@ -131,10 +132,10 @@ function SelectorImpl(
         name={htmlName}
         value={selectedValue}
         disabled={disabled}
-        required={required ?? isRequired}
+        required={nativeRequired}
         tabIndex={tabIndex}
         aria-describedby={describedBy}
-        aria-required={isRequired || required ? true : domProps["aria-required"]}
+        aria-required={nativeRequired ? true : domProps["aria-required"]}
         aria-disabled={disabled ? true : domProps["aria-disabled"]}
         aria-invalid={status?.type === "error" ? true : domProps["aria-invalid"]}
         aria-busy={isLoading || domProps["aria-busy"]}

@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { createRoot } from "react-dom/client"
 
-import { MultiSelector } from "./MultiSelector"
-import { Typeahead, type SearchSource } from "./Typeahead"
+import { MultiSelector } from "../../src/ui/astryx/selectors/MultiSelector"
+import { Typeahead, type SearchSource } from "../../src/ui/astryx/selectors/Typeahead"
 
 type FixtureItem = { readonly id: string; readonly label: string }
 
@@ -28,6 +28,7 @@ export function Fixture() {
   const [typeaheadDisabled, setTypeaheadDisabled] = useState(false)
   const [source, setSource] = useState<SearchSource<FixtureItem>>(sourceA)
   const [item, setItem] = useState<FixtureItem | null>(null)
+  const [openEvents, setOpenEvents] = useState(0)
 
   return (
     <main>
@@ -35,6 +36,7 @@ export function Fixture() {
       <button type="button" data-testid="toggle-typeahead-disabled" onClick={() => setTypeaheadDisabled((current) => !current)}>Toggle typeahead disabled</button>
       <button type="button" data-testid="swap-source" onClick={() => setSource(sourceB)}>Swap source</button>
       <button type="button" data-testid="resolve-old" onClick={() => resolveOld?.([oldItem])}>Resolve old</button>
+      <output data-testid="open-events">{openEvents}</output>
       <MultiSelector
         label="Statuses"
         options={[{ value: "ready", label: "Ready" }, { value: "review", label: "Review" }, { value: "done", label: "Done" }]}
@@ -66,6 +68,7 @@ export function Fixture() {
         errorText="Project search failed"
         debounceMs={0}
         isDisabled={typeaheadDisabled}
+        onOpenChange={() => setOpenEvents((current) => current + 1)}
         data-testid="typeahead"
       />
     </main>

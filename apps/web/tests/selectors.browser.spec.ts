@@ -1,8 +1,44 @@
-import { expect, test } from "@playwright/test"
+import { spawn, type ChildProcess } from "node:child_process"
+import { expect, test, type WorkerInfo } from "@playwright/test"
+
+let fixtureServer: ChildProcess | undefined
+let fixtureBaseURL = ""
+
+async function waitForFixture(url: string): Promise<void> {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url)
+      if (response.ok) return
+    } catch {
+      // Vite is still starting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error(`selector fixture did not start at ${url}`)
+}
 
 test.describe("CSP-safe selector browser contracts", () => {
+  test.describe.configure({ mode: "serial" })
+
+  test.beforeAll(async ({ browser }, workerInfo: WorkerInfo) => {
+    void browser
+    const port = 1422 + (process.pid % 1000) + workerInfo.workerIndex
+    fixtureBaseURL = `http://127.0.0.1:${port}/app/`
+    fixtureServer = spawn("pnpm", ["vite", "--host", "127.0.0.1", "--port", String(port)], {
+      cwd: import.meta.dirname.replace(/\/tests$/, ""),
+      stdio: "ignore",
+    })
+    await waitForFixture(`${fixtureBaseURL}tests/fixtures/astryx-selectors.fixture.html`)
+  })
+
+  test.afterAll(() => {
+    fixtureServer?.kill()
+    fixtureServer = undefined
+  })
+
   test.beforeEach(async ({ page }) => {
-    await page.goto("src/ui/astryx/selectors/selectors.browser.html")
+    await page.goto(`${fixtureBaseURL}tests/fixtures/astryx-selectors.fixture.html`)
   })
 
   test("keeps search editing keys native and uses two-stage Escape", async ({ page }) => {
@@ -22,6 +58,8 @@ test.describe("CSP-safe selector browser contracts", () => {
     await trigger.press("Escape")
     await trigger.click()
     await expect(page.getByRole("combobox", { name: "Filter statuses" })).toHaveValue("")
+    await search.fill("   ")
+    await expect(page.getByRole("option", { name: "Select all statuses" })).toBeVisible()
   })
 
   test("keeps active descendant IDs truthful for hover and source swaps", async ({ page }) => {
@@ -53,14 +91,16 @@ test.describe("CSP-safe selector browser contracts", () => {
     await expect(page.locator(`#${typeaheadActiveId}`)).toHaveAttribute("role", "option")
   })
 
-  test("closes and invalidates controls when disabled flips", async ({ page }) => {
+  test("closes and invalidates controls when disabled flips with inline callbacks", async ({ page }) => {
     const typeahead = page.getByTestId("typeahead")
     await page.getByTestId("swap-source").click()
     await typeahead.fill("new")
     await expect(page.getByText("New result")).toBeVisible()
+    await expect(page.getByTestId("open-events")).toHaveText("1")
     await page.getByTestId("toggle-typeahead-disabled").click()
     await expect(typeahead).toBeDisabled()
     await expect(typeahead).toHaveAttribute("aria-expanded", "false")
     await expect(page.getByText("New result")).toHaveCount(0)
+    await expect(page.getByTestId("open-events")).toHaveText("2")
   })
 })

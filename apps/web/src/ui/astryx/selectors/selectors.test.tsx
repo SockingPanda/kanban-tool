@@ -193,6 +193,42 @@ describe("CSP-safe selector family", () => {
     expect(markup).toContain('aria-describedby="typeahead-')
   })
 
+  test("does not create dangling IDREFs for empty copy", () => {
+    const selectorMarkup = renderToStaticMarkup(
+      <Selector
+        label="Status"
+        options={["ready"]}
+        value="ready"
+        description=""
+        status={{ type: "warning", message: "" }}
+        placeholder="Choose a status"
+        loadingText="Loading statuses"
+      />,
+    )
+    const typeaheadMarkup = renderToStaticMarkup(
+      <Typeahead
+        label="Project"
+        searchSource={createStaticSource([])}
+        value={null}
+        onChange={vi.fn()}
+        isDisabled
+        disabledMessage=""
+        placeholder="Find project"
+        searchLabel="Find project"
+        listboxLabel="Project matches"
+        loadingText="Loading projects"
+        clearLabel="Clear project"
+        emptySearchResultsText="No project matches"
+        errorText="Project search failed"
+      />,
+    )
+
+    expect(selectorMarkup).not.toContain("aria-describedby")
+    expect(selectorMarkup).not.toMatch(/id="[^"]*-(?:description|status)"/)
+    expect(typeaheadMarkup).not.toContain("aria-describedby")
+    expect(typeaheadMarkup).not.toMatch(/id="[^"]*-disabled-message"/)
+  })
+
   test("does not expose forbidden style or overlay APIs in the source", () => {
     const markup = renderToStaticMarkup(
       <Selector label="Status" options={["ready"]} value="ready" onChange={vi.fn()} placeholder="Choose a status" loadingText="Loading statuses" />,

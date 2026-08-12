@@ -125,9 +125,9 @@ function TypeaheadImpl<T extends SearchableItem>(
   const generatedId = useId().replaceAll(":", "")
   const inputId = inputIdProp ?? id ?? `typeahead-${generatedId}`
   const listboxId = listboxIdProp ?? `${inputId}-listbox`
-  const descriptionId = description === undefined ? undefined : `${inputId}-description`
-  const statusId = status?.message === undefined ? undefined : `${inputId}-status`
-  const disabledMessageId = !isDisabled || disabledMessage === undefined ? undefined : `${inputId}-disabled-message`
+  const descriptionId = description ? `${inputId}-description` : undefined
+  const statusId = status?.message ? `${inputId}-status` : undefined
+  const disabledMessageId = !isDisabled || !disabledMessage ? undefined : `${inputId}-disabled-message`
   const placeholderText = placeholder
   const loadingTextValue = loadingText
   const clearText = clearLabel
@@ -146,7 +146,11 @@ function TypeaheadImpl<T extends SearchableItem>(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
   const [failed, setFailed] = useState(false)
-  const errorId = failed ? `${inputId}-error` : undefined
+  const openRef = useRef(open)
+  const onOpenChangeRef = useRef(onOpenChange)
+  openRef.current = open
+  onOpenChangeRef.current = onOpenChange
+  const errorId = failed && error ? `${inputId}-error` : undefined
   const describedBy = joinIds(domProps["aria-describedby"], descriptionId, statusId, errorId, disabledMessageId)
 
   const setInputRef = (node: HTMLInputElement | null) => {
@@ -163,16 +167,18 @@ function TypeaheadImpl<T extends SearchableItem>(
   }, [searchSource])
 
   const setOpenState = useCallback((next: boolean) => {
-    setOpen((current) => {
-      if (current === next) return current
-      onOpenChange?.(next)
-      return next
-    })
+    if (openRef.current === next) {
+      if (!next) invalidatePending()
+      return
+    }
+    openRef.current = next
+    setOpen(next)
+    onOpenChangeRef.current?.(next)
     if (!next) {
       setActiveIndex(-1)
       invalidatePending()
     }
-  }, [invalidatePending, onOpenChange])
+  }, [invalidatePending])
 
   const clearQuery = useCallback((close = true) => {
     invalidatePending()
@@ -345,12 +351,9 @@ function TypeaheadImpl<T extends SearchableItem>(
     setLoading(false)
     setError(undefined)
     setFailed(false)
-    setOpen((current) => {
-      if (current) onOpenChange?.(false)
-      return false
-    })
+    setOpenState(false)
     return () => invalidatePending()
-  }, [invalidatePending, onOpenChange, searchSource])
+  }, [invalidatePending, searchSource, setOpenState])
 
   useEffect(() => {
     if (!isDisabled) return
@@ -360,11 +363,8 @@ function TypeaheadImpl<T extends SearchableItem>(
     setLoading(false)
     setError(undefined)
     setFailed(false)
-    setOpen((current) => {
-      if (current) onOpenChange?.(false)
-      return false
-    })
-  }, [invalidatePending, isDisabled, onOpenChange])
+    setOpenState(false)
+  }, [invalidatePending, isDisabled, setOpenState])
 
   const combinedStatusType = status?.type
   const nativeRequired = required ?? isRequired

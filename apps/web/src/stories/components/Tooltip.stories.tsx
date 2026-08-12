@@ -1,17 +1,17 @@
 import { useState } from "react"
+import type { ReactNode } from "react"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 
 import { Button } from "@astryxdesign/core/Button"
 import { Card } from "@astryxdesign/core/Card"
-import { Grid } from "@astryxdesign/core/Grid"
 import { HStack } from "@astryxdesign/core/HStack"
 import { Icon } from "@astryxdesign/core/Icon"
 import { IconButton } from "@astryxdesign/core/IconButton"
 import { Text } from "@astryxdesign/core/Text"
-import { Tooltip, type TooltipProps } from "@astryxdesign/core/Tooltip"
 import { VStack } from "@astryxdesign/core/VStack"
 
-import { CatalogPage, CatalogSection, CliEvidence } from "./AstryxCatalog"
+import { Grid } from "../../ui/astryx/primitives/Grid"
+import { Tooltip, type TooltipProps } from "../../ui/astryx/overlays/Tooltip"
 
 const ASTRYX_EVIDENCE = {
   package: "@astryxdesign/core@0.3.0",
@@ -35,14 +35,14 @@ const meta = {
   component: Tooltip,
   tags: ["autodocs", "astryx", "cli-verified"],
   parameters: {
-    layout: "fullscreen",
+    layout: "padded",
     astryx: ASTRYX_EVIDENCE,
     docs: {
       description: {
         component: [
-          "Astryx Tooltip 的项目目录，覆盖位置、键盘触发、长内容和禁用矩阵。",
-          "实现与使用边界来自 `astryx component Tooltip`、`astryx component Tooltip --props` 和 `astryx docs layout`。",
-          "页面只使用 Astryx primitives，不引入 story-local CSS、inline style 或手写 SVG。",
+          "Astryx Tooltip 的 strict-CSP safe overlay：短的补充说明通过 hover 或 focus 出现，不承载操作或必须信息。",
+          "组件级说明来自 `astryx component Tooltip`、`astryx component Tooltip --props` 与 `astryx docs layout`；story 只提供本地触发器和 copy。",
+          "Canvas 保留 controls、placement、hover、focus、disabled 与 icon-only contract，不注入自定义 CatalogPage 或视觉 docs chrome。",
         ].join("\n\n"),
       },
     },
@@ -57,7 +57,6 @@ const meta = {
     isEnabled: { control: "boolean" },
     isOpen: { control: "boolean" },
     isDefaultOpen: { control: "boolean" },
-    hasHoverIndication: { control: "inline-radio", options: ["auto", true, false] },
     onOpenChange: { action: "open changed" },
   },
   args: {
@@ -68,7 +67,6 @@ const meta = {
     hideDelay: 0,
     focusTrigger: "auto",
     isEnabled: true,
-    hasHoverIndication: "auto",
   },
 } satisfies Meta<typeof Tooltip>
 
@@ -77,15 +75,17 @@ type Story = StoryObj<typeof meta>
 
 function TooltipTrigger({
   label,
+  content,
   tooltipProps,
   disabled = false,
 }: {
   readonly label: string
+  readonly content: ReactNode
   readonly tooltipProps?: Partial<TooltipProps>
   readonly disabled?: boolean
 }) {
   return (
-    <Tooltip content="Shows a short explanation" {...tooltipProps}>
+    <Tooltip content={content} {...tooltipProps}>
       <Button type="button" label={label} variant="secondary" isDisabled={disabled} />
     </Tooltip>
   )
@@ -138,48 +138,61 @@ function Matrix({ english = false }: { readonly english?: boolean }) {
   ] as const
 
   return (
-    <CatalogPage title={copy.title} description={copy.description}>
-      <CatalogSection title={copy.placements} description={english ? "Placement follows the available edge." : "位置跟随可用边界。"}>
-        <Grid columns={{ minWidth: 180, repeat: "fit" }} gap={3}>
-          {placements.map(([placement, label]) => (
-            <Card variant="muted" padding={4} key={placement}>
-              <VStack gap={3}>
-                <Text type="code">{placement}</Text>
-                <TooltipTrigger label={label} tooltipProps={{ placement }} />
-              </VStack>
-            </Card>
-          ))}
-        </Grid>
-      </CatalogSection>
+    <VStack gap={4}>
+      <VStack gap={1}>
+        <Text as="p" type="supporting">{copy.description}</Text>
+      </VStack>
+      <Grid label={copy.placements} columns="auto-sm" gap={3}>
+        {placements.map(([placement, label]) => (
+          <Card variant="muted" padding={4} key={placement}>
+            <VStack gap={3}>
+              <Text type="code">{placement}</Text>
+              <TooltipTrigger label={label} content={label} tooltipProps={{ placement }} />
+            </VStack>
+          </Card>
+        ))}
+      </Grid>
 
-      <CatalogSection title={copy.keyboard} description={copy.keyboardDetail}>
-        <Card variant="muted" padding={5}>
+      <Card variant="muted" padding={5}>
+        <VStack gap={3}>
+          <Text weight="semibold">{copy.keyboard}</Text>
+          <Text type="supporting">{copy.keyboardDetail}</Text>
           <HStack hAlign="center">
-            <TooltipTrigger label={english ? "Focus me" : "聚焦我"} tooltipProps={{ focusTrigger: "always", content: copy.keyboardDetail, hasHoverIndication: true }} />
+            <TooltipTrigger label={english ? "Focus me" : "聚焦我"} content={copy.keyboardDetail} tooltipProps={{ focusTrigger: "always" }} />
           </HStack>
-        </Card>
-      </CatalogSection>
+        </VStack>
+      </Card>
 
-      <CatalogSection title={copy.long} description={copy.longDetail}>
-        <Card variant="muted" padding={5}>
+      <Card variant="muted" padding={5}>
+        <VStack gap={3}>
+          <Text weight="semibold">{copy.long}</Text>
+          <Text type="supporting">{copy.longDetail}</Text>
           <HStack hAlign="center">
-            <TooltipTrigger label={english ? "Read details" : "查看详情"} tooltipProps={{ content: copy.longDetail.repeat(2), placement: "below", alignment: "start" }} />
+            <TooltipTrigger label={english ? "Read details" : "查看详情"} content={copy.longDetail.repeat(2)} tooltipProps={{ placement: "below", alignment: "start" }} />
           </HStack>
-        </Card>
-      </CatalogSection>
+        </VStack>
+      </Card>
 
-      <CatalogSection title={copy.disabled} description={copy.disabledDetail}>
-        <Card variant="muted" padding={5}>
+      <Card variant="muted" padding={5}>
+        <VStack gap={3}>
+          <Text weight="semibold">{copy.disabled}</Text>
+          <Text type="supporting">{copy.disabledDetail}</Text>
           <HStack hAlign="center">
-            <TooltipTrigger label={english ? "Unavailable" : "不可用"} disabled tooltipProps={{ content: copy.disabledDetail }} />
+            <TooltipTrigger label={english ? "Unavailable" : "不可用"} content={copy.disabledDetail} disabled tooltipProps={{ isEnabled: false }} />
           </HStack>
-        </Card>
-      </CatalogSection>
+        </VStack>
+      </Card>
 
-      <CatalogSection title={copy.toggle} description={enabled ? copy.enabled : copy.disabledState}>
-        <Card variant="muted" padding={5}>
+      <Card variant="muted" padding={5}>
+        <VStack gap={3}>
+          <Text weight="semibold">{copy.toggle}</Text>
+          <Text type="supporting">{enabled ? copy.enabled : copy.disabledState}</Text>
           <HStack gap={3} hAlign="center" wrap="wrap">
-            <TooltipTrigger label={enabled ? copy.enabled : copy.disabledState} tooltipProps={{ isEnabled: enabled, content: enabled ? copy.enabled : copy.disabledState }} />
+            <TooltipTrigger
+              label={enabled ? copy.enabled : copy.disabledState}
+              content={enabled ? copy.enabled : copy.disabledState}
+              tooltipProps={{ isEnabled: enabled }}
+            />
             <Button
               type="button"
               label={enabled ? (english ? "Disable tooltip" : "禁用 Tooltip") : (english ? "Enable tooltip" : "启用 Tooltip")}
@@ -187,28 +200,17 @@ function Matrix({ english = false }: { readonly english?: boolean }) {
               onClick={() => setEnabled((current) => !current)}
             />
           </HStack>
-        </Card>
-      </CatalogSection>
-
-      <CliEvidence evidence={ASTRYX_EVIDENCE} />
-    </CatalogPage>
+        </VStack>
+      </Card>
+    </VStack>
   )
 }
 
 export const Default: Story = {
   render: (args) => (
-    <CatalogPage title="Tooltip" description="短的补充说明通过 hover 或 focus 出现，不承载操作或必须信息。">
-      <CatalogSection title="Playground" description="Controls 直接驱动 Astryx Tooltip 的公开 props。">
-        <Card variant="muted" padding={6}>
-          <HStack hAlign="center">
-            <Tooltip {...args}>
-              <Button type="button" label="Hover or focus" variant="secondary" />
-            </Tooltip>
-          </HStack>
-        </Card>
-      </CatalogSection>
-      <CliEvidence evidence={ASTRYX_EVIDENCE} />
-    </CatalogPage>
+    <Tooltip {...args}>
+      <Button type="button" label="Hover or focus" variant="secondary" />
+    </Tooltip>
   ),
 }
 
@@ -218,73 +220,37 @@ export const Placements: Story = {
 }
 
 export const Keyboard: Story = {
-  args: { focusTrigger: "always", content: "Focus reveals this tooltip", hasHoverIndication: true },
+  args: { focusTrigger: "always", content: "Focus reveals this tooltip" },
   render: (args) => (
-    <CatalogPage title="Tooltip keyboard trigger" description="focusTrigger=always 让键盘用户通过 Tab 发现补充说明。">
-      <CatalogSection title="Focus reveals the tooltip" description="先用 Tab 聚焦，再观察 Tooltip 的出现与消失。">
-        <Card variant="muted" padding={6}>
-          <HStack hAlign="center">
-            <Tooltip {...args}>
-              <Button type="button" label="Tab to me" variant="secondary" />
-            </Tooltip>
-          </HStack>
-        </Card>
-      </CatalogSection>
-      <CliEvidence evidence={ASTRYX_EVIDENCE} />
-    </CatalogPage>
+    <Tooltip {...args}>
+      <Button type="button" label="Tab to me" variant="secondary" />
+    </Tooltip>
   ),
 }
 
 export const LongContent: Story = {
   args: { content: "A longer explanation stays supplemental and wraps within the layer without becoming an interaction surface.", placement: "below", alignment: "start" },
   render: (args) => (
-    <CatalogPage title="Tooltip long content" description="长文本仍然是补充说明；需要操作或复杂结构时应升级为 HoverCard 或 Popover。">
-      <CatalogSection title="Bounded supplemental content" description="位置与触发器保持稳定，内容在 layer 内换行。">
-        <Card variant="muted" padding={6}>
-          <HStack hAlign="center">
-            <Tooltip {...args}>
-              <Button type="button" label="Read details" variant="secondary" />
-            </Tooltip>
-          </HStack>
-        </Card>
-      </CatalogSection>
-      <CliEvidence evidence={ASTRYX_EVIDENCE} />
-    </CatalogPage>
+    <Tooltip {...args}>
+      <Button type="button" label="Read details" variant="secondary" />
+    </Tooltip>
   ),
 }
 
 export const Disabled: Story = {
   args: { isEnabled: false, content: "This tooltip is intentionally disabled" },
   render: (args) => (
-    <CatalogPage title="Tooltip disabled" description="通过 isEnabled=false 明确关闭触发器，不把禁用状态误读为内容缺失。">
-      <CatalogSection title="Disabled trigger" description="禁用控件保留自身语义；Tooltip 不再响应 hover 或 focus。">
-        <Card variant="muted" padding={6}>
-          <HStack hAlign="center">
-            <Tooltip {...args}>
-              <Button type="button" label="No tooltip" variant="secondary" />
-            </Tooltip>
-          </HStack>
-        </Card>
-      </CatalogSection>
-      <CliEvidence evidence={ASTRYX_EVIDENCE} />
-    </CatalogPage>
+    <Tooltip {...args}>
+      <Button type="button" label="No tooltip" variant="secondary" isDisabled />
+    </Tooltip>
   ),
 }
 
 export const IconOnlyContract: Story = {
   render: (args) => (
-    <CatalogPage title="Tooltip for icon-only actions" description="IconButton 提供 accessible label；Tooltip 为视力正常用户补充可见上下文。">
-      <CatalogSection title="IconButton + Tooltip" description="两层 contract 分工明确：label 是可访问名称，Tooltip 是视觉补充。">
-        <Card variant="muted" padding={6}>
-          <HStack hAlign="center">
-            <Tooltip {...args} content="搜索任务">
-              <IconButton label="搜索任务" icon={<Icon icon="search" />} variant="ghost" />
-            </Tooltip>
-          </HStack>
-        </Card>
-      </CatalogSection>
-      <CliEvidence evidence={ASTRYX_EVIDENCE} />
-    </CatalogPage>
+    <Tooltip {...args}>
+      <IconButton label="搜索任务" icon={<Icon icon="search" />} variant="ghost" />
+    </Tooltip>
   ),
 }
 

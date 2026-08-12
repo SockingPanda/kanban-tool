@@ -36,12 +36,7 @@
     "@astryxdesign/core/CodeBlock",
     "@astryxdesign/core/Skeleton"
   ],
-  "unsafeImportBaseline": [
-    { "importer": "src/stories/components/TextInput.stories.tsx", "path": "@astryxdesign/core/Grid" },
-    { "importer": "src/stories/components/TextInput.stories.tsx", "path": "@astryxdesign/core/TextInput" },
-    { "importer": "src/stories/components/Tooltip.stories.tsx", "path": "@astryxdesign/core/Grid" },
-    { "importer": "src/stories/components/Tooltip.stories.tsx", "path": "@astryxdesign/core/Tooltip" }
-  ],
+  "unsafeImportBaseline": [],
   "ownedPaths": [
     "src/styles.css",
     "src/layers.css",

@@ -31,9 +31,23 @@ export function createContractValidatorPlugin(options: { schemaDirectory?: strin
       const schema = JSON.parse(readFileSync(schemaPath, "utf8")) as object
       const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false, code: { esm: true, source: true } })
       const validator = ajv.compile(schema)
-      return standaloneCode(ajv, validator)
+      return browserEsmStandaloneCode(standaloneCode(ajv, validator))
     },
   }
+}
+
+/**
+ * AJV's ESM standalone output can still emit CommonJS `require()` calls for
+ * runtime helpers such as unicode length. Production bundling rewrites those
+ * calls, but Vite serves virtual modules directly during Storybook dev. Keep
+ * the validator genuinely browser-native by expressing helper dependencies as
+ * ESM imports at the virtual-module boundary.
+ */
+function browserEsmStandaloneCode(source: string): string {
+  return source.replace(
+    /const ([A-Za-z_$][\w$]*) = require\(("ajv\/dist\/runtime\/[^"]+")\)\.default;/g,
+    "import $1 from $2;",
+  )
 }
 
 function schemaPathForSlug(slug: string, schemaDirectory: string): string {

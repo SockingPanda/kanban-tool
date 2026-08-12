@@ -61,6 +61,18 @@ describe("CSP-safe generated contract validator", () => {
     expect(validator(invalid), `${slug} invalid`).toBe(false)
   })
 
+  test("emits browser ESM imports for AJV runtime helpers", () => {
+    const plugin = createContractValidatorPlugin()
+    const resolved = plugin.resolveId("virtual:kanban-contract-validator/api-list-tasks-by-status-path")
+    if (typeof resolved !== "string") throw new Error("contract validator virtual module did not resolve")
+
+    const source = plugin.load(resolved)
+    if (typeof source !== "string") throw new Error("contract validator virtual module did not load")
+
+    expect(source).toContain('from "ajv/dist/runtime/ucs2length"')
+    expect(source).not.toContain("require(")
+  })
+
   test("rejects traversal and unknown generated validator slugs", () => {
     const plugin = createContractValidatorPlugin()
 

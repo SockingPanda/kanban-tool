@@ -15,9 +15,13 @@ export const SKELETON_SIZE_CLASSES: Readonly<Record<SkeletonSize, string>> = {
 }
 
 export interface SkeletonProps
-  extends Omit<HTMLAttributes<HTMLElement>, "children" | "style">,
+  extends Omit<HTMLAttributes<HTMLElement>, "children" | "style" | "aria-hidden">,
     NoRuntimeStyleProps {
   readonly size?: SkeletonSize
+  /** Legacy stagger input is rejected and stripped for JS spread callers. */
+  readonly index?: never
+  /** Skeletons are always decorative and cannot opt into an exposed name. */
+  readonly "aria-hidden"?: never
   readonly ref?: React.Ref<HTMLElement>
 }
 
@@ -32,17 +36,20 @@ export function Skeleton({
   ref,
   ...rest
 }: SkeletonProps) {
-  const safeRest = guardNoRuntimeStyleProps(rest)
+  const legacySafeRest = {...rest} as Record<string, unknown>
+  delete legacySafeRest.index
+  delete legacySafeRest["aria-hidden"]
+  const safeRest = guardNoRuntimeStyleProps(legacySafeRest)
   return (
     <section
       ref={ref}
-      aria-hidden="true"
       className={classNames(
         "motion-safe:animate-pulse bg-skeleton",
         SKELETON_SIZE_CLASSES[size],
         className,
       )}
       {...safeRest}
+      aria-hidden="true"
       data-size={size}
     />
   )

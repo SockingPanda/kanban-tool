@@ -5,10 +5,12 @@ import {
   CODE_BLOCK_HEIGHT_CLASSES,
   CODE_BLOCK_COPY_FEEDBACK_MS,
   CodeBlock,
+  type CodeBlockProps,
   GRID_COLUMN_CLASSES,
   Grid,
   guardNoRuntimeStyleProps,
   Skeleton,
+  type SkeletonProps,
   SafeCard,
   type SafeCardProps,
   SafeLayout,
@@ -69,13 +71,41 @@ describe("CSP-safe Astryx primitives", () => {
     expect(markup).not.toContain("已复制")
   })
 
+  test("CodeBlock keeps its caller label as the section accessible name", () => {
+    const markup = renderToStaticMarkup(
+      <CodeBlock
+        {...({
+          code: "safe",
+          label: "Evidence JSON",
+          copyLabel: "复制代码",
+          copiedLabel: "已复制",
+          errorLabel: "复制失败",
+          "aria-label": "caller override",
+        } as unknown as CodeBlockProps)}
+      />,
+    )
+
+    expect(markup).not.toContain('aria-label="caller override"')
+    expect(markup).toContain('aria-label="Evidence JSON"')
+  })
+
   test("Skeleton exposes finite geometry and a reduced-motion-safe animation", () => {
-    const markup = renderToStaticMarkup(<Skeleton size="card" />)
+    const markup = renderToStaticMarkup(
+      <Skeleton
+        {...({
+          size: "card",
+          index: 3,
+          "aria-hidden": false,
+        } as unknown as SkeletonProps)}
+      />,
+    )
 
     expect(markup).toContain("motion-safe:animate-pulse")
     expect(markup).toContain("h-32 w-full")
     expect(markup).toContain('data-size="card"')
     expect(markup).not.toContain("data-delay")
+    expect(markup).not.toContain('index="3"')
+    expect(markup).toContain('aria-hidden="true"')
     expect(markup).not.toContain("style=")
     expect(markup).not.toMatch(/(?:slate|gray|neutral)-\d+/)
     expect(markup).not.toMatch(/delay-\d+/)
@@ -110,6 +140,10 @@ describe("CSP-safe Astryx primitives", () => {
 
     // @ts-expect-error A section landmark must have an accessible label.
     const unlabeledGrid = <Grid><p>safe</p></Grid>
+    // @ts-expect-error Skeleton is always decorative and cannot opt into aria-hidden=false.
+    const visibleSkeleton = <Skeleton aria-hidden={false} />
+    // @ts-expect-error Legacy Skeleton stagger input is no longer supported.
+    const legacySkeleton = <Skeleton index={3} />
     // @ts-expect-error CodeBlock requires a caller-provided accessible label and copy feedback labels.
     const unlabeledCodeBlock = <CodeBlock code="safe" />
     // @ts-expect-error Static facade must not expose dynamic width.
@@ -128,6 +162,8 @@ describe("CSP-safe Astryx primitives", () => {
     expect(style).toBeDefined()
     expect(contentWidth).toBeDefined()
     expect(unlabeledGrid).toBeDefined()
+    expect(visibleSkeleton).toBeDefined()
+    expect(legacySkeleton).toBeDefined()
     expect(unlabeledCodeBlock).toBeDefined()
     expect(resizable).toBeDefined()
     expect(labelWidth).toBeDefined()

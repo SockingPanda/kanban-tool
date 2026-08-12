@@ -48,7 +48,10 @@ export const CODE_BLOCK_SIZE_CLASSES = {
 } as const
 
 export interface CodeBlockProps
-  extends Omit<HTMLAttributes<HTMLElement>, "children" | "style" | "title">,
+  extends Omit<
+      HTMLAttributes<HTMLElement>,
+      "children" | "style" | "title" | "aria-label"
+    >,
     NoRuntimeStyleProps {
   readonly code: string
   readonly language?: string
@@ -147,13 +150,13 @@ export function CodeBlock({
   return (
     <section
       ref={ref}
-      aria-label={resolvedLabel}
       className={classNames(
         "relative min-w-0 overflow-hidden",
         CODE_BLOCK_CONTAINER_CLASSES[container],
         className,
       )}
       {...safeRest}
+      aria-label={resolvedLabel}
       data-language={language}
       data-container={container}
       data-max-height={maxHeight}

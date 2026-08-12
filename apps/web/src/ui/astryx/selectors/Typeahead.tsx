@@ -168,7 +168,7 @@ function TypeaheadImpl<T extends SearchableItem>(
 
   const setOpenState = useCallback((next: boolean) => {
     if (openRef.current === next) {
-      if (!next) invalidatePending()
+      if (!next) setLoading(false)
       return
     }
     openRef.current = next

@@ -68,6 +68,7 @@ export function Fixture() {
         clearLabel="Clear project"
         emptySearchResultsText="No projects"
         errorText="Project search failed"
+        hasEntriesOnFocus
         debounceMs={0}
         isDisabled={typeaheadDisabled}
         onOpenChange={() => setOpenEvents((current) => current + 1)}

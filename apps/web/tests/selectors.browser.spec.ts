@@ -41,6 +41,14 @@ test.describe("CSP-safe selector browser contracts", () => {
     await page.goto(`${fixtureBaseURL}tests/fixtures/astryx-selectors.fixture.html`)
   })
 
+  test("clears loading after an empty focus bootstrap", async ({ page }) => {
+    const typeahead = page.getByTestId("typeahead")
+    await typeahead.focus()
+    await expect(typeahead).toHaveAttribute("aria-expanded", "false")
+    await expect(typeahead).not.toHaveAttribute("aria-busy", "true")
+    await expect(page.getByText("Loading projects")).toHaveCount(0)
+  })
+
   test("keeps search editing keys native and uses two-stage Escape", async ({ page }) => {
     const trigger = page.getByTestId("multi-selector")
     await trigger.click()

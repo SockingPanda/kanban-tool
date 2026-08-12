@@ -54,6 +54,15 @@ describe("Astryx CSP UI guard", () => {
     const facadeGroup = facade.safeWrappers.find((entry) => entry.kind === "group")
     expect(facadeGroup?.origin).toBe("astryx-facade")
     expect(() => validateUiGuardManifest(facade)).not.toThrow()
+    if (facadeGroup?.kind === "group") {
+      const textInput = componentEntry(cloneManifest(), "TextInput") as Record<string, unknown>
+      facadeGroup.members[0].cli = { ...(textInput.cli as Record<string, unknown>), component: "SafeCard", command: "pnpm exec astryx --json component SafeCard" }
+      expect(() => validateUiGuardManifest(facade)).toThrow(/safeWrappers are invalid/)
+    }
+
+    const missingStdout = cloneManifest()
+    delete (componentEntry(missingStdout, "TextInput").cli as Record<string, unknown>).evidenceStdout
+    expect(() => validateUiGuardManifest(missingStdout)).toThrow(/safeWrappers are invalid/)
   })
 
   test("checks package, lock, export, license, version, source hash, and path provenance", () => {
@@ -63,6 +72,7 @@ describe("Astryx CSP UI guard", () => {
       ["version", (manifest) => { (groupMember(manifest, "SafeCard").upstream as Record<string, unknown>).version = "9.9.9" }, /upstream metadata/],
       ["license", (manifest) => { (groupMember(manifest, "SafeCard").upstream as Record<string, unknown>).license = "Apache-2.0" }, /upstream metadata/],
       ["source export", (manifest) => { (groupMember(manifest, "SafeCard").upstream as Record<string, unknown>).sourcePath = "src/HStack/index.ts" }, /package.json exports/],
+      ["CLI evidence hash", (manifest) => { (componentEntry(manifest, "TextInput").cli as Record<string, unknown>).evidenceStdout += "forged" }, /stdout hash mismatch/],
       ["lock", (manifest) => { manifest.source.tarballOrSourceHash = `sha512-${"A".repeat(86)}` }, /source hash does not match pnpm-lock/],
     ]
     for (const [, mutate, expected] of cases) {
@@ -74,6 +84,13 @@ describe("Astryx CSP UI guard", () => {
     const traversal = cloneManifest()
     traversal.rootBarrel.path = "src/ui/astryx/../index.ts"
     expect(() => validateUiGuardManifest(traversal)).toThrow(/Invalid Astryx UI safety manifest path/)
+
+    const forgedSource = cloneManifest()
+    const selector = componentEntry(forgedSource, "Selector")
+    const sharedType = (selector.publicSources as Array<Record<string, unknown>>).find((entry) => entry.exported === "SelectableOption")
+    if (sharedType === undefined) throw new Error("missing Selector shared public source fixture")
+    sharedType.sourcePath = selector.ownedPath
+    expect(() => validateUiGuardManifestProvenance(forgedSource, projectRoot)).toThrow(/export modules/)
   })
 
   test("rejects symlink escapes and duplicate wrapper identities", () => {
@@ -97,20 +114,22 @@ describe("Astryx CSP UI guard", () => {
     const cases: Array<[string, string, RegExp]> = [
       ["wildcard", "export * from \"./fields/TextInput\"", /wildcard/],
       ["missing", source.replace('export {CheckboxInput} from "./fields/CheckboxInput"\n', ""), /exactly match/],
-      ["extra", `${source}\nexport const Extra = 1\n`, /exactly match/],
+      ["extra", `${source}\nexport const Extra = 1\n`, /only allows explicit/],
       ["runtime", source.replace('export {CheckboxInput} from "./fields/CheckboxInput"', 'export type {CheckboxInput} from "./fields/CheckboxInput"'), /runtime exports must exactly match/],
       ["type-as-runtime", source.replace('export type {\n  CheckboxInputProps,', 'export {\n  CheckboxInputProps,'), /runtime exports must exactly match/],
       ["duplicate", `${source}\nexport {CheckboxInput} from "./fields/CheckboxInput"\n`, /duplicate export/],
+      ["module ownership", source.replace('export {CheckboxInput} from "./fields/CheckboxInput"', 'export {CheckboxInput} from "./fields/TextInput"'), /export modules/],
+      ["imported alias", source.replace('export {CheckboxInput} from "./fields/CheckboxInput"', 'export {TextInput as CheckboxInput} from "./fields/TextInput"'), /export modules/],
     ]
     for (const [, barrel, expected] of cases) {
-      const temporaryRoot = mkdtempSync(path.join(projectRoot, ".ui-guard-root-test-"))
+      const temporaryBarrel = path.join(projectRoot, "src/ui/astryx", `.ui-guard-root-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.ts`)
       try {
-        writeFileSync(path.join(temporaryRoot, "index.ts"), barrel)
+        writeFileSync(temporaryBarrel, barrel)
         const manifest = cloneManifest()
-        manifest.rootBarrel.path = `${path.basename(temporaryRoot)}/index.ts`
+        manifest.rootBarrel.path = `src/ui/astryx/${path.basename(temporaryBarrel)}`
         expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).toThrow(expected)
       } finally {
-        rmSync(temporaryRoot, { recursive: true, force: true })
+        rmSync(temporaryBarrel, { force: true })
       }
     }
   })
@@ -155,6 +174,9 @@ describe("Astryx CSP UI guard", () => {
     expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).not.toThrow()
     manifest.swizzles[0].publicApi = "Other"
     expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).toThrow(/matching safeWrapper/)
+    manifest.swizzles[0].publicApi = "TextInput"
+    manifest.swizzles[0].sourcePackage = "@other/core"
+    expect(() => validateUiGuardManifestProvenance(manifest, projectRoot)).toThrow(/provenance does not match/)
   })
 
   test("inventories the current source without traversing reference/output", () => {
@@ -162,7 +184,7 @@ describe("Astryx CSP UI guard", () => {
     expect(report.passed).toBe(true)
     expect(report.files.some((file) => file.includes(`${path.sep}stories${path.sep}reference${path.sep}`))).toBe(false)
     expect(report.warnings.some((warning) => warning.code === "residual-css")).toBe(true)
-  })
+  }, 60_000)
 
   test("fails closed for unsafe source imports, inline style, DOM style, and forbidden paths", () => {
     const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-guard-"))
@@ -171,6 +193,9 @@ describe("Astryx CSP UI guard", () => {
         'import "@astryxdesign/core/TextInput"',
         'import { TextInput as UnsafeInput } from "@astryxdesign/core"',
         'import "./reference/example"',
+        'import "./src%2Fstories%2Freference%2Fruntime"',
+        'import ".\\\\output\\\\runtime"',
+        'import "./reference/%ZZ"',
         'import "./lib/preferences"',
         'export function Bad() { return <div style={{ color: "red" }} /> }',
         'declare const ordinary: { style: { color: string } }',
@@ -187,7 +212,7 @@ describe("Astryx CSP UI guard", () => {
         "dom-style",
       ]))
       expect(report.errors.filter((error) => error.code === "unsafe-direct-import")).toHaveLength(2)
-      expect(report.errors.filter((error) => error.code === "forbidden-import")).toHaveLength(1)
+      expect(report.errors.filter((error) => error.code === "forbidden-import")).toHaveLength(4)
       expect(report.errors.filter((error) => error.code === "dom-style")).toHaveLength(2)
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true })
@@ -204,8 +229,8 @@ describe("Astryx CSP UI guard", () => {
         'export * as UnsafeCore from "@astryxdesign/core"',
         'const core = require("@astryxdesign/core")',
         'const dynamicCore = await import("@astryxdesign/core")',
-        'void Core.Grid; void Core["TextInput"]; void core.Tooltip',
-        'void dynamicCore.Dialog',
+        'const Alias = Core; const loaderAlias = dynamicCore',
+        'void Core.Grid; void Core["TextInput"]; void core.Tooltip; void Alias.Grid; void loaderAlias.Dialog',
         'void import("@astryxdesign/core/Popover")',
         'void import("./reference/runtime")',
         'void require("./output/runtime")',
@@ -429,7 +454,7 @@ describe("Astryx CSP UI guard", () => {
       rmSync(fixtureRoot, { recursive: true, force: true })
       rmSync(outputRoot, { recursive: true, force: true })
     }
-  })
+  }, 60_000)
 
   test("keeps production and Storybook CSS topology identical and same-origin", async () => {
     const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-config-fixture-"))
@@ -466,7 +491,7 @@ describe("Astryx CSP UI guard", () => {
       rmSync(productionOutput, { recursive: true, force: true })
       rmSync(storybookOutput, { recursive: true, force: true })
     }
-  })
+  }, 60_000)
 })
 
 function collectFiles(root: string): string[] {

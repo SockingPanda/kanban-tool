@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite"
 import { defineConfig } from "vite"
 
 import { createContractValidatorPlugin } from "../build/contract-validator.ts"
+import { createUiGuardPlugin, uiGuardModeFromEnv } from "../build/ui-guard.ts"
 
 /**
  * Storybook-only Vite config. Production's `vite.config.ts` is intentionally
@@ -13,7 +14,7 @@ import { createContractValidatorPlugin } from "../build/contract-validator.ts"
  */
 export default defineConfig({
   root: path.resolve(import.meta.dirname, ".."),
-  plugins: [tailwindcss(), createContractValidatorPlugin()],
+  plugins: [tailwindcss(), createUiGuardPlugin({ mode: uiGuardModeFromEnv() }), createContractValidatorPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "../src"),

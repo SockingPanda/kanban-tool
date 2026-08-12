@@ -23,6 +23,8 @@
     "storybook:cli": "STORYBOOK_FEATURE_AI_CLI=1 storybook ai -p 6006",
     "storybook:build": "storybook build --output-dir ../../output/storybook",
     "test": "vitest run src build --passWithNoTests",
+    "ui-guard": "vitest run build/ui-guard.test.ts --passWithNoTests",
+    "ui-guard:enforce": "UI_GUARD_MODE=enforce vitest run build/ui-guard.test.ts --passWithNoTests",
     "typecheck": "tsc -b",
     "vite-build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173"

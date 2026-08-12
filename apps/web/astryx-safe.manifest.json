@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "package": "@astryxdesign/core",
+    "version": "0.3.0",
+    "tarballOrSourceHash": "sha512-t2hHvR7AcwW0oKrnxCwbdEEE5Ytgy0Ug61DcYAl9BxAuV5z4XL0/kMo5DiPvX9jbDxzysmOa8ClnXqzxouRUVQ==",
+    "license": "MIT",
+    "upstream": "https://github.com/facebook/astryx"
+  },
+  "tailwindBridge": {
+    "packages": [
+      "tailwindcss",
+      "@tailwindcss/vite",
+      "@astryxdesign/core"
+    ],
+    "version": "4.3.3",
+    "staticCssEntry": "src/styles.css"
+  },
+  "swizzles": [],
+  "unsafeDirectImports": [
+    "@astryxdesign/core/TextInput",
+    "@astryxdesign/core/TextArea",
+    "@astryxdesign/core/CheckboxInput",
+    "@astryxdesign/core/FileInput",
+    "@astryxdesign/core/Selector",
+    "@astryxdesign/core/MultiSelector",
+    "@astryxdesign/core/Typeahead",
+    "@astryxdesign/core/DateTimeInput",
+    "@astryxdesign/core/Dialog",
+    "@astryxdesign/core/Popover",
+    "@astryxdesign/core/Tooltip",
+    "@astryxdesign/core/MoreMenu",
+    "@astryxdesign/core/TreeList",
+    "@astryxdesign/core/SideNav",
+    "@astryxdesign/core/Grid",
+    "@astryxdesign/core/CodeBlock",
+    "@astryxdesign/core/Skeleton"
+  ],
+  "ownedPaths": [
+    "src/styles.css",
+    "src/layers.css",
+    "src/main.tsx",
+    ".storybook/preview.tsx",
+    "vite.config.ts",
+    ".storybook/vite.config.ts",
+    "build/ui-guard.ts",
+    "build/ui-guard.test.ts"
+  ],
+  "forbiddenRoots": [
+    "src/stories/reference",
+    "reference",
+    "output"
+  ],
+  "residualCss": [
+    { "path": "src/ui/foundations/tokens.css", "maxLoc": 109, "owner": "foundations", "reason": "Legacy token aliases are still consumed by the migrated shell.", "exitCondition": "Remove kb-* aliases after all consumers use Astryx tokens." },
+    { "path": "src/shell.module.css", "maxLoc": 563, "owner": "product-shell", "reason": "Existing shell fallback remains while surfaces migrate to Astryx and utilities.", "exitCondition": "Replace shell layout rules with Astryx layout and token-backed utilities." },
+    { "path": "src/ui/navigation/navigation.module.css", "maxLoc": 889, "owner": "navigation", "reason": "Existing navigation fallback remains while the shared shell migrates.", "exitCondition": "Replace navigation selectors with Astryx navigation composition." },
+    { "path": "src/ui/tasks/tasks.module.css", "maxLoc": 850, "owner": "tasks", "reason": "Existing task fallback remains while task projections migrate.", "exitCondition": "Replace task projection selectors with Astryx components and utilities." },
+    { "path": "src/features/board/BoardView.module.css", "maxLoc": 921, "owner": "board", "reason": "Existing board projection fallback remains during migration.", "exitCondition": "Migrate board projection layout and state styling to Astryx utilities." },
+    { "path": "src/features/explorer/EventsView.module.css", "maxLoc": 199, "owner": "events", "reason": "Existing events projection fallback remains during migration.", "exitCondition": "Migrate events projection styling to Astryx utilities." },
+    { "path": "src/features/explorer/ExplorerPage.module.css", "maxLoc": 257, "owner": "explorer", "reason": "Existing explorer page fallback remains during migration.", "exitCondition": "Migrate explorer page composition to Astryx layout." },
+    { "path": "src/features/explorer/TaskInspector.module.css", "maxLoc": 577, "owner": "task-inspector", "reason": "Existing inspector fallback remains during migration.", "exitCondition": "Migrate inspector shell and states to Astryx composition." },
+    { "path": "src/features/explorer/TaskInspectorAssetsPanel.module.css", "maxLoc": 399, "owner": "task-inspector-assets", "reason": "Existing inspector assets fallback remains during migration.", "exitCondition": "Migrate assets panel styling to Astryx components." },
+    { "path": "src/features/explorer/TaskInspectorRelationsPanel.module.css", "maxLoc": 287, "owner": "task-inspector-relations", "reason": "Existing inspector relations fallback remains during migration.", "exitCondition": "Migrate relations panel styling to Astryx components." },
+    { "path": "src/features/explorer/TaskListView.module.css", "maxLoc": 480, "owner": "task-list", "reason": "Existing list projection fallback remains during migration.", "exitCondition": "Migrate list projection styling to Astryx table/list components." },
+    { "path": "src/features/explorer/TaskMapView.module.css", "maxLoc": 491, "owner": "task-map", "reason": "Existing map projection fallback remains during migration.", "exitCondition": "Migrate map controls and surface styling to Astryx composition." },
+    { "path": "src/features/explorer/TaskRunsView.module.css", "maxLoc": 249, "owner": "task-runs", "reason": "Existing runs projection fallback remains during migration.", "exitCondition": "Migrate runs projection styling to Astryx components." },
+    { "path": "src/features/explorer/TasksWorkspaceChrome.module.css", "maxLoc": 120, "owner": "tasks-workspace", "reason": "Existing workspace chrome fallback remains during migration.", "exitCondition": "Migrate workspace chrome to Astryx layout and utilities." },
+    { "path": "src/features/health/health-page.module.css", "maxLoc": 168, "owner": "health", "reason": "Existing health page fallback remains during migration.", "exitCondition": "Migrate health surface styling to Astryx components." },
+    { "path": "src/features/maintenance/maintenance-page.module.css", "maxLoc": 164, "owner": "maintenance", "reason": "Existing maintenance page fallback remains during migration.", "exitCondition": "Migrate maintenance surface styling to Astryx components." },
+    { "path": "src/features/ontology/OntologyScreen.module.css", "maxLoc": 346, "owner": "ontology", "reason": "Existing ontology surface fallback remains during migration.", "exitCondition": "Migrate ontology surface styling to Astryx components." },
+    { "path": "src/features/projects/projects.module.css", "maxLoc": 295, "owner": "projects", "reason": "Existing projects surface fallback remains during migration.", "exitCondition": "Migrate projects surface styling to Astryx components." },
+    { "path": "src/features/signals/SignalsScreen.module.css", "maxLoc": 284, "owner": "signals", "reason": "Existing signals surface fallback remains during migration.", "exitCondition": "Migrate signals surface styling to Astryx components." },
+    { "path": "src/stories/design-system/philosophy.module.css", "maxLoc": 544, "owner": "storybook-design-system", "reason": "Existing story documentation fallback remains as a review artifact.", "exitCondition": "Rebuild the story with Astryx primitives and remove local CSS." },
+    { "path": "src/stories/foundations/foundations.stories.css", "maxLoc": 282, "owner": "storybook-foundations", "reason": "Existing foundation story fallback remains as a review artifact.", "exitCondition": "Rebuild the story with Astryx primitives and remove local CSS." },
+    { "path": "src/stories/navigation/navigation.stories.module.css", "maxLoc": 754, "owner": "storybook-navigation", "reason": "Existing navigation story fallback remains as a review artifact.", "exitCondition": "Rebuild the story with Astryx primitives and remove local CSS." },
+    { "path": "src/stories/primitives/primitives.stories.css", "maxLoc": 244, "owner": "storybook-primitives", "reason": "Existing primitive story fallback remains as a review artifact.", "exitCondition": "Rebuild the story with Astryx primitives and remove local CSS." },
+    { "path": "src/stories/tasks/tasks-stories.module.css", "maxLoc": 132, "owner": "storybook-tasks", "reason": "Existing task story fallback remains as a review artifact.", "exitCondition": "Rebuild the story with Astryx primitives and remove local CSS." }
+  ],
+  "legacyRawLayout": [
+    { "path": "src/ProductShell.tsx", "maxCount": 5, "owner": "product-shell", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/board/BoardTaskMutations.tsx", "maxCount": 3, "owner": "board", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/board/BoardView.tsx", "maxCount": 25, "owner": "board", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/EventsView.tsx", "maxCount": 3, "owner": "events", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/ExplorerPage.tsx", "maxCount": 7, "owner": "explorer", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/TaskInspector.tsx", "maxCount": 17, "owner": "task-inspector", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/TaskInspectorAssetsPanel.tsx", "maxCount": 19, "owner": "task-inspector-assets", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/TaskInspectorEditActions.tsx", "maxCount": 9, "owner": "task-inspector", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/TaskInspectorRelationsPanel.tsx", "maxCount": 11, "owner": "task-inspector-relations", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/TaskListView.tsx", "maxCount": 15, "owner": "task-list", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/TaskMapView.tsx", "maxCount": 15, "owner": "task-map", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/TaskRunsView.tsx", "maxCount": 7, "owner": "task-runs", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/explorer/TasksWorkspaceChrome.tsx", "maxCount": 2, "owner": "tasks-workspace", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/health/HealthPage.tsx", "maxCount": 8, "owner": "health", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/maintenance/MaintenancePage.tsx", "maxCount": 25, "owner": "maintenance", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/ontology/OntologyScreen.tsx", "maxCount": 44, "owner": "ontology", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/projects/ProjectOverview.tsx", "maxCount": 5, "owner": "projects", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/projects/ProjectsCollection.tsx", "maxCount": 3, "owner": "projects", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/settings/SettingsPage.tsx", "maxCount": 19, "owner": "settings", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/features/signals/SignalsScreen.tsx", "maxCount": 16, "owner": "signals", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/stories/design-system/Philosophy.stories.tsx", "maxCount": 54, "owner": "storybook-design-system", "exitCondition": "Rebuild formal stories with Astryx primitives and utilities." },
+    { "path": "src/stories/foundations/Environment.stories.tsx", "maxCount": 7, "owner": "storybook-foundations", "exitCondition": "Rebuild formal stories with Astryx primitives and utilities." },
+    { "path": "src/stories/foundations/TokenReference.stories.tsx", "maxCount": 21, "owner": "storybook-foundations", "exitCondition": "Rebuild formal stories with Astryx primitives and utilities." },
+    { "path": "src/stories/navigation/Navigation.stories.tsx", "maxCount": 25, "owner": "storybook-navigation", "exitCondition": "Rebuild formal stories with Astryx primitives and utilities." },
+    { "path": "src/stories/primitives/Controls.stories.tsx", "maxCount": 5, "owner": "storybook-primitives", "exitCondition": "Rebuild formal stories with Astryx primitives and utilities." },
+    { "path": "src/stories/primitives/States.stories.tsx", "maxCount": 5, "owner": "storybook-primitives", "exitCondition": "Rebuild formal stories with Astryx primitives and utilities." },
+    { "path": "src/stories/tasks/TasksPatterns.stories.tsx", "maxCount": 10, "owner": "storybook-tasks", "exitCondition": "Rebuild formal stories with Astryx primitives and utilities." },
+    { "path": "src/ui/navigation/ProjectPicker.tsx", "maxCount": 2, "owner": "navigation", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/ui/navigation/ProjectTree.tsx", "maxCount": 1, "owner": "navigation", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/ui/navigation/ProjectsSidebar.tsx", "maxCount": 4, "owner": "navigation", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/ui/navigation/ResourceHeader.tsx", "maxCount": 3, "owner": "navigation", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/ui/tasks/TasksPatterns.tsx", "maxCount": 15, "owner": "tasks", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." }
+  ],
+  "pageContract": {
+    "schemaVersion": 1,
+    "sharedStyleEntry": "src/styles.css",
+    "entrypoints": [
+      { "path": "src/main.tsx", "import": "./styles.css" },
+      { "path": ".storybook/preview.tsx", "import": "../src/styles.css" }
+    ]
+  }
+}

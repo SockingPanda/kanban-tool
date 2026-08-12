@@ -7,6 +7,7 @@ import { defineConfig } from "vite"
 
 import { createWebArtifactManifestPlugin } from "./build/artifact-manifest.ts"
 import { createContractValidatorPlugin } from "./build/contract-validator.ts"
+import { createUiGuardPlugin, uiGuardModeFromEnv } from "./build/ui-guard.ts"
 
 const webPackage = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
@@ -23,6 +24,7 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
+    createUiGuardPlugin({ mode: uiGuardModeFromEnv() }),
     createContractValidatorPlugin(),
     {
       name: "strict-preview-csp",

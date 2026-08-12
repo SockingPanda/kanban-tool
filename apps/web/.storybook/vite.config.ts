@@ -1,5 +1,6 @@
 import path from "node:path"
 
+import tailwindcss from "@tailwindcss/vite"
 import { defineConfig } from "vite"
 
 import { createContractValidatorPlugin } from "../build/contract-validator.ts"
@@ -12,7 +13,7 @@ import { createContractValidatorPlugin } from "../build/contract-validator.ts"
  */
 export default defineConfig({
   root: path.resolve(import.meta.dirname, ".."),
-  plugins: [createContractValidatorPlugin()],
+  plugins: [tailwindcss(), createContractValidatorPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "../src"),

@@ -1,1 +1,6 @@
-@layer reset, astryx-base, astryx-theme, product;
+/*
+ * The shared entrypoint owns the complete stylesheet topology. Keep this
+ * statement before every import so Vite and Storybook resolve the same layer
+ * precedence under strict CSP.
+ */
+@layer reset, theme, base, astryx-base, astryx-theme, product, components, utilities;

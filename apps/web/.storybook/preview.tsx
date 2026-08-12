@@ -5,10 +5,6 @@ import { Theme } from "@astryxdesign/core/theme"
 import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 import type { Preview } from "@storybook/react-vite"
 
-import "@astryxdesign/core/reset.css"
-import "@astryxdesign/core/astryx.css"
-import "@astryxdesign/theme-neutral/theme.css"
-import "../src/layers.css"
 import "../src/styles.css"
 
 import { astryxMessages, astryxOverrides } from "../src/lib/i18n"

@@ -205,14 +205,19 @@ describe("Ontology screen presentation", () => {
     expect(html).toContain("Signal rows")
     expect(html).toContain("Grouped review")
     expect(html).toContain("Candidate atom")
-    expect(html).toContain('data-columns="three"')
+    expect(html).toContain('data-columns="responsive-three"')
+    expect(html).toContain("grid-cols-1 lg:grid-cols-2 xl:grid-cols-3")
+    expect(html).toContain("min-h-0 max-h-screen overflow-hidden")
+    expect(html).toContain("min-h-0 max-h-screen overflow-auto")
     expect(html).not.toContain(" style=")
     expect(html).not.toContain("<style")
   })
 
   test("keeps the three-column contract explicit in source", () => {
     const source = readFileSync(new URL("./OntologyScreen.tsx", import.meta.url), "utf8")
-    expect(source).toContain('columns="three"')
+    expect(source).toContain('columns="responsive-three"')
+    expect(source).toContain('className="min-h-0 max-h-screen overflow-hidden"')
+    expect(source).toContain('className="min-h-0 max-h-screen overflow-auto"')
     expect(source).not.toContain('columns="auto-lg"')
   })
 

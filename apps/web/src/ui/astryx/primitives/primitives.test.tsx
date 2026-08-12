@@ -51,6 +51,26 @@ describe("CSP-safe Astryx primitives", () => {
     expect(markup).not.toContain("<div")
   })
 
+  test("Grid maps responsive columns to finite literal breakpoint classes", () => {
+    const twoColumnMarkup = renderToStaticMarkup(
+      <Grid label="Responsive two-column grid" columns="responsive-two">
+        <p>two</p>
+      </Grid>,
+    )
+    const threeColumnMarkup = renderToStaticMarkup(
+      <Grid label="Responsive three-column grid" columns="responsive-three">
+        <p>three</p>
+      </Grid>,
+    )
+
+    expect(twoColumnMarkup).toContain(GRID_COLUMN_CLASSES["responsive-two"])
+    expect(twoColumnMarkup).toContain('data-columns="responsive-two"')
+    expect(twoColumnMarkup).not.toContain("style=")
+    expect(threeColumnMarkup).toContain(GRID_COLUMN_CLASSES["responsive-three"])
+    expect(threeColumnMarkup).toContain('data-columns="responsive-three"')
+    expect(threeColumnMarkup).not.toContain("style=")
+  })
+
   test("CodeBlock renders plain native pre/code with finite height and resident live status", () => {
     const markup = renderToStaticMarkup(
       <CodeBlock

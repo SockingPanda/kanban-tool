@@ -315,9 +315,9 @@ export function SignalsScreenView({
               />
             ) : null}
 
-            <Grid label={`${copy.signalRows} / ${copy.detail}`} columns="two" gap={4}>
-              <SafeCard padding={0}>
-                <SafeVStack gap={0}>
+            <Grid label={`${copy.signalRows} / ${copy.detail}`} columns="responsive-two" gap={4} className="min-h-0 max-h-screen overflow-hidden">
+              <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
+                <SafeVStack gap={0} className="min-h-0">
                     <SafeHStack padding={4} gap={2} justify="between" align="start" wrap="wrap">
                       <SafeVStack gap={1}>
                         <Heading level={2}>{copy.signalRows}</Heading>
@@ -335,8 +335,8 @@ export function SignalsScreenView({
                     />
                 </SafeVStack>
               </SafeCard>
-              <SafeCard padding={0}>
-                <SafeVStack gap={0}>
+              <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
+                <SafeVStack gap={0} className="min-h-0">
                     <SafeHStack padding={4} gap={2} justify="between" align="start" wrap="wrap">
                       <SafeVStack gap={1}>
                         <Heading level={2}>{copy.detail}</Heading>

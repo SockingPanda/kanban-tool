@@ -12,6 +12,8 @@ export type GridColumns =
   | "single"
   | "two"
   | "three"
+  | "responsive-two"
+  | "responsive-three"
   | "auto-sm"
   | "auto-md"
   | "auto-lg"
@@ -25,6 +27,8 @@ export const GRID_COLUMN_CLASSES: Readonly<Record<GridColumns, string>> = {
   single: "grid-cols-1",
   two: "grid-cols-2",
   three: "grid-cols-3",
+  "responsive-two": "grid-cols-1 lg:grid-cols-2",
+  "responsive-three": "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3",
   "auto-sm": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
   "auto-md": "grid-cols-1 md:grid-cols-2 xl:grid-cols-3",
   "auto-lg": "grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3",

@@ -441,15 +441,15 @@ export function OntologyScreenView({
         {signals.error ? <Banner status="error" title={copy.rowsError} description={localizedErrorMessage(signals.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryRows} variant="ghost" size="sm" onClick={onRefreshRows} />} /> : null}
         {groups.error ? <Banner status="error" title={copy.groupsError} description={localizedErrorMessage(groups.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryGroups} variant="ghost" size="sm" onClick={onRefreshGroups} />} /> : null}
 
-        <Grid label={`${copy.signalRows} / ${copy.groupedReview} / ${copy.signalDetail}`} columns="three" gap={4}>
-        <SafeCard padding={0}>
-          <SafeVStack gap={0}>
+        <Grid label={`${copy.signalRows} / ${copy.groupedReview} / ${copy.signalDetail}`} columns="responsive-three" gap={4} className="min-h-0 max-h-screen overflow-hidden">
+        <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
+          <SafeVStack gap={0} className="min-h-0">
             <PanelHeader title={copy.signalRows} meta={copy.loadedCount(viewSignals.length)} refreshing={signals.phase === "refreshing"} copy={copy} />
             <OntologySignalListView phase={signals.phase} signals={viewSignals} selectedSignalId={selectedSignalId} onSelectSignal={onSelectSignal} copy={copy} />
           </SafeVStack>
         </SafeCard>
-        <SafeCard padding={0}>
-          <SafeVStack gap={0}>
+        <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
+          <SafeVStack gap={0} className="min-h-0">
             <PanelHeader title={copy.groupedReview} meta={copy.groupsCount(groups.data.length)} refreshing={groups.phase === "refreshing"} copy={copy} />
             <SafeHStack gap={1} padding={3} wrap="wrap" role="group" aria-label={copy.groupBy}>
               {(["label", "candidate_atom", "proposed_label"] as const).map((candidate) => <Button key={candidate} label={candidate === "candidate_atom" ? copy.atom : candidate === "proposed_label" ? copy.proposal : copy.label} variant={groupBy === candidate ? "primary" : "ghost"} size="sm" aria-pressed={groupBy === candidate} onClick={() => onFiltersChange({ ...filters, groupBy: candidate })} />)}
@@ -457,12 +457,12 @@ export function OntologyScreenView({
             <ReviewGroupsView phase={groups.phase} groups={groups.data} onSelectSignal={onSelectSignal} copy={copy} />
           </SafeVStack>
         </SafeCard>
-        <SafeVStack gap={4}>
-          <SafeCard padding={0}>
+        <SafeVStack gap={4} className="min-h-0 max-h-screen overflow-auto">
+          <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
             <PanelHeader title={copy.signalDetail} meta={localizedSignalStatus(detail.data?.signal.status, copy)} refreshing={detail.phase === "refreshing"} copy={copy} endContent={selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null} />
             <OntologySignalDetailView phase={detail.phase} detail={detail.data} error={detail.error} actionError={actionError} onRetryAction={onRetryAction} actionReason={actionReason} actionPending={actionPending} lifecycleEnabled={lifecycleEnabled} onActionReasonChange={onActionReasonChange} onLifecycleAction={onLifecycleAction} onExplainAtom={onExplainAtom} locale={locale} copy={copy} onRetry={onRefreshDetail} />
           </SafeCard>
-          <SafeCard padding={0}>
+          <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
             <PanelHeader title={copy.atomExplain} meta={atom.phase === "refreshing" ? copy.refreshing : atomRef || copy.none} refreshing={atom.phase === "refreshing"} copy={copy} />
             <form onSubmit={onAtomSearch}>
               <SafeHStack gap={2} padding={4} align="end" wrap="wrap">

@@ -55,10 +55,8 @@ type TypeaheadPropsBase<T extends SearchableItem> = SafeDomProps & {
   readonly hasClear?: boolean
   readonly hasAutoFocus?: boolean
   readonly isLabelHidden?: boolean
-  readonly isOptional?: boolean
-  readonly optionalLabel?: string
   readonly listboxLabel: string
-  readonly isRequired?: boolean
+  readonly required?: boolean
   readonly size?: "sm" | "md" | "lg"
   readonly debounceMs?: number
   readonly onChangeQuery?: (query: string) => void
@@ -68,8 +66,12 @@ type TypeaheadPropsBase<T extends SearchableItem> = SafeDomProps & {
   readonly "data-testid"?: string
 }
 
-export type TypeaheadProps<T extends SearchableItem> = TypeaheadPropsBase<T> &
-  ({ readonly isOptional: true; readonly optionalLabel: string } | { readonly isOptional?: false; readonly optionalLabel?: never })
+type TypeaheadRequirementProps =
+  | { readonly isRequired: true; readonly isOptional?: false; readonly optionalLabel?: never }
+  | { readonly isRequired?: false; readonly isOptional: true; readonly optionalLabel: string }
+  | { readonly isRequired?: false; readonly isOptional?: false; readonly optionalLabel?: never }
+
+export type TypeaheadProps<T extends SearchableItem> = TypeaheadPropsBase<T> & TypeaheadRequirementProps
 
 function TypeaheadImpl<T extends SearchableItem>(
   {
@@ -99,6 +101,7 @@ function TypeaheadImpl<T extends SearchableItem>(
     isLabelHidden = false,
     isOptional = false,
     isRequired = false,
+    required,
     listboxLabel,
     size = "md",
     debounceMs = 150,
@@ -143,13 +146,21 @@ function TypeaheadImpl<T extends SearchableItem>(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
   const [failed, setFailed] = useState(false)
-  const describedBy = joinIds(domProps["aria-describedby"], descriptionId, statusId, disabledMessageId)
+  const errorId = failed ? `${inputId}-error` : undefined
+  const describedBy = joinIds(domProps["aria-describedby"], descriptionId, statusId, errorId, disabledMessageId)
 
   const setInputRef = (node: HTMLInputElement | null) => {
     inputRef.current = node
     if (typeof forwardedRef === "function") forwardedRef(node)
     else if (forwardedRef) forwardedRef.current = node
   }
+
+  const invalidatePending = useCallback(() => {
+    generationRef.current += 1
+    if (timeoutRef.current !== undefined) clearTimeout(timeoutRef.current)
+    timeoutRef.current = undefined
+    searchSource.cancel?.()
+  }, [searchSource])
 
   const setOpenState = useCallback((next: boolean) => {
     setOpen((current) => {
@@ -159,15 +170,12 @@ function TypeaheadImpl<T extends SearchableItem>(
     })
     if (!next) {
       setActiveIndex(-1)
-      searchSource.cancel?.()
+      invalidatePending()
     }
-  }, [onOpenChange, searchSource])
+  }, [invalidatePending, onOpenChange])
 
   const clearQuery = useCallback((close = true) => {
-    generationRef.current += 1
-    if (timeoutRef.current !== undefined) clearTimeout(timeoutRef.current)
-    timeoutRef.current = undefined
-    searchSource.cancel?.()
+    invalidatePending()
     setQuery("")
     onChangeQuery?.("")
     setResults([])
@@ -175,9 +183,10 @@ function TypeaheadImpl<T extends SearchableItem>(
     setFailed(false)
     setLoading(false)
     if (close) setOpenState(false)
-  }, [onChangeQuery, searchSource, setOpenState])
+  }, [invalidatePending, onChangeQuery, setOpenState])
 
   const runSearch = useCallback(async (nextQuery: string) => {
+    if (isDisabled) return
     const generation = ++generationRef.current
     searchSource.cancel?.()
     setLoading(true)
@@ -199,9 +208,10 @@ function TypeaheadImpl<T extends SearchableItem>(
     } finally {
       if (generationRef.current === generation) setLoading(false)
     }
-  }, [errorTextValue, maxMenuItems, searchSource, setOpenState])
+  }, [errorTextValue, isDisabled, maxMenuItems, searchSource, setOpenState])
 
   const runBootstrap = useCallback(async () => {
+    if (isDisabled) return
     const generation = ++generationRef.current
     searchSource.cancel?.()
     setLoading(true)
@@ -224,39 +234,38 @@ function TypeaheadImpl<T extends SearchableItem>(
     } finally {
       if (generationRef.current === generation) setLoading(false)
     }
-  }, [errorTextValue, maxMenuItems, searchSource, setOpenState])
+  }, [errorTextValue, isDisabled, maxMenuItems, searchSource, setOpenState])
 
   const handleQueryChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextQuery = event.currentTarget.value
+    const queryGeneration = generationRef.current + 1
+    invalidatePending()
     setQuery(nextQuery)
     onChangeQuery?.(nextQuery)
     setError(undefined)
     setFailed(false)
-    setActiveIndex(0)
-    if (timeoutRef.current !== undefined) clearTimeout(timeoutRef.current)
+    setResults([])
+    setActiveIndex(-1)
+    setLoading(false)
     if (nextQuery.length === 0) {
-      generationRef.current += 1
-      searchSource.cancel?.()
-      setResults([])
-      setLoading(false)
       setOpenState(false)
       return
     }
+    setOpenState(true)
     if (debounceMs <= 0) {
       void runSearch(nextQuery)
     } else {
       timeoutRef.current = setTimeout(() => {
         timeoutRef.current = undefined
+        if (generationRef.current !== queryGeneration) return
         void runSearch(nextQuery)
       }, debounceMs)
     }
   }
 
   const selectItem = (item: T) => {
-    generationRef.current += 1
-    if (timeoutRef.current !== undefined) clearTimeout(timeoutRef.current)
-    timeoutRef.current = undefined
-    searchSource.cancel?.()
+    if (isDisabled) return
+    invalidatePending()
     onChange(item)
     setQuery("")
     onChangeQuery?.("")
@@ -329,13 +338,38 @@ function TypeaheadImpl<T extends SearchableItem>(
     }
   }
 
-  useEffect(() => () => {
-    if (timeoutRef.current !== undefined) clearTimeout(timeoutRef.current)
-    searchSource.cancel?.()
-  }, [searchSource])
+  useEffect(() => {
+    invalidatePending()
+    setResults([])
+    setActiveIndex(-1)
+    setLoading(false)
+    setError(undefined)
+    setFailed(false)
+    setOpen((current) => {
+      if (current) onOpenChange?.(false)
+      return false
+    })
+    return () => invalidatePending()
+  }, [invalidatePending, onOpenChange, searchSource])
 
-  const combinedStatus = error ?? status?.message
-  const combinedStatusType = failed ? "error" : status?.type
+  useEffect(() => {
+    if (!isDisabled) return
+    invalidatePending()
+    setResults([])
+    setActiveIndex(-1)
+    setLoading(false)
+    setError(undefined)
+    setFailed(false)
+    setOpen((current) => {
+      if (current) onOpenChange?.(false)
+      return false
+    })
+  }, [invalidatePending, isDisabled, onOpenChange])
+
+  const combinedStatusType = status?.type
+  const nativeRequired = required ?? isRequired
+  const showEmptyResults = results.length === 0 && !loading && !error && (query.length > 0 || open)
+  const emptyResultsId = `${listboxId}-empty`
   const handleFocus = (event: FocusEvent<HTMLInputElement>) => {
     onFocus?.(event)
     if (isDisabled) return
@@ -354,7 +388,6 @@ function TypeaheadImpl<T extends SearchableItem>(
   return (
     <section
       className={mergeClasses(fieldClass, className)}
-      data-testid={testId}
       data-status={status?.type}
       data-state={failed ? "error" : loading ? "loading" : open ? "open" : "closed"}
       aria-busy={loading || undefined}
@@ -362,7 +395,7 @@ function TypeaheadImpl<T extends SearchableItem>(
     >
       <label className={isLabelHidden ? hiddenLabelClass : labelClass} htmlFor={inputId}>
         {label}
-        {isRequired ? <small aria-hidden="true"> *</small> : null}
+        {nativeRequired ? <small aria-hidden="true"> *</small> : null}
         {isOptional && optionalText ? <small aria-hidden="true"> ({optionalText})</small> : null}
       </label>
       {description ? <p id={descriptionId} className={descriptionClass}>{description}</p> : null}
@@ -376,16 +409,19 @@ function TypeaheadImpl<T extends SearchableItem>(
         role="combobox"
         value={query}
         placeholder={placeholderText}
-        aria-label={searchText ?? domProps["aria-label"]}
+        aria-label={searchText}
         aria-autocomplete="list"
         aria-expanded={open}
         aria-controls={listboxId}
         aria-activedescendant={open && activeIndex >= 0 && activeIndex < results.length ? `${listboxId}-option-${activeIndex}` : undefined}
         aria-describedby={describedBy}
-        aria-invalid={combinedStatusType === "error" ? true : domProps["aria-invalid"]}
+        aria-invalid={failed || combinedStatusType === "error" ? true : domProps["aria-invalid"]}
+        aria-required={nativeRequired ? true : domProps["aria-required"]}
         aria-busy={loading || domProps["aria-busy"]}
         aria-disabled={isDisabled ? true : domProps["aria-disabled"]}
         disabled={isDisabled}
+        required={nativeRequired}
+        data-testid={testId}
         autoComplete="off"
         autoFocus={hasAutoFocus}
         tabIndex={tabIndex}
@@ -419,6 +455,7 @@ function TypeaheadImpl<T extends SearchableItem>(
         className={listboxClass}
         role="listbox"
         aria-label={resultsText}
+        aria-describedby={showEmptyResults ? emptyResultsId : undefined}
         hidden={!open}
       >
         {results.map((item, index) => (
@@ -436,19 +473,22 @@ function TypeaheadImpl<T extends SearchableItem>(
             {renderItem ? renderItem(item) : renderOption ? renderOption(item) : item.element ?? item.label}
           </li>
         ))}
-        {results.length === 0 && !loading && (query.length > 0 || open) && (error ?? noResultsText) ? (
-          <li role="presentation" className="px-2 py-1 text-sm text-secondary">{error ?? noResultsText}</li>
-        ) : null}
       </ul>
+      {showEmptyResults ? <p id={emptyResultsId} role="status" aria-live="polite" className="px-2 py-1 text-sm text-secondary">{noResultsText}</p> : null}
       {isDisabled && disabledMessage ? <p id={disabledMessageId} className={descriptionClass} role="status">{disabledMessage}</p> : null}
-      {loading && loadingTextValue ? <output className="text-xs text-secondary" role="status">{loadingTextValue}</output> : null}
-      {combinedStatus ? (
+      {loading ? <output className="text-xs text-secondary" role="status" aria-live="polite">{loadingTextValue}</output> : null}
+      {error ? (
+        <p id={errorId} className={statusClasses[statusVariant]} role="alert" aria-live="assertive">
+          {error}
+        </p>
+      ) : null}
+      {status?.message ? (
         <p
           id={statusId}
           className={statusClasses[statusVariant]}
           role={combinedStatusType === "error" ? "alert" : "status"}
         >
-          {combinedStatus}
+          {status.message}
         </p>
       ) : null}
     </section>

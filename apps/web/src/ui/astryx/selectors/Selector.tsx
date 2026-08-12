@@ -7,16 +7,22 @@ import {
   joinIds,
   labelClass,
   mergeClasses,
-  optionGroups,
+  nativeOptionGroups,
   selectorControlClasses,
   statusClasses,
   type SafeDomProps,
-  type SelectableOption,
-  type SelectorOption,
+  type NativeSelectableOption,
+  type NativeSelectorOption,
   type SelectorStatus,
 } from "./shared"
 
-export type { SelectorOptionData, SelectorOptionType, SelectorOption, SelectorStatus } from "./shared"
+export type {
+  NativeSelectorOption as SelectorOption,
+  NativeSelectorOptionData as SelectorOptionData,
+  NativeSelectorOptionType as SelectorOptionType,
+  NativeSelectorSection as SelectorSection,
+  SelectorStatus,
+} from "./shared"
 
 type SelectorPropsBase = SafeDomProps & {
   readonly label: string
@@ -24,14 +30,14 @@ type SelectorPropsBase = SafeDomProps & {
   readonly status?: SelectorStatus
   readonly statusVariant?: "attached" | "detached"
   readonly htmlName?: string
-  readonly options: readonly SelectorOption[]
+  readonly options: readonly NativeSelectorOption[]
   readonly value?: string
   readonly defaultValue?: string
   readonly onChange?: (value: string) => void
-  readonly renderOption?: (option: SelectableOption) => string
-  readonly placeholder?: string
+  readonly renderOption?: (option: NativeSelectableOption) => string
+  /** Explicit empty option copy; an omitted value is not a valid no-selection state. */
+  readonly placeholder: string
   readonly isLabelHidden?: boolean
-  readonly isRequired?: boolean
   readonly isDisabled?: boolean
   readonly isLoading?: boolean
   readonly loadingText: string
@@ -40,10 +46,14 @@ type SelectorPropsBase = SafeDomProps & {
   readonly required?: boolean
 }
 
-export type SelectorProps = SelectorPropsBase &
-  ({ readonly isOptional: true; readonly optionalLabel: string } | { readonly isOptional?: false; readonly optionalLabel?: never })
+type SelectorRequirementProps =
+  | { readonly isRequired: true; readonly isOptional?: false; readonly optionalLabel?: never }
+  | { readonly isRequired?: false; readonly isOptional: true; readonly optionalLabel: string }
+  | { readonly isRequired?: false; readonly isOptional?: false; readonly optionalLabel?: never }
 
-function optionContent(option: SelectableOption, renderOption?: (option: SelectableOption) => string): string {
+export type SelectorProps = SelectorPropsBase & SelectorRequirementProps
+
+function optionContent(option: NativeSelectableOption, renderOption?: (option: NativeSelectableOption) => string): string {
   return renderOption ? renderOption(option) : option.label
 }
 
@@ -91,8 +101,7 @@ function SelectorImpl(
   const selectedValue = value === undefined ? internalValue : value
   const describedBy = joinIds(domProps["aria-describedby"], descriptionId, statusId)
   const disabled = isDisabled || isLoading
-  const groups = optionGroups(options)
-  const loadingTextValue = loadingText
+  const groups = nativeOptionGroups(options)
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const nextValue = event.currentTarget.value
@@ -106,7 +115,6 @@ function SelectorImpl(
     <section
       className={mergeClasses(fieldClass, className)}
       aria-busy={isLoading || undefined}
-      data-testid={testId}
       data-status={status?.type}
     >
       <label className={isLabelHidden ? hiddenLabelClass : labelClass} htmlFor={controlId}>
@@ -126,7 +134,7 @@ function SelectorImpl(
         required={required ?? isRequired}
         tabIndex={tabIndex}
         aria-describedby={describedBy}
-        aria-required={isRequired ? true : domProps["aria-required"]}
+        aria-required={isRequired || required ? true : domProps["aria-required"]}
         aria-disabled={disabled ? true : domProps["aria-disabled"]}
         aria-invalid={status?.type === "error" ? true : domProps["aria-invalid"]}
         aria-busy={isLoading || domProps["aria-busy"]}
@@ -137,8 +145,9 @@ function SelectorImpl(
         onMouseDown={onMouseDown}
         onClick={onClick}
         onChange={handleChange}
+        data-testid={testId}
       >
-        {placeholder ? <option value="">{placeholder}</option> : null}
+        <option value="">{placeholder}</option>
         {groups.map((group, groupIndex) => {
           const children = group.options.map((option) => (
             <option key={option.value} value={option.value} disabled={option.disabled}>
@@ -161,7 +170,7 @@ function SelectorImpl(
           {status.message}
         </p>
       ) : null}
-      {isLoading ? <output className="text-xs text-secondary" role="status">{loadingTextValue}</output> : null}
+      {isLoading ? <output className="text-xs text-secondary" role="status" aria-live="polite">{loadingText}</output> : null}
     </section>
   )
 }

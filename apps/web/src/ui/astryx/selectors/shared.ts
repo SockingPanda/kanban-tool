@@ -7,6 +7,28 @@ export type SelectorOptionData = {
   readonly icon?: ReactNode
 }
 
+/** The option shape that the native Selector can represent without loss. */
+export type NativeSelectorOptionData = {
+  readonly value: string
+  readonly label?: string
+  readonly disabled?: boolean
+}
+
+export type NativeSelectorSection = {
+  readonly type: "section"
+  readonly title?: string
+  readonly options: readonly NativeSelectorOptionData[]
+}
+
+export type NativeSelectorOption = string | NativeSelectorOptionData | NativeSelectorSection
+export type NativeSelectorOptionType = NativeSelectorOption
+
+export type NativeSelectableOption = {
+  readonly value: string
+  readonly label: string
+  readonly disabled?: boolean
+}
+
 export type SelectorDivider = { readonly type: "divider" }
 
 export type SelectorSection = {
@@ -101,6 +123,55 @@ export function optionGroups(options: readonly SelectorOption[]): readonly {
       groups.push({ title: option.title, options: option.options.map(normalizeOption) })
     } else if (isOptionData(option)) {
       loose.push(normalizeOption(option))
+    }
+  }
+  flushLoose()
+  return groups
+}
+
+function hasUnsupportedNativeFields(option: object): boolean {
+  return "icon" in option && (option as { readonly icon?: unknown }).icon !== undefined
+}
+
+function normalizeNativeOption(option: string | NativeSelectorOptionData): NativeSelectableOption {
+  if (typeof option === "string") {
+    return { value: option, label: option }
+  }
+  if (hasUnsupportedNativeFields(option)) {
+    throw new TypeError("Selector native options do not support icons")
+  }
+  return {
+    value: option.value,
+    label: option.label ?? option.value,
+    disabled: option.disabled,
+  }
+}
+
+/** Native `<select>` groups; unsupported divider/icon shapes fail loudly at runtime. */
+export function nativeOptionGroups(options: readonly NativeSelectorOption[]): readonly {
+  readonly title?: string
+  readonly options: readonly NativeSelectableOption[]
+}[] {
+  const groups: { title?: string; options: readonly NativeSelectableOption[] }[] = []
+  let loose: NativeSelectableOption[] = []
+  const flushLoose = () => {
+    if (loose.length > 0) {
+      groups.push({ options: loose })
+      loose = []
+    }
+  }
+  for (const option of options) {
+    if (typeof option === "object" && "type" in option && option.type === "section") {
+      flushLoose()
+      groups.push({
+        title: option.title,
+        options: option.options.map(normalizeNativeOption),
+      })
+    } else if (typeof option === "object") {
+      if ("type" in option) throw new TypeError("Selector native options do not support dividers")
+      loose.push(normalizeNativeOption(option))
+    } else {
+      loose.push(normalizeNativeOption(option))
     }
   }
   flushLoose()

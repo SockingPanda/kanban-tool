@@ -31,12 +31,13 @@ import {
   type SafeDomProps,
   type SelectableOption,
   type SelectorOption,
+  type SelectorOptionData,
   type SelectorStatus,
 } from "./shared"
 
 export type { SelectorOptionData, SelectorOptionType, SelectorOption, SelectorStatus } from "./shared"
 
-export type MultiSelectorOptionData = SelectableOption
+export type MultiSelectorOptionData = SelectorOptionData
 export type MultiSelectorOptionType = SelectorOption
 export type MultiSelectorStatus = SelectorStatus
 
@@ -52,7 +53,6 @@ type MultiSelectorPropsBase = SafeDomProps & {
   readonly renderOption?: (option: SelectableOption) => ReactNode
   readonly placeholder: string
   readonly isLabelHidden?: boolean
-  readonly isRequired?: boolean
   readonly isDisabled?: boolean
   readonly isLoading?: boolean
   readonly loadingText: string
@@ -66,9 +66,10 @@ type MultiSelectorPropsBase = SafeDomProps & {
   readonly "data-testid"?: string
 }
 
-type MultiSelectorOptionalProps =
-  | { readonly isOptional: true; readonly optionalLabel: string }
-  | { readonly isOptional?: false; readonly optionalLabel?: never }
+type MultiSelectorRequirementProps =
+  | { readonly isRequired: true; readonly isOptional?: false; readonly optionalLabel?: never }
+  | { readonly isRequired?: false; readonly isOptional: true; readonly optionalLabel: string }
+  | { readonly isRequired?: false; readonly isOptional?: false; readonly optionalLabel?: never }
 
 type MultiSelectorClearProps =
   | { readonly hasClear: true; readonly clearLabel: string }
@@ -79,16 +80,18 @@ type MultiSelectorSearchProps =
   | { readonly hasSearch?: false; readonly searchLabel?: never; readonly searchPlaceholder?: never }
 
 type MultiSelectorSelectAllProps =
-  | { readonly hasSelectAll: true; readonly selectAllLabel: string }
-  | { readonly hasSelectAll?: false; readonly selectAllLabel?: never }
+  | {
+      readonly hasSelectAll: true
+      readonly selectAllLabel: string
+      readonly selectAllStateLabel?: (state: "all" | "some" | "none") => string
+    }
+  | { readonly hasSelectAll?: false; readonly selectAllLabel?: never; readonly selectAllStateLabel?: never }
 
 type MultiSelectorDisplayProps =
   | { readonly triggerDisplay?: "count"; readonly selectedText: (count: number) => string }
   | { readonly triggerDisplay: "labels" | "badges"; readonly selectedText?: (count: number) => string }
 
-export type MultiSelectorProps = MultiSelectorPropsBase & MultiSelectorOptionalProps & MultiSelectorClearProps & MultiSelectorSearchProps & MultiSelectorSelectAllProps & MultiSelectorDisplayProps
-
-const allValue = "__astryx_select_all__"
+export type MultiSelectorProps = MultiSelectorPropsBase & MultiSelectorRequirementProps & MultiSelectorClearProps & MultiSelectorSearchProps & MultiSelectorSelectAllProps & MultiSelectorDisplayProps
 
 function selectedLabels(options: readonly SelectableOption[], values: readonly string[]): readonly string[] {
   const labels = new Map(options.map((option) => [option.value, option.label]))
@@ -123,6 +126,7 @@ function MultiSelectorImpl(
     clearLabel,
     hasSelectAll = false,
     selectAllLabel,
+    selectAllStateLabel,
     hasSearch = false,
     searchLabel,
     searchPlaceholder,
@@ -156,6 +160,12 @@ function MultiSelectorImpl(
   const [searchQuery, setSearchQuery] = useState("")
   const allOptions = useMemo(() => flattenOptions(options), [options])
   const enabledOptions = useMemo(() => allOptions.filter((option) => !option.disabled), [allOptions])
+  const selectAllValue = useMemo(() => {
+    const values = new Set(allOptions.map((option) => option.value))
+    let candidate = "__astryx_select_all__"
+    while (values.has(candidate)) candidate = `${candidate}_`
+    return candidate
+  }, [allOptions])
   const visibleOptions = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase()
     if (query.length === 0) return allOptions
@@ -164,14 +174,18 @@ function MultiSelectorImpl(
   const clearText = clearLabel
   const selectAllText = selectAllLabel
   const searchText = searchLabel
-  const selectAllOption = useMemo<SelectableOption>(() => ({ value: allValue, label: selectAllText ?? "" }), [selectAllText])
-  const showSelectAll = hasSelectAll
+  const selectAllOption = useMemo<SelectableOption>(() => ({ value: selectAllValue, label: selectAllText ?? "" }), [selectAllValue, selectAllText])
+  const showSelectAll = hasSelectAll && enabledOptions.length > 0
   const activeOptions = useMemo(
     () => showSelectAll && searchQuery.length === 0 ? [selectAllOption, ...visibleOptions] : visibleOptions,
     [searchQuery.length, selectAllOption, showSelectAll, visibleOptions],
   )
   const selectedSet = useMemo(() => new Set(value), [value])
   const allSelected = enabledOptions.length > 0 && enabledOptions.every((option) => selectedSet.has(option.value))
+  const selectAllState = allSelected
+    ? "all"
+    : enabledOptions.some((option) => selectedSet.has(option.value)) ? "some" : "none"
+  const selectAllAnnouncement = selectAllStateLabel?.(selectAllState)
   const selected = useMemo(() => selectedLabels(allOptions, value), [allOptions, value])
   const describedBy = joinIds(domProps["aria-describedby"], descriptionId, statusId)
   const disabled = isDisabled || isLoading
@@ -182,6 +196,8 @@ function MultiSelectorImpl(
   const firstFocusableIndex = focusableIndices[0] ?? -1
   const lastFocusableIndex = focusableIndices[focusableIndices.length - 1] ?? -1
   const activeOption = activeOptions[activeIndex]
+  const emptyOptions = activeOptions.length === (showSelectAll && searchQuery.length === 0 ? 1 : 0)
+  const emptyOptionsId = `${listboxId}-empty`
 
   useEffect(() => {
     setActiveIndex((current) => focusableIndices.includes(current) ? current : firstFocusableIndex)
@@ -193,14 +209,24 @@ function MultiSelectorImpl(
     }
   }, [hasSearch, open])
 
-  const setOpenState = (next: boolean, restoreFocus = true) => {
+  useEffect(() => {
+    if (!disabled) return
+    setOpen((current) => {
+      if (current) onOpenChange?.(false)
+      return false
+    })
+    setActiveIndex(-1)
+    setSearchQuery("")
+  }, [disabled, onOpenChange])
+
+  const setOpenState = (next: boolean, restoreFocus = true, clearQuery = true) => {
     if (disabled || next === open) return
     setOpen(next)
     onOpenChange?.(next)
     if (next) {
       setActiveIndex(firstFocusableIndex)
     } else {
-      setSearchQuery("")
+      if (clearQuery) setSearchQuery("")
       if (restoreFocus) triggerRef.current?.focus()
     }
   }
@@ -212,7 +238,7 @@ function MultiSelectorImpl(
 
   const toggleOption = (option: SelectableOption) => {
     if (disabled || option.disabled) return
-    if (option.value === allValue) {
+    if (option.value === selectAllValue) {
       onChange(allSelected ? value.filter((item) => !enabledOptions.some((entry) => entry.value === item)) : enabledOptions.map((entry) => entry.value))
       return
     }
@@ -225,6 +251,8 @@ function MultiSelectorImpl(
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     onKeyDown?.(event)
     if (event.defaultPrevented || disabled) return
+    const isSearchInput = event.currentTarget === searchRef.current
+    if (isSearchInput && (event.key === " " || event.key === "Home" || event.key === "End")) return
     const moveActive = (direction: 1 | -1) => {
       if (focusableIndices.length === 0) return
       const currentPosition = focusableIndices.indexOf(activeIndex)
@@ -269,7 +297,11 @@ function MultiSelectorImpl(
       case "Escape":
         if (open) {
           event.preventDefault()
-          setOpenState(false)
+          setOpenState(false, true, false)
+        } else if (hasSearch && searchQuery.length > 0) {
+          event.preventDefault()
+          setSearchQuery("")
+          setActiveIndex(-1)
         }
         break
       case "Tab":
@@ -294,7 +326,7 @@ function MultiSelectorImpl(
         : selected.join(", ")
 
   const renderOptionItem = (option: SelectableOption, index: number) => {
-    const selectedOption = option.value === allValue ? allSelected : selectedSet.has(option.value)
+    const selectedOption = option.value === selectAllValue ? allSelected : selectedSet.has(option.value)
     const isActive = index === activeIndex
     return (
       <li
@@ -302,15 +334,18 @@ function MultiSelectorImpl(
         id={`${listboxId}-option-${index}`}
         role="option"
         aria-selected={selectedOption}
+        aria-label={option.value === selectAllValue && selectAllAnnouncement ? `${selectAllText}, ${selectAllAnnouncement}` : undefined}
         aria-disabled={option.disabled || undefined}
+        data-partial={option.value === selectAllValue && selectAllState === "some" ? "true" : undefined}
         data-highlighted={isActive || undefined}
         data-selected={selectedOption || undefined}
         data-disabled={option.disabled || undefined}
         className={optionClass}
         onMouseDown={(event) => event.preventDefault()}
+        onMouseEnter={() => { if (!option.disabled) setActiveIndex(index) }}
         onClick={() => toggleOption(option)}
       >
-        {option.value === allValue ? selectAllText : renderOption ? renderOption(option) : option.label}
+        {option.value === selectAllValue ? selectAllText : renderOption ? renderOption(option) : option.label}
       </li>
     )
   }
@@ -338,7 +373,6 @@ function MultiSelectorImpl(
     <section
       className={mergeClasses(fieldClass, className)}
       aria-busy={isLoading || undefined}
-      data-testid={testId}
       data-status={status?.type}
       onBlur={handleFieldBlur}
     >
@@ -360,7 +394,7 @@ function MultiSelectorImpl(
         aria-controls={listboxId}
         aria-activedescendant={!hasSearch && open && activeOption && !activeOption.disabled ? `${listboxId}-option-${activeIndex}` : undefined}
         aria-describedby={describedBy}
-        aria-required={required ?? isRequired ? true : undefined}
+        aria-required={required || isRequired ? true : undefined}
         aria-invalid={status?.type === "error" ? true : domProps["aria-invalid"]}
         aria-busy={isLoading || domProps["aria-busy"]}
         disabled={disabled}
@@ -373,6 +407,7 @@ function MultiSelectorImpl(
           onClick?.(event)
           if (!event.defaultPrevented) setOpenState(!open)
         }}
+        data-testid={testId}
       >
         {summary}
       </button>
@@ -408,8 +443,15 @@ function MultiSelectorImpl(
           aria-expanded={open}
           aria-controls={listboxId}
           aria-activedescendant={activeOption && !activeOption.disabled ? `${listboxId}-option-${activeIndex}` : undefined}
+          aria-describedby={describedBy}
+          aria-invalid={status?.type === "error" ? true : domProps["aria-invalid"]}
+          aria-required={required || isRequired ? true : domProps["aria-required"]}
+          aria-busy={isLoading || domProps["aria-busy"]}
+          aria-disabled={disabled ? true : domProps["aria-disabled"]}
           autoComplete="off"
           disabled={disabled}
+          required={required || isRequired}
+          data-testid={testId ? `${testId}-search` : undefined}
           onChange={handleSearchChange}
           onKeyDown={handleKeyDown}
         />
@@ -419,13 +461,14 @@ function MultiSelectorImpl(
         className={listboxClass}
         role="listbox"
         aria-labelledby={triggerId}
+        aria-describedby={emptyOptions ? emptyOptionsId : undefined}
         aria-multiselectable="true"
         hidden={!open}
       >
         {showSelectAll && searchQuery.length === 0 ? renderOptionItem(selectAllOption, 0) : null}
         {renderedGroups}
-        {activeOptions.length === (showSelectAll && searchQuery.length === 0 ? 1 : 0) ? <li role="presentation" className="px-2 py-1 text-sm text-secondary">{noOptionsText}</li> : null}
       </ul>
+      {emptyOptions ? <p id={emptyOptionsId} role="status" aria-live="polite" className="px-2 py-1 text-sm text-secondary">{noOptionsText}</p> : null}
       {status?.message ? (
         <p
           id={statusId}
@@ -435,7 +478,7 @@ function MultiSelectorImpl(
           {status.message}
         </p>
       ) : null}
-      {isLoading ? <output className="text-xs text-secondary" role="status">{loadingText}</output> : null}
+      {isLoading ? <output className="text-xs text-secondary" role="status" aria-live="polite">{loadingText}</output> : null}
     </section>
   )
 }

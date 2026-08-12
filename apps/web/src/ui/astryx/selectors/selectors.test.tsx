@@ -25,6 +25,7 @@ describe("CSP-safe selector family", () => {
         options={options}
         value="ready"
         onChange={vi.fn()}
+        placeholder="Choose a status"
         loadingText="Loading statuses"
         data-testid="status-selector"
       />,
@@ -33,6 +34,8 @@ describe("CSP-safe selector family", () => {
     expect(markup).toContain("<select")
     expect(markup).toContain('name="status"')
     expect(markup).toContain('data-selector-control="true"')
+    expect(markup).toContain('<option value="">Choose a status</option>')
+    expect(markup).toContain('data-testid="status-selector"')
     expect(markup).toContain('aria-describedby="selector-')
     expect(markup).toContain("Ready")
     expect(markup).toContain("More")
@@ -96,6 +99,31 @@ describe("CSP-safe selector family", () => {
     expect(markup).not.toContain("<span")
   })
 
+  test("keeps select-all identity distinct and exposes caller-owned partial state", () => {
+    const markup = renderToStaticMarkup(
+      <MultiSelector
+        label="Statuses"
+        options={[
+          { value: "__astryx_select_all__", label: "Collision" },
+          { value: "done", label: "Done" },
+        ]}
+        value={["__astryx_select_all__"]}
+        onChange={vi.fn()}
+        placeholder="Choose statuses"
+        loadingText="Fetching statuses"
+        noOptionsText="Nothing"
+        selectedText={(count) => `${count} statuses`}
+        hasSelectAll
+        selectAllLabel="Select everything"
+        selectAllStateLabel={(state) => state === "some" ? "Some statuses selected" : state === "all" ? "All statuses selected" : "No statuses selected"}
+      />,
+    )
+
+    expect(markup).toContain("Collision")
+    expect(markup).toContain('aria-label="Select everything, Some statuses selected"')
+    expect(markup).toContain('data-partial="true"')
+  })
+
   test("exposes async SearchSource, selected value, and combobox IDREFs", () => {
     const items = [
       { id: "one", label: "One", auxiliaryData: { slug: "uno" } },
@@ -120,6 +148,8 @@ describe("CSP-safe selector family", () => {
         clearLabel="Clear project"
         emptySearchResultsText="No project matches"
         errorText="Project search failed"
+        isRequired
+        required
         data-testid="project-typeahead"
       />,
     )
@@ -127,6 +157,8 @@ describe("CSP-safe selector family", () => {
     expect(markup).toContain('role="combobox"')
     expect(markup).toContain('aria-controls="typeahead-')
     expect(markup).toContain('aria-expanded="false"')
+    expect(markup).toContain('aria-required="true"')
+    expect(markup).toContain('required=""')
     expect(markup).toContain("One")
     expect(markup).toContain('role="listbox"')
     expect(markup).toContain('hidden=""')
@@ -163,7 +195,7 @@ describe("CSP-safe selector family", () => {
 
   test("does not expose forbidden style or overlay APIs in the source", () => {
     const markup = renderToStaticMarkup(
-      <Selector label="Status" options={["ready"]} value="ready" onChange={vi.fn()} loadingText="Loading statuses" />,
+      <Selector label="Status" options={["ready"]} value="ready" onChange={vi.fn()} placeholder="Choose a status" loadingText="Loading statuses" />,
     )
     expect(markup).not.toContain("xstyle")
     expect(markup).not.toContain("width=")
@@ -185,7 +217,7 @@ describe("CSP-safe selector family", () => {
 
 // Safe selectors deliberately reject runtime presentation escape hatches.
 // @ts-expect-error style is intentionally not part of the safe selector API.
-const styleIsRejected = <Selector label="Status" options={["ready"]} loadingText="Loading statuses" style={{}} />
+const styleIsRejected = <Selector label="Status" options={["ready"]} placeholder="Choose a status" loadingText="Loading statuses" style={{}} />
 // @ts-expect-error xstyle is intentionally not part of the safe selector API.
 const xstyleIsRejected = <MultiSelector label="Status" options={["ready"]} value={[]} onChange={() => undefined} placeholder="Choose status" loadingText="Loading statuses" noOptionsText="Nothing" selectedText={(count) => `${count} statuses`} xstyle={{}} />
 // @ts-expect-error width is intentionally not part of the safe selector API.
@@ -197,7 +229,15 @@ const countCopyIsRequired = <MultiSelector label="Status" options={["ready"]} va
 // @ts-expect-error Typeahead copy is required for its control, listbox, loading, and result states.
 const typeaheadCopyIsRequired = <Typeahead label="Project" searchSource={createStaticSource([])} value={null} onChange={() => undefined} />
 // @ts-expect-error loading output requires caller-owned loading text.
-const selectorLoadingCopyIsRequired = <Selector label="Status" options={["ready"]} isLoading />
+const selectorLoadingCopyIsRequired = <Selector label="Status" options={["ready"]} placeholder="Choose a status" isLoading />
+// @ts-expect-error native Selector does not support divider sentinel options.
+const nativeDividerIsRejected = <Selector label="Status" options={[{ type: "divider" }]} placeholder="Choose a status" loadingText="Loading statuses" />
+// @ts-expect-error native Selector does not support icon-bearing options.
+const nativeIconIsRejected = <Selector label="Status" options={[{ value: "ready", icon: "icon" }]} placeholder="Choose a status" loadingText="Loading statuses" />
+// @ts-expect-error native option rendering must return a string consumable by <option>.
+const richNativeOptionIsRejected = <Selector label="Status" options={["ready"]} placeholder="Choose a status" loadingText="Loading statuses" renderOption={() => <strong>Ready</strong>} />
+// @ts-expect-error required and optional labels are mutually exclusive.
+const conflictingRequirementCopyIsRejected = <Selector label="Status" options={["ready"]} placeholder="Choose a status" loadingText="Loading statuses" isRequired isOptional optionalLabel="Optional" />
 
 void styleIsRejected
 void xstyleIsRejected
@@ -206,3 +246,7 @@ void searchCopyIsRequired
 void countCopyIsRequired
 void typeaheadCopyIsRequired
 void selectorLoadingCopyIsRequired
+void nativeDividerIsRejected
+void nativeIconIsRejected
+void richNativeOptionIsRejected
+void conflictingRequirementCopyIsRejected

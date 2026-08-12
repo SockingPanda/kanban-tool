@@ -457,23 +457,25 @@ export function OntologyScreenView({
             <ReviewGroupsView phase={groups.phase} groups={groups.data} onSelectSignal={onSelectSignal} copy={copy} />
           </SafeVStack>
         </SafeCard>
-        <SafeVStack gap={4} className="min-h-0 max-h-screen overflow-auto">
-          <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
-            <PanelHeader title={copy.signalDetail} meta={localizedSignalStatus(detail.data?.signal.status, copy)} refreshing={detail.phase === "refreshing"} copy={copy} endContent={selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null} />
-            <OntologySignalDetailView phase={detail.phase} detail={detail.data} error={detail.error} actionError={actionError} onRetryAction={onRetryAction} actionReason={actionReason} actionPending={actionPending} lifecycleEnabled={lifecycleEnabled} onActionReasonChange={onActionReasonChange} onLifecycleAction={onLifecycleAction} onExplainAtom={onExplainAtom} locale={locale} copy={copy} onRetry={onRefreshDetail} />
-          </SafeCard>
-          <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
-            <PanelHeader title={copy.atomExplain} meta={atom.phase === "refreshing" ? copy.refreshing : atomRef || copy.none} refreshing={atom.phase === "refreshing"} copy={copy} />
-            <form onSubmit={onAtomSearch}>
-              <SafeHStack gap={2} padding={4} align="end" wrap="wrap">
-                <SafeVStack className="min-w-0 flex-1">
-                  <TextInput label={copy.atomInput} isLabelHidden value={atomDraft} onChange={(value) => onAtomDraftChange?.(value)} placeholder={copy.atomInput} htmlName="atom-ref" />
-                </SafeVStack>
-                <Button label={copy.explain} type="submit" variant="secondary" size="sm" isDisabled={!atomDraft.trim()} />
-              </SafeHStack>
-            </form>
-            <AtomExplainView phase={atom.phase} explain={atom.data} error={atom.error} onRetry={onRefreshAtom} locale={locale} copy={copy} />
-          </SafeCard>
+        <SafeVStack gap={4} className="min-h-0 max-h-screen overflow-auto lg:col-span-2 xl:col-span-1">
+          <Grid label={`${copy.signalDetail} / ${copy.atomExplain}`} columns="responsive-two" gap={4} className="min-h-0 xl:grid-cols-1">
+            <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
+              <PanelHeader title={copy.signalDetail} meta={localizedSignalStatus(detail.data?.signal.status, copy)} refreshing={detail.phase === "refreshing"} copy={copy} endContent={selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null} />
+              <OntologySignalDetailView phase={detail.phase} detail={detail.data} error={detail.error} actionError={actionError} onRetryAction={onRetryAction} actionReason={actionReason} actionPending={actionPending} lifecycleEnabled={lifecycleEnabled} onActionReasonChange={onActionReasonChange} onLifecycleAction={onLifecycleAction} onExplainAtom={onExplainAtom} locale={locale} copy={copy} onRetry={onRefreshDetail} />
+            </SafeCard>
+            <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
+              <PanelHeader title={copy.atomExplain} meta={atom.phase === "refreshing" ? copy.refreshing : atomRef || copy.none} refreshing={atom.phase === "refreshing"} copy={copy} />
+              <form onSubmit={onAtomSearch}>
+                <SafeHStack gap={2} padding={4} align="end" wrap="wrap">
+                  <SafeVStack className="min-w-0 flex-1">
+                    <TextInput label={copy.atomInput} isLabelHidden value={atomDraft} onChange={(value) => onAtomDraftChange?.(value)} placeholder={copy.atomInput} htmlName="atom-ref" />
+                  </SafeVStack>
+                  <Button label={copy.explain} type="submit" variant="secondary" size="sm" isDisabled={!atomDraft.trim()} />
+                </SafeHStack>
+              </form>
+              <AtomExplainView phase={atom.phase} explain={atom.data} error={atom.error} onRetry={onRefreshAtom} locale={locale} copy={copy} />
+            </SafeCard>
+          </Grid>
         </SafeVStack>
         </Grid>
       </SafeVStack>

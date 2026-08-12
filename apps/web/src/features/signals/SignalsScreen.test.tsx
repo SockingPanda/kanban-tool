@@ -78,6 +78,7 @@ describe("Signals screen presentation", () => {
     expect(html).toContain("Evidence JSON")
     expect(html).toContain("default#1")
     expect(html).toContain("Close detail")
+    expect(html).toContain("whitespace-pre-wrap")
     expect(html).toContain('data-columns="responsive-two"')
     expect(html).toContain("grid-cols-1 lg:grid-cols-2")
     expect(html).toContain("min-h-0 max-h-screen overflow-hidden")
@@ -89,6 +90,7 @@ describe("Signals screen presentation", () => {
   test("keeps the two-column and CSP-safe text contracts in source", () => {
     const source = readFileSync(new URL("./SignalsScreen.tsx", import.meta.url), "utf8")
     expect(source).toContain('columns="responsive-two"')
+    expect(source).toContain('className="whitespace-pre-wrap"')
     expect(source).toContain('className="min-h-0 max-h-screen overflow-hidden"')
     expect(source).toContain('className="min-h-0 max-h-screen overflow-auto"')
     expect(source).not.toContain('columns="auto-md"')

@@ -426,7 +426,7 @@ export function SignalDetailView({ loading, signal, error, onRetry, locale = "en
         <MachineBadge variant="neutral" label={signal.kind} />
       </SafeHStack>
       <Heading level={3}>{signal.title}</Heading>
-      <Text as="p" type="supporting">{signal.summary}</Text>
+      <Text as="p" type="supporting" className="whitespace-pre-wrap">{signal.summary}</Text>
       <SafeMetadataList columns="multi" label={{ position: "top" }}>
         <Fact label={copy.signalId} value={signal.id} />
         <Fact label={copy.observationId} value={signal.observation_id} />

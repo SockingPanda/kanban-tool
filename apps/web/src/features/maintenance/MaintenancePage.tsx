@@ -1,5 +1,9 @@
 import { AlertDialog } from "@astryxdesign/core/AlertDialog"
+import { Badge } from "@astryxdesign/core/Badge"
+import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Text, type TextProps } from "@astryxdesign/core/Text"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
@@ -7,6 +11,16 @@ import type { Locale } from "../../lib/preferences"
 import { createTranslator } from "../../lib/i18n"
 import { requestHealthRefresh } from "../../lib/health-refresh"
 import { usePreferences } from "../../lib/use-preferences"
+import { CheckboxInput, TextInput } from "../../ui/astryx/fields"
+import { PageFrame } from "../../ui/astryx/page-frame"
+import {
+  Grid,
+  SafeCard,
+  SafeHStack,
+  SafeSection,
+  SafeStack,
+  SafeVStack,
+} from "../../ui/astryx/primitives"
 import {
   createMaintenanceApi,
   MaintenanceApiError,
@@ -23,7 +37,6 @@ import {
   type VacuumReport,
 } from "../../lib/api/maintenance-api"
 import { maintenanceOwnerForAction } from "./maintenance-intents"
-import styles from "./maintenance-page.module.css"
 
 type LoadState<T> =
   | { kind: "loading" }
@@ -132,10 +145,10 @@ function formatTimestamp(value: number | null | undefined, locale: Locale): stri
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date)
 }
 
-function statusTone(status: { dirty: boolean; degraded: boolean; failed: number; last_error: string | null; lifecycle_status: string }): string {
+function statusTone(status: { dirty: boolean; degraded: boolean; failed: number; last_error: string | null; lifecycle_status: string }): "error" | "success" {
   return status.degraded || status.dirty || status.failed > 0 || Boolean(status.last_error) || /degraded|error|failed/i.test(status.lifecycle_status)
-    ? styles.degraded
-    : styles.ready
+    ? "error"
+    : "success"
 }
 
 export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial, onHealthRefresh }: MaintenancePageProps) {
@@ -407,163 +420,195 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
   }
 
   return (
-    <section className={styles.page} aria-labelledby="maintenance-heading" data-testid="maintenance-page">
-      <div className={styles.headingRow}>
-        <div className={styles.pageHeading}>
-          <p className={styles.eyebrow}>{t("productKicker")}</p>
-          <h1 id="maintenance-heading">{t("maintenanceHeading")}</h1>
-          <p className={styles.lede}>{t("maintenanceDescription")}</p>
-        </div>
-        <Button label={t("refresh")} variant="secondary" isDisabled={isBusy || status.kind === "loading"} isLoading={status.kind === "loading"} onClick={refreshAll} data-testid="maintenance-refresh" />
-      </div>
+    <PageFrame
+      frame="content"
+      aria-labelledby="maintenance-heading"
+      bodyLabelledBy="maintenance-heading"
+      data-testid="maintenance-page"
+      header={(
+        <SafeHStack as="header" gap={4} justify="between" align="start" wrap="wrap">
+          <SafeVStack gap={1} className="min-w-0">
+            <Text as="p" type="supporting" display="block">{t("productKicker")}</Text>
+            <Heading level={1} id="maintenance-heading">{t("maintenanceHeading")}</Heading>
+            <Text as="p" type="supporting" display="block">{t("maintenanceDescription")}</Text>
+          </SafeVStack>
+          <Button label={t("refresh")} variant="secondary" size="sm" isDisabled={isBusy || status.kind === "loading"} isLoading={status.kind === "loading"} onClick={refreshAll} data-testid="maintenance-refresh" />
+        </SafeHStack>
+      )}
+    >
+      <SafeVStack as="section" gap={6} aria-labelledby="maintenance-heading">
+        {status.kind === "loading" && stats.kind === "loading" && searchStatus.kind === "loading" ? (
+          <Banner status="info" title={t("loading")} container="section" role="status" aria-live="polite" data-testid="maintenance-loading" />
+        ) : null}
 
-      {status.kind === "loading" && stats.kind === "loading" && searchStatus.kind === "loading" ? (
-        <div className={styles.boundary} role="status" aria-live="polite" data-testid="maintenance-loading">{t("loading")}</div>
-      ) : null}
+        <Grid label={t("maintenanceHeading")} columns="auto-md" gap={4}>
+          <Panel title={t("maintenanceStatusHeading")} testId="maintenance-status">
+            <StatusContent state={status} t={t} locale={locale} />
+          </Panel>
+          <Panel title={t("statsHeading")} testId="maintenance-stats">
+            <StatsContent state={stats} t={t} locale={locale} />
+          </Panel>
+          <Panel title={t("searchStatusHeading")} testId="maintenance-search-status">
+            <SearchContent state={searchStatus} t={t} />
+          </Panel>
+          <Panel title={t("doctorHeading")} testId="maintenance-doctor">
+            <SafeVStack gap={3}>
+              <Button label={pendingAction === "doctor" ? t("loading") : t("runDoctor")} variant="secondary" size="sm" isDisabled={isBusy} isLoading={pendingAction === "doctor"} onClick={runDoctor} data-testid="maintenance-doctor-submit" />
+              {doctor.kind === "ready" ? <DoctorContent report={doctor.value} t={t} /> : null}
+              {doctor.kind === "error" ? <InlineError error={doctor.error} t={t} action="doctor" actionError={actionError} /> : null}
+            </SafeVStack>
+          </Panel>
+        </Grid>
 
-      <div className={styles.overviewGrid}>
-        <Panel title={t("maintenanceStatusHeading")} testId="maintenance-status">
-          <StatusContent state={status} t={t} locale={locale} />
-        </Panel>
-        <Panel title={t("statsHeading")} testId="maintenance-stats">
-          <StatsContent state={stats} t={t} locale={locale} />
-        </Panel>
-        <Panel title={t("searchStatusHeading")} testId="maintenance-search-status">
-          <SearchContent state={searchStatus} t={t} />
-        </Panel>
-        <Panel title={t("doctorHeading")} testId="maintenance-doctor">
-          <Button label={pendingAction === "doctor" ? t("loading") : t("runDoctor")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "doctor"} onClick={runDoctor} data-testid="maintenance-doctor-submit" />
-          {doctor.kind === "ready" ? <DoctorContent report={doctor.value} t={t} /> : null}
-          {doctor.kind === "error" ? <InlineError error={doctor.error} t={t} action="doctor" actionError={actionError} /> : null}
-        </Panel>
-      </div>
+        {syncNotice ? (
+          <Banner
+            status={syncNotice === "stale" ? "warning" : "info"}
+            title={t(syncNotice === "stale" ? "maintenanceDataStale" : "mutationSubmittedSyncPending")}
+            container="section"
+            role="status"
+            aria-live="polite"
+            data-testid={syncNotice === "stale" ? "maintenance-stale" : "maintenance-sync-pending"}
+            data-notice-kind={syncNotice}
+            endContent={<Button label={t("retry")} variant="ghost" size="sm" isDisabled={isBusy} onClick={() => { setSyncNotice(null); void refreshAll() }} data-testid="maintenance-sync-retry" />}
+          />
+        ) : null}
 
-      {syncNotice ? <div className={styles.boundary} role="status" aria-live="polite" data-testid={syncNotice === "stale" ? "maintenance-stale" : "maintenance-sync-pending"} data-notice-kind={syncNotice}><span>{t(syncNotice === "stale" ? "maintenanceDataStale" : "mutationSubmittedSyncPending")}</span> <Button label={t("retry")} variant="secondary" isDisabled={isBusy} onClick={() => { setSyncNotice(null); void refreshAll() }} data-testid="maintenance-sync-retry" /></div> : null}
+        <SafeSection variant="transparent" padding={0} dividers={["top"]} role="region" aria-labelledby="maintenance-operations-heading" aria-busy={isBusy}>
+          <SafeVStack gap={4} paddingBlock={4}>
+            <SafeHStack gap={3} justify="between" align="start" wrap="wrap">
+              <SafeVStack gap={1}>
+                <Text as="p" type="supporting" display="block">{t("hostAdministration")}</Text>
+                <Heading level={2} id="maintenance-operations-heading">{t("maintenanceOperationsHeading")}</Heading>
+              </SafeVStack>
+              <LiteralText type="code" display="block">{boardSlug}</LiteralText>
+            </SafeHStack>
+            <Grid label={t("maintenanceOperationsHeading")} columns="auto-md" gap={4}>
+              <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
+              <PathOperation label={t("exportPathLabel")} value={exportPath} onChange={setExportPath} buttonLabel={t("exportAction")} disabled={isBusy || !exportPath.trim()} loading={pendingAction === "export"} onClick={() => openConfirm({ kind: "export", path: exportPath.trim() })} testId="maintenance-export" />
+              <SafeCard padding={4} role="group" aria-labelledby="maintenance-import-heading" data-testid="maintenance-import" aria-busy={pendingAction === "import"}>
+                <SafeVStack gap={3}>
+                  <Heading level={3} id="maintenance-import-heading">{t("portableImportHeading")}</Heading>
+                  <TextInput type="text" label={t("importPathLabel")} value={importPath} onChange={(value) => setImportPath(value)} placeholder={t("importPathPlaceholder")} htmlName="maintenance-import-path" data-testid="maintenance-import-path" />
+                  <CheckboxInput label={t("replaceImportLabel")} value={replaceImport} onChange={(checked) => setReplaceImport(checked)} size="sm" htmlName="maintenance-replace-import" />
+                  <Button label={replaceImport ? t("replaceImportAction") : t("importAction")} variant={replaceImport ? "destructive" : "secondary"} size="sm" isDisabled={isBusy || !importPath.trim()} isLoading={pendingAction === "import"} onClick={() => openConfirm({ kind: "import", path: importPath.trim(), replace: replaceImport })} data-testid="maintenance-import-submit" />
+                  {resultFor(results.import, "import", t)}
+                  <InlineError error={actionError?.action === "import" ? actionError.error : null} t={t} action="import" actionError={actionError} />
+                </SafeVStack>
+              </SafeCard>
+              <SafeCard padding={4} role="group" aria-labelledby="maintenance-projection-heading" data-testid="maintenance-projection" aria-busy={(["run", "rebuild", "cleanup", "vacuum"] as const).includes(pendingAction as "run" | "rebuild" | "cleanup" | "vacuum")}>
+                <SafeVStack gap={3}>
+                  <Heading level={3} id="maintenance-projection-heading">{t("projectionMaintenanceHeading")}</Heading>
+                  <Text as="p" type="supporting" display="block">{t("projectionMaintenanceDescription")}</Text>
+                  <TextInput type="text" label={t("maintenanceOwnerLabel")} value={maintenanceOwner} onChange={(value) => setMaintenanceOwner(value)} placeholder={actor || runtime.actor} htmlName="maintenance-owner" data-testid="maintenance-owner" />
+                  <SafeHStack gap={2} wrap="wrap">
+                    <Button label={t("runMaintenanceAction")} variant="secondary" size="sm" isDisabled={isBusy} isLoading={pendingAction === "run"} onClick={() => openConfirm({ kind: "run", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-run-submit" />
+                    <Button label={t("rebuildAction")} variant="destructive" size="sm" isDisabled={isBusy} isLoading={pendingAction === "rebuild"} onClick={() => openConfirm({ kind: "rebuild", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-rebuild-submit" />
+                    <Button label={t("cleanupAction")} variant="destructive" size="sm" isDisabled={isBusy} isLoading={pendingAction === "cleanup"} onClick={() => openConfirm({ kind: "cleanup", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-cleanup-submit" />
+                    <Button label={t("vacuumAction")} variant="destructive" size="sm" isDisabled={isBusy} isLoading={pendingAction === "vacuum"} onClick={() => openConfirm({ kind: "vacuum" })} data-testid="maintenance-vacuum-submit" />
+                  </SafeHStack>
+                  {resultFor(results.run, "run", t)}
+                  {resultFor(results.rebuild, "rebuild", t)}
+                  {resultFor(results.cleanup, "cleanup", t)}
+                  {resultFor(results.vacuum, "vacuum", t)}
+                  {(["run", "rebuild", "cleanup", "vacuum"] as const).map((action) => <InlineError key={action} error={actionError?.action === action ? actionError.error : null} t={t} action={action} actionError={actionError} />)}
+                </SafeVStack>
+              </SafeCard>
+              <SafeCard padding={4} role="group" aria-labelledby="maintenance-checkpoint-heading" data-testid="maintenance-checkpoint" aria-busy={pendingAction === "checkpoint"}>
+                <SafeVStack gap={3}>
+                  <Heading level={3} id="maintenance-checkpoint-heading">{t("checkpointHeading")}</Heading>
+                  <Text as="p" type="supporting" display="block">{t("checkpointDescription")}</Text>
+                  <Button label={t("checkpointAction")} variant="secondary" size="sm" isDisabled={isBusy} isLoading={pendingAction === "checkpoint"} onClick={() => openConfirm({ kind: "checkpoint" })} data-testid="maintenance-checkpoint-submit" />
+                  {resultFor(results.checkpoint, "checkpoint", t)}
+                  <InlineError error={actionError?.action === "checkpoint" ? actionError.error : null} t={t} action="checkpoint" actionError={actionError} />
+                </SafeVStack>
+              </SafeCard>
+              <Banner status="warning" title={t("legacyImportHeading")} description={t("legacyImportUnsupported")} container="card" data-testid="maintenance-legacy-import-unsupported" />
+            </Grid>
+            {resultFor(results.backup, "backup", t)}
+            {resultFor(results.export, "export", t)}
+            <InlineError error={actionError?.action === "backup" ? actionError.error : null} t={t} action="backup" actionError={actionError} />
+            <InlineError error={actionError?.action === "export" ? actionError.error : null} t={t} action="export" actionError={actionError} />
+          </SafeVStack>
+        </SafeSection>
 
-      <section className={styles.operations} aria-labelledby="maintenance-operations-heading" aria-busy={isBusy}>
-        <div className={styles.sectionHeading}>
-          <div>
-            <p className={styles.eyebrow}>{t("hostAdministration")}</p>
-            <h2 id="maintenance-operations-heading">{t("maintenanceOperationsHeading")}</h2>
-          </div>
-          <span className={styles.scope} translate="no">{boardSlug}</span>
-        </div>
-        <div className={styles.operationGrid}>
-          <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
-          <PathOperation label={t("exportPathLabel")} value={exportPath} onChange={setExportPath} buttonLabel={t("exportAction")} disabled={isBusy || !exportPath.trim()} loading={pendingAction === "export"} onClick={() => openConfirm({ kind: "export", path: exportPath.trim() })} testId="maintenance-export" />
-          <section className={styles.operation} aria-labelledby="maintenance-import-heading" data-testid="maintenance-import" aria-busy={pendingAction === "import"}>
-            <h3 id="maintenance-import-heading">{t("portableImportHeading")}</h3>
-            <label className={styles.field} htmlFor="maintenance-import-path">
-              <span>{t("importPathLabel")}</span>
-              <input id="maintenance-import-path" name="maintenance-import-path" autoComplete="off" translate="no" value={importPath} onChange={(event) => setImportPath(event.currentTarget.value)} placeholder={t("importPathPlaceholder")} data-testid="maintenance-import-path" />
-            </label>
-            <label className={styles.checkbox}>
-              <input id="maintenance-replace-import" name="maintenance-replace-import" type="checkbox" checked={replaceImport} onChange={(event) => setReplaceImport(event.currentTarget.checked)} />
-              <span>{t("replaceImportLabel")}</span>
-            </label>
-            <Button label={replaceImport ? t("replaceImportAction") : t("importAction")} variant={replaceImport ? "destructive" : "secondary"} isDisabled={isBusy || !importPath.trim()} isLoading={pendingAction === "import"} onClick={() => openConfirm({ kind: "import", path: importPath.trim(), replace: replaceImport })} data-testid="maintenance-import-submit" />
-            {resultFor(results.import, "import", t)}
-            <InlineError error={actionError?.action === "import" ? actionError.error : null} t={t} action="import" actionError={actionError} />
-          </section>
-          <section className={styles.operation} aria-labelledby="maintenance-projection-heading" data-testid="maintenance-projection" aria-busy={(["run", "rebuild", "cleanup", "vacuum"] as const).includes(pendingAction as "run" | "rebuild" | "cleanup" | "vacuum")}>
-            <h3 id="maintenance-projection-heading">{t("projectionMaintenanceHeading")}</h3>
-            <p className={styles.muted}>{t("projectionMaintenanceDescription")}</p>
-            <label className={styles.field} htmlFor="maintenance-owner">
-              <span>{t("maintenanceOwnerLabel")}</span>
-              <input id="maintenance-owner" name="maintenance-owner" autoComplete="off" translate="no" value={maintenanceOwner} onChange={(event) => setMaintenanceOwner(event.currentTarget.value)} placeholder={actor || runtime.actor} data-testid="maintenance-owner" />
-            </label>
-            <div className={styles.buttonRow}>
-              <Button label={t("runMaintenanceAction")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "run"} onClick={() => openConfirm({ kind: "run", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-run-submit" />
-              <Button label={t("rebuildAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "rebuild"} onClick={() => openConfirm({ kind: "rebuild", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-rebuild-submit" />
-              <Button label={t("cleanupAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "cleanup"} onClick={() => openConfirm({ kind: "cleanup", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-cleanup-submit" />
-              <Button label={t("vacuumAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "vacuum"} onClick={() => openConfirm({ kind: "vacuum" })} data-testid="maintenance-vacuum-submit" />
-            </div>
-            {resultFor(results.run, "run", t)}
-            {resultFor(results.rebuild, "rebuild", t)}
-            {resultFor(results.cleanup, "cleanup", t)}
-            {resultFor(results.vacuum, "vacuum", t)}
-            {(["run", "rebuild", "cleanup", "vacuum"] as const).map((action) => <InlineError key={action} error={actionError?.action === action ? actionError.error : null} t={t} action={action} actionError={actionError} />)}
-          </section>
-          <section className={styles.operation} aria-labelledby="maintenance-checkpoint-heading" data-testid="maintenance-checkpoint" aria-busy={pendingAction === "checkpoint"}>
-            <h3 id="maintenance-checkpoint-heading">{t("checkpointHeading")}</h3>
-            <p className={styles.muted}>{t("checkpointDescription")}</p>
-            <Button label={t("checkpointAction")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "checkpoint"} onClick={() => openConfirm({ kind: "checkpoint" })} data-testid="maintenance-checkpoint-submit" />
-            {resultFor(results.checkpoint, "checkpoint", t)}
-            <InlineError error={actionError?.action === "checkpoint" ? actionError.error : null} t={t} action="checkpoint" actionError={actionError} />
-          </section>
-          <section className={styles.unsupported} aria-labelledby="maintenance-legacy-import-heading" data-testid="maintenance-legacy-import-unsupported">
-            <h3 id="maintenance-legacy-import-heading">{t("legacyImportHeading")}</h3>
-            <p>{t("legacyImportUnsupported")}</p>
-          </section>
-        </div>
-        {resultFor(results.backup, "backup", t)}
-        {resultFor(results.export, "export", t)}
-        <InlineError error={actionError?.action === "backup" ? actionError.error : null} t={t} action="backup" actionError={actionError} />
-        <InlineError error={actionError?.action === "export" ? actionError.error : null} t={t} action="export" actionError={actionError} />
-      </section>
-
-      <AlertDialog
-        isOpen={confirm !== null}
-        onOpenChange={(isOpen) => { if (!isOpen) { setConfirm(null); restoreConfirmFocus() } }}
-        title={confirm ? confirmTitle(confirm, t) : t("maintenanceHeading")}
-        description={confirm ? confirmDescription(confirm, t) : ""}
-        cancelLabel={t("cancel")}
-        actionLabel={t("continue")}
-        actionVariant={confirm && isDestructive(confirm) ? "destructive" : "primary"}
-        isActionLoading={pendingAction !== null}
-        onAction={confirmAction}
-        data-testid="maintenance-confirm-dialog"
-      />
-    </section>
+        <AlertDialog
+          isOpen={confirm !== null}
+          onOpenChange={(isOpen) => { if (!isOpen) { setConfirm(null); restoreConfirmFocus() } }}
+          title={confirm ? confirmTitle(confirm, t) : t("maintenanceHeading")}
+          description={confirm ? confirmDescription(confirm, t) : ""}
+          cancelLabel={t("cancel")}
+          actionLabel={t("continue")}
+          actionVariant={confirm && isDestructive(confirm) ? "destructive" : "primary"}
+          isActionLoading={pendingAction !== null}
+          onAction={confirmAction}
+          data-testid="maintenance-confirm-dialog"
+        />
+      </SafeVStack>
+    </PageFrame>
   )
 }
 
 function Panel({ title, testId, children }: { title: string; testId: string; children: ReactNode }) {
-  return <section className={styles.panel} aria-labelledby={`${testId}-heading`} data-testid={testId}><h2 id={`${testId}-heading`}>{title}</h2>{children}</section>
+  return <SafeCard padding={4} role="region" aria-labelledby={`${testId}-heading`} data-testid={testId}><SafeVStack gap={3}><Heading level={2} id={`${testId}-heading`}>{title}</Heading>{children}</SafeVStack></SafeCard>
 }
 
 function PathOperation({ label, value, onChange, buttonLabel, disabled, loading, onClick, testId }: { label: string; value: string; onChange: (value: string) => void; buttonLabel: string; disabled: boolean; loading: boolean; onClick: () => void; testId: string }) {
-  return <section className={styles.operation} aria-labelledby={`${testId}-heading`} data-testid={testId} aria-busy={loading}>
-    <h3 id={`${testId}-heading`}>{label}</h3>
-    <label className={styles.field} htmlFor={`${testId}-path`}><span>{label}</span><input id={`${testId}-path`} name={`${testId}-path`} autoComplete="off" translate="no" value={value} onChange={(event) => onChange(event.currentTarget.value)} data-testid={`${testId}-path`} /></label>
-    <Button label={buttonLabel} variant="secondary" isDisabled={disabled} isLoading={loading} onClick={onClick} data-testid={`${testId}-submit`} />
-  </section>
+  return <SafeCard padding={4} role="group" aria-labelledby={`${testId}-heading`} data-testid={testId} aria-busy={loading}>
+    <SafeVStack gap={3}>
+      <Heading level={3} id={`${testId}-heading`}>{label}</Heading>
+      <TextInput type="text" label={label} value={value} onChange={(next) => onChange(next)} htmlName={`${testId}-path`} data-testid={`${testId}-path`} />
+      <Button label={buttonLabel} variant="secondary" size="sm" isDisabled={disabled} isLoading={loading} onClick={onClick} data-testid={`${testId}-submit`} />
+    </SafeVStack>
+  </SafeCard>
 }
 
 function StatusContent({ state, t, locale }: { state: LoadState<MaintenanceStatus>; t: ReturnType<typeof createTranslator>; locale: Locale }) {
   if (state.kind === "loading") return <Boundary text={t("loading")} />
   if (state.kind === "error") return <InlineError error={state.error} t={t} action="status" actionError={null} />
   const { owner } = state.value
-  return <div className={styles.content}>
-    <dl className={styles.metrics}>
+  return <SafeVStack gap={3}>
+    <MetricGrid label={t("maintenanceStatusHeading")}>
       <Metric label={t("databaseInstance")} value={state.value.database_instance_id} />
       <Metric label={t("protocolVersion")} value={state.value.protocol_version} />
       <Metric label={t("owner")} value={owner.owner ?? t("noOwner")} />
       <Metric label={t("mode")} value={owner.mode ?? "—"} />
-      <Metric label={t("active")} value={owner.active} tone={owner.active ? styles.ready : styles.mutedValue} />
+      <Metric label={t("active")} value={owner.active} tone={owner.active ? "primary" : "muted"} status={owner.active ? "success" : undefined} />
       <Metric label={t("fenceEpoch")} value={owner.fence_epoch} />
       <Metric label={t("leaseExpiresAt")} value={formatTimestamp(owner.lease_expires_at, locale)} />
       <Metric label={t("buildIdentity")} value={owner.build_identity} />
       <Metric label={t("lastHeartbeat")} value={formatTimestamp(owner.last_heartbeat_at, locale)} />
-    </dl>
-    <p className={styles.muted}>{t("projectionStores")}: {state.value.stores.length}</p>
-    {state.value.stores.length > 0 ? <div className={styles.storeList}>{state.value.stores.map((store) => <div className={styles.store} key={store.store_name}>
-      <div className={styles.storeHeading}><strong translate="no">{store.store_name}</strong>{store.degraded || store.dirty ? <span className={statusTone(store)}>{t("degraded")}</span> : <span className={statusTone(store)} translate="no">{reported(store.lifecycle_status)}</span>}</div>
-      <dl className={styles.detailGrid}><Metric label={t("activeGeneration")} value={store.active_generation} /><Metric label={t("activeFingerprint")} value={store.active_fingerprint} /><Metric label={t("previousGeneration")} value={store.previous_generation} /><Metric label={t("buildingGeneration")} value={store.building_generation} /><Metric label={t("storeFenceEpoch")} value={store.fence_epoch} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pending")} value={store.pending} /><Metric label={t("running")} value={store.running} /><Metric label={t("failed")} value={store.failed} /><Metric label={t("phase")} value={store.phase} /><Metric label={t("updatedAt")} value={formatTimestamp(store.updated_at, locale)} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /><Metric label={t("storeErrors")} value={errorSummary(store.errors.length, t)} /></dl>
-    </div>)}</div> : <p className={styles.empty}>{t("noProjectionStores")}</p>}
-  </div>
+    </MetricGrid>
+    <Text as="p" type="supporting" display="block">{t("projectionStores")}: {state.value.stores.length}</Text>
+    {state.value.stores.length > 0 ? <SafeVStack gap={3}>{state.value.stores.map((store) => <SafeCard variant="muted" padding={3} key={store.store_name}>
+      <SafeVStack gap={2}>
+        <SafeHStack gap={2} justify="between" align="center" wrap="wrap">
+          <LiteralText type="code" display="block">{store.store_name}</LiteralText>
+          {store.degraded || store.dirty ? <Badge variant={statusTone(store)} label={t("degraded")} /> : <LiteralText type="code" display="block">{reported(store.lifecycle_status)}</LiteralText>}
+        </SafeHStack>
+        <MetricGrid label={t("projectionStores")}><Metric label={t("activeGeneration")} value={store.active_generation} /><Metric label={t("activeFingerprint")} value={store.active_fingerprint} /><Metric label={t("previousGeneration")} value={store.previous_generation} /><Metric label={t("buildingGeneration")} value={store.building_generation} /><Metric label={t("storeFenceEpoch")} value={store.fence_epoch} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pending")} value={store.pending} /><Metric label={t("running")} value={store.running} /><Metric label={t("failed")} value={store.failed} /><Metric label={t("phase")} value={store.phase} /><Metric label={t("updatedAt")} value={formatTimestamp(store.updated_at, locale)} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /><Metric label={t("storeErrors")} value={errorSummary(store.errors.length, t)} /></MetricGrid>
+      </SafeVStack>
+    </SafeCard>)}</SafeVStack> : <Text as="p" type="supporting" display="block">{t("noProjectionStores")}</Text>}
+  </SafeVStack>
 }
 
 function StatsContent({ state, t, locale }: { state: LoadState<QueueStats>; t: ReturnType<typeof createTranslator>; locale: Locale }) {
   if (state.kind === "loading") return <Boundary text={t("loading")} />
   if (state.kind === "error") return <InlineError error={state.error} t={t} action="stats" actionError={null} />
-  return <div className={styles.content}><dl className={styles.metrics}><Metric label={t("boardId")} value={state.value.board_id} /><Metric label={t("generatedAt")} value={formatTimestamp(state.value.generated_at, locale)} /><Metric label={t("unplannedActiveTasks")} value={state.value.unplanned_active_tasks} /><Metric label={t("incompleteRequiredSteps")} value={state.value.active_parents_with_incomplete_required_steps} /></dl><h3 className={styles.subheading}>{t("statusCounts")}</h3>{state.value.status_counts.length > 0 ? <dl className={styles.detailGrid}>{state.value.status_counts.map((entry) => <Metric key={entry.status} label={entry.status} labelTranslateNo value={entry.count} />)}</dl> : <p className={styles.empty}>{t("noStatusCounts")}</p>}<h3 className={styles.subheading}>{t("staleClaims")}</h3>{state.value.stale_claims.length > 0 ? <div className={styles.storeList}>{state.value.stale_claims.map((claim) => <div className={styles.store} key={claim.task_id}><div className={styles.storeHeading}><strong translate="no">#{claim.seq} {claim.title}</strong><span translate="no">{claim.claim_owner ?? t("noOwner")}</span></div><dl className={styles.detailGrid}><Metric label={t("expiresAt")} value={formatTimestamp(claim.claim_expires_at, locale)} /><Metric label={t("lastHeartbeat")} value={formatTimestamp(claim.last_heartbeat_at, locale)} /><Metric label={t("run") } value={claim.current_run_id} /><Metric label={t("retry")} value={`${claim.retry_count}/${claim.max_retries ?? "—"}`} /></dl></div>)}</div> : <p className={styles.empty}>{t("noStaleClaims")}</p>}<h3 className={styles.subheading}>{t("blockedReasons")}</h3>{state.value.blocked_reasons.length > 0 ? <dl className={styles.detailGrid}>{state.value.blocked_reasons.map((entry) => <Metric key={entry.reason} label={entry.reason || t("unspecified")} labelTranslateNo value={entry.count} />)}</dl> : <p className={styles.empty}>{t("noBlockedReasons")}</p>}</div>
+  return <SafeVStack gap={3}>
+    <MetricGrid label={t("statsHeading")}><Metric label={t("boardId")} value={state.value.board_id} /><Metric label={t("generatedAt")} value={formatTimestamp(state.value.generated_at, locale)} /><Metric label={t("unplannedActiveTasks")} value={state.value.unplanned_active_tasks} /><Metric label={t("incompleteRequiredSteps")} value={state.value.active_parents_with_incomplete_required_steps} /></MetricGrid>
+    <Heading level={3}>{t("statusCounts")}</Heading>
+    {state.value.status_counts.length > 0 ? <MetricGrid label={t("statusCounts")}>{state.value.status_counts.map((entry) => <Metric key={entry.status} label={entry.status} labelTranslateNo value={entry.count} />)}</MetricGrid> : <Text as="p" type="supporting" display="block">{t("noStatusCounts")}</Text>}
+    <Heading level={3}>{t("staleClaims")}</Heading>
+    {state.value.stale_claims.length > 0 ? <SafeVStack gap={3}>{state.value.stale_claims.map((claim) => <SafeCard variant="muted" padding={3} key={claim.task_id}><SafeVStack gap={2}><SafeHStack gap={2} justify="between" align="center" wrap="wrap"><LiteralText type="code" display="block">#{claim.seq} {claim.title}</LiteralText><LiteralText type="code" display="block">{claim.claim_owner ?? t("noOwner")}</LiteralText></SafeHStack><MetricGrid label={t("staleClaims")}><Metric label={t("expiresAt")} value={formatTimestamp(claim.claim_expires_at, locale)} /><Metric label={t("lastHeartbeat")} value={formatTimestamp(claim.last_heartbeat_at, locale)} /><Metric label={t("run")} value={claim.current_run_id} /><Metric label={t("retry")} value={`${claim.retry_count}/${claim.max_retries ?? "—"}`} /></MetricGrid></SafeVStack></SafeCard>)}</SafeVStack> : <Text as="p" type="supporting" display="block">{t("noStaleClaims")}</Text>}
+    <Heading level={3}>{t("blockedReasons")}</Heading>
+    {state.value.blocked_reasons.length > 0 ? <MetricGrid label={t("blockedReasons")}>{state.value.blocked_reasons.map((entry) => <Metric key={entry.reason} label={entry.reason || t("unspecified")} labelTranslateNo value={entry.count} />)}</MetricGrid> : <Text as="p" type="supporting" display="block">{t("noBlockedReasons")}</Text>}
+  </SafeVStack>
 }
 
 function SearchContent({ state, t }: { state: LoadState<SearchStatus>; t: ReturnType<typeof createTranslator> }) {
   if (state.kind === "loading") return <Boundary text={t("loading")} />
   if (state.kind === "error") return <InlineError error={state.error} t={t} action="search" actionError={null} />
-  return <dl className={styles.detailGrid}><Metric label={t("backend")} value={state.value.backend} /><Metric label={t("derivedIndex")} value={state.value.derived_index} /><Metric label={t("stale")} value={state.value.stale} tone={state.value.stale ? styles.degraded : styles.ready} /><Metric label={t("generation")} value={state.value.generation} /><Metric label={t("lastEvent")} value={state.value.last_event_id} /><Metric label={t("lagEvents")} value={state.value.index_lag_events} /><Metric label={t("message")} value={diagnosticSummary(state.value.message, t)} /></dl>
+  return <MetricGrid label={t("searchStatusHeading")}><Metric label={t("backend")} value={state.value.backend} /><Metric label={t("derivedIndex")} value={state.value.derived_index} /><Metric label={t("stale")} value={state.value.stale} tone={state.value.stale ? "primary" : "muted"} status={state.value.stale ? "error" : undefined} /><Metric label={t("generation")} value={state.value.generation} /><Metric label={t("lastEvent")} value={state.value.last_event_id} /><Metric label={t("lagEvents")} value={state.value.index_lag_events} /><Metric label={t("message")} value={diagnosticSummary(state.value.message, t)} /></MetricGrid>
 }
 
 function DoctorContent({ report, t }: { report: DoctorReport; t: ReturnType<typeof createTranslator> }) {
@@ -593,18 +638,26 @@ function DoctorContent({ report, t }: { report: DoctorReport; t: ReturnType<type
     [t("ontologyErrors"), report.ontology_ledger_errors],
     [t("ontologyWarnings"), report.ontology_ledger_warnings],
   ] as const
-  return <div className={styles.content}><p className={report.ok ? styles.ready : styles.degraded} data-testid="maintenance-doctor-result">{report.ok ? t("doctorOk") : t("doctorFindings")}</p><dl className={styles.detailGrid}>{findings.map(([label, value]) => <Metric key={label} label={label} value={value} />)}</dl><h3 className={styles.subheading}>{t("derivedStores")}</h3>{report.derived_stores.length > 0 ? <div className={styles.storeList}>{report.derived_stores.map((store) => <div className={styles.store} key={store.store_name}><div className={styles.storeHeading}><strong translate="no">{store.store_name}</strong><span>{store.dirty ? t("degraded") : t("ready")}</span></div><dl className={styles.detailGrid}><Metric label={t("schemaVersion")} value={store.schema_version} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pendingOutbox")} value={store.pending_outbox} /><Metric label={t("runningOutbox")} value={store.running_outbox} /><Metric label={t("failedOutbox")} value={store.failed_outbox} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /></dl></div>)}</div> : <p className={styles.empty}>{t("noDerivedStores")}</p>}</div>
+  return <SafeVStack gap={3}><SafeStack as="section" data-testid="maintenance-doctor-result"><Badge variant={report.ok ? "success" : "error"} label={report.ok ? t("doctorOk") : t("doctorFindings")} /></SafeStack><MetricGrid label={t("doctorHeading")}>{findings.map(([label, value]) => <Metric key={label} label={label} value={value} />)}</MetricGrid><Heading level={3}>{t("derivedStores")}</Heading>{report.derived_stores.length > 0 ? <SafeVStack gap={3}>{report.derived_stores.map((store) => <SafeCard variant="muted" padding={3} key={store.store_name}><SafeVStack gap={2}><SafeHStack gap={2} justify="between" align="center" wrap="wrap"><LiteralText type="code" display="block">{store.store_name}</LiteralText>{store.dirty ? <Badge variant="error" label={t("degraded")} /> : <LiteralText type="supporting">{t("ready")}</LiteralText>}</SafeHStack><MetricGrid label={t("derivedStores")}><Metric label={t("schemaVersion")} value={store.schema_version} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pendingOutbox")} value={store.pending_outbox} /><Metric label={t("runningOutbox")} value={store.running_outbox} /><Metric label={t("failedOutbox")} value={store.failed_outbox} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /></MetricGrid></SafeVStack></SafeCard>)}</SafeVStack> : <Text as="p" type="supporting" display="block">{t("noDerivedStores")}</Text>}</SafeVStack>
 }
 
-function Metric({ label, value, tone, labelTranslateNo = false }: { label: string; value: unknown; tone?: string; labelTranslateNo?: boolean }) {
-  return <div className={styles.metric}><dt translate={labelTranslateNo ? "no" : undefined}>{label}</dt><dd className={tone ?? styles.value} translate="no">{reported(value as string | number | boolean | null | undefined)}</dd></div>
+function MetricGrid({ children, label }: { children: ReactNode; label: string }) {
+  return <Grid label={label} columns="auto-md" gap={2}>{children}</Grid>
 }
 
-function Boundary({ text }: { text: string }) { return <div className={styles.boundary} role="status" aria-live="polite">{text}</div> }
+function Metric({ label, value, tone = "primary", status, labelTranslateNo = false }: { label: string; value: unknown; tone?: "primary" | "muted"; status?: "success" | "error"; labelTranslateNo?: boolean }) {
+  return <SafeVStack gap={0.5} className="min-w-0">{labelTranslateNo ? <LiteralText as="p" type="supporting" display="block">{label}</LiteralText> : <Text as="p" type="supporting" display="block">{label}</Text>}{status ? <Badge variant={status} label={<LiteralText type="code">{reported(value as string | number | boolean | null | undefined)}</LiteralText>} /> : <LiteralText as="p" type="code" color={tone === "muted" ? "secondary" : "primary"} display="block" wordBreak="break-word">{reported(value as string | number | boolean | null | undefined)}</LiteralText>}</SafeVStack>
+}
+
+function LiteralText({ children, ...props }: Omit<TextProps, "children"> & { children: ReactNode }) {
+  return <Text {...props}><span translate="no">{children}</span></Text>
+}
+
+function Boundary({ text }: { text: string }) { return <Banner status="info" title={text} container="section" role="status" aria-live="polite" /> }
 
 function InlineError({ error, t, action, actionError }: { error: unknown; t: ReturnType<typeof createTranslator>; action: string; actionError: { action: string; error: unknown } | null }) {
   if (error === null || error === undefined || (actionError !== null && actionError.action !== action)) return null
-  return <div className={styles.error} role="alert" data-testid={`maintenance-${action}-error`}><strong>{t("maintenanceActionFailed")}</strong><span>{safeErrorText(error, t)}</span></div>
+  return <Banner status="error" title={t("maintenanceActionFailed")} description={safeErrorText(error, t)} container="card" role="alert" data-testid={`maintenance-${action}-error`} />
 }
 
 function resultFor(result: Result | undefined, key: ResultKey, t: ReturnType<typeof createTranslator>): ReactNode {
@@ -619,7 +672,7 @@ function resultFor(result: Result | undefined, key: ResultKey, t: ReturnType<typ
 }
 
 function Evidence({ title, rows, testId }: { title: string; rows: Array<[string, unknown]>; testId: string }) {
-  return <div className={styles.evidence} data-testid={testId} aria-live="polite"><strong>{title}</strong><dl>{rows.map(([label, value]) => <Metric key={label} label={label} value={value} />)}</dl></div>
+  return <Banner status="success" title={title} container="card" defaultIsExpanded data-testid={testId} aria-live="polite"><MetricGrid label={title}>{rows.map(([label, value]) => <Metric key={label} label={label} value={value} />)}</MetricGrid></Banner>
 }
 
 function isDestructive(action: ConfirmAction): boolean { return action.kind !== "checkpoint" && action.kind !== "run" }

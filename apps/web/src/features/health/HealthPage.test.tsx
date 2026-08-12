@@ -30,11 +30,13 @@ describe("HealthPage", () => {
     const markup = renderToStaticMarkup(<PreferencesProvider><HealthPage runtime={runtime} initialReport={health} /></PreferencesProvider>)
 
     expect(markup).toContain('data-testid="health-page"')
+    expect(markup).toContain('data-frame="content"')
     expect(markup).toContain('data-testid="health-metric-ok"')
     expect(markup).toContain("true")
     expect(markup).toContain("sha256:test")
     expect(markup).toContain(runtime.actor)
     expect(markup).toContain(runtime.webBuildId)
+    expect(markup).not.toContain("style=")
   })
 
   test("renders a retryable loading boundary without inventing health data", () => {

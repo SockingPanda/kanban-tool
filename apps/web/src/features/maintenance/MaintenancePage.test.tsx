@@ -91,6 +91,7 @@ describe("MaintenancePage", () => {
       <PreferencesProvider><MaintenancePage runtime={runtime} boardSlug="default" /></PreferencesProvider>,
     )
     expect(loading).toContain('data-testid="maintenance-loading"')
+    expect(loading).toContain('data-frame="content"')
     expect(loading).toContain("维护")
 
     const ready = renderToStaticMarkup(

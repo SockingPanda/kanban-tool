@@ -1,3 +1,8 @@
+import { Banner } from "@astryxdesign/core/Banner"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Text } from "@astryxdesign/core/Text"
+import { StatusDot } from "@astryxdesign/core/StatusDot"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
@@ -5,11 +10,16 @@ import { readHealth, type HealthReadError, type HealthReport } from "../../lib/a
 import { createTranslator } from "../../lib/i18n"
 import { HEALTH_REFRESH_EVENT } from "../../lib/health-refresh"
 import { usePreferences } from "../../lib/use-preferences"
+import { PageFrame } from "../../ui/astryx/page-frame"
+import {
+  SafeHStack,
+  SafeMetadataList,
+  SafeMetadataListItem,
+  SafeVStack,
+} from "../../ui/astryx/primitives"
 import { presentHealthError } from "./health-error"
-import { healthMetricTone } from "./health-metrics"
 import { isCurrentHealthRequest } from "./health-request"
 import { apiOriginForRuntime } from "../settings/settings-diagnostics"
-import styles from "./health-page.module.css"
 
 export type HealthPageProps = {
   runtime: WebRuntimeConfig
@@ -77,100 +87,145 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
   }, [refresh])
 
   return (
-    <section className={styles.page} aria-labelledby="health-heading" data-testid="health-page">
-      <div className={styles.headingRow}>
-        <div className={styles.pageHeading}>
-          <p className={styles.eyebrow}>{t("productKicker")}</p>
-          <h1 id="health-heading">{t("healthHeading")}</h1>
-          <p className={styles.lede}>{t("healthDescription")}</p>
-        </div>
-        <button type="button" className={styles.refresh} disabled={pending} onClick={refresh} data-testid="health-refresh">
-          {pending ? t("loading") : t("refresh")}
-        </button>
-      </div>
+    <PageFrame
+      frame="content"
+      aria-labelledby="health-heading"
+      bodyLabelledBy="health-heading"
+      data-testid="health-page"
+      header={(
+        <SafeHStack as="header" gap={4} align="start" justify="between" wrap="wrap">
+          <SafeVStack gap={1.5} className="min-w-0">
+            <Heading level={1} id="health-heading">{t("healthHeading")}</Heading>
+            <Text as="p" type="body" color="secondary" textWrap="pretty">{t("healthDescription")}</Text>
+          </SafeVStack>
+          <Button
+            type="button"
+            label={pending ? t("loading") : t("refresh")}
+            variant="secondary"
+            isLoading={pending}
+            isDisabled={pending}
+            onClick={refresh}
+            data-testid="health-refresh"
+          />
+        </SafeHStack>
+      )}
+    >
+      <SafeVStack as="section" gap={6} aria-labelledby="health-heading">
+        {state.kind === "loading" ? (
+          <Banner status="info" title={t("loading")} container="section" data-testid="health-loading" />
+        ) : null}
 
-      {state.kind === "loading" ? (
-        <div className={styles.boundary} role="status" aria-live="polite" data-testid="health-loading">{t("loading")}</div>
-      ) : null}
+        {state.kind === "error" ? (
+          <HealthErrorBanner error={state.error} t={t} pending={pending} onRetry={refresh} testId="health-error" retryTestId="health-error-retry" />
+        ) : null}
 
-      {state.kind === "error" ? (
-        <div className={styles.error} role="alert" data-testid="health-error">
-          <HealthErrorContent error={state.error} t={t} />
-          <button type="button" className={styles.retry} disabled={pending} onClick={refresh} data-testid="health-error-retry">
-            {pending ? t("loading") : t("retry")}
-          </button>
-        </div>
-      ) : null}
+        {state.kind === "ready" ? (
+          <>
+            <HealthMetrics report={state.report} t={t} />
+            {state.staleError ? (
+              <HealthErrorBanner error={state.staleError} t={t} pending={pending} onRetry={refresh} stale testId="health-stale" />
+            ) : null}
+          </>
+        ) : null}
 
-      {state.kind === "ready" ? (
-        <>
-          <HealthMetrics report={state.report} t={t} />
-          {state.staleError ? (
-            <div className={styles.stale} role="alert" data-testid="health-stale">
-              <HealthErrorContent error={state.staleError} t={t} />
-              <p>{t("healthStale")}</p>
-              <button type="button" className={styles.retry} disabled={pending} onClick={refresh}>{t("retry")}</button>
-            </div>
-          ) : null}
-        </>
-      ) : null}
-
-      <section className={styles.runtime} aria-labelledby="health-runtime-heading" data-testid="health-runtime">
-        <div>
-          <p className={styles.eyebrow}>{t("runtime")}</p>
-          <h2 id="health-runtime-heading">{t("runtimeIdentity")}</h2>
-        </div>
-        <dl className={styles.runtimeGrid}>
-          <RuntimeFact label={t("defaultBoard")} value={runtime.defaultBoard} fallback={t("reported")} />
-          <RuntimeFact label={t("actor")} value={runtime.actor} fallback={t("reported")} />
-          <RuntimeFact label={t("api")} value={apiOriginForRuntime(runtime)} fallback={t("reported")} />
-          <RuntimeFact label={t("server")} value={runtime.serverVersion} fallback={t("reported")} />
-          <RuntimeFact label={t("protocol")} value={runtime.protocolVersion} fallback={t("reported")} />
-          <RuntimeFact label={t("build")} value={runtime.webBuildId} fallback={t("reported")} />
-        </dl>
-      </section>
-    </section>
+        <SafeVStack as="section" gap={3} aria-labelledby="health-runtime-heading" data-testid="health-runtime">
+          <Heading level={2} id="health-runtime-heading">{t("runtimeIdentity")}</Heading>
+          <SafeMetadataList columns="multi">
+            <RuntimeFact label={t("defaultBoard")} value={runtime.defaultBoard} fallback={t("reported")} />
+            <RuntimeFact label={t("actor")} value={runtime.actor} fallback={t("reported")} />
+            <RuntimeFact label={t("api")} value={apiOriginForRuntime(runtime)} fallback={t("reported")} />
+            <RuntimeFact label={t("server")} value={runtime.serverVersion} fallback={t("reported")} />
+            <RuntimeFact label={t("protocol")} value={runtime.protocolVersion} fallback={t("reported")} />
+            <RuntimeFact label={t("build")} value={runtime.webBuildId} fallback={t("reported")} />
+          </SafeMetadataList>
+        </SafeVStack>
+      </SafeVStack>
+    </PageFrame>
   )
 }
 
 function HealthMetrics({ report, t }: { report: HealthReport; t: ReturnType<typeof createTranslator> }) {
+  const statusVariant = report.ok ? "success" : "error"
   const metrics = [
-    { id: "ok", label: t("healthOk"), value: String(report.ok), tone: styles[healthMetricTone(report.ok)] },
-    { id: "db", label: t("healthDb"), value: reported(report.db, t("reported")), tone: styles[healthMetricTone(report.ok)] },
-    { id: "version", label: t("version"), value: reported(report.version, t("reported")), tone: styles.neutral },
-    { id: "db-path", label: t("dbPath"), value: reported(report.db_path, t("reported")), tone: styles.neutral },
-    { id: "db-fingerprint", label: t("dbFingerprint"), value: reported(report.db_fingerprint, t("reported")), tone: styles.neutral },
+    { id: "ok", label: t("healthOk"), value: String(report.ok), status: statusVariant },
+    { id: "db", label: t("healthDb"), value: reported(report.db, t("reported")), status: statusVariant },
+    { id: "version", label: t("version"), value: reported(report.version, t("reported")), status: undefined },
+    { id: "db-path", label: t("dbPath"), value: reported(report.db_path, t("reported")), status: undefined },
+    { id: "db-fingerprint", label: t("dbFingerprint"), value: reported(report.db_fingerprint, t("reported")), status: undefined },
   ] as const
 
   return (
-    <dl className={styles.metrics} aria-label={t("healthMetrics")} data-testid="health-metrics">
-      {metrics.map((metric) => (
-        <div className={styles.metric} key={metric.id} data-testid={`health-metric-${metric.id}`}>
-          <dt>{metric.label}</dt>
-          <dd className={metric.tone} translate="no">{metric.value}</dd>
-        </div>
-      ))}
-    </dl>
+    <SafeVStack as="section" gap={2} aria-label={t("healthMetrics")} data-testid="health-metrics">
+      <SafeMetadataList columns="multi">
+        {metrics.map((metric) => (
+          <SafeMetadataListItem key={metric.id} label={metric.label} data-testid={`health-metric-${metric.id}`}>
+            <SafeHStack gap={1} align="center" wrap="wrap">
+              {metric.status ? <StatusDot variant={metric.status} label={`${metric.label}: ${metric.value}`} /> : null}
+              <Text type="code" wordBreak="break-word"><span translate="no">{metric.value}</span></Text>
+            </SafeHStack>
+          </SafeMetadataListItem>
+        ))}
+      </SafeMetadataList>
+    </SafeVStack>
   )
 }
 
 function RuntimeFact({ label, value, fallback }: { label: string; value: string; fallback: string }) {
   return (
-    <div className={styles.runtimeFact}>
-      <dt>{label}</dt>
-      <dd translate="no">{reported(value, fallback)}</dd>
-    </div>
+    <SafeMetadataListItem label={label}>
+      <Text type="code" wordBreak="break-word"><span translate="no">{reported(value, fallback)}</span></Text>
+    </SafeMetadataListItem>
   )
 }
 
-function HealthErrorContent({ error, t }: { error: unknown; t: ReturnType<typeof createTranslator> }) {
+function HealthErrorDescription({ error, t, stale }: { error: unknown; t: ReturnType<typeof createTranslator>; stale?: boolean }) {
   const copy = presentHealthError(error, t)
   return (
-    <>
-      <strong>{copy.title}</strong>
-      <span data-testid="health-error-detail">{copy.detail}</span>
-      <span data-testid="health-error-next-step">{copy.nextStep}</span>
-    </>
+    <SafeVStack gap={0.5}>
+      <Text as="p" type="body" color="inherit" data-testid="health-error-detail">{copy.detail}</Text>
+      <Text as="p" type="body" color="inherit" data-testid="health-error-next-step">{copy.nextStep}</Text>
+      {stale ? <Text as="p" type="body" color="inherit">{t("healthStale")}</Text> : null}
+    </SafeVStack>
+  )
+}
+
+function HealthErrorBanner({
+  error,
+  t,
+  pending,
+  onRetry,
+  stale = false,
+  testId,
+  retryTestId,
+}: {
+  error: unknown
+  t: ReturnType<typeof createTranslator>
+  pending: boolean
+  onRetry: () => void
+  stale?: boolean
+  testId: string
+  retryTestId?: string
+}) {
+  const copy = presentHealthError(error, t)
+  return (
+    <Banner
+      status={stale ? "warning" : "error"}
+      title={copy.title}
+      description={<HealthErrorDescription error={error} t={t} stale={stale} />}
+      container="section"
+      data-testid={testId}
+      endContent={(
+        <Button
+          type="button"
+          label={pending ? t("loading") : t("retry")}
+          variant="ghost"
+          isLoading={pending}
+          isDisabled={pending}
+          onClick={onRetry}
+          data-testid={retryTestId}
+        />
+      )}
+    />
   )
 }
 

@@ -1,6 +1,5 @@
 import {
   type ChangeEvent,
-  type DragEventHandler,
   type InputHTMLAttributes,
   type Ref,
   useCallback,
@@ -58,6 +57,7 @@ type NativeFileInputProps = Omit<
   | "onKeyDown"
   | "onKeyUp"
   | "onClick"
+  | "onDrop"
   | "style"
   | "width"
 >
@@ -88,8 +88,6 @@ export interface FileInputProps
   readonly placeholder?: string
   readonly chooseFileText: string
   readonly chooseFilesText: string
-  readonly mode?: "input" | "dropzone"
-  readonly labelTooltip?: string
   readonly clearLabel: string
   readonly clearText: string
   readonly invalidTypeMessage: string | ((file: File) => string)
@@ -100,7 +98,6 @@ export interface FileInputProps
   readonly formatFileSize: (bytes: number) => string
   readonly onValidationError?: (error: FileInputValidationError) => void
   readonly changeAction?: (files: File | File[] | null) => void | Promise<void>
-  readonly onDrop?: DragEventHandler<HTMLInputElement>
 }
 
 interface ValidationResult {
@@ -216,8 +213,6 @@ export function FileInput({
   placeholder,
   chooseFileText,
   chooseFilesText,
-  mode = "input",
-  labelTooltip,
   clearLabel,
   clearText,
   invalidTypeMessage,
@@ -226,7 +221,6 @@ export function FileInput({
   formatFileSize,
   onValidationError,
   changeAction,
-  onDrop: callerDrop,
   autoComplete,
   translate,
   ["aria-describedby"]: callerDescribedBy,
@@ -245,14 +239,16 @@ export function FileInput({
     (validationMessage ? {type: "error" as const, message: validationMessage} : undefined)
   const statusId = effectiveStatus?.message ? `${controlId}-status` : undefined
   const disabledMessageId = isDisabled && disabledMessage ? `${controlId}-disabled` : undefined
+  const selectedFiles = value == null ? [] : Array.isArray(value) ? value : [value]
+  const selectedNames = selectedFiles.map((file) => file.name).join(", ")
+  const selectedNamesId = selectedNames ? `${controlId}-file-names` : undefined
   const describedBy = mergeDescribedBy(
     callerDescribedBy,
     descriptionId,
     statusId,
     disabledMessageId,
+    selectedNamesId,
   )
-  const selectedFiles = value == null ? [] : Array.isArray(value) ? value : [value]
-  const selectedNames = selectedFiles.map((file) => file.name).join(", ")
   const displayText = selectedNames || placeholder || (isMultiple ? chooseFilesText : chooseFileText)
 
   const resetNativeInput = useCallback(() => {
@@ -263,7 +259,8 @@ export function FileInput({
 
   const handleFiles = useCallback(
     (files: File[]) => {
-      if (isDisabled) {
+      if (isDisabled || files.length === 0) {
+        resetNativeInput()
         return
       }
       const result = validateFiles(
@@ -279,10 +276,14 @@ export function FileInput({
       )
       setValidationMessage(result.message)
       if (result.rejected) {
-        if (result.error) {
-          onValidationError?.(result.error)
+        try {
+          resetNativeInput()
+          if (result.error) {
+            onValidationError?.(result.error)
+          }
+        } finally {
+          resetNativeInput()
         }
-        resetNativeInput()
         return
       }
       const nextValue = result.valid.length === 0
@@ -290,11 +291,15 @@ export function FileInput({
         : isMultiple
           ? result.valid
           : result.valid[0]
-      onChange(nextValue)
-      if (nextValue != null && changeAction) {
-        void changeAction(nextValue)
+      try {
+        resetNativeInput()
+        onChange(nextValue)
+        if (nextValue != null && changeAction) {
+          void changeAction(nextValue)
+        }
+      } finally {
+        resetNativeInput()
       }
-      resetNativeInput()
     },
     [
       accept,
@@ -322,17 +327,13 @@ export function FileInput({
       return
     }
     setValidationMessage(undefined)
-    onChange(null)
-    resetNativeInput()
-    internalRef.current?.focus()
-  }
-
-  const handleDrop: DragEventHandler<HTMLInputElement> = (event) => {
-    callerDrop?.(event)
-    if (!event.defaultPrevented && mode === "dropzone") {
-      event.preventDefault()
-      handleFiles(Array.from(event.dataTransfer.files))
+    try {
+      resetNativeInput()
+      onChange(null)
+    } finally {
+      resetNativeInput()
     }
+    internalRef.current?.focus()
   }
 
   return (
@@ -346,7 +347,6 @@ export function FileInput({
       disabledMessageId={disabledMessageId}
       label={label}
       labelHidden={isLabelHidden}
-      labelTooltip={labelTooltip}
       optionalText={optionalText}
       optional={isOptional}
       required={isRequired}
@@ -373,7 +373,6 @@ export function FileInput({
         autoComplete={autoComplete}
         className={mergeClasses(
           FILE_CLASSES,
-          mode === "dropzone" && "min-h-16",
           className,
         )}
         disabled={isDisabled}
@@ -381,12 +380,15 @@ export function FileInput({
         multiple={isMultiple}
         name={htmlName}
         onChange={handleInputChange}
-        onDrop={handleDrop}
         required={isRequired && !isOptional}
         type="file"
         translate={translate}
       />
-      <p className={DESCRIPTION_CLASSES} data-file-name={selectedNames || undefined}>
+      <p
+        className={DESCRIPTION_CLASSES}
+        data-file-name={selectedNames || undefined}
+        id={selectedNamesId}
+      >
         {displayText}
       </p>
       {selectedFiles.length > 0 && !isDisabled && !isLoading ? (

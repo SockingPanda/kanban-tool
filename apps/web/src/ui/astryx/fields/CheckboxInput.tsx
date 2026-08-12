@@ -75,7 +75,6 @@ export interface CheckboxInputProps
   readonly disabledMessage?: string
   readonly isReadOnly?: boolean
   readonly isLoading?: boolean
-  readonly labelTooltip?: string
   readonly onFocus?: FocusEventHandler<HTMLInputElement>
   readonly onBlur?: FocusEventHandler<HTMLInputElement>
 }
@@ -97,7 +96,7 @@ export function CheckboxInput({
   onChange,
   description,
   status,
-  statusVariant = "detached",
+  statusVariant = "attached",
   htmlName,
   size = "md",
   isLabelHidden = false,
@@ -109,7 +108,6 @@ export function CheckboxInput({
   disabledMessage,
   isReadOnly = false,
   isLoading = false,
-  labelTooltip,
   onFocus,
   onBlur,
   autoComplete,
@@ -146,7 +144,6 @@ export function CheckboxInput({
       disabledMessageId={disabledMessageId}
       label={label}
       labelHidden={isLabelHidden}
-      labelTooltip={labelTooltip}
       optionalText={optionalText}
       optional={isOptional}
       required={isRequired}

@@ -2,7 +2,6 @@ import {
   type ChangeEvent,
   type InputHTMLAttributes,
   type KeyboardEvent,
-  type ReactNode,
   type Ref,
   useId,
   useRef,
@@ -63,7 +62,7 @@ interface TextInputBaseProps
   readonly type?: TextInputType
   readonly label: string
   readonly value: string
-  readonly onChange?: (value: string, event: ChangeEvent<HTMLInputElement>) => void
+  readonly onChange?: (value: string, event: ChangeEvent<HTMLInputElement> | null) => void
   readonly description?: string
   readonly status?: TextInputStatus
   readonly statusVariant?: TextInputStatusVariant
@@ -79,8 +78,6 @@ interface TextInputBaseProps
   readonly isLoading?: boolean
   readonly placeholder?: string
   readonly hasAutoFocus?: boolean
-  readonly labelTooltip?: string
-  readonly startIcon?: ReactNode
   readonly onEnter?: () => void
 }
 
@@ -130,8 +127,6 @@ export function TextInput({
   clearLabel,
   clearText,
   hasAutoFocus = false,
-  labelTooltip,
-  startIcon,
   onEnter,
   onKeyDown,
   autoComplete,
@@ -209,8 +204,6 @@ export function TextInput({
       disabledMessageId={disabledMessageId}
       label={label}
       labelHidden={isLabelHidden}
-      labelIcon={startIcon}
-      labelTooltip={labelTooltip}
       optionalText={optionalText}
       optional={isOptional}
       required={isRequired}
@@ -218,27 +211,23 @@ export function TextInput({
       status={status}
       statusVariant={statusVariant}
     >
+      {input}
       {hasClear && effectiveValue && !isDisabled ? (
-        <>
-          {input}
-          <button
-            aria-label={clearLabel}
-            className="justify-self-start rounded-md border border-border-strong px-2 py-1 text-sm text-primary focus-visible:outline focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={(event) => {
-              event.preventDefault()
-              if (!isDisabled) {
-                onChange?.("", null as unknown as ChangeEvent<HTMLInputElement>)
-                inputRef.current?.focus()
-              }
-            }}
-            type="button"
-          >
-            {clearText}
-          </button>
-        </>
-      ) : (
-        input
-      )}
+        <button
+          aria-label={clearLabel}
+          className="justify-self-start rounded-md border border-border-strong px-2 py-1 text-sm text-primary focus-visible:outline focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={(event) => {
+            event.preventDefault()
+            if (!isDisabled) {
+              onChange?.("", null)
+              inputRef.current?.focus()
+            }
+          }}
+          type="button"
+        >
+          {clearText}
+        </button>
+      ) : null}
     </FieldShell>
   )
 }

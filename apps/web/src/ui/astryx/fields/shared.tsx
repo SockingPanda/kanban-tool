@@ -8,8 +8,8 @@ import type {
 } from "react"
 
 export type FieldStatusType = "warning" | "error" | "success"
-/** `tooltip` is a compatibility value; this safe shell only hides the message. */
-export type FieldStatusVariant = "attached" | "detached" | "tooltip"
+/** The safe shell renders status text as an attached sibling message. */
+export type FieldStatusVariant = "attached"
 
 export interface FieldStatus {
   readonly type: FieldStatusType
@@ -110,8 +110,6 @@ export interface FieldShellProps {
   readonly requiredText?: string
   readonly optionalText?: string
   readonly disabled?: boolean
-  readonly labelTooltip?: string
-  readonly labelIcon?: ReactNode
   readonly status?: FieldStatus
   readonly statusVariant?: FieldStatusVariant
   readonly disabledMessage?: string
@@ -132,8 +130,6 @@ export function FieldShell({
   requiredText,
   optionalText,
   disabled = false,
-  labelTooltip,
-  labelIcon,
   status,
   statusVariant = "attached",
   disabledMessage,
@@ -152,9 +148,7 @@ export function FieldShell({
       <label
         className={mergeClasses(LABEL_CLASSES, labelHidden && VISUALLY_HIDDEN)}
         htmlFor={controlId}
-        title={labelTooltip}
       >
-        {labelIcon}
         {label}
         {required && !optional && requiredText ? ` · ${requiredText}` : null}
         {optional && optionalText ? ` · ${optionalText}` : null}
@@ -173,7 +167,6 @@ export function FieldShell({
           className={mergeClasses(
             STATUS_MESSAGE_CLASSES,
             STATUS_CLASSES[status.type],
-            statusVariant === "tooltip" && VISUALLY_HIDDEN,
           )}
           data-status={status.type}
           data-variant={statusVariant}

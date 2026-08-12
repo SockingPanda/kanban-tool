@@ -129,6 +129,22 @@ describe("CSP-safe field contracts", () => {
         onChange={() => undefined}
       />,
     )
+    const selectedFileMarkup = renderToStaticMarkup(
+      <FileInput
+        id="selected-file"
+        label="Selected file"
+        value={{name: "notes.txt"} as File}
+        chooseFileText="Choose one"
+        chooseFilesText="Choose many"
+        clearLabel="Remove attachment"
+        clearText="Remove"
+        invalidTypeMessage="Invalid file"
+        sizeLimitMessage="File too large"
+        maxFilesMessage="Too many files"
+        formatFileSize={(bytes) => `${bytes} bytes`}
+        onChange={() => undefined}
+      />,
+    )
 
     expect(checkboxMarkup).toContain('type="checkbox"')
     expect(checkboxMarkup).toContain('name="terms"')
@@ -142,6 +158,9 @@ describe("CSP-safe field contracts", () => {
     expect(fileMarkup).toContain('autoComplete="off"')
     expect(fileMarkup).toContain('translate="no"')
     expect(fileMarkup).toContain("Choose many")
+    expect(selectedFileMarkup).toContain('aria-describedby="selected-file-file-names"')
+    expect(selectedFileMarkup).toContain('id="selected-file-file-names"')
+    expect(selectedFileMarkup).toContain("notes.txt")
   })
 
   test("keeps caller-owned copy visible and does not invent English defaults", () => {
@@ -237,12 +256,16 @@ describe("CSP-safe field contracts", () => {
     ].join("\n")
 
     expect(source).not.toMatch(/<div|<span|<style>/)
+    expect(source).not.toContain("labelTooltip")
+    expect(source).not.toContain("labelIcon")
+    expect(source).not.toContain("startIcon")
     expect(markup).not.toMatch(/ style=/)
     expect(markup).not.toMatch(/<div|<span/)
     expect(markup).not.toMatch(/class="[^"]*\[/)
     expect(source).toContain(
-      'onChange?.("", null as unknown as ChangeEvent<HTMLInputElement>)',
+      'onChange?.("", null)',
     )
+    expect(source).not.toContain("as unknown as ChangeEvent")
     expect(source).toContain("inputRef.current?.focus()")
   })
 })
@@ -277,6 +300,48 @@ const fileWidthIsRejected = (
 )
 // @ts-expect-error clearLabel and clearText are required when hasClear is true.
 const clearCopyIsRequired = <TextInput label="Name" value="x" hasClear onChange={() => undefined} />
+// @ts-expect-error labelTooltip is not part of the safe field API.
+const labelTooltipIsRejected = <TextInput label="Name" value="" labelTooltip="help" />
+// @ts-expect-error startIcon is not part of the safe field API.
+const startIconIsRejected = <TextInput label="Name" value="" startIcon="icon" />
+// @ts-expect-error only the attached status variant is supported.
+const detachedStatusIsRejected = <TextInput label="Name" value="" statusVariant="detached" />
+// @ts-expect-error tooltip status is not a safe presentation API.
+const tooltipStatusIsRejected = <TextInput label="Name" value="" statusVariant="tooltip" />
+const modeApiIsRejected = (
+  <FileInput
+    label="File"
+    value={null}
+    chooseFileText="Choose file"
+    chooseFilesText="Choose files"
+    clearLabel="Remove file"
+    clearText="Remove"
+    invalidTypeMessage="Invalid file"
+    sizeLimitMessage="File too large"
+    maxFilesMessage="Too many files"
+    formatFileSize={(bytes) => `${bytes} bytes`}
+    onChange={() => undefined}
+    // @ts-expect-error dropzone mode is intentionally not exposed.
+    mode="dropzone"
+  />
+)
+const dropHandlerApiIsRejected = (
+  <FileInput
+    label="File"
+    value={null}
+    chooseFileText="Choose file"
+    chooseFilesText="Choose files"
+    clearLabel="Remove file"
+    clearText="Remove"
+    invalidTypeMessage="Invalid file"
+    sizeLimitMessage="File too large"
+    maxFilesMessage="Too many files"
+    formatFileSize={(bytes) => `${bytes} bytes`}
+    onChange={() => undefined}
+    // @ts-expect-error native drop handlers are intentionally not exposed.
+    onDrop={() => undefined}
+  />
+)
 
 void styleIsRejected
 void xstyleIsRejected
@@ -285,3 +350,9 @@ void textAreaStyleIsRejected
 void checkboxXstyleIsRejected
 void fileWidthIsRejected
 void clearCopyIsRequired
+void labelTooltipIsRejected
+void startIconIsRejected
+void detachedStatusIsRejected
+void tooltipStatusIsRejected
+void modeApiIsRejected
+void dropHandlerApiIsRejected

@@ -2,7 +2,6 @@ import {
   type ChangeEvent,
   type ClipboardEventHandler,
   type KeyboardEventHandler,
-  type ReactNode,
   type Ref,
   type TextareaHTMLAttributes,
   useId,
@@ -76,8 +75,6 @@ export interface TextAreaProps
   readonly isLoading?: boolean
   readonly hasSpellCheck?: boolean
   readonly hasAutoFocus?: boolean
-  readonly labelTooltip?: string
-  readonly startIcon?: ReactNode
   readonly onPaste?: ClipboardEventHandler<HTMLTextAreaElement>
   readonly onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>
 }
@@ -113,8 +110,6 @@ export function TextArea({
   isLoading = false,
   hasSpellCheck = true,
   hasAutoFocus = false,
-  labelTooltip,
-  startIcon,
   onPaste,
   onKeyDown,
   autoComplete,
@@ -153,8 +148,6 @@ export function TextArea({
       disabledMessageId={disabledMessageId}
       label={label}
       labelHidden={isLabelHidden}
-      labelIcon={startIcon}
-      labelTooltip={labelTooltip}
       optionalText={optionalText}
       optional={isOptional}
       required={isRequired}

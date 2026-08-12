@@ -60,6 +60,10 @@ test.describe("CSP-safe selector browser contracts", () => {
     await expect(page.getByRole("combobox", { name: "Filter statuses" })).toHaveValue("")
     await search.fill("   ")
     await expect(page.getByRole("option", { name: "Select all statuses" })).toBeVisible()
+    await page.getByRole("option", { name: "Select all statuses" }).click()
+    await expect(page.locator('input[type="hidden"][name="statuses"]')).toHaveCount(2)
+    await page.getByTestId("outside").click()
+    await expect(trigger).toHaveAttribute("aria-expanded", "false")
   })
 
   test("keeps active descendant IDs truthful for hover and source swaps", async ({ page }) => {
@@ -70,6 +74,11 @@ test.describe("CSP-safe selector browser contracts", () => {
     const activeId = await search.getAttribute("aria-activedescendant")
     expect(activeId).not.toBeNull()
     await expect(page.locator(`#${activeId}`)).toHaveAttribute("role", "option")
+    await search.press("ArrowDown")
+    await search.press("ArrowDown")
+    const skippedDisabledId = await search.getAttribute("aria-activedescendant")
+    expect(skippedDisabledId).not.toBeNull()
+    await expect(page.locator(`#${skippedDisabledId}`)).toHaveText("Done")
     const hoveredOption = page.getByRole("option").nth(1)
     await hoveredOption.hover()
     await expect(search).toHaveAttribute("aria-activedescendant", await hoveredOption.getAttribute("id") ?? "")

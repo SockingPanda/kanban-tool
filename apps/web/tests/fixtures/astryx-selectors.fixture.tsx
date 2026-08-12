@@ -32,6 +32,7 @@ export function Fixture() {
 
   return (
     <main>
+      <button type="button" data-testid="outside">Outside</button>
       <button type="button" data-testid="toggle-multi-disabled" onClick={() => setMultiDisabled((current) => !current)}>Toggle multi disabled</button>
       <button type="button" data-testid="toggle-typeahead-disabled" onClick={() => setTypeaheadDisabled((current) => !current)}>Toggle typeahead disabled</button>
       <button type="button" data-testid="swap-source" onClick={() => setSource(sourceB)}>Swap source</button>
@@ -39,9 +40,10 @@ export function Fixture() {
       <output data-testid="open-events">{openEvents}</output>
       <MultiSelector
         label="Statuses"
-        options={[{ value: "ready", label: "Ready" }, { value: "review", label: "Review" }, { value: "done", label: "Done" }]}
+        options={[{ value: "ready", label: "Ready" }, { value: "review", label: "Review", disabled: true }, { value: "done", label: "Done" }]}
         value={selected}
         onChange={setSelected}
+        htmlName="statuses"
         placeholder="Choose statuses"
         loadingText="Loading statuses"
         noOptionsText="No statuses"

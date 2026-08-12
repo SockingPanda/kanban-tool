@@ -40,7 +40,7 @@ export function Fixture() {
       <output data-testid="open-events">{openEvents}</output>
       <MultiSelector
         label="Statuses"
-        options={[{ value: "ready", label: "Ready" }, { value: "review", label: "Review", disabled: true }, { value: "done", label: "Done" }]}
+        options={[{ value: "ready", label: "Ready" }, { type: "section", title: "Other statuses", options: [{ value: "review", label: "Review", disabled: true }, { value: "done", label: "Done" }] }]}
         value={selected}
         onChange={setSelected}
         htmlName="statuses"

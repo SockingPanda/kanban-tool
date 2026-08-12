@@ -109,6 +109,42 @@ describe("Astryx CSP UI guard", () => {
     }
   })
 
+  test("fails closed for dynamic module names and unknown intrinsic style bags", () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-guard-v2-"))
+    try {
+      writeFileSync(path.join(temporaryRoot, "unsafe.tsx"), [
+        'declare const suffix: string, modulePath: string, props: Record<string, unknown>, attr: string',
+        'void import(`./feature/${suffix}`)',
+        'void import("./feature/" + suffix)',
+        'void require(modulePath)',
+        'void require(`./feature/${suffix}`)',
+        'const styled = { style: { color: "red" } }',
+        'const dangerous = { dangerouslySetInnerHTML: { __html: "<style>" } }',
+        'const Bad = () => <div {...props} {...styled} {...dangerous} />',
+        'React.createElement("div", props)',
+        'React.createElement("div", styled)',
+        'document.body.setAttribute(attr, "red")',
+        'Object.assign(document.body, { style: { color: "red" } })',
+        'Object.assign(document.body, props)',
+      ].join("\n"))
+      writeFileSync(path.join(temporaryRoot, "safe.tsx"), [
+        'const safe = { className: "flex", ariaLabel: "safe" }',
+        'const Safe = () => <div {...safe} />',
+        'React.createElement("div", safe)',
+        'document.body.setAttribute("data-state", "ready")',
+        'Object.assign({}, { body: "safe" })',
+      ].join("\n"))
+      const report = scanUiSource({ projectRoot: temporaryRoot, sourcePaths: ["unsafe.tsx", "safe.tsx"], mode: "enforce" })
+      expect(report.passed).toBe(false)
+      expect(report.errors.filter((error) => error.code === "unsafe-direct-import").some((error) => error.message.includes("module specifier"))).toBe(true)
+      expect(report.errors.filter((error) => error.code === "inline-style").length).toBeGreaterThanOrEqual(4)
+      expect(report.errors.filter((error) => error.code === "dom-style").length).toBeGreaterThanOrEqual(3)
+      expect(report.errors.filter((error) => error.path === "safe.tsx" && ["unsafe-direct-import", "inline-style", "dom-style"].includes(error.code))).toHaveLength(0)
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true })
+    }
+  })
+
   test("resolves only the supported inventory and enforce modes", () => {
     expect(uiGuardModeFromEnv("inventory")).toBe("inventory")
     expect(uiGuardModeFromEnv("enforce")).toBe("enforce")

@@ -377,6 +377,10 @@ function collectSourceFiles(filePath: string, projectRoot: string, forbiddenRoot
 function scanSourceText(source: string, relativePath: string, mode: UiGuardMode, manifest: UiGuardManifest, issues: UiGuardIssue[]): void {
   const sharedStyleOwner = relativePath === manifest.tailwindBridge.staticCssEntry
   for (const candidate of collectStaticImports(source, relativePath)) {
+    if ("dynamicKind" in candidate && candidate.unknownSpecifier) {
+      issues.push(issue("unsafe-direct-import", mode === "enforce" ? "error" : "warning", relativePath, lineForOffset(source, candidate.offset), `Dynamic ${candidate.dynamicKind}() module specifier must be a string literal under the static import policy.`))
+      continue
+    }
     const imported = candidate.value
     if (isCssSpecifier(imported)) scanCssImportEdge(relativePath, imported, mode, manifest, issues)
     if (manifest.unsafeDirectImports.includes(imported) && !sharedStyleOwner) {
@@ -403,22 +407,31 @@ function scanSourceText(source: string, relativePath: string, mode: UiGuardMode,
 
 type StaticImport = { readonly value: string; readonly offset: number }
 
-function collectStaticImports(source: string, relativePath: string): readonly StaticImport[] {
+type DynamicImport = StaticImport & { readonly dynamicKind: "import" | "require"; readonly unknownSpecifier: boolean }
+
+function collectStaticImports(source: string, relativePath: string): readonly (StaticImport | DynamicImport)[] {
   const extension = path.extname(relativePath).toLowerCase()
   if (extension === ".css") return []
   if (![".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"].includes(extension)) return []
   const scriptKind = extension === ".tsx" ? ts.ScriptKind.TSX : extension === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
   const sourceFile = ts.createSourceFile(relativePath, source, ts.ScriptTarget.Latest, true, scriptKind)
-  const imports: StaticImport[] = []
+  const imports: (StaticImport | DynamicImport)[] = []
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       imports.push({ value: node.moduleSpecifier.text, offset: node.moduleSpecifier.getStart(sourceFile) })
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined && ts.isStringLiteral(node.moduleSpecifier)) {
       imports.push({ value: node.moduleSpecifier.text, offset: node.moduleSpecifier.getStart(sourceFile) })
-    } else if (ts.isCallExpression(node) && node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0])) {
+    } else if (ts.isCallExpression(node)) {
       const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword
       const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require"
-      if (isDynamicImport || isRequire) imports.push({ value: node.arguments[0].text, offset: node.arguments[0].getStart(sourceFile) })
+      if (isDynamicImport || isRequire) {
+        const argument = node.arguments[0]
+        if (argument !== undefined && ts.isStringLiteral(argument)) {
+          imports.push({ value: argument.text, offset: argument.getStart(sourceFile), dynamicKind: isDynamicImport ? "import" : "require", unknownSpecifier: false })
+        } else {
+          imports.push({ value: "<dynamic-module-specifier>", offset: argument?.getStart(sourceFile) ?? node.getStart(sourceFile), dynamicKind: isDynamicImport ? "import" : "require", unknownSpecifier: true })
+        }
+      }
     }
     ts.forEachChild(node, visit)
   }
@@ -533,6 +546,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
   }
   const scriptKind = extension === ".tsx" ? ts.ScriptKind.TSX : extension === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
   const sourceFile = ts.createSourceFile(relativePath, source, ts.ScriptTarget.Latest, true, scriptKind)
+  const staticObjectBindings = collectStaticObjectBindings(sourceFile)
   let rawDivCount = 0
   let layoutSpanCount = 0
   const styleViolations: { code: "inline-style" | "dom-style"; offset: number; message: string }[] = []
@@ -556,7 +570,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
       if (ts.isJsxAttribute(attribute) && jsxAttributeNameText(attribute.name) === "dangerouslySetInnerHTML") {
         addViolation("inline-style", attribute, "dangerouslySetInnerHTML is forbidden under the static CSP style policy.")
       }
-      if (ts.isJsxSpreadAttribute(attribute) && spreadMayCarryStyle(attribute.expression, sourceFile)) {
+      if (isIntrinsicJsxTagName(tagName) && ts.isJsxSpreadAttribute(attribute) && spreadMayCarryStyle(attribute.expression, sourceFile, staticObjectBindings)) {
         addViolation("inline-style", attribute, "JSX spread props may inject inline style; use explicit static props instead.")
       }
     }
@@ -569,7 +583,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
       if (expressionContainsStyle(node.left)) addViolation("dom-style", node.left, "DOM .style mutation is forbidden under the static CSP style policy.")
       else if (expressionContainsMarkupSink(node.left)) addViolation("inline-style", node.left, "Runtime HTML/style injection is forbidden under the static CSP style policy.")
     }
-    if (ts.isCallExpression(node) && isStyleMutationCall(node)) {
+    if (ts.isCallExpression(node) && isStyleMutationCall(node, sourceFile, staticObjectBindings)) {
       addViolation("dom-style", node.expression, "DOM .style mutation is forbidden under the static CSP style policy.")
     }
     if (ts.isCallExpression(node) && isMarkupInjectionCall(node)) {
@@ -578,7 +592,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
     if (ts.isCallExpression(node) && isStyleElementFactory(node)) {
       addViolation("inline-style", node.expression, "Runtime style element injection is forbidden under the static CSP style policy.")
     }
-    if (ts.isCallExpression(node) && isCreateElementCall(node) && createElementPropsMayCarryStyle(node.arguments[1])) {
+    if (ts.isCallExpression(node) && isCreateElementCall(node) && createElementPropsMayCarryStyle(node, sourceFile, staticObjectBindings)) {
       addViolation("inline-style", node.expression, "React.createElement style props are forbidden under the static CSP style policy.")
     }
     if (ts.isCallExpression(node) && isCreateElementCall(node)) {
@@ -593,6 +607,18 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
   }
   visit(sourceFile)
   return { rawLayoutCount: rawDivCount + layoutSpanCount, styleViolations }
+}
+
+function collectStaticObjectBindings(sourceFile: ts.SourceFile): ReadonlyMap<string, ts.ObjectLiteralExpression> {
+  const bindings = new Map<string, ts.ObjectLiteralExpression>()
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && ts.isObjectLiteralExpression(node.initializer)) {
+      bindings.set(node.name.text, node.initializer)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return bindings
 }
 
 function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiGuardMode, manifest: UiGuardManifest, issues: UiGuardIssue[]): void {
@@ -704,21 +730,21 @@ function expressionContainsMarkupSink(expression: ts.Expression): boolean {
   return false
 }
 
-function isStyleMutationCall(node: ts.CallExpression): boolean {
+function isStyleMutationCall(node: ts.CallExpression, sourceFile: ts.SourceFile, bindings: ReadonlyMap<string, ts.ObjectLiteralExpression>): boolean {
   if (ts.isPropertyAccessExpression(node.expression)) {
     if ((node.expression.name.text === "setProperty" || node.expression.name.text === "removeProperty") && expressionContainsStyle(node.expression.expression)) return true
-    if ((node.expression.name.text === "setAttribute" || node.expression.name.text === "removeAttribute") && firstArgumentIs(node, "style")) return true
-    return node.expression.name.text === "assign" && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "Object" && node.arguments.length > 0 && expressionContainsStyle(node.arguments[0])
+    if (node.expression.name.text === "setAttribute" || node.expression.name.text === "removeAttribute") {
+      return node.arguments.length === 0 || !ts.isStringLiteral(node.arguments[0]) || node.arguments[0].text === "style"
+    }
+    if (node.expression.name.text === "assign" && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "Object") {
+      return node.arguments.length < 2 || expressionContainsStyle(node.arguments[0]) || objectMayCarryStyle(node.arguments[1], bindings, new Set(), sourceFile)
+    }
   }
   return false
 }
 
 function isMarkupInjectionCall(node: ts.CallExpression): boolean {
   return ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "insertAdjacentHTML"
-}
-
-function firstArgumentIs(node: ts.CallExpression, value: string): boolean {
-  return node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text === value
 }
 
 function hasLayoutClass(attributes: ts.JsxAttributes, sourceFile: ts.SourceFile): boolean {
@@ -734,15 +760,34 @@ function hasLayoutClass(attributes: ts.JsxAttributes, sourceFile: ts.SourceFile)
   return attributes.properties.some((attribute) => ts.isJsxSpreadAttribute(attribute) && (spreadObjectHasLayoutClass(attribute.expression, sourceFile) || !ts.isObjectLiteralExpression(attribute.expression)))
 }
 
-function spreadMayCarryStyle(expression: ts.Expression, sourceFile: ts.SourceFile): boolean {
-  if (ts.isObjectLiteralExpression(expression)) {
-    return expression.properties.some((property) => {
-      if (!ts.isPropertyAssignment(property)) return false
-      const name = property.name.getText(sourceFile)
-      return name === "style" || name === "dangerouslySetInnerHTML"
-    })
+function isIntrinsicJsxTagName(tagName: string): boolean {
+  return /^[a-z]/.test(tagName)
+}
+
+function spreadMayCarryStyle(expression: ts.Expression, sourceFile: ts.SourceFile, bindings: ReadonlyMap<string, ts.ObjectLiteralExpression>): boolean {
+  return objectMayCarryStyle(expression, bindings, new Set(), sourceFile)
+}
+
+function objectMayCarryStyle(expression: ts.Expression | undefined, bindings: ReadonlyMap<string, ts.ObjectLiteralExpression>, seen: Set<string>, sourceFile?: ts.SourceFile): boolean {
+  if (expression === undefined) return true
+  if (ts.isParenthesizedExpression(expression)) return objectMayCarryStyle(expression.expression, bindings, seen, sourceFile)
+  if (ts.isIdentifier(expression)) {
+    const binding = bindings.get(expression.text)
+    if (binding === undefined || seen.has(expression.text)) return true
+    seen.add(expression.text)
+    return objectMayCarryStyle(binding, bindings, seen, sourceFile)
   }
-  return ts.isIdentifier(expression) && /style/i.test(expression.text)
+  if (!ts.isObjectLiteralExpression(expression)) return true
+  for (const property of expression.properties) {
+    const name = "name" in property && property.name !== undefined && sourceFile !== undefined ? property.name.getText(sourceFile) : undefined
+    if (name === "style" || name === "dangerouslySetInnerHTML") return true
+    if (ts.isSpreadAssignment(property)) {
+      if (objectMayCarryStyle(property.expression, bindings, new Set(seen), sourceFile)) return true
+      continue
+    }
+    if (ts.isComputedPropertyName(property.name)) return true
+  }
+  return false
 }
 
 function spreadObjectHasLayoutClass(expression: ts.Expression, sourceFile: ts.SourceFile): boolean {
@@ -768,12 +813,13 @@ function isCreateElementCall(node: ts.CallExpression): boolean {
     || ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "createElement"
 }
 
-function createElementPropsMayCarryStyle(argument: ts.Expression | undefined): boolean {
-  if (argument === undefined) return false
-  if (ts.isObjectLiteralExpression(argument)) {
-    return argument.properties.some((property) => ts.isPropertyAssignment(property) && ["style", "dangerouslySetInnerHTML"].includes(property.name.getText()))
-  }
-  return ts.isIdentifier(argument) && /style|props/i.test(argument.text)
+function createElementPropsMayCarryStyle(node: ts.CallExpression, sourceFile: ts.SourceFile, bindings: ReadonlyMap<string, ts.ObjectLiteralExpression>): boolean {
+  const tag = node.arguments[0]
+  const props = node.arguments[1]
+  if (tag === undefined || props === undefined) return false
+  if (ts.isStringLiteral(tag) && isIntrinsicJsxTagName(tag.text)) return objectMayCarryStyle(props, bindings, new Set(), sourceFile)
+  if (ts.isObjectLiteralExpression(props)) return objectMayCarryStyle(props, bindings, new Set(), sourceFile)
+  return ts.isIdentifier(props) && /style|props/i.test(props.text)
 }
 
 function rawLayoutFromCreateElement(node: ts.CallExpression, sourceFile: ts.SourceFile): { rawDivCount: number; layoutSpanCount: number } {

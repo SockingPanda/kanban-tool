@@ -123,6 +123,20 @@ test("safe field callbacks, native reset, refs, and IDREFs hold in a real browse
   })
   await expect.poll(async () => (await logs(page)).filter((entry) => entry.field === "max-files-file" && entry.kind !== "error")).toHaveLength(0)
 
+  const sizeInput = page.locator("#size-file")
+  await sizeInput.setInputFiles({
+    name: "too-large.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("12"),
+  })
+  await expect(sizeInput).toHaveValue("")
+  await expect.poll(async () => logs(page)).toContainEqual({
+    field: "size-file",
+    kind: "error",
+    reason: "size-limit",
+  })
+  await expect.poll(async () => (await logs(page)).filter((entry) => entry.field === "size-file" && entry.kind !== "error")).toHaveLength(0)
+
   const throwingInput = page.locator("#throw-file")
   await throwingInput.setInputFiles({
     name: "throw.txt",

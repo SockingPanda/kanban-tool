@@ -123,6 +123,23 @@ export function FieldHarness() {
 
       <FileInput
         {...fileCopy}
+        id="size-file"
+        label="Size limited file"
+        value={null}
+        maxSize={1}
+        onChange={(files) => {
+          log({field: "size-file", kind: "change", value: oneFile(files)?.name ?? "null"})
+        }}
+        onValidationError={(error) => {
+          log({field: "size-file", kind: "error", reason: error.reason})
+        }}
+        changeAction={() => {
+          log({field: "size-file", kind: "action"})
+        }}
+      />
+
+      <FileInput
+        {...fileCopy}
         id="throw-file"
         label="Throwing file"
         value={null}

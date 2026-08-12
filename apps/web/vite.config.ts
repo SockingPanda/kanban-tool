@@ -48,6 +48,7 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
+    cssCodeSplit: false,
     emptyOutDir: true,
   },
 })

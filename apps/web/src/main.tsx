@@ -1,6 +1,7 @@
+import "./styles.css"
+
 import { bootstrapWebApp, renderRuntimeStartupError } from "./bootstrap"
 import { prepareWebPreferences } from "./lib/preferences"
-import "./styles.css"
 
 const root = document.getElementById("root")
 

@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from "vitest"
 import {
   DateTimeInput,
   combineDateTimeValue,
+  isDateTimeWithinBounds,
   isISODate,
   isISOTime,
   parseDateTimeLocal,
@@ -13,16 +14,33 @@ import {
 describe("CSP-safe Astryx DateTimeInput", () => {
   test("parses ISO and native local date/time values without timezone conversion", () => {
     expect(parseISODateTime("2026-08-09T09:10")).toEqual({ date: "2026-08-09", time: "09:10" })
+    expect(parseISODateTime("2026-08-09")).toEqual({ date: "2026-08-09" })
+    expect(parseISODateTime("2026-08-09T09:10:30", false)).toEqual({ date: "2026-08-09", time: "09:10" })
     expect(parseISODateTime("2026-02-29T09:10")).toBeUndefined()
+    expect(parseISODateTime("0000-01-01")).toBeUndefined()
     expect(parseDateTimeLocal("2026-08-09", "09:10")).toBe("2026-08-09T09:10")
     expect(parseDateTimeLocal("2026-08-09T09:10")).toBe("2026-08-09T09:10")
+    expect(parseDateTimeLocal("2026-08-09", "09:10:30", false)).toBe("2026-08-09T09:10")
     expect(combineDateTimeValue("2026-08-09", "09:10:30")).toBe("2026-08-09T09:10:30")
     expect(parseDateTimeLocal("2026-08-09", "")).toBeUndefined()
     expect(isISODate("2024-02-29")).toBe(true)
     expect(isISODate("2025-02-29")).toBe(false)
+    expect(isISODate("0000-01-01")).toBe(false)
     expect(isISOTime("23:59")).toBe(true)
     expect(isISOTime("23:59:59")).toBe(true)
     expect(isISOTime("24:00")).toBe(false)
+  })
+
+  test("rejects complete candidates outside date and same-day time bounds", () => {
+    const min = parseISODateTime("2026-08-09T09:00")
+    const max = parseISODateTime("2026-08-30T18:00")
+
+    expect(isDateTimeWithinBounds("2026-08-08", "12:00", min, max)).toBe(false)
+    expect(isDateTimeWithinBounds("2026-08-09", "08:59", min, max)).toBe(false)
+    expect(isDateTimeWithinBounds("2026-08-09", "09:00", min, max)).toBe(true)
+    expect(isDateTimeWithinBounds("2026-08-30", "18:01", min, max)).toBe(false)
+    expect(isDateTimeWithinBounds("2026-08-10", "12:00", min, max)).toBe(true)
+    expect(isDateTimeWithinBounds("2026-08-09", "09:00:30", min, max, false)).toBe(true)
   })
 
   test("renders native date/time controls with Astryx-shaped field semantics", () => {
@@ -90,6 +108,49 @@ describe("CSP-safe Astryx DateTimeInput", () => {
     expect(markup).toContain('step="900"')
     expect(markup).toContain('data-astryx-segment="date"')
     expect(markup).toContain('data-astryx-segment="time"')
+  })
+
+  test("supports date-only bounds and normalizes seconds when seconds are disabled", () => {
+    const markup = renderToStaticMarkup(
+      <DateTimeInput
+        clearLabel="清除截止时间"
+        dateLabel="截止日期"
+        hasSeconds={false}
+        label="截止时间"
+        max="2026-08-30"
+        min="2026-08-09"
+        timeLabel="截止时间"
+        value="2026-08-09T09:10:30"
+      />,
+    )
+
+    expect(markup).toContain('value="2026-08-09"')
+    expect(markup).toContain('value="09:10"')
+    expect(markup).toContain('min="2026-08-09"')
+    expect(markup).toContain('max="2026-08-30"')
+    expect(markup).not.toContain('min="09:')
+    expect(markup).not.toContain('max="18:')
+  })
+
+  test("normalizes seconds in initial values and bounds when seconds are disabled", () => {
+    const markup = renderToStaticMarkup(
+      <DateTimeInput
+        clearLabel="清除截止时间"
+        dateLabel="截止日期"
+        hasSeconds={false}
+        label="截止时间"
+        max="2026-08-09T18:00:30"
+        min="2026-08-09T09:00:30"
+        timeLabel="截止时间"
+        value="2026-08-09T09:10:30"
+      />,
+    )
+
+    expect(markup).toContain('value="09:10"')
+    expect(markup).toContain('min="09:00"')
+    expect(markup).toContain('max="18:00"')
+    expect(markup).not.toContain(":10:30")
+    expect(markup).not.toContain(":00:30")
   })
 
   test("keeps disabled and required semantics on both native controls", () => {

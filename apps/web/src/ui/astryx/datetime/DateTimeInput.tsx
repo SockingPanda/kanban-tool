@@ -129,7 +129,7 @@ export function isISODate(value: string): boolean {
   const year = Number(match[1])
   const month = Number(match[2])
   const day = Number(match[3])
-  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
+  return year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
 }
 
 export function isISOTime(value: string, hasSeconds = true): boolean {
@@ -143,47 +143,104 @@ export function isISOTime(value: string, hasSeconds = true): boolean {
   return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59
 }
 
+function normalizeISOTime(value: string, hasSeconds = true): string | undefined {
+  const match = TIME_PATTERN.exec(value)
+  if (!match || !isISOTime(value, true)) return undefined
+  if (!hasSeconds && match[3] !== undefined) return `${match[1]}:${match[2]}`
+  return value
+}
+
 export function parseISODateTime(
   value: string | null | undefined,
+  hasSeconds = true,
 ): ISODateTimeParts | undefined {
   const candidate = value?.trim()
   if (!candidate) return undefined
 
+  if (isISODate(candidate)) return { date: candidate }
+
   const match = DATE_TIME_PATTERN.exec(candidate)
-  if (!match || !isISODate(match[1]) || !isISOTime(match[2])) return undefined
-  return { date: match[1], time: match[2] }
+  const time = match ? normalizeISOTime(match[2], hasSeconds) : undefined
+  if (!match || !isISODate(match[1]) || !time) return undefined
+  return { date: match[1], time }
 }
 
 export function parseDateTimeLocal(
   date: string | null | undefined,
   time?: string | null,
+  hasSeconds = true,
 ): ISODateTimeString | undefined {
   if (time === undefined && date?.includes("T")) {
-    const parsed = parseISODateTime(date)
-    return parsed?.time ? parseDateTimeLocal(parsed.date, parsed.time) : undefined
+    const parsed = parseISODateTime(date, hasSeconds)
+    return parsed?.time ? parseDateTimeLocal(parsed.date, parsed.time, hasSeconds) : undefined
   }
 
   const dateValue = date?.trim() ?? ""
-  const timeValue = time?.trim() ?? ""
-  if (!isISODate(dateValue) || !isISOTime(timeValue)) return undefined
+  const timeValue = normalizeISOTime(time?.trim() ?? "", hasSeconds)
+  if (!isISODate(dateValue) || !timeValue) return undefined
   return `${dateValue}T${timeValue}` as ISODateTimeString
 }
 
 export function splitDateTimeValue(
   value: string | null | undefined,
+  hasSeconds = true,
 ): ISODateTimeParts | undefined {
-  return parseISODateTime(value)
+  return parseISODateTime(value, hasSeconds)
 }
 
 export function combineDateTimeValue(
   date: string | null | undefined,
   time: string | null | undefined,
+  hasSeconds = true,
 ): ISODateTimeString | undefined {
-  return parseDateTimeLocal(date, time)
+  return parseDateTimeLocal(date, time, hasSeconds)
 }
 
 export const parseLocalDateTime = parseDateTimeLocal
 export const formatISODateTime = combineDateTimeValue
+
+function compareISODate(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function timeToSeconds(value: string): number {
+  const [hour, minute, second = "0"] = value.split(":")
+  return Number(hour) * 3600 + Number(minute) * 60 + Number(second)
+}
+
+export function isDateWithinBounds(
+  date: string | null | undefined,
+  min?: ISODateTimeParts,
+  max?: ISODateTimeParts,
+): boolean {
+  const dateValue = date?.trim() ?? ""
+  if (!isISODate(dateValue)) return false
+  if (min?.date && compareISODate(dateValue, min.date) < 0) return false
+  if (max?.date && compareISODate(dateValue, max.date) > 0) return false
+  return true
+}
+
+export function isDateTimeWithinBounds(
+  date: string | null | undefined,
+  time: string | null | undefined,
+  min?: ISODateTimeParts,
+  max?: ISODateTimeParts,
+  hasSeconds = true,
+): boolean {
+  const dateValue = date?.trim() ?? ""
+  const timeValue = normalizeISOTime(time?.trim() ?? "", hasSeconds)
+  if (!timeValue || !isDateWithinBounds(dateValue, min, max)) return false
+
+  if (min?.date === dateValue && min.time) {
+    const minTime = normalizeISOTime(min.time, hasSeconds)
+    if (minTime && timeToSeconds(timeValue) < timeToSeconds(minTime)) return false
+  }
+  if (max?.date === dateValue && max.time) {
+    const maxTime = normalizeISOTime(max.time, hasSeconds)
+    if (maxTime && timeToSeconds(timeValue) > timeToSeconds(maxTime)) return false
+  }
+  return true
+}
 
 function statusTypeOf(
   status: DateTimeInputStatus | DateTimeInputStatusType | undefined,
@@ -304,11 +361,11 @@ function DateTimeInputImpl(
   const statusId = statusMessageOf(status) ? `${controlId}-status` : undefined
   const legendId = `${controlId}-legend`
   const dateInputRef = useRef<HTMLInputElement | null>(null)
-  const parsedValue = parseISODateTime(value)
+  const parsedValue = parseISODateTime(value, hasSeconds)
   const [dateValue, setDateValue] = useState(parsedValue?.date ?? "")
   const [timeValue, setTimeValue] = useState(parsedValue?.time ?? "")
-  const dateBounds = parseISODateTime(min)
-  const maxBounds = parseISODateTime(max)
+  const dateBounds = parseISODateTime(min, hasSeconds)
+  const maxBounds = parseISODateTime(max, hasSeconds)
   const statusType = statusTypeOf(status)
   const statusMessage = statusMessageOf(status)
   const interactiveDisabled = isDisabled || isLoading
@@ -317,10 +374,10 @@ function DateTimeInputImpl(
   const rootProps = pickRootProps(rest)
 
   useEffect(() => {
-    const next = parseISODateTime(value)
+    const next = parseISODateTime(value, hasSeconds)
     setDateValue(next?.date ?? "")
     setTimeValue(next?.time ?? "")
-  }, [value])
+  }, [hasSeconds, value])
 
   const setDateRef = (node: HTMLInputElement | null) => {
     dateInputRef.current = node
@@ -328,19 +385,36 @@ function DateTimeInputImpl(
   }
 
   const fireChange = (nextDate: string, nextTime: string) => {
-    onChange?.(parseDateTimeLocal(nextDate, nextTime))
+    const nextValue = parseDateTimeLocal(nextDate, nextTime, hasSeconds)
+    if (!nextValue) {
+      onChange?.(undefined)
+      return
+    }
+
+    const nextParts = parseISODateTime(nextValue, hasSeconds)
+    if (!nextParts?.time || !isDateTimeWithinBounds(nextParts.date, nextParts.time, dateBounds, maxBounds, hasSeconds)) return
+    onChange?.(nextValue)
   }
 
   const handleDateChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (interactiveDisabled) return
-    const nextDate = isISODate(event.currentTarget.value) ? event.currentTarget.value : ""
+    const nextDate = event.currentTarget.value.trim()
+    if (nextDate && (!isISODate(nextDate) || !isDateWithinBounds(nextDate, dateBounds, maxBounds))) return
     setDateValue(nextDate)
     fireChange(nextDate, timeValue)
   }
 
   const handleTimeChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (interactiveDisabled) return
-    const nextTime = isISOTime(event.currentTarget.value) ? event.currentTarget.value : ""
+    const rawTime = event.currentTarget.value.trim()
+    if (!rawTime) {
+      setTimeValue("")
+      fireChange(dateValue, "")
+      return
+    }
+
+    const nextTime = normalizeISOTime(rawTime, hasSeconds)
+    if (!nextTime || (dateValue && !isDateTimeWithinBounds(dateValue, nextTime, dateBounds, maxBounds, hasSeconds))) return
     setTimeValue(nextTime)
     fireChange(dateValue, nextTime)
   }

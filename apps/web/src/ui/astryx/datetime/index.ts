@@ -1,6 +1,8 @@
 export {
   DateTimeInput,
   combineDateTimeValue,
+  isDateTimeWithinBounds,
+  isDateWithinBounds,
   isISODate,
   isISOTime,
   formatISODateTime,

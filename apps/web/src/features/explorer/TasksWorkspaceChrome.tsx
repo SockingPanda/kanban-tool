@@ -1,10 +1,26 @@
 import type { MouseEvent } from "react"
 
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Text } from "@astryxdesign/core/Text"
+
+import {
+  CheckboxInput,
+  PageFrame,
+  SafeHStack,
+  SafeVStack,
+  Selector,
+  SideNav,
+  SideNavItem,
+  SideNavSection,
+  TextInput,
+} from "@/ui/astryx"
+
 import type { TaskListQueryState } from "../../lib/api/explorer-read-model"
 import type { DensityMode, Locale } from "../../lib/preferences"
-import { DisplayMenu, FilterBar, ViewSwitcher, type TasksDensity, type TasksListDisplay, type TasksView } from "../../ui/tasks"
 
-import styles from "./TasksWorkspaceChrome.module.css"
+export type TasksView = "board" | "list" | "map"
+export type TasksListDisplay = "grouped" | "table"
 
 export interface TasksDiagnosticLink {
   readonly id: string
@@ -52,7 +68,7 @@ const displayColumnsEnglish = {
   updated: { id: "updated", label: "Updated" },
 } as const
 
-function taskDensity(density: DensityMode): TasksDensity {
+function taskDensity(density: DensityMode): "dense" | "comfortable" {
   return density === "compact" ? "dense" : "comfortable"
 }
 
@@ -75,65 +91,173 @@ function handleDiagnosticClick(event: MouseEvent<HTMLAnchorElement>, href: strin
   void onNavigate(href)
 }
 
+const viewOptions = [
+  { id: "board", route: "board", display: "grouped", labels: { zh: "看板", en: "Board" } },
+  { id: "list", route: "list", display: "grouped", labels: { zh: "列表", en: "List" } },
+  { id: "table", route: "list", display: "table", labels: { zh: "表格", en: "Table" } },
+  { id: "map", route: "map", display: "grouped", labels: { zh: "地图", en: "Map" } },
+] as const
+
+function TaskViewNavigation({
+  activeView,
+  displayVariant,
+  hrefForView,
+  label,
+  locale,
+  onViewChange,
+}: Pick<TasksWorkspaceChromeProps, "activeView" | "displayVariant" | "hrefForView" | "locale" | "onViewChange"> & { readonly label: string }) {
+  function selection(view: (typeof viewOptions)[number], event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>, hasHref: boolean): void {
+    const routeView = view.route as "board" | "list" | "map"
+    if (hasHref) event.preventDefault()
+    onViewChange(routeView, view.display)
+  }
+
+  return (
+    <SideNav aria-label={label} className="w-auto min-w-0 border-0 bg-transparent" data-testid="task-view-navigation">
+      <SideNavSection heading={label} isHeaderHidden>
+        {viewOptions.map((view) => {
+          const selected = view.id === "table"
+            ? activeView === "list" && displayVariant === "table"
+            : activeView === view.id && (view.id !== "list" || displayVariant !== "table")
+          const href = hrefForView?.(view.route, view.display)
+          return (
+            <SideNavItem
+              key={view.id}
+              label={view.labels[locale]}
+              href={href}
+              isSelected={selected}
+              onClick={href !== undefined ? (event) => selection(view, event, true) : (event) => selection(view, event, false)}
+              size="sm"
+            />
+          )
+        })}
+      </SideNavSection>
+    </SideNav>
+  )
+}
+
+function DisplayControls({
+  columns,
+  copy,
+  density,
+  onDensityChange,
+  onVisibleColumnsChange,
+  visibleColumns,
+}: {
+  readonly columns: readonly { readonly id: string; readonly label: string }[]
+  readonly copy: {
+    readonly display: string
+    readonly density: string
+    readonly dense: string
+    readonly comfortable: string
+    readonly visibleFields: string
+    readonly select: string
+    readonly loading: string
+  }
+  readonly density: DensityMode
+  readonly onDensityChange: (density: DensityMode) => void
+  readonly visibleColumns: Readonly<Record<string, boolean>>
+  readonly onVisibleColumnsChange: (columnId: string, visible: boolean) => void
+}) {
+  const selectedDensity = taskDensity(density)
+  const densityOptions = [
+    { value: "dense", label: copy.dense },
+    { value: "comfortable", label: copy.comfortable },
+  ] as const
+
+  return (
+    <details className="relative min-w-0">
+      <summary className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm text-primary outline-none hover:bg-overlay-hover focus-visible:outline-2 focus-visible:outline-accent">
+        {copy.display}
+      </summary>
+      <SafeVStack as="section" role="group" aria-label={copy.display} className="absolute end-0 z-10 mt-2 min-w-56 gap-3 rounded-lg border border-border bg-surface p-3 shadow-lg">
+        <Selector
+          label={copy.density}
+          options={densityOptions}
+          value={selectedDensity}
+          placeholder={copy.select}
+          loadingText={copy.loading}
+          htmlName="tasks-density"
+          onChange={(value) => {
+            if (value === "dense" || value === "comfortable") onDensityChange(value === "dense" ? "compact" : "comfortable")
+          }}
+        />
+        {columns.length > 0 ? (
+          <SafeVStack as="fieldset" className="gap-2 border-0 p-0">
+            <legend className="text-sm font-semibold text-primary">{copy.visibleFields}</legend>
+            {columns.map((column) => (
+              <CheckboxInput
+                key={column.id}
+                label={column.label}
+                value={visibleColumns[column.id] ?? true}
+                htmlName={`task-column-${column.id}`}
+                onChange={(visible) => onVisibleColumnsChange(column.id, visible)}
+                size="sm"
+              />
+            ))}
+          </SafeVStack>
+        ) : null}
+      </SafeVStack>
+    </details>
+  )
+}
+
 export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, displayVariant, density, listQuery, onViewChange, onSearchChange, onOpenFilters, onRemoveFilter, onClearFilters, onDensityChange, visibleColumns, onVisibleColumnsChange, diagnostics, onNavigate, hasInspector, onCloseInspector, inert = false }: TasksWorkspaceChromeProps) {
   const copy = locale === "en"
-    ? { title: "Tasks", views: "Task views", search: "Search tasks", filters: "Filters", display: "Display", more: "More", diagnostics: "Diagnostics", close: "Close Inspector" }
-    : { title: "任务", views: "任务视图", search: "搜索任务", filters: "筛选", display: "显示", more: "更多", diagnostics: "诊断", close: "关闭任务检查器" }
+    ? {
+        title: "Tasks", views: "Task views", search: "Search tasks", searchLabel: "Task search", filters: "Filters", display: "Display", more: "More", diagnostics: "Diagnostics", close: "Close Inspector", density: "Density", dense: "Compact", comfortable: "Comfortable", visibleFields: "Visible fields", select: "Select", loading: "Loading", active: "Active filters", clear: "Clear filters", removeFilter: "Remove filter",
+      }
+    : {
+        title: "任务", views: "任务视图", search: "搜索任务", searchLabel: "任务搜索", filters: "筛选", display: "显示", more: "更多", diagnostics: "诊断", close: "关闭任务检查器", density: "密度", dense: "紧凑", comfortable: "舒适", visibleFields: "可见字段", select: "选择", loading: "加载中", active: "当前筛选", clear: "清除筛选", removeFilter: "移除筛选",
+      }
   const columns = Object.values(locale === "en" ? displayColumnsEnglish : displayColumns)
   const filters = activeView === "list" ? listFilters(listQuery, locale) : []
   const querySearch = activeView === "list" ? listQuery?.search ?? "" : ""
   const searchDisabled = activeView !== "list" || onSearchChange === undefined
-  const display = displayVariant === "table" ? "table" : "grouped"
+
+  const header = (
+    <SafeHStack className="min-w-0 flex-wrap gap-3" align="center" justify="between">
+      <SafeVStack className="min-w-0 gap-1">
+        <Heading level={1} id="tasks-workspace-heading" tabIndex={-1} data-explorer-focus-fallback>{copy.title}</Heading>
+        <Text type="supporting"><span translate="no">{scope}</span></Text>
+      </SafeVStack>
+      <SafeHStack className="min-w-0 flex-wrap gap-2" align="center" justify="end">
+        <TaskViewNavigation activeView={activeView} displayVariant={displayVariant} hrefForView={hrefForView} label={copy.views} locale={locale} onViewChange={onViewChange} />
+        <DisplayControls columns={activeView === "list" ? columns : []} copy={copy} density={density} onDensityChange={onDensityChange} visibleColumns={visibleColumns} onVisibleColumnsChange={onVisibleColumnsChange} />
+        {hasInspector && onCloseInspector ? <Button label={copy.close} variant="ghost" size="sm" onClick={onCloseInspector} /> : null}
+        {diagnostics.length > 0 ? (
+          <details className="relative min-w-0">
+            <summary className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm text-primary outline-none hover:bg-overlay-hover focus-visible:outline-2 focus-visible:outline-accent">{copy.more}</summary>
+            <SafeVStack as="nav" aria-label={copy.diagnostics} className="absolute end-0 z-10 mt-2 min-w-40 gap-1 rounded-lg border border-border bg-surface p-2 shadow-lg">
+              {diagnostics.map((link) => <a key={link.id} className="rounded-md px-2 py-1.5 text-sm text-secondary no-underline hover:bg-overlay-hover hover:text-primary focus-visible:outline-2 focus-visible:outline-accent" href={link.href} onClick={onNavigate ? (event) => handleDiagnosticClick(event, link.href, onNavigate) : undefined}>{link.label}</a>)}
+            </SafeVStack>
+          </details>
+        ) : null}
+      </SafeHStack>
+    </SafeHStack>
+  )
+
+  const toolbar = (
+    <SafeHStack as="section" role="search" aria-label={copy.searchLabel} className="min-w-0 flex-wrap gap-3" align="end">
+      <TextInput type="search" label={copy.search} value={querySearch} placeholder={copy.search} isDisabled={searchDisabled} isLabelHidden htmlName="task-search" data-testid="list-search" onChange={(value) => onSearchChange?.(value)} />
+      <Button label={copy.filters} variant="secondary" size="sm" isDisabled={searchDisabled || onOpenFilters === undefined} onClick={onOpenFilters} />
+      {filters.length > 0 ? (
+        <SafeHStack as="section" aria-label={copy.active} className="min-w-0 flex-wrap gap-2" align="center">
+          <Text type="supporting">{copy.active}</Text>
+          {filters.map((filter) => (
+            <Button key={filter.id} label={filter.label} variant="ghost" size="sm" aria-label={`${copy.removeFilter}: ${filter.label}`} onClick={onRemoveFilter ? () => onRemoveFilter(filter.id) : undefined} />
+          ))}
+          {onClearFilters ? <Button label={copy.clear} variant="ghost" size="sm" onClick={onClearFilters} /> : null}
+        </SafeHStack>
+      ) : null}
+    </SafeHStack>
+  )
 
   return (
-    <section className={styles.chrome} aria-labelledby="tasks-workspace-heading" data-testid="tasks-workspace-chrome" inert={inert || undefined}>
-      <header className={styles.header}>
-        <div className={styles.identity}>
-          <h1 id="tasks-workspace-heading" tabIndex={-1} data-explorer-focus-fallback>{copy.title}</h1>
-          <span className={styles.scope} translate="no">{scope}</span>
-        </div>
-        <div className={styles.actions}>
-          <ViewSwitcher
-            activeView={activeView}
-            displayVariant={display}
-            includeTableDisplay
-            onSelectionChange={(view, nextDisplay) => onViewChange(view, nextDisplay)}
-            hrefForView={hrefForView}
-            label={copy.views}
-            locale={locale}
-          />
-          <DisplayMenu
-            options={{ density: taskDensity(density), visibleColumns }}
-            onDensityChange={(next) => onDensityChange(next === "dense" ? "compact" : "comfortable")}
-            columns={activeView === "list" ? columns : []}
-            onColumnVisibilityChange={activeView === "list" ? onVisibleColumnsChange : undefined}
-            label={copy.display}
-            locale={locale}
-          />
-          {hasInspector && onCloseInspector ? <button type="button" className={styles.closeInspector} onClick={onCloseInspector}>{copy.close}</button> : null}
-          {diagnostics.length > 0 ? (
-            <details className={styles.more}>
-              <summary>{copy.more}</summary>
-              <nav aria-label={copy.diagnostics}>
-                {diagnostics.map((link) => <a key={link.id} href={link.href} onClick={onNavigate ? (event) => handleDiagnosticClick(event, link.href, onNavigate) : undefined}>{link.label}</a>)}
-              </nav>
-            </details>
-          ) : null}
-        </div>
-      </header>
-      <FilterBar
-        search={querySearch}
-        searchTestId="list-search"
-        onSearchChange={onSearchChange ?? (() => undefined)}
-        disabled={searchDisabled}
-        placeholder={copy.search}
-        filters={filters}
-        onOpenFilters={activeView === "list" ? onOpenFilters : undefined}
-        onRemoveFilter={onRemoveFilter}
-        onClearFilters={onClearFilters}
-        filterButtonLabel={copy.filters}
-        locale={locale}
-      />
-    </section>
+    <SafeVStack as="section" className="min-w-0" inert={inert || undefined} data-testid="tasks-workspace-chrome">
+      <PageFrame frame="content" aria-labelledby="tasks-workspace-heading" bodyLabel={copy.title} header={header} toolbar={toolbar} toolbarLabel={copy.searchLabel}>
+        <SafeVStack className="sr-only" aria-hidden="true" />
+      </PageFrame>
+    </SafeVStack>
   )
 }

@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { Banner } from "@astryxdesign/core/Banner"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { List, ListItem } from "@astryxdesign/core/List"
+import { Text } from "@astryxdesign/core/Text"
+
 import {
   ExplorerReadError,
   loadTaskMap,
@@ -10,6 +16,15 @@ import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
+import {
+  PageFrame,
+  SafeHStack,
+  SafeLayout,
+  SafeMetadataList,
+  SafeMetadataListItem,
+  SafeSection,
+  SafeVStack,
+} from "@/ui/astryx"
 import {
   defaultTaskMapUrlState,
   filterTaskMap,
@@ -370,34 +385,29 @@ function TaskMapToolbar({
   readonly onRetry?: () => void
 }) {
   return (
-    <div className={styles.toolbar} role="toolbar" aria-label={copy.toolbar}>
-      <div className={styles.filterGroup} role="group" aria-label={copy.filter}>
+    <SafeHStack className="min-w-0 flex-wrap gap-2 border border-border bg-surface p-2" role="group" aria-label={copy.toolbar}>
+      <SafeHStack className="min-w-0 max-w-full gap-1 overflow-x-auto" role="group" aria-label={copy.filter}>
         {(Object.keys(copy.filterOptions) as BoardMapFilter[]).map((value) => (
-          <button
+          <Button
             key={value}
-            type="button"
-            className={styles.filterButton}
+            label={copy.filterOptions[value]}
+            variant={filter === value ? "primary" : "secondary"}
+            size="sm"
             aria-pressed={filter === value}
             onClick={() => onFilterChange(value)}
-          >
-            {copy.filterOptions[value]}
-          </button>
+          />
         ))}
-      </div>
-      <button type="button" className={styles.toggleButton} aria-pressed={hideIsolated} onClick={onHideIsolatedChange}>
-        {hideIsolated ? copy.showIsolated : copy.hideIsolated}
-      </button>
-      <button type="button" className={styles.toggleButton} aria-pressed={showDoneContext} onClick={onShowDoneContextChange}>
-        {showDoneContext ? copy.hideDone : copy.showDone}
-      </button>
-      <div className={styles.zoomGroup} role="group" aria-label={copy.zoom}>
-        <button type="button" aria-label={copy.zoomOut} onClick={() => onZoomChange(-1)} disabled={zoom <= MIN_MAP_ZOOM}>−</button>
-        <output data-testid="task-map-zoom" aria-live="polite">{Math.round(zoom * 100)}%</output>
-        <button type="button" aria-label={copy.zoomIn} onClick={() => onZoomChange(1)} disabled={zoom >= MAX_MAP_ZOOM}>＋</button>
-        <button type="button" aria-label={copy.zoomReset} onClick={() => onZoomChange(0)}>↺</button>
-      </div>
-      {onRetry ? <button type="button" className={styles.refreshButton} onClick={onRetry} disabled={loading}>{loading ? copy.refreshing : copy.refresh}</button> : null}
-    </div>
+      </SafeHStack>
+      <Button label={hideIsolated ? copy.showIsolated : copy.hideIsolated} variant="secondary" size="sm" aria-pressed={hideIsolated} onClick={onHideIsolatedChange} />
+      <Button label={showDoneContext ? copy.hideDone : copy.showDone} variant="secondary" size="sm" aria-pressed={showDoneContext} onClick={onShowDoneContextChange} />
+      <SafeHStack className="ms-auto gap-1" role="group" aria-label={copy.zoom}>
+        <Button label={copy.zoomOut} variant="ghost" size="sm" isDisabled={zoom <= MIN_MAP_ZOOM} onClick={() => onZoomChange(-1)} />
+        <output className="text-sm tabular-nums text-primary" data-testid="task-map-zoom" aria-live="polite">{Math.round(zoom * 100)}%</output>
+        <Button label={copy.zoomIn} variant="ghost" size="sm" isDisabled={zoom >= MAX_MAP_ZOOM} onClick={() => onZoomChange(1)} />
+        <Button label={copy.zoomReset} variant="ghost" size="sm" onClick={() => onZoomChange(0)} />
+      </SafeHStack>
+      {onRetry ? <Button label={loading ? copy.refreshing : copy.refresh} variant="secondary" size="sm" onClick={onRetry} isDisabled={loading} /> : null}
+    </SafeHStack>
   )
 }
 
@@ -405,11 +415,15 @@ function TaskMapError({ copy, error, onRetry }: { readonly copy: MapCopy; readon
   const notFound = errorReason(error) === "board-not-found"
   const offline = error instanceof ExplorerReadError && error.kind === "offline"
   return (
-    <section className={styles.state} data-testid={offline ? "task-map-offline" : notFound ? "task-map-not-found" : "task-map-error"} role={offline ? "status" : "alert"}>
-      <h2>{offline ? copy.offline : notFound ? copy.notFound : copy.error}</h2>
-      {!offline ? <p>{error.message}</p> : null}
-      {onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}
-    </section>
+    <SafeSection variant="transparent" padding={0} data-testid={offline ? "task-map-offline" : notFound ? "task-map-not-found" : "task-map-error"}>
+      <Banner
+        status={offline ? "warning" : "error"}
+        role={offline ? "status" : "alert"}
+        title={offline ? copy.offline : notFound ? copy.notFound : copy.error}
+        description={!offline ? error.message : undefined}
+        endContent={onRetry ? <Button label={copy.retry} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
+      />
+    </SafeSection>
   )
 }
 
@@ -425,24 +439,29 @@ function TaskMapInspector({
   readonly onSelectTask: (taskId: string) => void
 }) {
   if (!node) {
-    return <aside className={styles.inspector} data-testid="task-map-inspector"><h2>{copy.selected}</h2><p>{copy.selectDescription}</p></aside>
+    return (
+      <SafeVStack as="aside" className="min-w-0 gap-3 border border-border bg-surface p-4" data-testid="task-map-inspector">
+        <Heading level={2}>{copy.selected}</Heading>
+        <Text type="supporting">{copy.selectDescription}</Text>
+      </SafeVStack>
+    )
   }
   const task = node.task
   return (
-    <aside className={styles.inspector} data-testid="task-map-inspector" aria-label={copy.selected}>
-      <h2>{copy.selected}</h2>
-      {hiddenSelection ? <p className={styles.hiddenSelection} role="status">{copy.hiddenSelection}</p> : null}
-      <p className={styles.nodeRef} translate="no">{task.ref}</p>
-      <h3>{task.title}</h3>
-      <dl className={styles.facts}>
-        <div><dt>{copy.status}</dt><dd translate="no">{task.status}</dd></div>
-        <div><dt>{copy.priority}</dt><dd translate="no">P{task.priority}</dd></div>
-        <div><dt>{copy.plan}</dt><dd translate="no">{task.execution_plan_state}</dd></div>
-        <div><dt>{copy.requiredSteps}</dt><dd>{task.completed_required_step_count} / {task.required_step_count}</dd></div>
-        <div><dt>{copy.nodeRole}</dt><dd translate="no">{node.role}</dd></div>
-      </dl>
-      <button type="button" className={styles.openButton} data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)}>{copy.openInspector}</button>
-    </aside>
+    <SafeVStack as="aside" className="min-w-0 gap-3 border border-border bg-surface p-4" data-testid="task-map-inspector" aria-label={copy.selected}>
+      <Heading level={2}>{copy.selected}</Heading>
+      {hiddenSelection ? <Banner status="warning" role="status" title={copy.hiddenSelection} /> : null}
+      <Text type="code"><span translate="no">{task.ref}</span></Text>
+      <Heading level={3}>{task.title}</Heading>
+      <SafeMetadataList>
+        <SafeMetadataListItem label={copy.status}><Text type="code"><span translate="no">{task.status}</span></Text></SafeMetadataListItem>
+        <SafeMetadataListItem label={copy.priority}><Text type="code"><span translate="no">P{task.priority}</span></Text></SafeMetadataListItem>
+        <SafeMetadataListItem label={copy.plan}><Text type="code"><span translate="no">{task.execution_plan_state}</span></Text></SafeMetadataListItem>
+        <SafeMetadataListItem label={copy.requiredSteps}><Text type="code" hasTabularNumbers>{task.completed_required_step_count} / {task.required_step_count}</Text></SafeMetadataListItem>
+        <SafeMetadataListItem label={copy.nodeRole}><Text type="code"><span translate="no">{node.role}</span></Text></SafeMetadataListItem>
+      </SafeMetadataList>
+      <Button label={copy.openInspector} variant="secondary" size="sm" data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)} />
+    </SafeVStack>
   )
 }
 
@@ -477,72 +496,128 @@ export function TaskMapPresentation({
   const mapMeta = sourceGraph?.meta
   const offline = state.error instanceof ExplorerReadError && state.error.kind === "offline"
 
+  const header = (
+    <SafeVStack className="min-w-0 gap-1 border-b border-border pb-3">
+      <Heading level={2} id="task-map-heading">{copy.title}</Heading>
+      <Text type="code" color="secondary"><span translate="no">{board}</span>{mapMeta ? <> · {mapMeta.node_count} {copy.nodes} · {mapMeta.edge_count} {copy.edges}</> : null}</Text>
+    </SafeVStack>
+  )
+  const toolbar = (
+    <TaskMapToolbar
+      copy={copy}
+      filter={filter}
+      hideIsolated={hideIsolated}
+      showDoneContext={showDoneContext}
+      zoom={zoom}
+      loading={state.loading}
+      onFilterChange={updateFilter}
+      onHideIsolatedChange={updateHideIsolated}
+      onShowDoneContextChange={updateDoneContext}
+      onZoomChange={updateZoom}
+      onRetry={onRetry}
+    />
+  )
+
   return (
-    <section className={styles.map} data-testid="task-map" aria-labelledby="task-map-heading">
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow} translate="no">{copy.kicker}</p>
-          <h2 id="task-map-heading">{copy.title}</h2>
-          <p className={styles.muted}><span translate="no">{board}</span>{mapMeta ? <> · {mapMeta.node_count} {copy.nodes} · {mapMeta.edge_count} {copy.edges}</> : null}</p>
-        </div>
-      </header>
+    <PageFrame
+      frame="workspace"
+      data-testid="task-map"
+      aria-labelledby="task-map-heading"
+      header={header}
+      toolbar={toolbar}
+      toolbarLabel={copy.toolbar}
+      bodyLabel={copy.graphRegion}
+    >
+      <SafeVStack className="min-w-0 gap-4">
+        {state.error && sourceGraph ? (
+          <Banner
+            status={offline ? "warning" : "error"}
+            role={offline ? "status" : "alert"}
+            title={offline ? copy.offline : copy.refreshError}
+            description={!offline ? state.error.message : undefined}
+            data-testid={offline ? "task-map-offline" : "task-map-refresh-error"}
+          />
+        ) : null}
+        {mapMeta?.truncated ? (
+          <Banner status="warning" role="alert" title={copy.truncated} description={`${copy.limit} ${mapMeta.limit_nodes}${locale === "zh" ? "。" : "."}`} data-testid="task-map-truncated" />
+        ) : null}
 
-      <TaskMapToolbar
-        copy={copy}
-        filter={filter}
-        hideIsolated={hideIsolated}
-        showDoneContext={showDoneContext}
-        zoom={zoom}
-        loading={state.loading}
-        onFilterChange={updateFilter}
-        onHideIsolatedChange={updateHideIsolated}
-        onShowDoneContextChange={updateDoneContext}
-        onZoomChange={updateZoom}
-        onRetry={onRetry}
-      />
+        {state.error && !sourceGraph ? <TaskMapError copy={copy} error={state.error} onRetry={onRetry} /> : null}
+        {!state.error && state.loading && !sourceGraph ? (
+          <SafeSection variant="transparent" padding={0} data-testid="task-map-loading">
+            <Banner status="info" role="status" title={copy.loading} description={copy.loadingDescription} />
+          </SafeSection>
+        ) : null}
+        {!state.error && !state.loading && sourceGraph && (!visibleGraph || visibleGraph.nodes.length === 0) ? (
+          <SafeSection variant="transparent" padding={0} data-testid="task-map-empty">
+            <Banner status="info" role="status" title={copy.empty} description={sourceGraph.nodes.length === 0 ? copy.emptyDescription : copy.filteredEmpty} />
+          </SafeSection>
+        ) : null}
 
-      {state.error && sourceGraph ? <div className={styles.inlineError} role={offline ? "status" : "alert"} data-testid={offline ? "task-map-offline" : "task-map-refresh-error"}><strong>{offline ? copy.offline : copy.refreshError}</strong>{!offline ? <span>{state.error.message}</span> : null}</div> : null}
-      {mapMeta?.truncated ? <div className={styles.truncated} role="alert" data-testid="task-map-truncated"><strong>{copy.truncated}</strong><span>{copy.limit} {mapMeta.limit_nodes}{locale === "zh" ? "。" : "."}</span></div> : null}
-
-      {state.error && !sourceGraph ? <TaskMapError copy={copy} error={state.error} onRetry={onRetry} /> : null}
-      {!state.error && state.loading && !sourceGraph ? <section className={styles.state} data-testid="task-map-loading" role="status"><h2>{copy.loading}</h2><p>{copy.loadingDescription}</p></section> : null}
-      {!state.error && !state.loading && sourceGraph && (!visibleGraph || visibleGraph.nodes.length === 0) ? <section className={styles.state} data-testid="task-map-empty" role="status"><h2>{copy.empty}</h2><p>{sourceGraph.nodes.length === 0 ? copy.emptyDescription : copy.filteredEmpty}</p></section> : null}
-
-      {visibleGraph && visibleGraph.nodes.length > 0 ? (
-        <div className={styles.layout}>
-          <section className={styles.graphPanel} aria-labelledby="task-map-graph-heading">
-            <h3 id="task-map-graph-heading" className={styles.visuallyHidden}>{copy.graphHeading}</h3>
-            <div className={styles.graphScroll} data-testid="task-map-graph" role="region" aria-label={copy.graphRegion} tabIndex={0}>
-              <div className={`${styles.graphCanvas} ${zoomClassName(zoom)}`} data-zoom={clampMapZoom(zoom)}>
-                <div className={styles.nodesGrid}>
-                  {visibleGraph.nodes.map((node) => {
-                    const selected = selectedNode?.task.id === node.task.id
-                    return (
-                      <article className={selected ? `${styles.node} ${styles.selectedNode}` : styles.node} key={node.task.id} data-testid="task-map-node" data-task-id={node.task.id}>
-                        <button type="button" className={styles.nodeButton} data-task-opener={taskOpenerKey(node.task.id)} aria-pressed={selected} aria-label={`${copy.inspectTask} ${node.task.ref} ${node.task.title}`} onClick={() => inspect(node.task.id)}>
-                          <span className={styles.nodeTopline}><span translate="no">{node.task.ref}</span><span translate={node.context_only ? undefined : "no"}>{node.context_only ? copy.context : node.role}</span></span>
-                          <strong>{node.task.title}</strong>
-                          <span className={styles.nodeFacts} translate="no">{node.task.status} · P{node.task.priority}</span>
-                        </button>
-                      </article>
-                    )
-                  })}
-                </div>
-                <section className={styles.edgeList} aria-labelledby="task-map-edges-heading">
-                  <h3 id="task-map-edges-heading">{copy.edgesHeading}</h3>
-                  {visibleGraph.edges.length === 0 ? <p>{copy.noEdges}</p> : (
-                    <ul>
-                      {visibleGraph.edges.map((edge) => <li key={edge.id} data-testid="task-map-edge" data-edge-id={edge.id}><span className={styles.edgeId} translate="no">{edge.id}</span><span translate="no">{edge.source_task_id}</span><span aria-hidden="true">→</span><span translate="no">{edge.target_task_id}</span><span><span translate="no">{edge.kind}</span>{edge.required ? ` · ${copy.required}` : ""}</span></li>)}
-                    </ul>
-                  )}
-                </section>
-              </div>
-            </div>
-          </section>
-          <TaskMapInspector copy={copy} node={selectedNode} hiddenSelection={hiddenSelection} onSelectTask={onSelectTask} />
-        </div>
-      ) : null}
-    </section>
+        {visibleGraph && visibleGraph.nodes.length > 0 ? (
+          <SafeLayout
+            className="min-w-0"
+            content={(
+              <SafeVStack className="min-w-0 gap-2" aria-labelledby="task-map-graph-heading">
+                <Heading level={3} id="task-map-graph-heading" className="sr-only">{copy.graphHeading}</Heading>
+                <SafeVStack as="div" className="min-w-0 max-h-96 overflow-auto overscroll-contain border border-border bg-body" data-testid="task-map-graph" role="region" aria-label={copy.graphRegion} tabIndex={0}>
+                  <SafeVStack as="div" className={styles.graphCanvas}>
+                    <SafeVStack as="div" className={zoomClassName(zoom)} data-zoom={clampMapZoom(zoom)}>
+                      <SafeVStack as="div" className="min-w-0 gap-4 p-4">
+                        <SafeVStack as="div" className="min-w-0 gap-2">
+                          {visibleGraph.nodes.map((node) => {
+                            const selected = selectedNode?.task.id === node.task.id
+                            return (
+                              <article className={selected ? "min-w-0 border border-accent bg-surface ring-2 ring-accent/25" : "min-w-0 border border-border bg-surface"} key={node.task.id} data-testid="task-map-node" data-task-id={node.task.id}>
+                                <Button
+                                  label={`${copy.inspectTask} ${node.task.ref} ${node.task.title}`}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-auto w-full justify-start text-start"
+                                  data-task-opener={taskOpenerKey(node.task.id)}
+                                  aria-pressed={selected}
+                                  onClick={() => inspect(node.task.id)}
+                                >
+                                  <SafeVStack as="div" className="min-w-0 gap-1 text-start">
+                                    <SafeHStack as="div" justify="between" className="min-w-0 gap-2">
+                                      <Text as="span" type="code"><span translate="no">{node.task.ref}</span></Text>
+                                      <Text as="span" type="supporting">{node.context_only ? copy.context : <span translate="no">{node.role}</span>}</Text>
+                                    </SafeHStack>
+                                    <Text as="span" type="label">{node.task.title}</Text>
+                                    <Text as="span" type="code" color="secondary"><span translate="no">{node.task.status} · P{node.task.priority}</span></Text>
+                                  </SafeVStack>
+                                </Button>
+                              </article>
+                            )
+                          })}
+                        </SafeVStack>
+                        <SafeSection variant="transparent" padding={0} aria-labelledby="task-map-edges-heading">
+                          <Heading level={3} id="task-map-edges-heading">{copy.edgesHeading}</Heading>
+                          {visibleGraph.edges.length === 0 ? <Text as="p" type="supporting">{copy.noEdges}</Text> : (
+                            <List density="compact" hasDividers>
+                              {visibleGraph.edges.map((edge) => (
+                                <ListItem
+                                  key={edge.id}
+                                  data-testid="task-map-edge"
+                                  data-edge-id={edge.id}
+                                  label={<Text type="code"><span translate="no">{edge.id}</span></Text>}
+                                  endContent={<Text type="supporting"><span translate="no">{edge.source_task_id} → {edge.target_task_id} · {edge.kind}</span>{edge.required ? ` · ${copy.required}` : ""}</Text>}
+                                />
+                              ))}
+                            </List>
+                          )}
+                        </SafeSection>
+                      </SafeVStack>
+                    </SafeVStack>
+                  </SafeVStack>
+                </SafeVStack>
+              </SafeVStack>
+            )}
+            end={<TaskMapInspector copy={copy} node={selectedNode} hiddenSelection={hiddenSelection} onSelectTask={onSelectTask} />}
+          />
+        ) : null}
+      </SafeVStack>
+    </PageFrame>
   )
 }
 

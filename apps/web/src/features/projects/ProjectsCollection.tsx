@@ -1,11 +1,19 @@
-import { useMemo, useState, type ChangeEvent, type MouseEvent } from "react"
+import { useMemo, useState, type MouseEvent } from "react"
+import { Banner } from "@astryxdesign/core/Banner"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { List, ListItem } from "@astryxdesign/core/List"
+import { StackItem } from "@astryxdesign/core/Stack"
+import { Text } from "@astryxdesign/core/Text"
 
 import type { BoardListItem } from "../../lib/api/board-list-read-model"
 import { routePath } from "../../lib/router"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
+import { TextInput } from "../../ui/astryx/fields/TextInput"
+import { PageFrame } from "../../ui/astryx/page-frame/PageFrame"
+import { StaticHStack, StaticVStack } from "../../ui/astryx/primitives/safe-core"
 import { NavigationIcon } from "../../ui/navigation"
-import styles from "./projects.module.css"
 
 export type ProjectsCollectionStatus = "loading" | "ready" | "offline" | "error" | "stale" | "recovering"
 
@@ -59,57 +67,106 @@ export function ProjectsCollection({
   const showBoundary = status !== "ready" || activeProjects.length === 0
   const empty = status === "ready" && activeProjects.length === 0
 
-  const onSearch = (event: ChangeEvent<HTMLInputElement>) => setQuery(event.currentTarget.value)
+  const boundaryStatus = status === "error" || status === "offline" ? "error" : status === "stale" || status === "recovering" ? "warning" : "info"
+  const boundaryRole = status === "error" || status === "offline" ? "alert" : "status"
+  const boundaryTitle = empty
+    ? query.trim().length > 0
+      ? `${t("projectSearchEmpty")}。`
+      : t("projectsEmpty")
+    : copy.detail
 
   return (
-    <section className={styles.projectsSurface} aria-labelledby="projects-collection-title" data-testid="projects-collection" data-status={status} data-has-snapshot={hasSnapshot ? "true" : "false"}>
-      <div className={styles.projectsHeading}>
-        <div>
-          <h1 id="projects-collection-title">{copy.label}</h1>
-          <p>{copy.detail}</p>
-        </div>
-        <label className={styles.projectsSearch}>
-          <NavigationIcon name="search" size={16} />
-          <span className={styles.visuallyHidden}>{t("projectSearch")}</span>
-          <input type="search" value={query} onChange={onSearch} placeholder={t("projectSearch")} aria-label={t("projectSearch")} disabled={status === "loading" && !hasSnapshot} />
-        </label>
-      </div>
+    <StaticVStack
+      as="section"
+      aria-labelledby="projects-collection-title"
+      data-testid="projects-collection"
+      data-status={status}
+      data-has-snapshot={hasSnapshot ? "true" : "false"}
+      className="min-w-0"
+    >
+      <PageFrame
+        frame="content"
+        aria-labelledby="projects-collection-title"
+        bodyLabel={t("projects")}
+        header={(
+          <StaticVStack gap={1} className="mx-auto w-full max-w-6xl border-b border-border pb-3">
+            <StaticHStack gap={4} justify="between" align="end" wrap="wrap">
+              <StackItem size="fill">
+                <StaticVStack gap={1}>
+                  <Heading level={1} id="projects-collection-title">{copy.label}</Heading>
+                  <Text as="p" type="body" color="secondary">{copy.detail}</Text>
+                </StaticVStack>
+              </StackItem>
+              <StackItem size="fill" className="min-w-0">
+                <TextInput
+                  id="projects-search"
+                  data-testid="projects-search"
+                  label={t("projectSearch")}
+                  isLabelHidden
+                  value={query}
+                  onChange={(value) => setQuery(value)}
+                  type="search"
+                  placeholder={t("projectSearchPlaceholder")}
+                  hasClear
+                  clearLabel={t("clearSearch")}
+                  clearText={t("clearSearch")}
+                  isDisabled={status === "loading" && !hasSnapshot}
+                />
+              </StackItem>
+            </StaticHStack>
+          </StaticVStack>
+        )}
+      >
+        <StaticVStack gap={5} className="mx-auto w-full max-w-6xl">
+          {isRefreshing ? <Text as="p" type="supporting" role="status">{t("projectsRefreshing")}</Text> : null}
+          {showBoundary ? (
+            <Banner
+              status={boundaryStatus}
+              role={boundaryRole}
+              aria-live="polite"
+              title={boundaryTitle}
+              container="section"
+              endContent={onRetry !== undefined && status !== "loading" && !isRefreshing ? <Button label={t("retry")} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
+              data-testid={"projects-collection-" + (empty ? "empty" : status)}
+            />
+          ) : null}
 
-      {isRefreshing ? <p className={styles.projectsRefreshing} role="status">{t("projectsRefreshing")}</p> : null}
-      {showBoundary ? (
-        <div className={styles.projectsBoundary + (empty ? " " + styles.projectsBoundaryEmpty : "")} role={status === "error" || status === "offline" ? "alert" : "status"} aria-live="polite" data-testid={"projects-collection-" + (empty ? "empty" : status)}>
-          <span>{empty ? (query.trim().length > 0 ? `${t("projectSearchEmpty")}。` : t("projectsEmpty")) : copy.detail}</span>
-          {onRetry !== undefined && status !== "loading" && !isRefreshing ? <button type="button" onClick={onRetry}>{t("retry")}</button> : null}
-        </div>
-      ) : null}
-
-      {activeProjects.length > 0 ? (
-        <ul className={styles.projectRows} data-testid="projects-collection-list">
-          {activeProjects.map((project) => (
-            <li key={project.id}>
-              <a
-                href={routePath({ kind: "project-overview", boardSlug: project.slug }, { basePath })}
-                className={styles.projectRow}
-                onClick={(event: MouseEvent<HTMLAnchorElement>) => {
-                  if (onOpenProject === undefined || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-                  event.preventDefault()
-                  onOpenProject(project)
-                }}
-                data-testid={"projects-collection-project-" + project.slug}
-              >
-                <NavigationIcon name="folder" size={22} />
-                <span className={styles.projectRowCopy}>
-                  <span className={styles.projectRowName}>{project.name}</span>
-                  <span className={styles.projectRowSlug}>{project.slug}</span>
-                </span>
-                {project.description !== null ? <span className={styles.projectRowDescription}>{project.description}</span> : null}
-                <NavigationIcon name="chevron-right" size={17} />
-              </a>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
+          {activeProjects.length > 0 ? (
+            <List density="spacious" hasDividers data-testid="projects-collection-list">
+              {activeProjects.map((project) => (
+                <ListItem
+                  key={project.id}
+                  href={routePath({ kind: "project-overview", boardSlug: project.slug }, { basePath })}
+                  label={project.name}
+                  description={
+                    <>
+                      <Text as="span" type="code">{project.slug}</Text>
+                      {project.description !== null ? <Text as="span" type="supporting">{` · ${project.description}`}</Text> : null}
+                    </>
+                  }
+                  startContent={<NavigationIcon name="folder" size={22} />}
+                  endContent={<NavigationIcon name="chevron-right" size={17} />}
+                  onClick={onOpenProject === undefined ? undefined : (event: MouseEvent<Element>) => {
+                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                    event.preventDefault()
+                    onOpenProject(project)
+                  }}
+                  onClickCapture={onOpenProject === undefined ? undefined : (event: MouseEvent<Element>) => {
+                    const target = event.target
+                    if (!(target instanceof Element) || target.closest("a") === null) return
+                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onOpenProject(project)
+                  }}
+                  data-testid={"projects-collection-project-" + project.slug}
+                />
+              ))}
+            </List>
+          ) : null}
+        </StaticVStack>
+      </PageFrame>
+    </StaticVStack>
   )
 }
 

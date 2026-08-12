@@ -51,16 +51,34 @@ describe("production Projects surfaces", () => {
 
     expect(markup).toContain("Active project")
     expect(markup).not.toContain("Archived project")
+    expect(markup).toContain('data-frame="content"')
+    expect(markup).toContain('data-testid="projects-search"')
     expect(markup).toContain('data-testid="projects-collection-list"')
     expect(markup).toContain('href="/app/boards/active/overview"')
+    expect(markup).not.toMatch(/<span[^>]*><div/)
+    expect(markup).not.toMatch(/\sstyle=/)
   })
 
   test("keeps a cached snapshot visible while offline", () => {
     const markup = renderWithLocale(<ProjectsCollection projects={[active]} status="offline" onRetry={vi.fn()} onOpenProject={vi.fn()} />)
 
     expect(markup).toContain('data-status="offline"')
+    expect(markup).toContain('data-has-snapshot="true"')
     expect(markup).toContain("Active project")
     expect(markup).toContain("Reload")
+  })
+
+  test("disables search without a loading snapshot and keeps retry semantics explicit", () => {
+    const loading = renderWithLocale(<ProjectsCollection projects={[]} status="loading" onRetry={vi.fn()} />)
+    const refreshing = renderWithLocale(<ProjectsCollection projects={[active]} status="ready" isRefreshing onRetry={vi.fn()} />)
+
+    expect(loading).toContain('data-status="loading"')
+    expect(loading).toContain('data-has-snapshot="false"')
+    expect(loading).toContain('id="projects-search"')
+    expect(loading).toContain("disabled")
+    expect(loading).toContain('data-testid="projects-collection-loading"')
+    expect(refreshing).toContain("Refreshing projects")
+    expect(refreshing).not.toContain('data-testid="projects-collection-ready"')
   })
 
   test("renders only board identity, description and archive state on overview", () => {
@@ -76,6 +94,9 @@ describe("production Projects surfaces", () => {
     expect(markup).not.toContain('href="/app/boards/archived/board"')
     expect(markup).not.toContain('data-testid="project-overview-open-tasks"')
     expect(markup).not.toContain("此项目没有提供")
+    expect(markup).toContain('data-testid="project-overview-identity"')
+    expect(markup).toContain('data-frame="content"')
+    expect(markup).not.toMatch(/\sstyle=/)
   })
 
   test("keeps an identity snapshot visible while the list is stale", () => {

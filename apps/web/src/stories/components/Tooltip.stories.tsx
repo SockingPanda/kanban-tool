@@ -60,7 +60,7 @@ const meta = {
     onOpenChange: { action: "open changed" },
   },
   args: {
-    content: "Shows a short explanation",
+    content: "显示简短说明",
     placement: "above",
     alignment: "center",
     delay: 120,
@@ -248,7 +248,7 @@ export const Disabled: Story = {
 
 export const IconOnlyContract: Story = {
   render: (args) => (
-    <Tooltip {...args}>
+    <Tooltip {...args} content="搜索任务">
       <IconButton label="搜索任务" icon={<Icon icon="search" />} variant="ghost" />
     </Tooltip>
   ),

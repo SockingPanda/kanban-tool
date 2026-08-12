@@ -72,10 +72,10 @@ const meta = {
     onKeyUp: { action: "key up" },
   },
   args: {
-    label: "Project name",
-    value: "kanban-tool",
+    label: "项目名称",
+    value: "看板工具",
     type: "text",
-    placeholder: "Enter a project name",
+    placeholder: "输入项目名称",
     hasClear: false,
     isDisabled: false,
     isLoading: false,
@@ -194,11 +194,6 @@ function Matrix({ locale }: { readonly locale: StorybookLocale }) {
 
 export const Default: Story = {
   render: (args) => <ControlledTextInput {...args} />,
-}
-
-export const Sizes: Story = {
-  render: (_, context) => <Matrix locale={localeFor(context.globals.locale)} />,
-  parameters: { controls: { exclude: ["onChange", "onEnter", "onKeyDown", "onKeyUp"] } },
 }
 
 export const States: Story = {

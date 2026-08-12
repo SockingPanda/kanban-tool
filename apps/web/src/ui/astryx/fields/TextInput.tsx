@@ -56,7 +56,7 @@ type NativeTextInputProps = Omit<
   | "width"
 >
 
-export interface TextInputProps
+interface TextInputBaseProps
   extends NativeTextInputProps,
     CommonFieldProps<HTMLInputElement> {
   readonly ref?: Ref<HTMLInputElement>
@@ -72,17 +72,29 @@ export interface TextInputProps
   readonly isLabelHidden?: boolean
   readonly isOptional?: boolean
   readonly isRequired?: boolean
+  readonly requiredText?: string
+  readonly optionalText?: string
   readonly isDisabled?: boolean
   readonly disabledMessage?: string
   readonly isLoading?: boolean
   readonly placeholder?: string
-  readonly hasClear?: boolean
-  readonly clearLabel?: string
   readonly hasAutoFocus?: boolean
   readonly labelTooltip?: string
   readonly startIcon?: ReactNode
   readonly onEnter?: () => void
 }
+
+export type TextInputProps =
+  | (TextInputBaseProps & {
+      readonly hasClear?: false
+      readonly clearLabel?: never
+      readonly clearText?: never
+    })
+  | (TextInputBaseProps & {
+      readonly hasClear: true
+      readonly clearLabel: string
+      readonly clearText: string
+    })
 
 function assignRef<T>(ref: Ref<T> | undefined, value: T | null): void {
   if (typeof ref === "function") {
@@ -108,12 +120,15 @@ export function TextInput({
   isLabelHidden = false,
   isOptional = false,
   isRequired = false,
+  requiredText,
+  optionalText,
   isDisabled = false,
   disabledMessage,
   isLoading = false,
   placeholder,
   hasClear = false,
   clearLabel,
+  clearText,
   hasAutoFocus = false,
   labelTooltip,
   startIcon,
@@ -140,7 +155,6 @@ export function TextInput({
     statusId,
     disabledMessageId,
   )
-  const hasFocusableDisabledState = isDisabled && Boolean(disabledMessage)
   const effectiveValue = value ?? ""
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -159,13 +173,13 @@ export function TextInput({
       }}
       aria-busy={isLoading || callerBusy || undefined}
       aria-describedby={describedBy}
-      aria-disabled={hasFocusableDisabledState ? true : callerDisabled}
+      aria-disabled={isDisabled ? true : callerDisabled}
       aria-invalid={status?.type === "error" ? true : callerInvalid}
       aria-required={isRequired && !isOptional ? true : callerRequired}
       autoComplete={autoComplete}
       autoFocus={hasAutoFocus}
       className={mergeClasses(CONTROL_CLASSES, statusControlClasses(status), className)}
-      disabled={isDisabled && !hasFocusableDisabledState}
+      disabled={isDisabled}
       id={controlId}
       maxLength={maxLength}
       name={htmlName}
@@ -177,7 +191,6 @@ export function TextInput({
       }}
       onKeyDown={onEnter || onKeyDown ? handleKeyDown : undefined}
       placeholder={placeholder}
-      readOnly={hasFocusableDisabledState || undefined}
       required={isRequired && !isOptional}
       type={type}
       translate={translate}
@@ -198,8 +211,10 @@ export function TextInput({
       labelHidden={isLabelHidden}
       labelIcon={startIcon}
       labelTooltip={labelTooltip}
+      optionalText={optionalText}
       optional={isOptional}
       required={isRequired}
+      requiredText={requiredText}
       status={status}
       statusVariant={statusVariant}
     >
@@ -207,7 +222,7 @@ export function TextInput({
         <>
           {input}
           <button
-            aria-label={clearLabel ?? `Clear ${label}`}
+            aria-label={clearLabel}
             className="justify-self-start rounded-md border border-border-strong px-2 py-1 text-sm text-primary focus-visible:outline focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
             onClick={(event) => {
               event.preventDefault()
@@ -218,7 +233,7 @@ export function TextInput({
             }}
             type="button"
           >
-            Clear
+            {clearText}
           </button>
         </>
       ) : (

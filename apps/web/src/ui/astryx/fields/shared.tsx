@@ -8,6 +8,7 @@ import type {
 } from "react"
 
 export type FieldStatusType = "warning" | "error" | "success"
+/** `tooltip` is a compatibility value; this safe shell only hides the message. */
 export type FieldStatusVariant = "attached" | "detached" | "tooltip"
 
 export interface FieldStatus {
@@ -106,6 +107,8 @@ export interface FieldShellProps {
   readonly descriptionId?: string
   readonly required?: boolean
   readonly optional?: boolean
+  readonly requiredText?: string
+  readonly optionalText?: string
   readonly disabled?: boolean
   readonly labelTooltip?: string
   readonly labelIcon?: ReactNode
@@ -126,6 +129,8 @@ export function FieldShell({
   descriptionId,
   required = false,
   optional = false,
+  requiredText,
+  optionalText,
   disabled = false,
   labelTooltip,
   labelIcon,
@@ -151,11 +156,12 @@ export function FieldShell({
       >
         {labelIcon}
         {label}
-        {required && !optional ? " · Required" : optional ? " · Optional" : null}
+        {required && !optional && requiredText ? ` · ${requiredText}` : null}
+        {optional && optionalText ? ` · ${optionalText}` : null}
       </label>
       {description ? (
         <p
-          className={mergeClasses(DESCRIPTION_CLASSES, labelHidden && VISUALLY_HIDDEN)}
+          className={DESCRIPTION_CLASSES}
           id={descriptionId}
         >
           {description}

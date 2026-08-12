@@ -32,6 +32,8 @@ describe("CSP-safe field contracts", () => {
         translate="no"
         hasClear
         clearLabel="Reset project name"
+        clearText="Reset"
+        requiredText="Required"
         aria-describedby="caller-help project-name-description"
         data-testid="project-name"
         onChange={() => undefined}
@@ -43,6 +45,7 @@ describe("CSP-safe field contracts", () => {
         value="kanban"
         hasClear
         clearLabel="Reset project name"
+        clearText="Reset"
         onChange={() => undefined}
       />,
     )
@@ -72,6 +75,7 @@ describe("CSP-safe field contracts", () => {
         description="Keep this concise."
         status={{type: "warning", message: "Almost complete."}}
         hasSpellCheck={false}
+        optionalText="Optional"
         autoComplete="off"
         translate="no"
         onChange={() => undefined}
@@ -96,6 +100,7 @@ describe("CSP-safe field contracts", () => {
         htmlName="terms"
         description="Required to continue."
         isRequired
+        requiredText="Required"
         autoComplete="off"
         translate="no"
         onChange={() => undefined}
@@ -111,6 +116,14 @@ describe("CSP-safe field contracts", () => {
         isMultiple
         maxSize={1024}
         maxFiles={2}
+        chooseFileText="Choose one"
+        chooseFilesText="Choose many"
+        clearLabel="Remove attachment"
+        clearText="Remove"
+        invalidTypeMessage={(file) => `${file.name} is not allowed`}
+        sizeLimitMessage={(file, maxSize, formattedSize) => `${file.name} exceeds ${formattedSize}/${maxSize}`}
+        maxFilesMessage={(maxFiles) => `At most ${maxFiles}`}
+        formatFileSize={(bytes) => `${bytes} bytes`}
         autoComplete="off"
         translate="no"
         onChange={() => undefined}
@@ -128,6 +141,73 @@ describe("CSP-safe field contracts", () => {
     expect(fileMarkup).toContain('multiple=""')
     expect(fileMarkup).toContain('autoComplete="off"')
     expect(fileMarkup).toContain('translate="no"')
+    expect(fileMarkup).toContain("Choose many")
+  })
+
+  test("keeps caller-owned copy visible and does not invent English defaults", () => {
+    const localized = renderToStaticMarkup(
+      <TextInput
+        label="名称"
+        value="value"
+        isRequired
+        requiredText="必填"
+        hasClear
+        clearLabel="重置"
+        clearText="重置"
+        onChange={() => undefined}
+      />,
+    )
+    const defaults = renderToStaticMarkup(
+      <FileInput
+        label="文件"
+        value={null}
+        chooseFileText="选择文件"
+        chooseFilesText="选择文件"
+        clearLabel="移除文件"
+        clearText="移除"
+        invalidTypeMessage="文件类型不支持"
+        sizeLimitMessage="文件过大"
+        maxFilesMessage="文件过多"
+        formatFileSize={(bytes) => `${bytes} 字节`}
+        onChange={() => undefined}
+      />,
+    )
+
+    expect(localized).toContain("必填")
+    expect(localized).toContain("重置")
+    expect(defaults).not.toMatch(/Required|Optional|Clear|Choose|Maximum|exceeds|accepted file/i)
+  })
+
+  test("keeps a hidden label's description visible and uses native disabled controls", () => {
+    const textInputMarkup = renderToStaticMarkup(
+      <TextInput
+        id="locked"
+        label="Locked"
+        value="value"
+        isLabelHidden
+        description="Still visible help"
+        isDisabled
+        disabledMessage="Locked by policy"
+        onChange={() => undefined}
+      />,
+    )
+    const checkboxMarkup = renderToStaticMarkup(
+      <CheckboxInput
+        id="locked-check"
+        label="Locked check"
+        value
+        isDisabled
+        disabledMessage="Locked by policy"
+        onChange={() => undefined}
+      />,
+    )
+
+    expect(textInputMarkup).toContain('id="locked-description"')
+    expect(textInputMarkup).toContain('disabled=""')
+    expect(textInputMarkup).not.toContain('readOnly=""')
+    expect(textInputMarkup).toContain("Still visible help")
+    expect(textInputMarkup).not.toContain('id="locked-description" class="sr-only')
+    expect(checkboxMarkup).toContain('disabled=""')
   })
 
   test("static markup never emits runtime style attributes or layout div/span", () => {
@@ -139,7 +219,21 @@ describe("CSP-safe field contracts", () => {
       renderToStaticMarkup(<TextInput label="Name" value="" onChange={() => undefined} />),
       renderToStaticMarkup(<TextArea label="Notes" value="" onChange={() => undefined} />),
       renderToStaticMarkup(<CheckboxInput label="Terms" value={false} onChange={() => undefined} />),
-      renderToStaticMarkup(<FileInput label="File" value={null} onChange={() => undefined} />),
+      renderToStaticMarkup(
+        <FileInput
+          label="File"
+          value={null}
+          chooseFileText="Choose file"
+          chooseFilesText="Choose files"
+          clearLabel="Remove file"
+          clearText="Remove"
+          invalidTypeMessage="Invalid file"
+          sizeLimitMessage="File too large"
+          maxFilesMessage="Too many files"
+          formatFileSize={(bytes) => `${bytes} bytes`}
+          onChange={() => undefined}
+        />,
+      ),
     ].join("\n")
 
     expect(source).not.toMatch(/<div|<span|<style>/)
@@ -164,8 +258,25 @@ const widthIsRejected = <TextInput label="Name" value="" onChange={() => undefin
 const textAreaStyleIsRejected = <TextArea label="Notes" value="" onChange={() => undefined} style={{}} />
 // @ts-expect-error xstyle must not be accepted by a safe field.
 const checkboxXstyleIsRejected = <CheckboxInput label="Terms" value={false} onChange={() => undefined} xstyle={{}} />
-// @ts-expect-error width must not be accepted by a safe field.
-const fileWidthIsRejected = <FileInput label="File" value={null} onChange={() => undefined} width="100%" />
+const fileWidthIsRejected = (
+  <FileInput
+    label="File"
+    value={null}
+    chooseFileText="Choose file"
+    chooseFilesText="Choose files"
+    clearLabel="Remove file"
+    clearText="Remove"
+    invalidTypeMessage="Invalid file"
+    sizeLimitMessage="File too large"
+    maxFilesMessage="Too many files"
+    formatFileSize={(bytes) => `${bytes} bytes`}
+    onChange={() => undefined}
+    // @ts-expect-error width must not be accepted by a safe field.
+    width="100%"
+  />
+)
+// @ts-expect-error clearLabel and clearText are required when hasClear is true.
+const clearCopyIsRequired = <TextInput label="Name" value="x" hasClear onChange={() => undefined} />
 
 void styleIsRejected
 void xstyleIsRejected
@@ -173,3 +284,4 @@ void widthIsRejected
 void textAreaStyleIsRejected
 void checkboxXstyleIsRejected
 void fileWidthIsRejected
+void clearCopyIsRequired

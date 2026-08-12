@@ -69,6 +69,8 @@ export interface TextAreaProps
   readonly isLabelHidden?: boolean
   readonly isOptional?: boolean
   readonly isRequired?: boolean
+  readonly requiredText?: string
+  readonly optionalText?: string
   readonly isDisabled?: boolean
   readonly disabledMessage?: string
   readonly isLoading?: boolean
@@ -104,6 +106,8 @@ export function TextArea({
   isLabelHidden = false,
   isOptional = false,
   isRequired = false,
+  requiredText,
+  optionalText,
   isDisabled = false,
   disabledMessage,
   isLoading = false,
@@ -135,7 +139,6 @@ export function TextArea({
     counterId,
     disabledMessageId,
   )
-  const hasFocusableDisabledState = isDisabled && Boolean(disabledMessage)
   const effectiveValue = value ?? ""
   const overLimit = maxLength != null && effectiveValue.length > maxLength
 
@@ -152,8 +155,10 @@ export function TextArea({
       labelHidden={isLabelHidden}
       labelIcon={startIcon}
       labelTooltip={labelTooltip}
+      optionalText={optionalText}
       optional={isOptional}
       required={isRequired}
+      requiredText={requiredText}
       status={status}
       statusVariant={statusVariant}
     >
@@ -164,7 +169,7 @@ export function TextArea({
         }}
         aria-busy={isLoading || callerBusy || undefined}
         aria-describedby={describedBy}
-        aria-disabled={hasFocusableDisabledState ? true : callerDisabled}
+        aria-disabled={isDisabled ? true : callerDisabled}
         aria-invalid={overLimit || status?.type === "error" ? true : callerInvalid}
         aria-required={isRequired && !isOptional ? true : callerRequired}
         autoComplete={autoComplete}
@@ -175,7 +180,7 @@ export function TextArea({
           overLimit && "border-error",
           className,
         )}
-        disabled={isDisabled && !hasFocusableDisabledState}
+        disabled={isDisabled}
         id={controlId}
         maxLength={maxLength}
         name={htmlName}
@@ -188,7 +193,6 @@ export function TextArea({
         onKeyDown={onKeyDown}
         onPaste={onPaste}
         placeholder={rest.placeholder}
-        readOnly={hasFocusableDisabledState || undefined}
         required={isRequired && !isOptional}
         rows={rows}
         spellCheck={hasSpellCheck}

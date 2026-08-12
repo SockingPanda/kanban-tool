@@ -10,6 +10,8 @@ export type {
   FileInputProps,
   FileInputStatus,
   FileInputStatusVariant,
+  FileInputValidationError,
+  FileInputValidationReason,
 } from "./FileInput"
 export {TextArea} from "./TextArea"
 export type {

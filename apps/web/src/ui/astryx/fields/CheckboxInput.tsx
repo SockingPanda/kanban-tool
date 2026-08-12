@@ -69,6 +69,8 @@ export interface CheckboxInputProps
   readonly isLabelHidden?: boolean
   readonly isOptional?: boolean
   readonly isRequired?: boolean
+  readonly requiredText?: string
+  readonly optionalText?: string
   readonly isDisabled?: boolean
   readonly disabledMessage?: string
   readonly isReadOnly?: boolean
@@ -101,6 +103,8 @@ export function CheckboxInput({
   isLabelHidden = false,
   isOptional = false,
   isRequired = false,
+  requiredText,
+  optionalText,
   isDisabled = false,
   disabledMessage,
   isReadOnly = false,
@@ -129,7 +133,6 @@ export function CheckboxInput({
     statusId,
     disabledMessageId,
   )
-  const hasFocusableDisabledState = isDisabled && Boolean(disabledMessage)
   const isIndeterminate = value === "indeterminate"
 
   return (
@@ -144,8 +147,10 @@ export function CheckboxInput({
       label={label}
       labelHidden={isLabelHidden}
       labelTooltip={labelTooltip}
+      optionalText={optionalText}
       optional={isOptional}
       required={isRequired}
+      requiredText={requiredText}
       status={status}
       statusVariant={statusVariant}
     >
@@ -159,7 +164,7 @@ export function CheckboxInput({
         }}
         aria-busy={isLoading || callerBusy || undefined}
         aria-describedby={describedBy}
-        aria-disabled={hasFocusableDisabledState ? true : callerDisabled}
+        aria-disabled={isDisabled ? true : callerDisabled}
         aria-invalid={status?.type === "error" ? true : callerInvalid}
         aria-readonly={isReadOnly || callerReadonly || undefined}
         aria-required={isRequired && !isOptional ? true : callerRequired}
@@ -171,9 +176,9 @@ export function CheckboxInput({
           statusControlClasses(status),
           className,
         )}
-        disabled={isDisabled && !hasFocusableDisabledState}
+        disabled={isDisabled}
         id={controlId}
-        name={isDisabled ? undefined : htmlName}
+        name={htmlName}
         onBlur={onBlur}
         onChange={(event) => {
           if (isDisabled || isReadOnly || isLoading) {

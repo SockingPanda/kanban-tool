@@ -56,7 +56,8 @@
     "vite.config.ts",
     ".storybook/vite.config.ts",
     "build/ui-guard.ts",
-    "build/ui-guard.test.ts"
+    "build/ui-guard.test.ts",
+    "src/ui/astryx/dom-props.ts"
   ],
   "forbiddenRoots": [
     "src/stories/reference",

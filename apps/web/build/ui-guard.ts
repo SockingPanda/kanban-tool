@@ -547,6 +547,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
   const scriptKind = extension === ".tsx" ? ts.ScriptKind.TSX : extension === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
   const sourceFile = ts.createSourceFile(relativePath, source, ts.ScriptTarget.Latest, true, scriptKind)
   const staticObjectModel = collectStaticObjectBindings(sourceFile)
+  const cspSafeDomPropModel = collectCspSafeDomPropModel(sourceFile, relativePath)
   let rawDivCount = 0
   let layoutSpanCount = 0
   const styleViolations: { code: "inline-style" | "dom-style"; offset: number; message: string }[] = []
@@ -570,7 +571,7 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
       if (ts.isJsxAttribute(attribute) && jsxAttributeNameText(attribute.name) === "dangerouslySetInnerHTML") {
         addViolation("inline-style", attribute, "dangerouslySetInnerHTML is forbidden under the static CSP style policy.")
       }
-      if (isIntrinsicJsxTagName(tagName) && ts.isJsxSpreadAttribute(attribute) && spreadMayCarryStyle(attribute.expression, staticObjectModel, attribute)) {
+      if (isIntrinsicJsxTagName(tagName) && ts.isJsxSpreadAttribute(attribute) && !cspSafeDomPropModel.isSafeExpression(attribute.expression, attribute) && spreadMayCarryStyle(attribute.expression, staticObjectModel, attribute)) {
         addViolation("inline-style", attribute, "JSX spread props may inject inline style; use explicit static props instead.")
       }
     }
@@ -607,6 +608,186 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
   }
   visit(sourceFile)
   return { rawLayoutCount: rawDivCount + layoutSpanCount, styleViolations }
+}
+
+const CSP_SAFE_DOM_PROPS_MODULE = "src/ui/astryx/dom-props"
+const CSP_SAFE_DOM_PROPS_HELPER = "pickCspSafeDomProps"
+
+type CspSafeDomPropBindingKind = "helper" | "namespace" | "safe-result" | "other"
+
+type CspSafeDomPropBinding = {
+  readonly name: string
+  readonly declaration: ts.Node
+  kind: CspSafeDomPropBindingKind
+}
+
+type CspSafeDomPropScope = {
+  readonly node: ts.Node
+  readonly parent: CspSafeDomPropScope | undefined
+  readonly bindings: Map<string, CspSafeDomPropBinding>
+}
+
+type CspSafeDomPropModel = {
+  readonly isSafeExpression: (expression: ts.Expression, useNode: ts.Node) => boolean
+}
+
+/**
+ * Resolve the one canonical runtime DOM-prop helper without trusting a local
+ * function that merely happens to use the same name. The model intentionally
+ * understands only a named/namespace import from `src/ui/astryx/dom-props`
+ * and a direct `const result = pickCspSafeDomProps(...)` binding.
+ */
+function collectCspSafeDomPropModel(sourceFile: ts.SourceFile, relativePath: string): CspSafeDomPropModel {
+  const root: CspSafeDomPropScope = {node: sourceFile, parent: undefined, bindings: new Map()}
+  const scopeByNode = new Map<ts.Node, CspSafeDomPropScope>([[sourceFile, root]])
+
+  const isScopeNode = (node: ts.Node): boolean => ts.isBlock(node)
+    || ts.isCaseBlock(node)
+    || ts.isCatchClause(node)
+    || ts.isFunctionDeclaration(node)
+    || ts.isFunctionExpression(node)
+    || ts.isArrowFunction(node)
+    || ts.isMethodDeclaration(node)
+    || ts.isGetAccessorDeclaration(node)
+    || ts.isSetAccessorDeclaration(node)
+    || ts.isConstructorDeclaration(node)
+
+  const registerBinding = (
+    scope: CspSafeDomPropScope,
+    name: string,
+    declaration: ts.Node,
+    kind: CspSafeDomPropBindingKind,
+  ): CspSafeDomPropBinding => {
+    const existing = scope.bindings.get(name)
+    if (existing !== undefined) {
+      existing.kind = "other"
+      return existing
+    }
+    const binding = {name, declaration, kind}
+    scope.bindings.set(name, binding)
+    return binding
+  }
+
+  const scopeFor = (node: ts.Node): CspSafeDomPropScope => {
+    let current: ts.Node | undefined = node
+    while (current !== undefined) {
+      const scope = scopeByNode.get(current)
+      if (scope !== undefined) return scope
+      current = current.parent
+    }
+    return root
+  }
+
+  const resolveBinding = (identifier: ts.Identifier, useNode: ts.Node): CspSafeDomPropBinding | undefined => {
+    let scope: CspSafeDomPropScope | undefined = scopeFor(useNode)
+    while (scope !== undefined) {
+      const binding = scope.bindings.get(identifier.text)
+      if (binding !== undefined) return binding
+      scope = scope.parent
+    }
+    return undefined
+  }
+
+  const canonicalModulePath = (specifier: string): string | undefined => {
+    if (specifier === "@/ui/astryx/dom-props") return CSP_SAFE_DOM_PROPS_MODULE
+    if (!specifier.startsWith(".")) return undefined
+    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), specifier))
+    const withoutExtension = resolved.replace(/\.(?:[cm]?[jt]sx?)$/, "")
+    return withoutExtension === CSP_SAFE_DOM_PROPS_MODULE ? withoutExtension : undefined
+  }
+
+  // Imports are hoisted, so register the canonical bindings before resolving
+  // variable initializers even when a source file places an import later.
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
+    if (canonicalModulePath(statement.moduleSpecifier.text) === undefined) continue
+    const bindings = statement.importClause?.namedBindings
+    if (bindings === undefined) continue
+    if (ts.isNamespaceImport(bindings)) {
+      registerBinding(root, bindings.name.text, bindings.name, "namespace")
+      continue
+    }
+    for (const element of bindings.elements) {
+      const importedName = element.propertyName?.text ?? element.name.text
+      if (importedName === CSP_SAFE_DOM_PROPS_HELPER) {
+        registerBinding(root, element.name.text, element.name, "helper")
+      } else {
+        registerBinding(root, element.name.text, element.name, "other")
+      }
+    }
+  }
+
+  const unwrap = (expression: ts.Expression): ts.Expression => {
+    let candidate = expression
+    while (
+      ts.isParenthesizedExpression(candidate)
+      || ts.isAsExpression(candidate)
+      || ts.isTypeAssertionExpression(candidate)
+      || ts.isNonNullExpression(candidate)
+      || ts.isSatisfiesExpression(candidate)
+    ) {
+      candidate = candidate.expression
+    }
+    return candidate
+  }
+
+  const isSafeCall = (expression: ts.Expression): boolean => {
+    const candidate = unwrap(expression)
+    if (!ts.isCallExpression(candidate)) return false
+    const callee = unwrap(candidate.expression)
+    if (ts.isIdentifier(callee)) {
+      return resolveBinding(callee, candidate)?.kind === "helper"
+    }
+    if (ts.isPropertyAccessExpression(callee) && callee.name.text === CSP_SAFE_DOM_PROPS_HELPER && ts.isIdentifier(callee.expression)) {
+      return resolveBinding(callee.expression, candidate)?.kind === "namespace"
+    }
+    return false
+  }
+
+  const visit = (node: ts.Node, parentScope: CspSafeDomPropScope): void => {
+    // Function/class declarations bind in their containing scope and can
+    // shadow the canonical import with a same-named local implementation.
+    if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
+      registerBinding(parentScope, node.name.text, node.name, "other")
+    }
+
+    let scope = parentScope
+    if (node !== sourceFile && isScopeNode(node)) {
+      scope = {node, parent: parentScope, bindings: new Map()}
+      scopeByNode.set(node, scope)
+      if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) || ts.isConstructorDeclaration(node)) {
+        for (const parameter of node.parameters) {
+          for (const identifier of identifiersInBindingName(parameter.name)) registerBinding(scope, identifier.text, identifier, "other")
+        }
+      }
+      if (ts.isCatchClause(node) && node.variableDeclaration !== undefined) {
+        for (const identifier of identifiersInBindingName(node.variableDeclaration.name)) registerBinding(scope, identifier.text, identifier, "other")
+      }
+    }
+
+    if (ts.isVariableDeclaration(node)) {
+      const declarationList = node.parent
+      const isConst = ts.isVariableDeclarationList(declarationList) && (declarationList.flags & ts.NodeFlags.Const) !== 0
+      const identifiers = identifiersInBindingName(node.name)
+      for (const identifier of identifiers) {
+        const binding = registerBinding(scope, identifier.text, identifier, "other")
+        if (identifiers.length === 1 && isConst && node.initializer !== undefined && binding.declaration === identifier && isSafeCall(node.initializer)) {
+          binding.kind = "safe-result"
+        }
+      }
+    }
+
+    ts.forEachChild(node, (child) => visit(child, scope))
+  }
+  visit(sourceFile, root)
+
+  return {
+    isSafeExpression(expression, useNode) {
+      const candidate = unwrap(expression)
+      if (isSafeCall(candidate)) return true
+      return ts.isIdentifier(candidate) && resolveBinding(candidate, useNode)?.kind === "safe-result"
+    },
+  }
 }
 
 type StaticObjectBinding = {

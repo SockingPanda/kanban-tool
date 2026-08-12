@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -163,6 +163,40 @@ describe("Astryx CSP UI guard", () => {
       expect(spreadErrors).toHaveLength(6)
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("only trusts calls and const results from the canonical DOM-prop helper", () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-guard-dom-props-"))
+    try {
+      const sourceDirectory = path.join(temporaryRoot, "src/ui/astryx/fields")
+      mkdirSync(sourceDirectory, {recursive: true})
+      writeFileSync(path.join(sourceDirectory, "safe.tsx"), [
+        'import {pickCspSafeDomProps} from "../dom-props"',
+        'declare const props: Record<string, unknown>',
+        'const safe = pickCspSafeDomProps(props)',
+        'const Direct = () => <input {...pickCspSafeDomProps({style: {color: "red"}})} />',
+        'const Result = () => <input {...safe} />',
+      ].join("\n"))
+      writeFileSync(path.join(sourceDirectory, "same-name.tsx"), [
+        'const pickCspSafeDomProps = (props: Record<string, unknown>) => props',
+        'const Bad = () => <input {...pickCspSafeDomProps({style: {color: "red"}})} />',
+      ].join("\n"))
+      writeFileSync(path.join(sourceDirectory, "wrong-module.tsx"), [
+        'import {pickCspSafeDomProps} from "./other-dom-props"',
+        'const Bad = () => <input {...pickCspSafeDomProps({style: {color: "red"}})} />',
+      ].join("\n"))
+
+      const report = scanUiSource({
+        projectRoot: temporaryRoot,
+        sourcePaths: ["src/ui/astryx/fields"],
+        mode: "enforce",
+      })
+      expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/safe.tsx" && error.code === "inline-style")).toHaveLength(0)
+      expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/same-name.tsx" && error.code === "inline-style")).toHaveLength(1)
+      expect(report.errors.filter((error) => error.path === "src/ui/astryx/fields/wrong-module.tsx" && error.code === "inline-style")).toHaveLength(1)
+    } finally {
+      rmSync(temporaryRoot, {recursive: true, force: true})
     }
   })
 

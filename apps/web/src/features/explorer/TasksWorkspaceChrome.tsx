@@ -105,7 +105,11 @@ function TaskViewNavigation({
 }: Pick<TasksWorkspaceChromeProps, "activeView" | "displayVariant" | "hrefForView" | "locale" | "onViewChange"> & { readonly label: string }) {
   function selection(view: (typeof viewOptions)[number], event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>, hasHref: boolean): void {
     const routeView = view.route as "board" | "list" | "map"
-    if (hasHref) event.preventDefault()
+    if (hasHref) {
+      const isModified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+      if (event.button !== 0 || isModified) return
+      event.preventDefault()
+    }
     onViewChange(routeView, view.display)
   }
 

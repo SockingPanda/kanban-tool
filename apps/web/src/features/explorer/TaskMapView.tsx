@@ -20,7 +20,6 @@ import {
   Grid,
   PageFrame,
   SafeHStack,
-  SafeLayout,
   SafeMetadataList,
   SafeMetadataListItem,
   SafeSection,
@@ -151,6 +150,7 @@ type MapCopy = {
   readonly limit: string
   readonly graphHeading: string
   readonly graphRegion: string
+  readonly layout: string
   readonly edgesHeading: string
   readonly noEdges: string
   readonly selected: string
@@ -200,6 +200,7 @@ const copies: Record<Locale, MapCopy> = {
     limit: "当前节点上限为",
     graphHeading: "任务关系节点",
     graphRegion: "关系图",
+    layout: "关系图与任务检查器",
     edgesHeading: "关系边",
     noEdges: "当前筛选没有关系边。",
     selected: "当前选择",
@@ -247,6 +248,7 @@ const copies: Record<Locale, MapCopy> = {
     limit: "Node limit is",
     graphHeading: "Task map nodes",
     graphRegion: "Task map",
+    layout: "Task map and inspector",
     edgesHeading: "Relations",
     noEdges: "No relations match the current filter.",
     selected: "Current selection",
@@ -560,66 +562,63 @@ export function TaskMapPresentation({
         ) : null}
 
         {visibleGraph && visibleGraph.nodes.length > 0 ? (
-          <SafeLayout
-            className="min-w-0"
-            content={(
-              <SafeVStack className="min-w-0 gap-2" aria-labelledby="task-map-graph-heading">
-                <Heading level={3} id="task-map-graph-heading" className="sr-only">{copy.graphHeading}</Heading>
-                <SafeVStack as="div" className="min-w-0 max-h-96 overflow-auto overscroll-contain border border-border bg-body" data-testid="task-map-graph" role="region" aria-label={copy.graphRegion} tabIndex={0}>
-                  <SafeVStack as="div" className={styles.graphCanvas}>
-                    <SafeVStack as="div" className={zoomClassName(zoom)} data-zoom={clampMapZoom(zoom)}>
-                      <SafeVStack as="div" className="min-w-0 gap-4 p-4">
-                        <Grid label={copy.nodes} columns="auto-md" gap={3} className="min-w-0" data-testid="task-map-nodes">
-                          {visibleGraph.nodes.map((node) => {
-                            const selected = selectedNode?.task.id === node.task.id
-                            return (
-                              <article className={selected ? "min-w-0 border border-accent bg-surface ring-2 ring-accent/25" : "min-w-0 border border-border bg-surface"} key={node.task.id} data-testid="task-map-node" data-task-id={node.task.id}>
-                                <Button
-                                  label={`${copy.inspectTask} ${node.task.ref} ${node.task.title}`}
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-auto w-full justify-start text-start"
-                                  data-task-opener={taskOpenerKey(node.task.id)}
-                                  aria-pressed={selected}
-                                  onClick={() => inspect(node.task.id)}
-                                >
-                                  <SafeVStack as="div" className="min-w-0 gap-1 text-start">
-                                    <SafeHStack as="div" justify="between" className="min-w-0 gap-2">
-                                      <Text as="span" type="code"><span translate="no">{node.task.ref}</span></Text>
-                                      <Text as="span" type="supporting">{node.context_only ? copy.context : <span translate="no">{node.role}</span>}</Text>
-                                    </SafeHStack>
-                                    <Text as="span" type="label">{node.task.title}</Text>
-                                    <Text as="span" type="code" color="secondary"><span translate="no">{node.task.status} · P{node.task.priority}</span></Text>
-                                  </SafeVStack>
-                                </Button>
-                              </article>
-                            )
-                          })}
-                        </Grid>
-                        <SafeSection variant="transparent" padding={0} aria-labelledby="task-map-edges-heading">
-                          <Heading level={3} id="task-map-edges-heading">{copy.edgesHeading}</Heading>
-                          {visibleGraph.edges.length === 0 ? <Text as="p" type="supporting">{copy.noEdges}</Text> : (
-                            <List density="compact" hasDividers>
-                              {visibleGraph.edges.map((edge) => (
-                                <ListItem
-                                  key={edge.id}
-                                  data-testid="task-map-edge"
-                                  data-edge-id={edge.id}
-                                  label={<Text type="code"><span translate="no">{edge.id}</span></Text>}
-                                  endContent={<Text type="supporting"><span translate="no">{edge.source_task_id} → {edge.target_task_id} · {edge.kind}</span>{edge.required ? ` · ${copy.required}` : ""}</Text>}
-                                />
-                              ))}
-                            </List>
-                          )}
-                        </SafeSection>
-                      </SafeVStack>
+          <Grid label={copy.layout} columns="auto-lg" gap={4} className="min-w-0" data-testid="task-map-layout">
+            <SafeVStack className="min-w-0 gap-2" aria-labelledby="task-map-graph-heading">
+              <Heading level={3} id="task-map-graph-heading" className="sr-only">{copy.graphHeading}</Heading>
+              <SafeVStack as="div" className="min-w-0 max-h-96 overflow-auto overscroll-contain border border-border bg-body" data-testid="task-map-graph" role="region" aria-label={copy.graphRegion} tabIndex={0}>
+                <SafeVStack as="div" className={styles.graphCanvas}>
+                  <SafeVStack as="div" className={zoomClassName(zoom)} data-zoom={clampMapZoom(zoom)}>
+                    <SafeVStack as="div" className="min-w-0 gap-4 p-4">
+                      <Grid label={copy.nodes} columns="auto-md" gap={3} className="min-w-0" data-testid="task-map-nodes">
+                        {visibleGraph.nodes.map((node) => {
+                          const selected = selectedNode?.task.id === node.task.id
+                          return (
+                            <article className={selected ? "min-w-0 border border-accent bg-surface ring-2 ring-accent/25" : "min-w-0 border border-border bg-surface"} key={node.task.id} data-testid="task-map-node" data-task-id={node.task.id}>
+                              <Button
+                                label={`${copy.inspectTask} ${node.task.ref} ${node.task.title}`}
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto w-full justify-start text-start"
+                                data-task-opener={taskOpenerKey(node.task.id)}
+                                aria-pressed={selected}
+                                onClick={() => inspect(node.task.id)}
+                              >
+                                <SafeVStack as="div" className="min-w-0 gap-1 text-start">
+                                  <SafeHStack as="div" justify="between" className="min-w-0 gap-2">
+                                    <Text as="span" type="code"><span translate="no">{node.task.ref}</span></Text>
+                                    <Text as="span" type="supporting">{node.context_only ? copy.context : <span translate="no">{node.role}</span>}</Text>
+                                  </SafeHStack>
+                                  <Text as="span" type="label">{node.task.title}</Text>
+                                  <Text as="span" type="code" color="secondary"><span translate="no">{node.task.status} · P{node.task.priority}</span></Text>
+                                </SafeVStack>
+                              </Button>
+                            </article>
+                          )
+                        })}
+                      </Grid>
+                      <SafeSection variant="transparent" padding={0} aria-labelledby="task-map-edges-heading">
+                        <Heading level={3} id="task-map-edges-heading">{copy.edgesHeading}</Heading>
+                        {visibleGraph.edges.length === 0 ? <Text as="p" type="supporting">{copy.noEdges}</Text> : (
+                          <List density="compact" hasDividers>
+                            {visibleGraph.edges.map((edge) => (
+                              <ListItem
+                                key={edge.id}
+                                data-testid="task-map-edge"
+                                data-edge-id={edge.id}
+                                label={<Text type="code"><span translate="no">{edge.id}</span></Text>}
+                                endContent={<Text type="supporting"><span translate="no">{edge.source_task_id} → {edge.target_task_id} · {edge.kind}</span>{edge.required ? ` · ${copy.required}` : ""}</Text>}
+                              />
+                            ))}
+                          </List>
+                        )}
+                      </SafeSection>
                     </SafeVStack>
                   </SafeVStack>
                 </SafeVStack>
               </SafeVStack>
-            )}
-            end={<TaskMapInspector copy={copy} node={selectedNode} hiddenSelection={hiddenSelection} onSelectTask={onSelectTask} />}
-          />
+            </SafeVStack>
+            <TaskMapInspector copy={copy} node={selectedNode} hiddenSelection={hiddenSelection} onSelectTask={onSelectTask} />
+          </Grid>
         ) : null}
       </SafeVStack>
     </PageFrame>

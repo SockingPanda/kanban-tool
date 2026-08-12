@@ -1,6 +1,5 @@
 import type { MouseEvent } from "react"
 import { Banner } from "@astryxdesign/core/Banner"
-import { ClickableCard } from "@astryxdesign/core/ClickableCard"
 import { Code } from "@astryxdesign/core/Code"
 import { Button } from "@astryxdesign/core/Button"
 import { Heading } from "@astryxdesign/core/Heading"
@@ -69,46 +68,34 @@ export function ProjectOverview({ project, onOpenTasks, basePath = "/app/", stat
               aria-live="polite"
               title={statusCopy}
               container="section"
-              endContent={onRetry !== undefined ? <Button label={t("retry")} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
+              endContent={onRetry !== undefined && status !== "recovering" ? <Button label={t("retry")} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
               data-testid="project-overview-status"
               data-status={status}
             />
           ) : null}
           <StaticMetadataList data-testid="project-overview-identity">
-            <StaticMetadataListItem label={t("slug")}><Code>{project.slug}</Code></StaticMetadataListItem>
+            <StaticMetadataListItem label={t("slug")}><span translate="no"><Code>{project.slug}</Code></span></StaticMetadataListItem>
             <StaticMetadataListItem label={t("archiveState")}>
               {project.archivedAt === null ? t("active") : t("archived")}
             </StaticMetadataListItem>
           </StaticMetadataList>
           {project.archivedAt === null ? (
-            <ClickableCard
-              label={t("tasks")}
+            <a
               href={routePath({ kind: "board", boardSlug: project.slug, view: "board" }, { basePath })}
-              className="w-full"
-              onClick={onOpenTasks === undefined ? undefined : (event: MouseEvent<HTMLElement>) => {
-                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-                event.preventDefault()
-                onOpenTasks()
-              }}
-              onClickCapture={onOpenTasks === undefined ? undefined : (event: MouseEvent<HTMLElement>) => {
-                const target = event.target
-                if (!(target instanceof Element) || target.closest("a") === null) return
-                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-                event.preventDefault()
-                event.stopPropagation()
-                onOpenTasks()
-              }}
-              padding={3}
               data-testid="project-overview-open-tasks"
+              className="flex w-full items-center justify-between gap-3 rounded-md border border-border-strong bg-surface px-3 py-3 text-start text-primary no-underline hover:border-accent hover:bg-muted focus-visible:outline-2 focus-visible:outline-accent"
+              onClick={onOpenTasks === undefined ? undefined : (event: MouseEvent<HTMLAnchorElement>) => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                event.preventDefault()
+                onOpenTasks()
+              }}
             >
-              <StaticHStack justify="between" align="center" className="w-full">
-                <StaticHStack gap={2} align="center">
-                  <NavigationIcon name="list" size={17} />
-                  <Text>{t("tasks")}</Text>
-                </StaticHStack>
-                <NavigationIcon name="chevron-right" size={16} />
+              <StaticHStack gap={2} align="center" className="min-w-0">
+                <NavigationIcon name="list" size={17} />
+                <Text>{t("tasks")}</Text>
               </StaticHStack>
-            </ClickableCard>
+              <NavigationIcon name="chevron-right" size={16} />
+            </a>
           ) : null}
         </StaticVStack>
       </PageFrame>

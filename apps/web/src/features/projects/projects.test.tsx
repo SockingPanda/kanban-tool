@@ -54,7 +54,8 @@ describe("production Projects surfaces", () => {
     expect(markup).toContain('data-frame="content"')
     expect(markup).toContain('data-testid="projects-search"')
     expect(markup).toContain('data-testid="projects-collection-list"')
-    expect(markup).toContain('href="/app/boards/active/overview"')
+    const projectLink = markup.match(/<a\b[^>]*data-testid="projects-collection-project-active"[^>]*>/)?.[0]
+    expect(projectLink).toContain('href="/app/boards/active/overview"')
     expect(markup).not.toMatch(/<span[^>]*><div/)
     expect(markup).not.toMatch(/\sstyle=/)
   })
@@ -68,6 +69,18 @@ describe("production Projects surfaces", () => {
     expect(markup).toContain("Reload")
   })
 
+  test("does not claim a cached snapshot when offline or error has no items", () => {
+    const offline = renderWithLocale(<ProjectsCollection projects={[]} status="offline" onRetry={vi.fn()} />)
+    const error = renderWithLocale(<ProjectsCollection projects={[]} status="error" onRetry={vi.fn()} />)
+
+    expect(offline).toContain('data-has-snapshot="false"')
+    expect(offline).toContain("no project snapshot is available yet")
+    expect(offline).not.toContain("Showing the cached project snapshot")
+    expect(error).toContain('data-has-snapshot="false"')
+    expect(error).toContain("no snapshot is available yet")
+    expect(error).not.toContain("Showing the cached project snapshot")
+  })
+
   test("disables search without a loading snapshot and keeps retry semantics explicit", () => {
     const loading = renderWithLocale(<ProjectsCollection projects={[]} status="loading" onRetry={vi.fn()} />)
     const refreshing = renderWithLocale(<ProjectsCollection projects={[active]} status="ready" isRefreshing onRetry={vi.fn()} />)
@@ -79,6 +92,9 @@ describe("production Projects surfaces", () => {
     expect(loading).toContain('data-testid="projects-collection-loading"')
     expect(refreshing).toContain("Refreshing projects")
     expect(refreshing).not.toContain('data-testid="projects-collection-ready"')
+
+    const recovering = renderWithLocale(<ProjectsCollection projects={[active]} status="recovering" onRetry={vi.fn()} />)
+    expect(recovering).not.toContain("Retry")
   })
 
   test("renders only board identity, description and archive state on overview", () => {
@@ -96,6 +112,7 @@ describe("production Projects surfaces", () => {
     expect(markup).not.toContain("此项目没有提供")
     expect(markup).toContain('data-testid="project-overview-identity"')
     expect(markup).toContain('data-frame="content"')
+    expect(markup).toContain('translate="no"')
     expect(markup).not.toMatch(/\sstyle=/)
   })
 
@@ -105,5 +122,14 @@ describe("production Projects surfaces", () => {
     expect(markup).toContain('data-testid="project-overview-status"')
     expect(markup).toContain('data-status="stale"')
     expect(markup).toContain("Showing the last successful canonical snapshot.")
+  })
+
+  test("keeps the overview task selector on the real anchor and suppresses retry while recovering", () => {
+    const ready = renderWithLocale(<ProjectOverview project={active} onOpenTasks={vi.fn()} />)
+    const recovering = renderWithLocale(<ProjectOverview project={active} status="recovering" onRetry={vi.fn()} />)
+    const taskLink = ready.match(/<a\b[^>]*data-testid="project-overview-open-tasks"[^>]*>/)?.[0]
+
+    expect(taskLink).toContain('href="/app/boards/active/board"')
+    expect(recovering).not.toContain("Retry")
   })
 })

@@ -27,10 +27,10 @@ export type ProjectsCollectionProps = {
   readonly basePath?: string
 }
 
-function statusCopy(status: ProjectsCollectionStatus, t: ReturnType<typeof createTranslator>): { readonly label: string; readonly detail: string } {
+function statusCopy(status: ProjectsCollectionStatus, hasSnapshot: boolean, t: ReturnType<typeof createTranslator>): { readonly label: string; readonly detail: string } {
   if (status === "loading") return { label: t("projectCollectionLoading"), detail: t("projectCollectionLoadingDetail") }
-  if (status === "offline") return { label: t("projectCollectionOffline"), detail: t("projectCollectionOfflineDetail") }
-  if (status === "error") return { label: t("projectCollectionError"), detail: t("projectCollectionErrorDetail") }
+  if (status === "offline") return { label: t("projectCollectionOffline"), detail: hasSnapshot ? t("projectCollectionOfflineDetail") : t("projectCollectionOfflineNoSnapshotDetail") }
+  if (status === "error") return { label: t("projectCollectionError"), detail: hasSnapshot ? t("projectCollectionErrorDetail") : t("projectCollectionErrorNoSnapshotDetail") }
   if (status === "stale") return { label: t("projectCollectionStale"), detail: t("projectCollectionStaleDetail") }
   if (status === "recovering") return { label: t("projectCollectionRecovering"), detail: t("projectCollectionRecoveringDetail") }
   return { label: t("projects"), detail: t("projectCollectionReadyDetail") }
@@ -62,8 +62,8 @@ export function ProjectsCollection({
     () => projects.filter((project) => project.archivedAt === null && matches(project, query)),
     [projects, query],
   )
-  const copy = statusCopy(status, t)
   const hasSnapshot = projects.length > 0 || status === "ready"
+  const copy = statusCopy(status, hasSnapshot, t)
   const showBoundary = status !== "ready" || activeProjects.length === 0
   const empty = status === "ready" && activeProjects.length === 0
 
@@ -126,7 +126,7 @@ export function ProjectsCollection({
               aria-live="polite"
               title={boundaryTitle}
               container="section"
-              endContent={onRetry !== undefined && status !== "loading" && !isRefreshing ? <Button label={t("retry")} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
+              endContent={onRetry !== undefined && status !== "loading" && status !== "recovering" && !isRefreshing ? <Button label={t("retry")} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
               data-testid={"projects-collection-" + (empty ? "empty" : status)}
             />
           ) : null}
@@ -136,30 +136,26 @@ export function ProjectsCollection({
               {activeProjects.map((project) => (
                 <ListItem
                   key={project.id}
-                  href={routePath({ kind: "project-overview", boardSlug: project.slug }, { basePath })}
-                  label={project.name}
-                  description={
-                    <>
-                      <Text as="span" type="code">{project.slug}</Text>
-                      {project.description !== null ? <Text as="span" type="supporting">{` · ${project.description}`}</Text> : null}
-                    </>
-                  }
-                  startContent={<NavigationIcon name="folder" size={22} />}
-                  endContent={<NavigationIcon name="chevron-right" size={17} />}
-                  onClick={onOpenProject === undefined ? undefined : (event: MouseEvent<Element>) => {
-                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-                    event.preventDefault()
-                    onOpenProject(project)
-                  }}
-                  onClickCapture={onOpenProject === undefined ? undefined : (event: MouseEvent<Element>) => {
-                    const target = event.target
-                    if (!(target instanceof Element) || target.closest("a") === null) return
-                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-                    event.preventDefault()
-                    event.stopPropagation()
-                    onOpenProject(project)
-                  }}
-                  data-testid={"projects-collection-project-" + project.slug}
+                  label={(
+                    <a
+                      href={routePath({ kind: "project-overview", boardSlug: project.slug }, { basePath })}
+                      data-testid={"projects-collection-project-" + project.slug}
+                      className="flex min-w-0 items-center gap-3 rounded-md px-3 py-3 text-start text-primary no-underline hover:bg-muted focus-visible:outline-2 focus-visible:outline-accent"
+                      onClick={onOpenProject === undefined ? undefined : (event: MouseEvent<HTMLAnchorElement>) => {
+                        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                        event.preventDefault()
+                        onOpenProject(project)
+                      }}
+                    >
+                      <NavigationIcon name="folder" size={22} />
+                      <StaticVStack gap={1} className="min-w-0 flex-1">
+                        <Text as="span" type="body" weight="semibold" className="truncate">{project.name}</Text>
+                        <Text as="span" type="code" color="secondary" className="truncate">{project.slug}</Text>
+                        {project.description !== null ? <Text as="span" type="supporting" color="secondary" className="truncate">{project.description}</Text> : null}
+                      </StaticVStack>
+                      <NavigationIcon name="chevron-right" size={17} />
+                    </a>
+                  )}
                 />
               ))}
             </List>

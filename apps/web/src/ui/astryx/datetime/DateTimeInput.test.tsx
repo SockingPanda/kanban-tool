@@ -9,6 +9,7 @@ import {
   isISOTime,
   parseDateTimeLocal,
   parseISODateTime,
+  resolveDateTimeChange,
 } from "./DateTimeInput"
 
 describe("CSP-safe Astryx DateTimeInput", () => {
@@ -41,6 +42,28 @@ describe("CSP-safe Astryx DateTimeInput", () => {
     expect(isDateTimeWithinBounds("2026-08-30", "18:01", min, max)).toBe(false)
     expect(isDateTimeWithinBounds("2026-08-10", "12:00", min, max)).toBe(true)
     expect(isDateTimeWithinBounds("2026-08-09", "09:00:30", min, max, false)).toBe(true)
+  })
+
+  test("keeps segments unchanged when a complete candidate would violate a time bound", () => {
+    const min = parseISODateTime("2026-08-09T09:00")
+
+    expect(resolveDateTimeChange("2026-08-09", "08:00", min)).toEqual({
+      accepted: false,
+      date: "2026-08-09",
+      time: "08:00",
+    })
+    expect(resolveDateTimeChange("2026-08-10", "09:00", min)).toEqual({
+      accepted: true,
+      date: "2026-08-10",
+      time: "09:00",
+      value: "2026-08-10T09:00",
+    })
+    expect(resolveDateTimeChange("2026-08-09", "09:00:30", min, undefined, false)).toEqual({
+      accepted: true,
+      date: "2026-08-09",
+      time: "09:00",
+      value: "2026-08-09T09:00",
+    })
   })
 
   test("renders native date/time controls with Astryx-shaped field semantics", () => {

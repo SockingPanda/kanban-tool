@@ -199,6 +199,13 @@ export function combineDateTimeValue(
 export const parseLocalDateTime = parseDateTimeLocal
 export const formatISODateTime = combineDateTimeValue
 
+export interface DateTimeChangeResolution {
+  readonly accepted: boolean
+  readonly date: string
+  readonly time: string
+  readonly value?: ISODateTimeString
+}
+
 function compareISODate(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
@@ -240,6 +247,34 @@ export function isDateTimeWithinBounds(
     if (maxTime && timeToSeconds(timeValue) > timeToSeconds(maxTime)) return false
   }
   return true
+}
+
+export function resolveDateTimeChange(
+  date: string | null | undefined,
+  time: string | null | undefined,
+  min?: ISODateTimeParts,
+  max?: ISODateTimeParts,
+  hasSeconds = true,
+): DateTimeChangeResolution {
+  const dateValue = date?.trim() ?? ""
+  const rawTime = time?.trim() ?? ""
+  const timeValue = normalizeISOTime(rawTime, hasSeconds) ?? ""
+
+  if (dateValue && (!isISODate(dateValue) || !isDateWithinBounds(dateValue, min, max))) {
+    return { accepted: false, date: dateValue, time: timeValue }
+  }
+  if (rawTime && !timeValue) {
+    return { accepted: false, date: dateValue, time: timeValue }
+  }
+  if (!dateValue || !timeValue) {
+    return { accepted: true, date: dateValue, time: timeValue }
+  }
+
+  const value = parseDateTimeLocal(dateValue, timeValue, hasSeconds)
+  if (!value || !isDateTimeWithinBounds(dateValue, timeValue, min, max, hasSeconds)) {
+    return { accepted: false, date: dateValue, time: timeValue }
+  }
+  return { accepted: true, date: dateValue, time: timeValue, value }
 }
 
 function statusTypeOf(
@@ -384,37 +419,24 @@ function DateTimeInputImpl(
     assignRef(forwardedRef, node)
   }
 
-  const fireChange = (nextDate: string, nextTime: string): boolean => {
-    const nextValue = parseDateTimeLocal(nextDate, nextTime, hasSeconds)
-    if (!nextValue) {
-      onChange?.(undefined)
-      return true
-    }
-
-    const nextParts = parseISODateTime(nextValue, hasSeconds)
-    if (!nextParts?.time || !isDateTimeWithinBounds(nextParts.date, nextParts.time, dateBounds, maxBounds, hasSeconds)) return false
-    onChange?.(nextValue)
-    return true
+  const fireChange = (nextDate: string, nextTime: string): DateTimeChangeResolution => {
+    const resolution = resolveDateTimeChange(nextDate, nextTime, dateBounds, maxBounds, hasSeconds)
+    if (resolution.accepted) onChange?.(resolution.value)
+    return resolution
   }
 
   const handleDateChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (interactiveDisabled) return
     const nextDate = event.currentTarget.value.trim()
-    if (nextDate && (!isISODate(nextDate) || !isDateWithinBounds(nextDate, dateBounds, maxBounds))) return
-    if (fireChange(nextDate, timeValue)) setDateValue(nextDate)
+    const resolution = fireChange(nextDate, timeValue)
+    if (resolution.accepted) setDateValue(resolution.date)
   }
 
   const handleTimeChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (interactiveDisabled) return
     const rawTime = event.currentTarget.value.trim()
-    if (!rawTime) {
-      if (fireChange(dateValue, "")) setTimeValue("")
-      return
-    }
-
-    const nextTime = normalizeISOTime(rawTime, hasSeconds)
-    if (!nextTime || (dateValue && !isDateTimeWithinBounds(dateValue, nextTime, dateBounds, maxBounds, hasSeconds))) return
-    if (fireChange(dateValue, nextTime)) setTimeValue(nextTime)
+    const resolution = fireChange(dateValue, rawTime)
+    if (resolution.accepted) setTimeValue(resolution.time)
   }
 
   const handleClear = () => {

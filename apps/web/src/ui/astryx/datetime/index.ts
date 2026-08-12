@@ -5,6 +5,7 @@ export {
   isDateWithinBounds,
   isISODate,
   isISOTime,
+  resolveDateTimeChange,
   formatISODateTime,
   parseDateTimeLocal,
   parseLocalDateTime,
@@ -18,6 +19,7 @@ export type {
   DateTimeInputStatus,
   DateTimeInputStatusType,
   DateTimeInputTimeIncrement,
+  DateTimeChangeResolution,
   ISODateTimeParts,
   ISODateTimeString,
 } from "./DateTimeInput"

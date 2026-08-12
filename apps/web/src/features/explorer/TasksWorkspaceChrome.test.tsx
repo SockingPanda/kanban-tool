@@ -24,8 +24,11 @@ describe("TasksWorkspaceChrome", () => {
       />,
     )
 
-    expect(markup).toContain('aria-label="任务视图"')
+    expect(markup).toContain('role="group" aria-label="任务视图"')
+    expect(markup).toContain('href="/app/boards/default/map?display=grouped"')
+    expect(markup).not.toContain("data-collapsed=")
     expect(markup).toContain('data-testid="list-search"')
     expect(markup).toContain('href="/app/boards/default/runs"')
+    expect(markup).not.toContain(" style=")
   })
 })

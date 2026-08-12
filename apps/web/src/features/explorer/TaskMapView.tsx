@@ -17,6 +17,7 @@ import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
 import {
+  Grid,
   PageFrame,
   SafeHStack,
   SafeLayout,
@@ -198,7 +199,7 @@ const copies: Record<Locale, MapCopy> = {
     truncated: "关系图已截断",
     limit: "当前节点上限为",
     graphHeading: "任务关系节点",
-    graphRegion: "任务关系图，可横向滚动",
+    graphRegion: "关系图",
     edgesHeading: "关系边",
     noEdges: "当前筛选没有关系边。",
     selected: "当前选择",
@@ -245,7 +246,7 @@ const copies: Record<Locale, MapCopy> = {
     truncated: "Task map truncated",
     limit: "Node limit is",
     graphHeading: "Task map nodes",
-    graphRegion: "Task map, horizontally scrollable",
+    graphRegion: "Task map",
     edgesHeading: "Relations",
     noEdges: "No relations match the current filter.",
     selected: "Current selection",
@@ -385,7 +386,7 @@ function TaskMapToolbar({
   readonly onRetry?: () => void
 }) {
   return (
-    <SafeHStack className="min-w-0 flex-wrap gap-2 border border-border bg-surface p-2" role="group" aria-label={copy.toolbar}>
+    <SafeHStack className="min-w-0 flex-wrap gap-2 border border-border bg-surface p-2" role="toolbar" aria-label={copy.toolbar}>
       <SafeHStack className="min-w-0 max-w-full gap-1 overflow-x-auto" role="group" aria-label={copy.filter}>
         {(Object.keys(copy.filterOptions) as BoardMapFilter[]).map((value) => (
           <Button
@@ -517,16 +518,20 @@ export function TaskMapPresentation({
       onRetry={onRetry}
     />
   )
+  const frameHeader = (
+    <SafeVStack className="min-w-0 gap-3">
+      {header}
+      {toolbar}
+    </SafeVStack>
+  )
 
   return (
     <PageFrame
       frame="workspace"
       data-testid="task-map"
       aria-labelledby="task-map-heading"
-      header={header}
-      toolbar={toolbar}
-      toolbarLabel={copy.toolbar}
-      bodyLabel={copy.graphRegion}
+      header={frameHeader}
+      bodyLabel={copy.graphHeading}
     >
       <SafeVStack className="min-w-0 gap-4">
         {state.error && sourceGraph ? (
@@ -564,7 +569,7 @@ export function TaskMapPresentation({
                   <SafeVStack as="div" className={styles.graphCanvas}>
                     <SafeVStack as="div" className={zoomClassName(zoom)} data-zoom={clampMapZoom(zoom)}>
                       <SafeVStack as="div" className="min-w-0 gap-4 p-4">
-                        <SafeVStack as="div" className="min-w-0 gap-2">
+                        <Grid label={copy.nodes} columns="auto-md" gap={3} className="min-w-0" data-testid="task-map-nodes">
                           {visibleGraph.nodes.map((node) => {
                             const selected = selectedNode?.task.id === node.task.id
                             return (
@@ -590,7 +595,7 @@ export function TaskMapPresentation({
                               </article>
                             )
                           })}
-                        </SafeVStack>
+                        </Grid>
                         <SafeSection variant="transparent" padding={0} aria-labelledby="task-map-edges-heading">
                           <Heading level={3} id="task-map-edges-heading">{copy.edgesHeading}</Heading>
                           {visibleGraph.edges.length === 0 ? <Text as="p" type="supporting">{copy.noEdges}</Text> : (

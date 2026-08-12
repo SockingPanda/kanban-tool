@@ -8,7 +8,6 @@ import { Heading } from "@astryxdesign/core/Heading"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from "@astryxdesign/core/Table"
 import { Text } from "@astryxdesign/core/Text"
-import { Toolbar } from "@astryxdesign/core/Toolbar"
 
 import type { ExplorerReadError, TaskListPlanFilter, TaskListQueryState, TaskListSort, TaskListStatus } from "../../lib/api/explorer-read-model"
 import { taskOpenerKey } from "../../lib/explorer-focus"
@@ -223,12 +222,18 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
           </SafeHStack>
         </SafeHStack>
 
-        <Toolbar
-          label={copy.filters}
-          size="sm"
-          variant="section"
-          startContent={(
-            <SafeHStack align="end" className="gap-2 flex-wrap" id="task-list-controls" data-testid="task-attention-lens" data-count-scope="loaded-results">
+        <SafeSection variant="transparent" padding={0} className="min-w-0">
+          <SafeHStack
+            as="div"
+            role="toolbar"
+            aria-label={copy.filters}
+            aria-orientation="horizontal"
+            tabIndex={-1}
+            id="task-list-controls"
+            className="min-w-0 gap-2 flex-wrap"
+            data-testid="task-attention-lens"
+            data-count-scope="loaded-results"
+          >
               <SafeHStack as="div" align="center" className="gap-1 flex-wrap" role="group" aria-label={copy.attentionLens}>
                 <Text type="supporting">{copy.attentionLens}</Text>
                 <Text type="supporting">{copy.attentionScope}</Text>
@@ -270,10 +275,9 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
               <Selector label={copy.sort} options={sorts.map((sort) => ({ value: sort, label: sort }))} value={state.query.sort} onChange={(value) => updateQuery(state.query, onQueryChange, { sort: value as TaskListSort })} placeholder={copy.sort} loadingText={copy.loading} size="sm" htmlName="task-sort" data-testid="list-sort" />
               <Selector label={copy.pageSize} options={[25, 50, 100, 200].map((limit) => ({ value: String(limit), label: String(limit) }))} value={String(state.query.limit)} onChange={(value) => updateQuery(state.query, onQueryChange, { limit: Number(value) })} placeholder={copy.pageSize} loadingText={copy.loading} size="sm" htmlName="task-limit" data-testid="list-limit" />
               <CheckboxInput label={copy.includeArchived} value={state.query.includeArchived} onChange={(value) => updateQuery(state.query, onQueryChange, { includeArchived: value })} htmlName="task-include-archived" size="sm" />
-            </SafeHStack>
-          )}
-          endContent={<Button label={copy.reset} variant="ghost" size="sm" onClick={() => onQueryChange({ status: [], priority: [], plan: [], search: "", sort: "updated_at", page: 1, limit: 100, includeArchived: false })} />}
-        />
+            <Button label={copy.reset} variant="ghost" size="sm" onClick={() => onQueryChange({ status: [], priority: [], plan: [], search: "", sort: "updated_at", page: 1, limit: 100, includeArchived: false })} />
+          </SafeHStack>
+        </SafeSection>
 
         {error ? (
           <Banner

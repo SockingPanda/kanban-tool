@@ -49,6 +49,10 @@ describe("TaskListView", () => {
     expect(markup).toContain('data-testid="task-list"')
     expect(markup).toContain('data-testid="list-search"')
     expect(markup).toContain('role="toolbar"')
+    expect(markup).toMatch(
+      /(?:id="task-list-controls"[^>]*tabindex="-1"|tabindex="-1"[^>]*id="task-list-controls")/,
+    )
+    expect(markup).not.toContain(" style=")
     expect(markup).toContain('aria-label="任务列表筛选"')
     expect(markup).toContain('data-testid="task-row"')
     expect(markup).toContain('data-testid="task-attention-lens"')

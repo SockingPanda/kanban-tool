@@ -10,9 +10,6 @@ import {
   SafeHStack,
   SafeVStack,
   Selector,
-  SideNav,
-  SideNavItem,
-  SideNavSection,
   TextInput,
 } from "@/ui/astryx"
 
@@ -95,7 +92,7 @@ const viewOptions = [
   { id: "board", route: "board", display: "grouped", labels: { zh: "看板", en: "Board" } },
   { id: "list", route: "list", display: "grouped", labels: { zh: "列表", en: "List" } },
   { id: "table", route: "list", display: "table", labels: { zh: "表格", en: "Table" } },
-  { id: "map", route: "map", display: "grouped", labels: { zh: "地图", en: "Map" } },
+  { id: "map", route: "map", display: "grouped", labels: { zh: "关系图", en: "Map" } },
 ] as const
 
 function TaskViewNavigation({
@@ -113,26 +110,38 @@ function TaskViewNavigation({
   }
 
   return (
-    <SideNav aria-label={label} className="w-auto min-w-0 border-0 bg-transparent" data-testid="task-view-navigation">
-      <SideNavSection heading={label} isHeaderHidden>
-        {viewOptions.map((view) => {
-          const selected = view.id === "table"
-            ? activeView === "list" && displayVariant === "table"
-            : activeView === view.id && (view.id !== "list" || displayVariant !== "table")
-          const href = hrefForView?.(view.route, view.display)
-          return (
-            <SideNavItem
-              key={view.id}
-              label={view.labels[locale]}
-              href={href}
-              isSelected={selected}
-              onClick={href !== undefined ? (event) => selection(view, event, true) : (event) => selection(view, event, false)}
-              size="sm"
-            />
-          )
-        })}
-      </SideNavSection>
-    </SideNav>
+    <SafeHStack as="div" role="group" aria-label={label} className="min-w-0 flex-wrap gap-1" data-testid="task-view-navigation">
+      {viewOptions.map((view) => {
+        const selected = view.id === "table"
+          ? activeView === "list" && displayVariant === "table"
+          : activeView === view.id && (view.id !== "list" || displayVariant !== "table")
+        const href = hrefForView?.(view.route, view.display)
+        const className = selected
+          ? "rounded-md bg-accent-muted px-3 py-1.5 text-sm font-semibold text-accent no-underline outline-none focus-visible:outline-2 focus-visible:outline-accent"
+          : "rounded-md px-3 py-1.5 text-sm text-primary no-underline outline-none hover:bg-overlay-hover focus-visible:outline-2 focus-visible:outline-accent"
+        return href !== undefined ? (
+          <a
+            key={view.id}
+            className={className}
+            href={href}
+            aria-current={selected ? "page" : undefined}
+            onClick={(event) => selection(view, event, true)}
+          >
+            {view.labels[locale]}
+          </a>
+        ) : (
+          <button
+            key={view.id}
+            className={className}
+            type="button"
+            aria-pressed={selected}
+            onClick={(event) => selection(view, event, false)}
+          >
+            {view.labels[locale]}
+          </button>
+        )
+      })}
+    </SafeHStack>
   )
 }
 
@@ -253,9 +262,16 @@ export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, d
     </SafeHStack>
   )
 
+  const frameHeader = (
+    <SafeVStack className="min-w-0 gap-3">
+      {header}
+      {toolbar}
+    </SafeVStack>
+  )
+
   return (
     <SafeVStack as="section" className="min-w-0" inert={inert || undefined} data-testid="tasks-workspace-chrome">
-      <PageFrame frame="content" aria-labelledby="tasks-workspace-heading" bodyLabel={copy.title} header={header} toolbar={toolbar} toolbarLabel={copy.searchLabel}>
+      <PageFrame frame="content" aria-labelledby="tasks-workspace-heading" bodyLabel={copy.title} header={frameHeader}>
         <SafeVStack className="sr-only" aria-hidden="true" />
       </PageFrame>
     </SafeVStack>

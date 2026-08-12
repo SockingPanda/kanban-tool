@@ -185,7 +185,11 @@ describe("TaskMapView", () => {
 
     expect(markup).toContain('data-testid="task-map"')
     expect(markup).toContain('data-testid="task-map-graph"')
+    expect(markup).toContain('aria-label="关系图"')
+    expect(markup).toContain('data-testid="task-map-nodes"')
+    expect(markup).toContain('data-columns="auto-md"')
     expect(markup).toContain('role="toolbar"')
+    expect(markup).not.toContain(" style=")
     expect(markup).not.toContain("<h1")
     expect(markup).toContain('tabindex="0"')
     expect(markup).toContain('data-testid="task-map-node"')

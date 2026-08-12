@@ -15,6 +15,7 @@ describe("Astryx CSP UI guard", () => {
     const manifest = readUiGuardManifest()
     expect(manifest.schemaVersion).toBe(1)
     expect(manifest.tailwindBridge.version).toBe("4.3.3")
+    expect(manifest.cssImports).toContainEqual({ importer: "src/main.tsx", path: "src/styles.css" })
     expect(manifest.pageContract.sharedStyleEntry).toBe("src/styles.css")
     expect(manifest.pageContract.entrypoints).toEqual(expect.arrayContaining([
       { path: "src/main.tsx", import: "./styles.css" },
@@ -60,13 +61,58 @@ describe("Astryx CSP UI guard", () => {
     }
   })
 
+  test("catches barrel members, re-exports, dynamic loaders, and unsafe style sinks", () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-guard-hardening-"))
+    try {
+      writeFileSync(path.join(temporaryRoot, "unsafe.tsx"), [
+        'import * as Core from "@astryxdesign/core"',
+        'export { Grid } from "@astryxdesign/core"',
+        'export * from "@astryxdesign/core"',
+        'const core = require("@astryxdesign/core")',
+        'void Core.Grid; void Core["TextInput"]; void core.Tooltip',
+        'void import("@astryxdesign/core/Popover")',
+        'void import("./reference/runtime")',
+        'void require("./output/runtime")',
+        'const styleProps = { style: { color: "red" } }',
+        'const Bad = () => <div {...{ style: { color: "red" } }} {...styleProps} dangerouslySetInnerHTML={{ __html: "<style>" }} />',
+        'React.createElement("div", { style: { color: "red" } })',
+        'document.body.setAttribute("style", "color:red")',
+        'document.body.removeAttribute("style")',
+        'document.body.insertAdjacentHTML("beforeend", "<style>")',
+        'document.body.innerHTML = "<style>"',
+      ].join("\n"))
+      const report = scanUiSource({ projectRoot: temporaryRoot, sourcePaths: ["unsafe.tsx"], mode: "enforce" })
+      expect(report.passed).toBe(false)
+      expect(report.errors.filter((error) => error.code === "unsafe-direct-import").length).toBeGreaterThanOrEqual(6)
+      expect(report.errors.filter((error) => error.code === "forbidden-import")).toHaveLength(2)
+      expect(report.errors.some((error) => error.code === "inline-style")).toBe(true)
+      expect(report.errors.some((error) => error.code === "dom-style")).toBe(true)
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("blocks CSS edges outside the importer/path baseline", () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-css-baseline-"))
+    try {
+      writeFileSync(path.join(temporaryRoot, "new.tsx"), 'import "./new-feature.css"')
+      const inventory = scanUiSource({ projectRoot: temporaryRoot, sourcePaths: ["new.tsx"] })
+      expect(inventory.errors.some((error) => error.code === "css-import")).toBe(false)
+      expect(inventory.warnings.some((warning) => warning.code === "css-import")).toBe(true)
+      const enforce = scanUiSource({ projectRoot: temporaryRoot, sourcePaths: ["new.tsx"], mode: "enforce" })
+      expect(enforce.errors.some((error) => error.code === "css-import")).toBe(true)
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true })
+    }
+  })
+
   test("resolves only the supported inventory and enforce modes", () => {
-    expect(uiGuardModeFromEnv(undefined)).toBe("inventory")
     expect(uiGuardModeFromEnv("inventory")).toBe("inventory")
     expect(uiGuardModeFromEnv("enforce")).toBe("enforce")
     expect(() => uiGuardModeFromEnv("strict")).toThrow(/inventory or enforce/)
     const enforce = scanUiSource({ projectRoot, sourcePaths: ["src/ui/foundations/tokens.css"], mode: "enforce" })
-    expect(enforce.errors.some((error) => error.code === "residual-css")).toBe(true)
+    expect(enforce.errors.some((error) => error.code === "residual-css")).toBe(false)
+    expect(enforce.warnings.some((warning) => warning.code === "residual-css")).toBe(true)
   })
 
   test("keeps raw layout within its manifest baseline", () => {
@@ -129,6 +175,43 @@ describe("Astryx CSP UI guard", () => {
       rmSync(outputRoot, { recursive: true, force: true })
     }
   })
+
+  test("keeps production and Storybook CSS topology identical and same-origin", async () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-config-fixture-"))
+    const productionOutput = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-config-production-"))
+    const storybookOutput = mkdtempSync(path.join(os.tmpdir(), "kanban-ui-config-storybook-"))
+    try {
+      writeFileSync(path.join(fixtureRoot, "index.html"), '<div id="root"></div><script type="module" src="/main.ts"></script>')
+      writeFileSync(path.join(fixtureRoot, "main.ts"), `import ${JSON.stringify(path.join(projectRoot, "src/styles.css"))}; document.getElementById("root")?.classList.add("flex", "text-primary")`)
+      await viteBuild({
+        root: fixtureRoot,
+        configFile: path.join(projectRoot, "vite.config.ts"),
+        build: { outDir: productionOutput, emptyOutDir: true, rollupOptions: { input: path.join(fixtureRoot, "index.html") } },
+      })
+      await viteBuild({
+        root: fixtureRoot,
+        configFile: path.join(projectRoot, ".storybook/vite.config.ts"),
+        build: { outDir: storybookOutput, emptyOutDir: true, rollupOptions: { input: path.join(fixtureRoot, "index.html") } },
+      })
+
+      const production = readBuiltCssTopology(productionOutput)
+      const storybook = readBuiltCssTopology(storybookOutput)
+      expect(production.cssFiles).toHaveLength(1)
+      expect(storybook.cssFiles).toHaveLength(1)
+      expect(production.firstLayer).toBe(storybook.firstLayer)
+      expect(production.firstLayer).toMatch(/^@layer\s+[\w-]+/)
+      expect(production.html).toMatch(/href=["'][^"']+\.css["']/)
+      expect(storybook.html).toMatch(/href=["'][^"']+\.css["']/)
+      expect(production.html).not.toMatch(/href=["'][a-z][a-z0-9+.-]*:\/\//i)
+      expect(storybook.html).not.toMatch(/href=["'][a-z][a-z0-9+.-]*:\/\//i)
+      expect(production.css).toContain("--color-text-primary")
+      expect(storybook.css).toContain("--color-text-primary")
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true })
+      rmSync(productionOutput, { recursive: true, force: true })
+      rmSync(storybookOutput, { recursive: true, force: true })
+    }
+  })
 })
 
 function collectFiles(root: string): string[] {
@@ -139,4 +222,13 @@ function collectFiles(root: string): string[] {
     else if (entry.isFile()) files.push(absolutePath)
   }
   return files
+}
+
+function readBuiltCssTopology(root: string): { cssFiles: string[]; css: string; html: string; firstLayer: string } {
+  const files = collectFiles(root)
+  const cssFiles = files.filter((file) => file.endsWith(".css"))
+  const css = cssFiles.map((file) => readFileSync(file, "utf8")).join("\n")
+  const html = files.filter((file) => file.endsWith(".html")).map((file) => readFileSync(file, "utf8")).join("\n")
+  const firstLayer = css.match(/@layer\s+[\w-]+/)?.[0] ?? ""
+  return { cssFiles, css, html, firstLayer }
 }

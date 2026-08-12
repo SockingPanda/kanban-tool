@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync, readdirSync } from "node:fs"
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -61,6 +61,16 @@ export type UiGuardLegacyRawLayout = {
   readonly exitCondition: string
 }
 
+export type UiGuardCssImport = {
+  readonly importer: string
+  readonly path: string
+}
+
+export type UiGuardUnsafeImportBaseline = {
+  readonly importer: string
+  readonly path: string
+}
+
 export type UiGuardPageEntrypoint = {
   readonly path: string
   readonly import: string
@@ -78,10 +88,12 @@ export type UiGuardManifest = {
   readonly tailwindBridge: UiGuardTailwindBridge
   readonly swizzles: readonly UiGuardSwizzle[]
   readonly unsafeDirectImports: readonly string[]
+  readonly unsafeImportBaseline: readonly UiGuardUnsafeImportBaseline[]
   readonly ownedPaths: readonly string[]
   readonly forbiddenRoots: readonly string[]
   readonly residualCss: readonly UiGuardResidualCss[]
   readonly legacyRawLayout: readonly UiGuardLegacyRawLayout[]
+  readonly cssImports: readonly UiGuardCssImport[]
   readonly pageContract: UiGuardPageContract
 }
 
@@ -97,6 +109,8 @@ export type UiGuardIssueCode =
   | "residual-css-over-budget"
   | "legacy-raw-layout"
   | "legacy-raw-layout-over-budget"
+  | "css-import"
+  | "manifest-provenance"
   | "page-contract"
 
 export type UiGuardIssue = {
@@ -142,6 +156,7 @@ export function readUiGuardManifest(manifestPath = UI_GUARD_MANIFEST_PATH): UiGu
     throw new Error(`Unable to read Astryx UI safety manifest: ${manifestPath}`, { cause: error })
   }
   validateUiGuardManifest(parsed)
+  validateUiGuardManifestProvenance(parsed, path.resolve(path.dirname(manifestPath)))
   return parsed
 }
 
@@ -164,6 +179,9 @@ export function validateUiGuardManifest(value: unknown): asserts value is UiGuar
   if (!isStringArray(value.unsafeDirectImports) || !isStringArray(value.ownedPaths) || !isStringArray(value.forbiddenRoots)) {
     throw new Error("Astryx UI safety manifest path lists are invalid")
   }
+  if (!Array.isArray(value.unsafeImportBaseline) || !value.unsafeImportBaseline.every(isUnsafeImportBaseline)) {
+    throw new Error("Astryx UI safety manifest unsafeImportBaseline is invalid")
+  }
   if (!Array.isArray(value.swizzles) || !value.swizzles.every(isSwizzle)) {
     throw new Error("Astryx UI safety manifest swizzles are invalid")
   }
@@ -173,12 +191,97 @@ export function validateUiGuardManifest(value: unknown): asserts value is UiGuar
   if (!Array.isArray(value.legacyRawLayout) || !value.legacyRawLayout.every(isLegacyRawLayout)) {
     throw new Error("Astryx UI safety manifest legacyRawLayout is invalid")
   }
+  if (!Array.isArray(value.cssImports) || !value.cssImports.every(isCssImport)) {
+    throw new Error("Astryx UI safety manifest cssImports is invalid")
+  }
   if (!isRecord(value.pageContract) || value.pageContract.schemaVersion !== UI_GUARD_SCHEMA_VERSION || !isNonEmptyString(value.pageContract.sharedStyleEntry) || !Array.isArray(value.pageContract.entrypoints) || !value.pageContract.entrypoints.every(isPageEntrypoint)) {
     throw new Error("Astryx UI safety manifest pageContract is invalid")
   }
-  for (const candidate of [...value.ownedPaths, ...value.forbiddenRoots, ...value.residualCss.map((item) => item.path), ...value.legacyRawLayout.map((item) => item.path), value.pageContract.sharedStyleEntry, ...value.pageContract.entrypoints.map((item) => item.path)]) {
+  for (const candidate of [...value.ownedPaths, ...value.forbiddenRoots, ...value.residualCss.map((item) => item.path), ...value.legacyRawLayout.map((item) => item.path), value.pageContract.sharedStyleEntry, ...value.pageContract.entrypoints.map((item) => item.path), ...value.cssImports.map((item) => item.importer), ...value.unsafeImportBaseline.map((item) => item.importer)]) {
     validateManifestPath(candidate)
   }
+  for (const entry of value.cssImports) validateCssImportPath(entry.path)
+  for (const entry of value.unsafeImportBaseline) {
+    if (entry.path.startsWith("/") || entry.path.includes("\\") || entry.path.split("/").includes("..")) {
+      throw new Error(`Invalid Astryx UI safety manifest unsafe import path: ${entry.path}`)
+    }
+  }
+}
+
+/** Validate provenance against the checked-in package metadata and lockfile before scanning sources. */
+function validateUiGuardManifestProvenance(manifest: UiGuardManifest, projectRoot: string): void {
+  const packageJsonPath = path.join(projectRoot, "package.json")
+  const lockfilePath = path.resolve(projectRoot, "..", "..", "pnpm-lock.yaml")
+  let packageJson: { dependencies?: Record<string, unknown>; devDependencies?: Record<string, unknown> }
+  try {
+    packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as typeof packageJson
+  } catch (error) {
+    throw new Error(`Unable to validate Astryx manifest provenance: ${packageJsonPath}`, { cause: error })
+  }
+  const corePackagePath = path.join(projectRoot, "node_modules", "@astryxdesign", "core", "package.json")
+  let corePackage: { version?: unknown; license?: unknown }
+  try {
+    corePackage = JSON.parse(readFileSync(corePackagePath, "utf8")) as typeof corePackage
+  } catch (error) {
+    throw new Error(`Unable to validate Astryx package provenance: ${corePackagePath}`, { cause: error })
+  }
+  if (corePackage.version !== manifest.source.version || corePackage.license !== manifest.source.license) {
+    throw new Error(`Astryx manifest source metadata does not match installed ${manifest.source.package}`)
+  }
+  const packageVersion = packageJson.dependencies?.[manifest.source.package]
+  if (packageVersion !== manifest.source.version) {
+    throw new Error(`Astryx manifest source version does not match package.json (${manifest.source.package})`)
+  }
+  for (const packageName of ["tailwindcss", "@tailwindcss/vite"]) {
+    const declared = packageJson.dependencies?.[packageName] ?? packageJson.devDependencies?.[packageName]
+    if (declared !== manifest.tailwindBridge.version) {
+      throw new Error(`Astryx Tailwind bridge version does not match package.json (${packageName})`)
+    }
+  }
+  let lockfile = ""
+  try {
+    lockfile = readFileSync(lockfilePath, "utf8")
+  } catch (error) {
+    throw new Error(`Unable to validate Astryx lockfile provenance: ${lockfilePath}`, { cause: error })
+  }
+  const lockPattern = new RegExp(`['"]?${escapeRegExp(manifest.source.package)}@${escapeRegExp(manifest.source.version)}['"]?:\\n\\s+resolution: \\{integrity: ([^}]+)\\}`)
+  const lockMatch = lockfile.match(lockPattern)
+  if (lockMatch?.[1] !== `sha512-${manifest.source.tarballOrSourceHash.replace(/^sha512-/, "")}`) {
+    throw new Error(`Astryx manifest source hash does not match pnpm-lock.yaml (${manifest.source.package})`)
+  }
+  const packageIntegrityPattern = /^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$/
+  if (!packageIntegrityPattern.test(manifest.source.tarballOrSourceHash)) {
+    throw new Error("Astryx manifest source.tarballOrSourceHash must be a valid SRI hash")
+  }
+  const owned = new Set<string>()
+  const canonicalRoot = realpathSync(projectRoot)
+  for (const ownedPath of manifest.ownedPaths) {
+    if (owned.has(ownedPath)) throw new Error(`Astryx manifest ownedPaths contains a duplicate: ${ownedPath}`)
+    owned.add(ownedPath)
+    const absolutePath = path.resolve(projectRoot, ownedPath)
+    if (!existsSync(absolutePath) || !isRegularFile(absolutePath)) {
+      throw new Error(`Astryx manifest ownedPath must be an existing file under the app root: ${ownedPath}`)
+    }
+    const canonicalPath = realpathSync(absolutePath)
+    if (canonicalPath !== canonicalRoot && !canonicalPath.startsWith(`${canonicalRoot}${path.sep}`)) {
+      throw new Error(`Astryx manifest ownedPath must remain under the canonical app root: ${ownedPath}`)
+    }
+  }
+  for (const swizzle of manifest.swizzles) {
+    if (!owned.has(swizzle.ownedPath)) {
+      throw new Error(`Astryx manifest swizzle ownedPath must be listed in ownedPaths: ${swizzle.component}`)
+    }
+    if (!/^[a-f0-9]{64}$/i.test(swizzle.sourceSha256)) {
+      throw new Error(`Astryx manifest swizzle sourceSha256 must be 64 hexadecimal characters: ${swizzle.component}`)
+    }
+    if (swizzle.sourceVersion !== manifest.source.version || swizzle.license !== manifest.source.license) {
+      throw new Error(`Astryx manifest swizzle provenance does not match ${manifest.source.package}: ${swizzle.component}`)
+    }
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 /** Scan source paths without traversing the explicitly forbidden reference/output trees. */
@@ -258,13 +361,18 @@ function scanSourceText(source: string, relativePath: string, mode: UiGuardMode,
   const sharedStyleOwner = relativePath === manifest.tailwindBridge.staticCssEntry
   for (const candidate of collectStaticImports(source, relativePath)) {
     const imported = candidate.value
+    if (isCssSpecifier(imported)) scanCssImportEdge(relativePath, imported, mode, manifest, issues)
     if (manifest.unsafeDirectImports.includes(imported) && !sharedStyleOwner) {
-      const severity = manifest.ownedPaths.includes(relativePath) || mode === "enforce" ? "error" : "warning"
+      const severity = unsafeImportSeverity(relativePath, imported, mode, manifest)
       issues.push(issue("unsafe-direct-import", severity, relativePath, lineForOffset(source, candidate.offset), `Unsafe direct import ${imported}; migrate this owner to the shared Astryx/CSP path.`))
     }
     if (isForbiddenImport(imported, manifest.forbiddenRoots)) {
       issues.push(issue("forbidden-import", "error", relativePath, lineForOffset(source, candidate.offset), `Import points at a forbidden reference/output path: ${imported}`))
     }
+  }
+
+  if (relativePath.endsWith(".css")) {
+    for (const candidate of collectCssReferences(source)) scanCssImportEdge(relativePath, candidate.value, mode, manifest, issues)
   }
 
   scanUnsafeBarrelImports(source, relativePath, mode, manifest, issues)
@@ -280,13 +388,7 @@ type StaticImport = { readonly value: string; readonly offset: number }
 
 function collectStaticImports(source: string, relativePath: string): readonly StaticImport[] {
   const extension = path.extname(relativePath).toLowerCase()
-  if (extension === ".css") {
-    const imports: StaticImport[] = []
-    for (const match of source.matchAll(/@import\s+["']([^"']+)["']/g)) {
-      imports.push({ value: match[1], offset: match.index ?? 0 })
-    }
-    return imports
-  }
+  if (extension === ".css") return []
   if (![".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"].includes(extension)) return []
   const scriptKind = extension === ".tsx" ? ts.ScriptKind.TSX : extension === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
   const sourceFile = ts.createSourceFile(relativePath, source, ts.ScriptTarget.Latest, true, scriptKind)
@@ -296,11 +398,48 @@ function collectStaticImports(source: string, relativePath: string): readonly St
       imports.push({ value: node.moduleSpecifier.text, offset: node.moduleSpecifier.getStart(sourceFile) })
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined && ts.isStringLiteral(node.moduleSpecifier)) {
       imports.push({ value: node.moduleSpecifier.text, offset: node.moduleSpecifier.getStart(sourceFile) })
+    } else if (ts.isCallExpression(node) && node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0])) {
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword
+      const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require"
+      if (isDynamicImport || isRequire) imports.push({ value: node.arguments[0].text, offset: node.arguments[0].getStart(sourceFile) })
     }
     ts.forEachChild(node, visit)
   }
   visit(sourceFile)
   return imports
+}
+
+function collectCssReferences(source: string): readonly StaticImport[] {
+  const references: StaticImport[] = []
+  for (const match of source.matchAll(/@import\s+(?:url\(\s*)?["']?([^"'\s)]+)["']?\s*\)?/g)) {
+    references.push({ value: match[1], offset: match.index ?? 0 })
+  }
+  for (const match of source.matchAll(/url\(\s*["']?([^"'\s)]+)["']?\s*\)/g)) {
+    references.push({ value: match[1], offset: match.index ?? 0 })
+  }
+  return references
+}
+
+function isCssSpecifier(imported: string): boolean {
+  return imported.endsWith(".css") || imported.includes(".css?") || imported.includes(".css#")
+}
+
+function scanCssImportEdge(importer: string, imported: string, mode: UiGuardMode, manifest: UiGuardManifest, issues: UiGuardIssue[]): void {
+  const pathValue = canonicalCssImportPath(importer, imported)
+  if (pathValue === undefined || manifest.cssImports.some((entry) => entry.importer === importer && entry.path === pathValue)) return
+  issues.push(issue("css-import", mode === "enforce" ? "error" : "warning", importer, undefined, `CSS import is not in the machine baseline: ${importer} -> ${pathValue}`))
+}
+
+function unsafeImportSeverity(importer: string, imported: string, mode: UiGuardMode, manifest: UiGuardManifest): UiGuardIssue["severity"] {
+  if (mode !== "enforce") return "warning"
+  return manifest.unsafeImportBaseline.some((entry) => entry.importer === importer && entry.path === imported) ? "warning" : "error"
+}
+
+function canonicalCssImportPath(importer: string, imported: string): string | undefined {
+  const clean = imported.split(/[?#]/, 1)[0]
+  if (!clean || clean.startsWith("data:") || clean.startsWith("#")) return undefined
+  if (!clean.startsWith(".")) return clean
+  return toManifestPath(path.posix.normalize(path.posix.join(path.posix.dirname(importer), clean)))
 }
 
 type SourceSyntaxInspection = {
@@ -397,20 +536,41 @@ function inspectSourceSyntax(source: string, relativePath: string): SourceSyntax
       if (ts.isJsxAttribute(attribute) && jsxAttributeNameText(attribute.name) === "style") {
         addViolation("inline-style", attribute, "Inline style tags/props are forbidden; use Astryx, Tailwind, or a static stylesheet.")
       }
+      if (ts.isJsxAttribute(attribute) && jsxAttributeNameText(attribute.name) === "dangerouslySetInnerHTML") {
+        addViolation("inline-style", attribute, "dangerouslySetInnerHTML is forbidden under the static CSP style policy.")
+      }
+      if (ts.isJsxSpreadAttribute(attribute) && spreadMayCarryStyle(attribute.expression, sourceFile)) {
+        addViolation("inline-style", attribute, "JSX spread props may inject inline style; use explicit static props instead.")
+      }
     }
   }
 
   const visit = (node: ts.Node): void => {
     if (ts.isJsxElement(node)) inspectJsxTag(node.openingElement)
     else if (ts.isJsxSelfClosingElement(node)) inspectJsxTag(node)
-    if (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind) && expressionContainsStyle(node.left)) {
-      addViolation("dom-style", node.left, "DOM .style mutation is forbidden under the static CSP style policy.")
+    if (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind)) {
+      if (expressionContainsStyle(node.left)) addViolation("dom-style", node.left, "DOM .style mutation is forbidden under the static CSP style policy.")
+      else if (expressionContainsMarkupSink(node.left)) addViolation("inline-style", node.left, "Runtime HTML/style injection is forbidden under the static CSP style policy.")
     }
     if (ts.isCallExpression(node) && isStyleMutationCall(node)) {
       addViolation("dom-style", node.expression, "DOM .style mutation is forbidden under the static CSP style policy.")
     }
+    if (ts.isCallExpression(node) && isMarkupInjectionCall(node)) {
+      addViolation("inline-style", node.expression, "Runtime HTML/style injection is forbidden under the static CSP style policy.")
+    }
     if (ts.isCallExpression(node) && isStyleElementFactory(node)) {
       addViolation("inline-style", node.expression, "Runtime style element injection is forbidden under the static CSP style policy.")
+    }
+    if (ts.isCallExpression(node) && isCreateElementCall(node) && createElementPropsMayCarryStyle(node.arguments[1])) {
+      addViolation("inline-style", node.expression, "React.createElement style props are forbidden under the static CSP style policy.")
+    }
+    if (ts.isCallExpression(node) && isCreateElementCall(node)) {
+      const rawLayout = rawLayoutFromCreateElement(node, sourceFile)
+      rawDivCount += rawLayout.rawDivCount
+      layoutSpanCount += rawLayout.layoutSpanCount
+    }
+    if (ts.isPropertyAssignment(node) && node.name.getText(sourceFile) === "dangerouslySetInnerHTML") {
+      addViolation("inline-style", node.name, "dangerouslySetInnerHTML is forbidden under the static CSP style policy.")
     }
     ts.forEachChild(node, visit)
   }
@@ -425,18 +585,72 @@ function scanUnsafeBarrelImports(source: string, relativePath: string, mode: UiG
   const sourceFile = ts.createSourceFile(relativePath, source, ts.ScriptTarget.Latest, true, scriptKind)
   const unsafeComponents = new Set(manifest.unsafeDirectImports.map((entry) => entry.slice(entry.lastIndexOf("/") + 1)))
   const sharedStyleOwner = relativePath === manifest.tailwindBridge.staticCssEntry
+  const namespaceAliases = new Set<string>()
+  const reported = new Set<string>()
+
+  const reportUnsafe = (component: string, importedPath: string, node: ts.Node): void => {
+    if (!unsafeComponents.has(component) || sharedStyleOwner) return
+    const key = `${component}:${node.getStart(sourceFile)}`
+    if (reported.has(key)) return
+    reported.add(key)
+    issues.push(issue("unsafe-direct-import", unsafeImportSeverity(relativePath, importedPath, mode, manifest), relativePath, lineForOffset(source, node.getStart(sourceFile)), `Unsafe Astryx component access ${component} via ${importedPath}; migrate this owner to the shared Astryx/CSP path.`))
+  }
+
+  const reportUnsafeStar = (node: ts.Node): void => {
+    if (sharedStyleOwner) return
+    const key = `*:${node.getStart(sourceFile)}`
+    if (reported.has(key)) return
+    reported.add(key)
+    issues.push(issue("unsafe-direct-import", mode === "enforce" ? "error" : "warning", relativePath, lineForOffset(source, node.getStart(sourceFile)), "Wildcard Astryx barrel re-export may expose unsafe components; use explicit safe exports."))
+  }
+
+  const memberName = (node: ts.PropertyAccessExpression | ts.ElementAccessExpression): string | undefined => {
+    if (ts.isPropertyAccessExpression(node)) return node.name.text
+    return node.argumentExpression !== undefined && ts.isStringLiteral(node.argumentExpression) ? node.argumentExpression.text : undefined
+  }
+
   const visit = (node: ts.Node): void => {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@astryxdesign/core" && node.importClause?.namedBindings !== undefined && ts.isNamedImports(node.importClause.namedBindings)) {
-      for (const element of node.importClause.namedBindings.elements) {
-        const component = element.propertyName?.text ?? element.name.text
-        if (!unsafeComponents.has(component)) continue
-        const severity = manifest.ownedPaths.includes(relativePath) || mode === "enforce" ? "error" : "warning"
-        issues.push(issue("unsafe-direct-import", severity, relativePath, lineForOffset(source, element.getStart(sourceFile)), `Unsafe barrel import ${component} from @astryxdesign/core; migrate this owner to the shared Astryx/CSP path.`))
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && ts.isCallExpression(node.initializer) && isBareCoreLoader(node.initializer)) {
+      namespaceAliases.add(node.name.text)
+    }
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@astryxdesign/core") {
+      const bindings = node.importClause?.namedBindings
+      if (bindings !== undefined && ts.isNamespaceImport(bindings)) {
+        namespaceAliases.add(bindings.name.text)
+      } else if (bindings !== undefined && ts.isNamedImports(bindings)) {
+        for (const element of bindings.elements) {
+          reportUnsafe(element.propertyName?.text ?? element.name.text, `@astryxdesign/core/${element.propertyName?.text ?? element.name.text}`, element)
+        }
+      }
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@astryxdesign/core") {
+      const clause = node.exportClause
+      if (clause === undefined) {
+        reportUnsafeStar(node)
+      } else if (ts.isNamespaceExport(clause)) {
+        namespaceAliases.add(clause.name.text)
+      } else if (ts.isNamedExports(clause)) {
+        for (const element of clause.elements) {
+          reportUnsafe(element.propertyName?.text ?? element.name.text, `@astryxdesign/core/${element.propertyName?.text ?? element.name.text}`, element)
+        }
+      }
+    }
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      const component = memberName(node)
+      if (component !== undefined && ts.isIdentifier(node.expression) && namespaceAliases.has(node.expression.text)) {
+        reportUnsafe(component, "@astryxdesign/core", node)
+      }
+      if (component !== undefined && ts.isCallExpression(node.expression) && isBareCoreLoader(node.expression)) {
+        reportUnsafe(component, "@astryxdesign/core", node)
       }
     }
     ts.forEachChild(node, visit)
   }
   if (!sharedStyleOwner) visit(sourceFile)
+}
+
+function isBareCoreLoader(node: ts.CallExpression): boolean {
+  if (node.arguments.length === 0 || !ts.isStringLiteral(node.arguments[0]) || node.arguments[0].text !== "@astryxdesign/core") return false
+  return node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === "require")
 }
 
 function isAssignmentOperator(kind: ts.SyntaxKind): boolean {
@@ -447,7 +661,18 @@ function expressionContainsStyle(expression: ts.Expression): boolean {
   if (ts.isParenthesizedExpression(expression)) return expressionContainsStyle(expression.expression)
   if (ts.isPropertyAccessExpression(expression)) return expression.name.text === "style" || expressionContainsStyle(expression.expression)
   if (ts.isElementAccessExpression(expression)) {
-    return (ts.isStringLiteral(expression.argumentExpression) && expression.argumentExpression.text === "style") || expressionContainsStyle(expression.expression)
+    return (expression.argumentExpression !== undefined && ts.isStringLiteral(expression.argumentExpression) && expression.argumentExpression.text === "style") || expressionContainsStyle(expression.expression)
+  }
+  return false
+}
+
+function expressionContainsMarkupSink(expression: ts.Expression): boolean {
+  if (ts.isParenthesizedExpression(expression)) return expressionContainsMarkupSink(expression.expression)
+  if (ts.isPropertyAccessExpression(expression)) {
+    return expression.name.text === "innerHTML" || expression.name.text === "outerHTML" || expressionContainsMarkupSink(expression.expression)
+  }
+  if (ts.isElementAccessExpression(expression)) {
+    return (expression.argumentExpression !== undefined && ts.isStringLiteral(expression.argumentExpression) && (expression.argumentExpression.text === "innerHTML" || expression.argumentExpression.text === "outerHTML")) || expressionContainsMarkupSink(expression.expression)
   }
   return false
 }
@@ -455,9 +680,18 @@ function expressionContainsStyle(expression: ts.Expression): boolean {
 function isStyleMutationCall(node: ts.CallExpression): boolean {
   if (ts.isPropertyAccessExpression(node.expression)) {
     if ((node.expression.name.text === "setProperty" || node.expression.name.text === "removeProperty") && expressionContainsStyle(node.expression.expression)) return true
+    if ((node.expression.name.text === "setAttribute" || node.expression.name.text === "removeAttribute") && firstArgumentIs(node, "style")) return true
     return node.expression.name.text === "assign" && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "Object" && node.arguments.length > 0 && expressionContainsStyle(node.arguments[0])
   }
   return false
+}
+
+function isMarkupInjectionCall(node: ts.CallExpression): boolean {
+  return ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "insertAdjacentHTML"
+}
+
+function firstArgumentIs(node: ts.CallExpression, value: string): boolean {
+  return node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text === value
 }
 
 function hasLayoutClass(attributes: ts.JsxAttributes, sourceFile: ts.SourceFile): boolean {
@@ -469,6 +703,26 @@ function hasLayoutClass(attributes: ts.JsxAttributes, sourceFile: ts.SourceFile)
       ? classAttribute.initializer.expression.getText(sourceFile)
       : ""
   const tokens = value.match(/[A-Za-z0-9_-]+/g) ?? []
+  if (tokens.some((token) => layoutClassNames.has(token) || layoutClassPrefixes.some((prefix) => token.startsWith(prefix)))) return true
+  return attributes.properties.some((attribute) => ts.isJsxSpreadAttribute(attribute) && (spreadObjectHasLayoutClass(attribute.expression, sourceFile) || !ts.isObjectLiteralExpression(attribute.expression)))
+}
+
+function spreadMayCarryStyle(expression: ts.Expression, sourceFile: ts.SourceFile): boolean {
+  if (ts.isObjectLiteralExpression(expression)) {
+    return expression.properties.some((property) => {
+      if (!ts.isPropertyAssignment(property)) return false
+      const name = property.name.getText(sourceFile)
+      return name === "style" || name === "dangerouslySetInnerHTML"
+    })
+  }
+  return ts.isIdentifier(expression) && /style/i.test(expression.text)
+}
+
+function spreadObjectHasLayoutClass(expression: ts.Expression, sourceFile: ts.SourceFile): boolean {
+  if (!ts.isObjectLiteralExpression(expression)) return false
+  const classProperty = expression.properties.find((property): property is ts.PropertyAssignment => ts.isPropertyAssignment(property) && property.name.getText(sourceFile) === "className")
+  if (classProperty === undefined) return false
+  const tokens = classProperty.initializer.getText(sourceFile).match(/[A-Za-z0-9_-]+/g) ?? []
   return tokens.some((token) => layoutClassNames.has(token) || layoutClassPrefixes.some((prefix) => token.startsWith(prefix)))
 }
 
@@ -480,6 +734,35 @@ function isStyleElementFactory(node: ts.CallExpression): boolean {
   if (node.arguments.length === 0 || !ts.isStringLiteral(node.arguments[0]) || node.arguments[0].text !== "style") return false
   if (ts.isIdentifier(node.expression)) return node.expression.text === "createElement"
   return ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "createElement"
+}
+
+function isCreateElementCall(node: ts.CallExpression): boolean {
+  return ts.isIdentifier(node.expression) && node.expression.text === "createElement"
+    || ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "createElement"
+}
+
+function createElementPropsMayCarryStyle(argument: ts.Expression | undefined): boolean {
+  if (argument === undefined) return false
+  if (ts.isObjectLiteralExpression(argument)) {
+    return argument.properties.some((property) => ts.isPropertyAssignment(property) && ["style", "dangerouslySetInnerHTML"].includes(property.name.getText()))
+  }
+  return ts.isIdentifier(argument) && /style|props/i.test(argument.text)
+}
+
+function rawLayoutFromCreateElement(node: ts.CallExpression, sourceFile: ts.SourceFile): { rawDivCount: number; layoutSpanCount: number } {
+  const tag = node.arguments[0]
+  const props = node.arguments[1]
+  if (tag === undefined) return { rawDivCount: 0, layoutSpanCount: 0 }
+  const tagName = ts.isStringLiteral(tag) ? tag.text : undefined
+  const hasLayout = props !== undefined && (ts.isObjectLiteralExpression(props) ? props.properties.some((property) => ts.isPropertyAssignment(property) && property.name.getText(sourceFile) === "className" && classExpressionHasLayout(property.initializer, sourceFile)) : ts.isIdentifier(props) && /class|props/i.test(props.text))
+  if (tagName === "div" || (tagName === undefined && hasLayout)) return { rawDivCount: 1, layoutSpanCount: 0 }
+  if (tagName === "span" && hasLayout) return { rawDivCount: 0, layoutSpanCount: 1 }
+  return { rawDivCount: 0, layoutSpanCount: 0 }
+}
+
+function classExpressionHasLayout(expression: ts.Expression, sourceFile: ts.SourceFile): boolean {
+  const tokens = expression.getText(sourceFile).match(/[A-Za-z0-9_-]+/g) ?? []
+  return tokens.some((token) => layoutClassNames.has(token) || layoutClassPrefixes.some((prefix) => token.startsWith(prefix)))
 }
 
 function scanLegacyRawLayout(count: number, relativePath: string, mode: UiGuardMode, manifest: UiGuardManifest, issues: UiGuardIssue[]): void {
@@ -506,9 +789,9 @@ function scanCssInventory(source: string, relativePath: string, mode: UiGuardMod
   if (residual === undefined) return
   const loc = lineCount(source)
   if (loc > residual.maxLoc) {
-    issues.push(issue("residual-css-over-budget", "error", relativePath, undefined, `Residual CSS exceeds its allowlist budget (${loc} LOC > ${residual.maxLoc} LOC).`))
+    issues.push(issue("residual-css-over-budget", mode === "enforce" ? "error" : "warning", relativePath, undefined, `Residual CSS exceeds its allowlist budget (${loc} LOC > ${residual.maxLoc} LOC).`))
   } else {
-    issues.push(issue("residual-css", mode === "enforce" ? "error" : "warning", relativePath, undefined, `Legacy CSS remains allowlisted for ${residual.owner}; exit: ${residual.exitCondition}`))
+    issues.push(issue("residual-css", "warning", relativePath, undefined, `Legacy CSS remains allowlisted for ${residual.owner}; exit: ${residual.exitCondition}`))
   }
 }
 
@@ -524,7 +807,15 @@ function scanPageContract(projectRoot: string, manifest: UiGuardManifest, issues
       continue
     }
     const source = readFileSync(absolutePath, "utf8")
-    const count = source.split(entry.import).length - 1
+    const extension = path.extname(entry.path).toLowerCase()
+    const scriptKind = extension === ".tsx" ? ts.ScriptKind.TSX : extension === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
+    const sourceFile = ts.createSourceFile(entry.path, source, ts.ScriptTarget.Latest, true, scriptKind)
+    let count = 0
+    const visit = (node: ts.Node): void => {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === entry.import) count += 1
+      ts.forEachChild(node, visit)
+    }
+    visit(sourceFile)
     if (count !== 1) {
       issues.push(issue("page-contract", "error", entry.path, undefined, `Page entrypoint must import the shared CSS entry exactly once (found ${count}).`))
     }
@@ -587,6 +878,12 @@ function validateManifestPath(value: string): void {
   }
 }
 
+function validateCssImportPath(value: string): void {
+  if (!isNonEmptyString(value) || value.startsWith("/") || value.includes("\\") || value.split("/").includes("..")) {
+    throw new Error(`Invalid Astryx UI safety manifest CSS path: ${String(value)}`)
+  }
+}
+
 function lineCount(source: string): number {
   return source.length === 0 ? 0 : (source.match(/\n/g)?.length ?? 0) + (source.endsWith("\n") ? 0 : 1)
 }
@@ -617,6 +914,14 @@ function isResidualCss(value: unknown): value is UiGuardResidualCss {
 
 function isLegacyRawLayout(value: unknown): value is UiGuardLegacyRawLayout {
   return isRecord(value) && isNonEmptyString(value.path) && isSafeNonNegativeInteger(value.maxCount) && isNonEmptyString(value.owner) && isNonEmptyString(value.exitCondition)
+}
+
+function isCssImport(value: unknown): value is UiGuardCssImport {
+  return isRecord(value) && isNonEmptyString(value.importer) && isNonEmptyString(value.path)
+}
+
+function isUnsafeImportBaseline(value: unknown): value is UiGuardUnsafeImportBaseline {
+  return isRecord(value) && isNonEmptyString(value.importer) && isNonEmptyString(value.path)
 }
 
 function isPageEntrypoint(value: unknown): value is UiGuardPageEntrypoint {

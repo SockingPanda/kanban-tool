@@ -93,13 +93,40 @@ describe("Signals screen presentation", () => {
     expect(source).toContain('className="whitespace-pre-wrap"')
     expect(source).toContain('className="min-h-0 max-h-screen overflow-hidden"')
     expect(source).toContain('className="min-h-0 max-h-screen overflow-auto"')
+    expect(source).toContain('data-testid="signals-list-scroll"')
+    expect(source).toContain('data-testid="signals-detail-scroll"')
+    expect(source).not.toMatch(/<SafeCard[^>]*overflow-auto/)
     expect(source).not.toContain('columns="auto-md"')
     expect(source).not.toContain("maxLines")
     expect(source).not.toContain("@astryxdesign/core/Spinner")
+    expect(source).not.toContain("isLoading")
     expect(source).toContain("SignalLoadingState")
     const textInputs = source.match(/<TextInput[\s\S]*?\/>/g) ?? []
     expect(textInputs).not.toHaveLength(0)
     expect(textInputs.every((input) => !/\bsize=/.test(input))).toBe(true)
+  })
+
+  test("renders refresh pending state with a caller label and no upstream spinner", () => {
+    const html = renderToStaticMarkup(
+      <SignalsScreenView
+        boardName="Default"
+        filters={filters}
+        list={state([signal()], "refreshing")}
+        detail={state(signal())}
+        selectedSignalId="sig_1"
+        online
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+        onCloseDetail={() => undefined}
+      />,
+    )
+
+    expect(html).toContain('aria-busy="true"')
+    expect(html).toContain("refreshing")
+    expect(html).not.toContain("Spinner")
+    expect(html).not.toContain(" style=")
+    expect(html).not.toContain("<style")
   })
 
   test.each([

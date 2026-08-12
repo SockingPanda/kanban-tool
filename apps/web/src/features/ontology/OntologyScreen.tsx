@@ -409,6 +409,7 @@ export function OntologyScreenView({
   copy = featureCopyForLocale("en").ontology,
 }: OntologyScreenViewProps) {
   const stale = signals.data.length > 0 && signals.phase === "error"
+  const refreshPending = signals.phase === "loading" || groups.phase === "loading" || signals.phase === "refreshing" || groups.phase === "refreshing"
   const includeAll = filters.includeAll === true
   const groupBy = filters.groupBy ?? "label"
   const viewSignals = detail.error && errorStatus(detail.error) === 404 && selectedSignalId !== null
@@ -431,7 +432,10 @@ export function OntologyScreenView({
           </SafeVStack>
           <SafeHStack gap={1} wrap="wrap">
             <Button label={includeAll ? copy.allHistory : copy.openConfirmed} variant={includeAll ? "primary" : "secondary"} size="sm" aria-pressed={includeAll} onClick={() => onFiltersChange({ ...filters, includeAll: !includeAll })} />
-            <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} isLoading={signals.phase === "loading" || groups.phase === "loading" || signals.phase === "refreshing" || groups.phase === "refreshing"} />
+            <SafeHStack gap={2} align="center" aria-busy={refreshPending}>
+              <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} isDisabled={refreshPending} />
+              {refreshPending ? <Text as="span" type="supporting" role="status">{copy.refreshing}</Text> : null}
+            </SafeHStack>
           </SafeHStack>
         </SafeHStack>
       )}
@@ -442,14 +446,14 @@ export function OntologyScreenView({
         {groups.error ? <Banner status="error" title={copy.groupsError} description={localizedErrorMessage(groups.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryGroups} variant="ghost" size="sm" onClick={onRefreshGroups} />} /> : null}
 
         <Grid label={`${copy.signalRows} / ${copy.groupedReview} / ${copy.signalDetail}`} columns="responsive-three" gap={4} className="min-h-0 max-h-screen overflow-hidden">
-        <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
-          <SafeVStack gap={0} className="min-h-0">
+        <SafeCard padding={0}>
+          <SafeVStack gap={0} className="min-h-0 max-h-screen overflow-auto" data-testid="ontology-signals-scroll">
             <PanelHeader title={copy.signalRows} meta={copy.loadedCount(viewSignals.length)} refreshing={signals.phase === "refreshing"} copy={copy} />
             <OntologySignalListView phase={signals.phase} signals={viewSignals} selectedSignalId={selectedSignalId} onSelectSignal={onSelectSignal} copy={copy} />
           </SafeVStack>
         </SafeCard>
-        <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
-          <SafeVStack gap={0} className="min-h-0">
+        <SafeCard padding={0}>
+          <SafeVStack gap={0} className="min-h-0 max-h-screen overflow-auto" data-testid="ontology-groups-scroll">
             <PanelHeader title={copy.groupedReview} meta={copy.groupsCount(groups.data.length)} refreshing={groups.phase === "refreshing"} copy={copy} />
             <SafeHStack gap={1} padding={3} wrap="wrap" role="group" aria-label={copy.groupBy}>
               {(["label", "candidate_atom", "proposed_label"] as const).map((candidate) => <Button key={candidate} label={candidate === "candidate_atom" ? copy.atom : candidate === "proposed_label" ? copy.proposal : copy.label} variant={groupBy === candidate ? "primary" : "ghost"} size="sm" aria-pressed={groupBy === candidate} onClick={() => onFiltersChange({ ...filters, groupBy: candidate })} />)}
@@ -459,21 +463,25 @@ export function OntologyScreenView({
         </SafeCard>
         <SafeVStack gap={4} className="min-h-0 max-h-screen overflow-auto lg:col-span-2 xl:col-span-1">
           <Grid label={`${copy.signalDetail} / ${copy.atomExplain}`} columns="responsive-two" gap={4} className="min-h-0 xl:grid-cols-1">
-            <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
-              <PanelHeader title={copy.signalDetail} meta={localizedSignalStatus(detail.data?.signal.status, copy)} refreshing={detail.phase === "refreshing"} copy={copy} endContent={selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null} />
-              <OntologySignalDetailView phase={detail.phase} detail={detail.data} error={detail.error} actionError={actionError} onRetryAction={onRetryAction} actionReason={actionReason} actionPending={actionPending} lifecycleEnabled={lifecycleEnabled} onActionReasonChange={onActionReasonChange} onLifecycleAction={onLifecycleAction} onExplainAtom={onExplainAtom} locale={locale} copy={copy} onRetry={onRefreshDetail} />
+            <SafeCard padding={0}>
+              <SafeVStack gap={0} className="min-h-0 max-h-screen overflow-auto" data-testid="ontology-detail-scroll">
+                <PanelHeader title={copy.signalDetail} meta={localizedSignalStatus(detail.data?.signal.status, copy)} refreshing={detail.phase === "refreshing"} copy={copy} endContent={selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null} />
+                <OntologySignalDetailView phase={detail.phase} detail={detail.data} error={detail.error} actionError={actionError} onRetryAction={onRetryAction} actionReason={actionReason} actionPending={actionPending} lifecycleEnabled={lifecycleEnabled} onActionReasonChange={onActionReasonChange} onLifecycleAction={onLifecycleAction} onExplainAtom={onExplainAtom} locale={locale} copy={copy} onRetry={onRefreshDetail} />
+              </SafeVStack>
             </SafeCard>
-            <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
-              <PanelHeader title={copy.atomExplain} meta={atom.phase === "refreshing" ? copy.refreshing : atomRef || copy.none} refreshing={atom.phase === "refreshing"} copy={copy} />
-              <form onSubmit={onAtomSearch}>
-                <SafeHStack gap={2} padding={4} align="end" wrap="wrap">
-                  <SafeVStack className="min-w-0 flex-1">
-                    <TextInput label={copy.atomInput} isLabelHidden value={atomDraft} onChange={(value) => onAtomDraftChange?.(value)} placeholder={copy.atomInput} htmlName="atom-ref" />
-                  </SafeVStack>
-                  <Button label={copy.explain} type="submit" variant="secondary" size="sm" isDisabled={!atomDraft.trim()} />
-                </SafeHStack>
-              </form>
-              <AtomExplainView phase={atom.phase} explain={atom.data} error={atom.error} onRetry={onRefreshAtom} locale={locale} copy={copy} />
+            <SafeCard padding={0}>
+              <SafeVStack gap={0} className="min-h-0 max-h-screen overflow-auto" data-testid="ontology-atom-scroll">
+                <PanelHeader title={copy.atomExplain} meta={atom.phase === "refreshing" ? copy.refreshing : atomRef || copy.none} refreshing={atom.phase === "refreshing"} copy={copy} />
+                <form onSubmit={onAtomSearch}>
+                  <SafeHStack gap={2} padding={4} align="end" wrap="wrap">
+                    <SafeVStack className="min-w-0 flex-1">
+                      <TextInput label={copy.atomInput} isLabelHidden value={atomDraft} onChange={(value) => onAtomDraftChange?.(value)} placeholder={copy.atomInput} htmlName="atom-ref" />
+                    </SafeVStack>
+                    <Button label={copy.explain} type="submit" variant="secondary" size="sm" isDisabled={!atomDraft.trim()} />
+                  </SafeHStack>
+                </form>
+                <AtomExplainView phase={atom.phase} explain={atom.data} error={atom.error} onRetry={onRefreshAtom} locale={locale} copy={copy} />
+              </SafeVStack>
             </SafeCard>
           </Grid>
         </SafeVStack>
@@ -559,11 +567,14 @@ export function OntologySignalDetailView({ phase, detail, error, actionError, on
     <SafeVStack gap={3}>
       {actionError ? <Banner status="error" title={copy.actionError} description={`${localizedErrorMessage(actionError, copy.unreadableResponse, locale)} ${copy.actionNextStep}`} endContent={onRetryAction ? <Button label={copy.retryAction} variant="ghost" size="sm" onClick={onRetryAction} /> : undefined} /> : null}
       <TextArea label={copy.reviewReason} value={actionReason} onChange={(value) => onActionReasonChange(value)} placeholder={copy.reasonPlaceholder} rows={3} htmlName="ontology-action-reason" />
-      <ButtonGroup label={copy.reviewReason} size="sm">
-        <Button label={copy.confirm} variant="primary" isDisabled={!canConfirm} isLoading={actionPending} onClick={() => onLifecycleAction("confirm")} />
-        <Button label={copy.resolveNoChange} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("resolve_no_change")} />
-        <Button label={copy.reject} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("reject")} />
-      </ButtonGroup>
+      <SafeHStack gap={2} align="center" wrap="wrap" aria-busy={actionPending}>
+        <ButtonGroup label={copy.reviewReason} size="sm" isDisabled={actionPending}>
+          <Button label={copy.confirm} variant="primary" isDisabled={!canConfirm} onClick={() => onLifecycleAction("confirm")} />
+          <Button label={copy.resolveNoChange} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("resolve_no_change")} />
+          <Button label={copy.reject} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("reject")} />
+        </ButtonGroup>
+        {actionPending ? <Text as="span" type="supporting" role="status">{copy.refreshing}</Text> : null}
+      </SafeHStack>
     </SafeVStack>
     <ActionHistory actions={detail.actions} onExplainAtom={onExplainAtom} copy={copy} />
   </SafeVStack>

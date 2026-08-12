@@ -240,6 +240,7 @@ export function SignalsScreenView({
   copy = featureCopyForLocale("en").signals,
 }: SignalsScreenViewProps) {
   const stale = list.phase === "error" && list.data.length > 0
+  const refreshPending = list.phase === "loading" || list.phase === "refreshing"
   const status = (filters.status ?? "review") as SignalStatusFilter
   const kindsValue = (filters.kinds ?? []).join(", ")
   const viewSignals = errorStatus(detail.error) === 404 && selectedSignalId !== null
@@ -258,7 +259,10 @@ export function SignalsScreenView({
               <Text as="p" type="supporting">{copy.lede}</Text>
               <Text as="p" type="supporting">{copy.board} · <code translate="no">{boardName}</code></Text>
             </SafeVStack>
-            <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} isLoading={list.phase === "loading" || list.phase === "refreshing"} />
+            <SafeHStack gap={2} align="center" aria-busy={refreshPending}>
+              <Button label={copy.refresh} variant="secondary" size="sm" onClick={onRefresh} isDisabled={refreshPending} />
+              {refreshPending ? <Text as="span" type="supporting" role="status">{copy.refreshing}</Text> : null}
+            </SafeHStack>
         </SafeHStack>
       )}
       toolbarLabel={copy.filters}
@@ -316,8 +320,8 @@ export function SignalsScreenView({
             ) : null}
 
             <Grid label={`${copy.signalRows} / ${copy.detail}`} columns="responsive-two" gap={4} className="min-h-0 max-h-screen overflow-hidden">
-              <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
-                <SafeVStack gap={0} className="min-h-0">
+              <SafeCard padding={0}>
+                <SafeVStack gap={0} className="min-h-0 max-h-screen overflow-auto" data-testid="signals-list-scroll">
                     <SafeHStack padding={4} gap={2} justify="between" align="start" wrap="wrap">
                       <SafeVStack gap={1}>
                         <Heading level={2}>{copy.signalRows}</Heading>
@@ -335,8 +339,8 @@ export function SignalsScreenView({
                     />
                 </SafeVStack>
               </SafeCard>
-              <SafeCard padding={0} className="min-h-0 max-h-screen overflow-auto">
-                <SafeVStack gap={0} className="min-h-0">
+              <SafeCard padding={0}>
+                <SafeVStack gap={0} className="min-h-0 max-h-screen overflow-auto" data-testid="signals-detail-scroll">
                     <SafeHStack padding={4} gap={2} justify="between" align="start" wrap="wrap">
                       <SafeVStack gap={1}>
                         <Heading level={2}>{copy.detail}</Heading>

@@ -225,7 +225,45 @@ describe("Ontology screen presentation", () => {
     expect(source).toContain('className="min-h-0 max-h-screen overflow-auto"')
     expect(source).toContain('className="min-h-0 max-h-screen overflow-auto lg:col-span-2 xl:col-span-1"')
     expect(source).toContain('className="min-h-0 xl:grid-cols-1"')
+    expect(source).toContain('data-testid="ontology-signals-scroll"')
+    expect(source).toContain('data-testid="ontology-groups-scroll"')
+    expect(source).toContain('data-testid="ontology-detail-scroll"')
+    expect(source).toContain('data-testid="ontology-atom-scroll"')
+    expect(source).not.toMatch(/<SafeCard[^>]*overflow-auto/)
+    expect(source).not.toContain("isLoading")
     expect(source).not.toContain('columns="auto-lg"')
+  })
+
+  test("renders refresh and action pending labels without upstream spinners or inline styles", () => {
+    const html = renderToStaticMarkup(
+      <OntologyScreenView
+        boardName="Default"
+        filters={filters}
+        signals={{ phase: "refreshing", data: [signalFixture()], error: null }}
+        groups={{ phase: "refreshing", data: [reviewGroupFixture()], error: null }}
+        detail={{ phase: "success", data: detailFixture(), error: null }}
+        atom={{ phase: "success", data: atomExplainFixture(), error: null }}
+        selectedSignalId="los_1"
+        atomRef="hash_1"
+        online
+        actionReason="Reviewed"
+        actionPending
+        lifecycleEnabled
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+        onActionReasonChange={() => undefined}
+        onLifecycleAction={() => undefined}
+        onExplainAtom={() => undefined}
+        onAtomSearch={() => undefined}
+      />,
+    )
+
+    expect(html).toContain('aria-busy="true"')
+    expect(html).toContain("refreshing")
+    expect(html).not.toContain("Spinner")
+    expect(html).not.toContain(" style=")
+    expect(html).not.toContain("<style")
   })
 
   test.each([

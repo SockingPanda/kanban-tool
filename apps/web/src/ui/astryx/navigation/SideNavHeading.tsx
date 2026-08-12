@@ -12,7 +12,7 @@ const headingClasses = {
   subheading: "block truncate text-xs text-secondary",
   link: "no-underline outline-none focus-visible:outline-2 focus-visible:outline-accent",
   collapsedCopy: "sr-only",
-  endContent: "ml-auto shrink-0",
+  endContent: "ms-auto shrink-0",
 } as const
 
 function HeadingLine({
@@ -72,7 +72,7 @@ export function SideNavHeading({
           <HeadingLine content={subheading} href={subheadingHref} className={headingClasses.subheading} />
         </p>
       ) : null}
-      {!isCollapsed && headerEndContent !== undefined ? <aside className={headingClasses.endContent}>{headerEndContent}</aside> : null}
+      {!isCollapsed && headerEndContent !== undefined ? <section className={headingClasses.endContent} role="presentation">{headerEndContent}</section> : null}
     </header>
   )
 }

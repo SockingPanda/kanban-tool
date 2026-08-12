@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react"
+import type { MouseEvent, ReactNode, Ref } from "react"
 
 /** The supported visual density values mirror Astryx's navigation vocabulary. */
 export type NavigationDensity = "compact" | "balanced" | "spacious"
@@ -37,18 +37,33 @@ export type TreeListAccessibleLabel =
   | { readonly "aria-label": string; readonly header?: ReactNode }
   | { readonly "aria-label"?: never; readonly header: ReactNode }
 
-export type TreeListProps<TItem = TreeListItemData> = {
+type TreeListExpansionProps =
+  | { readonly expandedIds: readonly string[]; readonly defaultExpandedIds?: never }
+  | { readonly expandedIds?: never; readonly defaultExpandedIds?: readonly string[] }
+
+type TreeListCommonProps<TItem> = {
   readonly items: readonly TItem[]
-  readonly adapter?: TreeListItemAdapter<TItem>
   readonly density?: NavigationDensity
   readonly expandLabel: (item: TreeListItemData) => string
   readonly collapseLabel: (item: TreeListItemData) => string
   readonly variant?: "lineGuides" | "noGuides"
   readonly className?: string
   readonly "data-testid"?: string
+  readonly id?: string
+  readonly "aria-labelledby"?: string
+  readonly ref?: Ref<HTMLElement>
   readonly onExpandedChange?: (id: string, expanded: boolean) => void
-  readonly onAction?: (item: TreeListItemData) => void
-} & TreeListAccessibleLabel
+  readonly onAction?: (item: TreeListItemData, event?: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => void
+}
+
+type TreeListAdapterProp<TItem> = [TItem] extends [TreeListItemData]
+  ? { readonly adapter?: TreeListItemAdapter<TItem> }
+  : { readonly adapter: TreeListItemAdapter<TItem> }
+
+export type TreeListProps<TItem = TreeListItemData> = TreeListCommonProps<TItem> &
+  TreeListAccessibleLabel &
+  TreeListExpansionProps &
+  TreeListAdapterProp<TItem>
 
 type SideNavCollapseConfigBase = {
   readonly defaultIsCollapsed?: boolean
@@ -57,8 +72,8 @@ type SideNavCollapseConfigBase = {
 }
 
 export type SideNavCollapseConfig =
-  | (SideNavCollapseConfigBase & { readonly hasButton?: false; readonly buttonLabel?: never })
-  | (SideNavCollapseConfigBase & { readonly hasButton?: true; readonly buttonLabel: string })
+  | (SideNavCollapseConfigBase & { readonly hasButton?: false; readonly expandLabel?: never; readonly collapseLabel?: never })
+  | (SideNavCollapseConfigBase & { readonly hasButton?: true; readonly expandLabel: string; readonly collapseLabel: string })
 
 export type SideNavItemCollapseConfig = {
   readonly defaultIsCollapsed?: boolean
@@ -72,11 +87,13 @@ export type SideNavProps = {
   readonly topContent?: ReactNode
   readonly footer?: ReactNode
   readonly footerIcons?: ReactNode
-  readonly collapsible?: boolean | SideNavCollapseConfig
+  readonly collapsible?: SideNavCollapseConfig
   readonly className?: string
+  readonly id?: string
   readonly "aria-label"?: string
   readonly "aria-labelledby"?: string
   readonly "data-testid"?: string
+  readonly ref?: Ref<HTMLElement>
 }
 
 export type SideNavHeadingProps = {
@@ -121,6 +138,9 @@ type SideNavItemCommonProps = {
   readonly isExpanded?: boolean
   readonly onExpandedChange?: (isExpanded: boolean) => void
   readonly className?: string
+  readonly id?: string
+  readonly "aria-controls"?: string
+  readonly ref?: Ref<HTMLElement>
   readonly size?: "sm" | "md" | "lg"
   readonly "data-testid"?: string
 }

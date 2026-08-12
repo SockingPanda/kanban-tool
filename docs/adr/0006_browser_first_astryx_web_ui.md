@@ -44,9 +44,12 @@ rendered surface 是 `apps/web`，旧 `apps/desktop/src/**` 已退出；Tauri �
 
 ### 视觉基线与平台范围
 
-- 视觉基线采用 Astryx `0.3.0` Beta。实现顺序是官方 composition/template，无法覆盖的领域组合
-  才使用普通 React/CSS；不得 swizzle、fork 或引入第二套通用组件库。若核心能力仍阻塞目标，必须
-  保留证据并阻塞该阶段，不能静默降低质量门槛或替换基线。
+- 视觉与实现基线采用 Astryx `0.3.0` Beta。官方 component、layout、token、composition 与 template
+  是主路径；新代码不以原生 `<div>`/`<span>` 组织布局，也不新增手写 CSS、CSS Modules、magic value
+  或自建 token。需要 utility styling 时允许 Tailwind，但不得用 arbitrary value 复制 Astryx token。
+- 深度定制允许 `astryx swizzle`，swizzled source 必须记录来源 Astryx 版本并在升级时单独审阅；不得
+  引入 Shadcn、直接 Radix wrapper、CVA 或第二套通用组件库。现存 React/CSS fallback 是迁移存量，
+  修改对应 surface 时优先收敛回 Astryx/Tailwind，不能作为新代码模板。
 - 首个发布范围是 Linux desktop/browser（Chromium、Firefox 与 Tauri WebKitGTK）；不承诺移动端和
   其他桌面平台，但组件与路由不得为未来扩展设置结构性障碍。功能语义保持现有 rendered UI 能力，
   不借此增加新的领域操作。
@@ -86,5 +89,6 @@ rendered surface 是 `apps/web`，旧 `apps/desktop/src/**` 已退出；Tauri �
 
 直接升级省去历史兼容代码和迁移成本，却要求切换前完成 contract、artifact 和 packaged desktop
 的成套验证；精确 artifact 回滚与数据库不变约束降低了失败半径，同时意味着旧版本只能从明确的
-历史材料恢复。Astryx 官方组合优先保留基线升级路径，普通 React/CSS fallback 保证领域 UI 可交付，
-但核心能力被 blocker policy 约束，不能以未审计的替代库掩盖设计系统风险。
+历史材料恢复。Astryx 主路径统一组件语义与升级入口；swizzle 提供受控的深度定制，代价是每次 Astryx
+升级都要额外审阅本地副本。Tailwind 只承担 utility styling，不成为第二套 token/component authority；
+存量 React/CSS 需要随所触及 surface 渐进退出，不能以未审计的替代库掩盖设计系统风险。

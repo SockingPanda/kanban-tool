@@ -122,6 +122,12 @@ Storybook，不得伪装成可用产品功能。
 
 ## Components
 
+- Astryx component、layout、token、composition 与 template 是默认实现；先通过 Astryx CLI 发现，
+  再写产品组合。
+- 新代码不使用原生 `<div>`/`<span>` 承担布局，不新增手写 CSS/CSS Modules。需要 utility styling
+  时允许 Tailwind；需要深度定制时允许可追溯版本的 `astryx swizzle`。
+- 现存 React/CSS 是迁移存量，不是新 surface 的模板。Tailwind arbitrary value、swizzled component
+  和本地 token 都不能形成与 Astryx 平行的设计系统。
 - 控件高度以 `2rem` 为主，hit target 通过外部 padding/布局保证；button radius 为 6px。
 - icon 使用一致的 16px、1.5px stroke 系统；不得使用 emoji 或 Unicode glyph 充当图标。
 - selected nav、focus、primary action 使用单一 operational blue accent；状态颜色只表达

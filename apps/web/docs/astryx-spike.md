@@ -10,10 +10,10 @@
   `@astryxdesign/cli@0.3.0`，StyleX peer 固定为 `@stylexjs/stylex@0.19.0`；Vite 固定为
   `8.2.1`。
 - 组件使用精确 subpath：`@astryxdesign/core/Button`、`Card`、`Table`、`theme` 和 `VStack`。
-  领域组合由普通 React + CSS Modules + 静态 token CSS 表达。
-- strict CSP 下禁止 runtime style injection，因此 TextInput、Dialog、Selector、Popover 在本切片
-  使用语义 HTML/CSS Modules fallback；这不是兼容旧版，而是对 `core@0.3.0` 的明确 production
-  边界。升级 Astryx 后须单独重跑本文的 CSP seam。
+  Stage 00 曾以普通 React + CSS Modules + 静态 token CSS 补齐领域组合；这些现在是待迁移存量。
+- strict CSP 下禁止 runtime style injection，因此 TextInput、Dialog、Selector、Popover 在 Stage 00
+  使用了语义 HTML/CSS Modules fallback。当前新增实现改为 Astryx 主路径，并允许受控 swizzle 与
+  编译期 Tailwind；升级 Astryx 或迁移相关 surface 后须重跑本文的 CSP seam。
 - 主题由 `package.json.astryx.theme` 接线；`astryx.config.mjs` 只使用 CLI 0.3.0 发布的
   `AstryxConfig` 字段。
 
@@ -26,12 +26,27 @@ pnpm exec astryx --version
 # 0.3.0
 
 pnpm run astryx:doctor
-# exit 0；pass 6、warn 1（AGENTS.md 没有 CLI marker）、fail 0、info 1
+# exit 0；pass 6、warn 1、fail 0、info 1
+# 当前外置盘上的 pnpm package links 在 Node Dirent 中不报告 directory/symlink，导致 CLI 误报
+# “No @astryxdesign/theme-* packages are installed”；实际 package、CSS import 与 Theme provider 均已接线
 
 pnpm run astryx:templates
 # 可用 page template 包含 kanban-board、table-page、settings-sidebar、shell-side-nav；
 # incident-console 当前 isReady=false。
+
+pnpm run astryx:search "task table"
+pnpm run astryx:component Button --props
+pnpm run astryx:manifest
 ```
+
+`apps/web/AGENTS.md` 包含由 `astryx init --features agents --agent codex` 生成的
+`<!-- ASTRYX:START -->` managed block，使 Codex 先用 `build`、`template`、`component`、`search` 和
+`docs` 发现官方能力，并以 Astryx component/layout/token 作为主实现。升级 Astryx 后由
+`astryx upgrade --apply` 更新 managed block，不手工维护其组件库存。
+
+本文件以下 CSS/CSP seam 是 Stage 00 的已验证历史证据，不再定义新增 UI 的实现方法。当前方法由
+`apps/web/AGENTS.md` 与 ADR 0006 持有：新代码不新增原生布局 `<div>`/`<span>` 或手写 CSS，允许
+Tailwind utility 与可追溯的 `astryx swizzle`；现存 React/CSS fallback 只作为待迁移存量。
 
 `kanban-board` skeleton 仅用于确认官方组件和布局入口，没有把模板逻辑、数据模型或文案复制到
 产品代码。生产切片只保留当前需要的 Button/Card/Table/VStack/Theme seam。
@@ -54,9 +69,9 @@ font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';
 frame-ancestors 'none'
 ```
 
-本切片不引入 `@astryxdesign/build`、`@stylexjs/unplugin`、Tailwind、Radix 或 Shadcn。原因是
-产品边界要求静态 CSS；build/plugin 方案会把编译/开发运行时样式层带入页面，不能作为本切片的
-strict-CSP 证据。组件只使用已发布的 Astryx CSS artifact，领域样式留在 CSS Modules。
+Stage 00 没有引入 `@astryxdesign/build`、`@stylexjs/unplugin`、Tailwind、Radix 或 Shadcn，以便隔离
+验证已发布 Astryx CSS artifact 的 strict-CSP seam。该历史选择不再禁止后续使用编译期 Tailwind；
+Tailwind 产物仍必须作为同源静态 CSS 通过 CSP/browser gate，Shadcn 与直接 Radix wrapper 仍不允许。
 
 验证项包括 `page.locator("[style]")` 和 `page.locator("style")` 都为零；没有 inline style
 prop、动态 `<style>`、外部字体或远程 CSS。
@@ -72,9 +87,9 @@ prop、动态 `<style>`、外部字体或远程 CSS。
   输出。
 - `src/Dialog/Dialog.tsx` 的 inner/container 和 sizing path 通过 `stylex.props` 计算动态尺寸。
 
-因此官方 TextInput/Dialog/Selector/Popover 会在当前 core 版本产生运行时 style 属性。生产 seam
-改用普通 `<input>`、CSS Modules 和原生 `<dialog>`，不 swizzle、不 fork、不放宽 CSP。后续
-升级 core 后应先以同样的 `[style]`/CSP/三引擎测试重新评估，再决定是否切回官方组件。
+因此官方 TextInput/Dialog/Selector/Popover 会在当前 core 版本产生运行时 style 属性。Stage 00 曾
+改用普通 `<input>`、CSS Modules 和原生 `<dialog>` 取得基线证据。当前新增实现应优先使用 Astryx；
+确需深度定制时允许从 `astryx swizzle` 起步，并通过同样的 `[style]`/CSP/三引擎测试。
 
 ## Overlay 与浏览器语义
 

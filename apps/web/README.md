@@ -15,6 +15,22 @@ UI intent 只能消费生成边界。
 - `pnpm --filter @kanban-tool/web test`
 - `pnpm --filter @kanban-tool/web build`
 
+## Storybook 与 agent 入口
+
+本地组件工作台使用 `pnpm --filter @kanban-tool/web storybook` 启动，默认地址为
+`http://127.0.0.1:6006`。Storybook 同时在 `http://127.0.0.1:6006/mcp` 暴露官方
+`@storybook/addon-mcp` endpoint；当前启用 docs 与 development toolset，未启用依赖
+`@storybook/addon-vitest` 的 testing toolset。
+
+仓库提供两条 Storybook CLI 路径：
+
+- `pnpm --filter @kanban-tool/web storybook:ai --help`：查看官方 `storybook ai` 命令；
+- `pnpm --filter @kanban-tool/web storybook:cli --help`：连接运行在 6006 的 Storybook，列出 MCP
+  暴露的 agent commands；例如追加 `list-all-documentation` 可从终端读取组件与 docs 索引。
+
+MCP 与 CLI 都只面向本地开发和 Storybook fixture。它们不连接 Turso、生产 API/SSE 或 canonical
+mutation path；静态 Storybook build 仍只输出到根目录 `output/storybook/`。
+
 Stage09 fixed candidate 上的根 `just ci-full` 与 09A、09C、09D、09E formal proof 均分别通过；
 `ci-full` 是独立 built-in gate，不编排这四条 proof lane。09A 的 real-host lane 由根
 `just release-proof-09a` 编排：它先构建同一 `apps/web/dist`，再以临时 DB/显式 loopback port

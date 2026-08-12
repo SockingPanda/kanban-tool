@@ -51,6 +51,7 @@ function focusFirstOrLast(container: HTMLElement, last: boolean): void {
 export interface OverlayInteractionOptions {
   readonly enabled: boolean
   readonly restoreFocusRef?: { current: HTMLElement | null }
+  readonly shouldRestoreFocus?: () => boolean
   readonly onEscape?: () => void
   readonly trapFocus?: boolean
   readonly autoFocus?: boolean
@@ -59,10 +60,12 @@ export interface OverlayInteractionOptions {
 /** Shared keyboard and focus behavior for modal and popup overlays. */
 export function useOverlayInteraction(
   nodeRef: { current: OverlayElement | null },
-  { enabled, restoreFocusRef, onEscape, trapFocus = true, autoFocus = true }: OverlayInteractionOptions,
+  { enabled, restoreFocusRef, shouldRestoreFocus, onEscape, trapFocus = true, autoFocus = true }: OverlayInteractionOptions,
 ): void {
   const escapeRef = useRef(onEscape)
+  const shouldRestoreFocusRef = useRef(shouldRestoreFocus)
   escapeRef.current = onEscape
+  shouldRestoreFocusRef.current = shouldRestoreFocus
   const restoreRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -135,7 +138,7 @@ export function useOverlayInteraction(
       unregister()
       const restore = restoreRef.current
       restoreRef.current = null
-      if (restore?.isConnected) restore.focus({ preventScroll: true })
+      if (restore?.isConnected && shouldRestoreFocusRef.current?.() !== false) restore.focus({ preventScroll: true })
     }
   }, [autoFocus, enabled, nodeRef, restoreFocusRef, trapFocus])
 }

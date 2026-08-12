@@ -46,6 +46,7 @@ describe("Astryx CSP-safe overlays", () => {
     expect(runtime).toContain('document.addEventListener("focusin"')
     expect(runtime).toContain("restoreFocusRef")
     expect(runtime).toContain("registerOverlay(node)")
+    expect(runtime).toContain("shouldRestoreFocus")
     expect(popover).toContain("supportsNativePopover")
     expect(popover).toContain("trapFocus: isModal")
     expect(runtime).toContain("showPopover()")

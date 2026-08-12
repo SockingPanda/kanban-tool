@@ -111,6 +111,7 @@ export function DropdownMenu({
   const openRef = useRef(open)
   const callbackRef = useRef(onOpenChange)
   const lastHideRef = useRef(0)
+  const skipRestoreFocusRef = useRef(false)
   const focusOnOpenRef = useRef<"first" | "last">("first")
   const typeaheadRef = useRef({ value: "", at: 0 })
   openRef.current = open
@@ -127,6 +128,7 @@ export function DropdownMenu({
     callbackRef.current?.(next)
   }
   const openMenu = (focus: "first" | "last" = "first") => {
+    skipRestoreFocusRef.current = false
     focusOnOpenRef.current = focus
     setOpen(true)
   }
@@ -147,6 +149,7 @@ export function DropdownMenu({
   useOverlayInteraction(menuRef, {
     enabled: open,
     restoreFocusRef,
+    shouldRestoreFocus: () => !skipRestoreFocusRef.current,
     onEscape: () => {
       if (menuRef.current && isTopOverlay(menuRef.current)) close()
     },
@@ -208,6 +211,7 @@ export function DropdownMenu({
       event.preventDefault()
       close()
     } else if (event.key === "Tab") {
+      skipRestoreFocusRef.current = true
       close()
     } else if (event.key === "ArrowDown" || event.key === "ArrowRight") {
       event.preventDefault()

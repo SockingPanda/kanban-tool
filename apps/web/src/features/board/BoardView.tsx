@@ -660,11 +660,11 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
     </>
   )
   const pageFrame = pageToolbar === null ? (
-    <PageFrame frame="workspace" bodyLabel={copy.boardColumnsLabel} bodyOverflow="none" header={pageHeader}>
+    <PageFrame frame="workspace" bodyLabel={copy.boardTitle} bodyOverflow="none" header={pageHeader}>
       {boardBody}
     </PageFrame>
   ) : (
-    <PageFrame frame="workspace" bodyLabel={copy.boardColumnsLabel} bodyOverflow="none" header={pageHeader} toolbar={pageToolbar} toolbarLabel={copy.boardTitle}>
+    <PageFrame frame="workspace" bodyLabel={copy.boardTitle} bodyOverflow="none" header={pageHeader} toolbar={pageToolbar} toolbarLabel={copy.boardTitle}>
       {boardBody}
     </PageFrame>
   )

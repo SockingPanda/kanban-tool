@@ -44,7 +44,6 @@ export function ProjectOverview({ project, onOpenTasks, basePath = "/app/", stat
   return (
     <StaticVStack
       as="section"
-      aria-labelledby="project-overview-title"
       data-testid="project-overview"
       data-archived={project.archivedAt === null ? "false" : "true"}
       className="min-w-0"

@@ -120,6 +120,7 @@
     { "path": "src/stories/tasks/tasks-stories.module.css", "maxLoc": 132, "owner": "storybook-tasks", "reason": "Existing task story fallback remains as a review artifact.", "exitCondition": "Rebuild the story with Astryx primitives and remove local CSS." }
   ],
   "legacyRawLayout": [
+    { "path": "src/ui/astryx/page-frame/PageFrame.tsx", "maxCount": 1, "owner": "page-frame", "exitCondition": "Keep the native toolbar container for the valid ARIA toolbar role; migrate any other layout containers to Astryx primitives or utilities." },
     { "path": "src/ProductShell.tsx", "maxCount": 5, "owner": "product-shell", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
     { "path": "src/features/board/BoardTaskMutations.tsx", "maxCount": 3, "owner": "board", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
     { "path": "src/features/board/BoardView.tsx", "maxCount": 25, "owner": "board", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },

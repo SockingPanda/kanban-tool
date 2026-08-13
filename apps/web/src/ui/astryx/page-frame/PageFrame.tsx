@@ -137,13 +137,13 @@ export function PageFrame(props: PageFrameProps) {
     >
       {hasHeader ? <header className={PAGE_FRAME_CLASSES.header[frame]}>{header}</header> : null}
       {hasToolbar ? (
-        <section
+        <div
           aria-label={toolbarLabel}
           className={PAGE_FRAME_CLASSES.toolbar[frame]}
           role="toolbar"
         >
           {toolbar}
-        </section>
+        </div>
       ) : null}
       {frame === "workspace" ? (
         <section

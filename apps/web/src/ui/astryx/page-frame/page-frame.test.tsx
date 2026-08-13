@@ -44,7 +44,7 @@ describe("CSP-safe PageFrame", () => {
     expect(markup).toContain(`class="${PAGE_FRAME_CLASSES.root.workspace}"`)
     expect(markup).toContain(`<header class="${PAGE_FRAME_CLASSES.header.workspace}"><h1>Tasks</h1></header>`)
     expect(markup).toContain(`<section aria-label="Task board" class="${PAGE_FRAME_BODY_OVERFLOW_CLASSES.x}" data-body-overflow="x" role="region"><p>Dense task rows</p></section>`)
-    expect(markup).toContain(`<section aria-label="Task board controls" class="${PAGE_FRAME_CLASSES.toolbar.workspace}" role="toolbar"><button type="button">Filter</button></section>`)
+    expect(markup).toContain(`<div aria-label="Task board controls" class="${PAGE_FRAME_CLASSES.toolbar.workspace}" role="toolbar"><button type="button">Filter</button></div>`)
     expect(markup).toMatch(new RegExp(`<section id="tasks-frame" class="${PAGE_FRAME_CLASSES.root.workspace}"`))
     expect(markup).not.toContain("<main")
     expect(markup).not.toContain("style=")
@@ -68,7 +68,8 @@ describe("CSP-safe PageFrame", () => {
       .map((file) => readFileSync(resolve(sourceDirectory, file), "utf8"))
       .join("\n")
 
-    expect(source).not.toMatch(/<div|<span|<main|<style>/)
+    expect(source).not.toMatch(/<div\b(?![^>]*\brole="toolbar")/)
+    expect(source).not.toMatch(/<span|<main|<style>/)
     expect(source).not.toMatch(/style\s*=|xstyle\b/)
     expect(source).not.toMatch(/bodyAriaProps|\.\.\.bodyLabelProps/)
     expect(source).toContain("aria-label={bodyLabel}")

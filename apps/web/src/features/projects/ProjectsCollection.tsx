@@ -78,7 +78,6 @@ export function ProjectsCollection({
   return (
     <StaticVStack
       as="section"
-      aria-labelledby="projects-collection-title"
       data-testid="projects-collection"
       data-status={status}
       data-has-snapshot={hasSnapshot ? "true" : "false"}

@@ -35,6 +35,8 @@ describe("Astryx CSP-safe overlays", () => {
     const sourceFiles = ["Dialog.tsx", "Popover.tsx", "Tooltip.tsx", "DropdownMenu.tsx", "MoreMenu.tsx", "overlay-runtime.ts"]
     const source = sourceFiles.map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8")).join("\n")
     expect(source).not.toMatch(/<(?:div|span)\b/)
+    expect(source).not.toContain("⋯")
+    expect(source).not.toContain("⌄")
     expect(source).not.toMatch(/\b(?:style|xstyle|anchorName|positionArea)\s*[:=]/)
     expect(source).not.toMatch(/(?:bg|text|border)-(?:slate|sky|white|black)\b/)
     expect(source).not.toMatch(/(?:bg-accent-strong|text-on-inverted|bg-inverted-strong)/)
@@ -202,7 +204,25 @@ describe("Astryx CSP-safe overlays", () => {
     expect(markup).toContain('role="menu"')
     expect(markup).toContain('role="menuitem"')
     expect(markup).toContain('data-testid="task-more-menu"')
+    expect(markup).toContain('data-size="sm"')
+    expect(markup).toContain('aria-hidden="true"')
+    expect(markup).not.toContain("⋯")
     expect(markup).not.toContain(" style=")
+  })
+
+  test("renders a decorative Astryx chevron without replacing the trigger label", () => {
+    const markup = renderToStaticMarkup(
+      <DropdownMenu
+        button={{ label: "Actions" }}
+        items={[{ label: "Run", onClick: vi.fn() }]}
+      />,
+    )
+
+    expect(markup).toContain('aria-label="Actions"')
+    expect(markup).toContain(">Actions")
+    expect(markup).toContain('data-size="sm"')
+    expect(markup).toContain('aria-hidden="true"')
+    expect(markup).not.toContain("⌄")
   })
 
   test("keeps controlled menu state in the rendered contract", () => {

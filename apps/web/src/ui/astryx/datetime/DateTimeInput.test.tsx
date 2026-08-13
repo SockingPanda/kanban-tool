@@ -110,6 +110,24 @@ describe("CSP-safe Astryx DateTimeInput", () => {
     expect(markup).not.toContain(`<${"span"}`)
   })
 
+  test("uses a decorative Astryx close icon for the default clear affordance", () => {
+    const markup = renderToStaticMarkup(
+      <DateTimeInput
+        clearLabel="清除截止时间"
+        dateLabel="截止日期"
+        hasClear
+        label="截止时间"
+        timeLabel="截止时间"
+        value="2026-08-09T09:10"
+      />,
+    )
+
+    expect(markup).toContain('aria-label="清除截止时间"')
+    expect(markup).toContain('data-size="sm"')
+    expect(markup).toContain('aria-hidden="true"')
+    expect(markup).not.toContain("×")
+  })
+
   test("emits the combined ISO value as native segments change and preserves bounds", () => {
     const markup = renderToStaticMarkup(
       <DateTimeInput

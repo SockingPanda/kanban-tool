@@ -4,6 +4,8 @@ import {
   type Ref,
 } from "react"
 
+import { Icon } from "@astryxdesign/core/Icon"
+
 import {
   DropdownMenu,
   type DropdownMenuOption,
@@ -23,7 +25,7 @@ export interface MoreMenuProps {
 }
 
 function MoreDots(): ReactNode {
-  return "⋯"
+  return <Icon icon="moreHorizontal" size="sm" />
 }
 
 export const MoreMenu = forwardRef<HTMLButtonElement, MoreMenuProps>(function MoreMenu(

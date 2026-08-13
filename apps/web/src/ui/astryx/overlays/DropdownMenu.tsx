@@ -8,6 +8,8 @@ import {
   type Ref,
 } from "react"
 
+import { Icon } from "@astryxdesign/core/Icon"
+
 import {
   classNames,
   isTopOverlay,
@@ -332,7 +334,7 @@ export function DropdownMenu({
       >
         {button.icon ?? null}
         {!button.isIconOnly ? label : null}
-        {hasChevron && !button.isIconOnly ? <i aria-hidden="true" className="text-xs">⌄</i> : null}
+        {hasChevron && !button.isIconOnly ? <Icon icon="chevronDown" size="sm" /> : null}
       </button>
       <menu
         ref={menuRef}

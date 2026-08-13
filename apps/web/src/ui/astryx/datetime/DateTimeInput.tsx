@@ -14,6 +14,8 @@ import {
   type Ref,
 } from "react"
 
+import { Icon } from "@astryxdesign/core/Icon"
+
 import {pickCspSafeDomProps, type CspSafeDomProps} from "../dom-props"
 
 export type ISODateTimeString = string & {
@@ -337,7 +339,7 @@ function DateTimeInputImpl(
     dateLabel,
     timeLabel,
     clearLabel,
-    clearText = "×",
+    clearText,
     optionalText,
     hasSeconds = false,
     timeIncrement,
@@ -525,7 +527,7 @@ function DateTimeInputImpl(
           onClick={handleClear}
           type="button"
         >
-          {clearText}
+          {clearText === undefined ? <Icon icon="close" size="sm" /> : clearText}
         </button>
       ) : null}
       {statusMessage ? (

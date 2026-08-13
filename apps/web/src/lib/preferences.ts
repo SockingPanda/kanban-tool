@@ -166,7 +166,7 @@ export function resetSidebarWidthPreference(preferences: WebPreferences): WebPre
 }
 
 export function themeColorForMode(mode: ThemeMode, prefersDark = false): string {
-  return mode === "dark" || (mode === "system" && prefersDark) ? "#1b1b1b" : "#f1f1f1"
+  return mode === "dark" || (mode === "system" && prefersDark) ? "#0f1113" : "#f6f7f8"
 }
 
 export function loadingCopyForLocale(locale: Locale): string {

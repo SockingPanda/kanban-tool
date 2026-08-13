@@ -67,7 +67,7 @@ function browserContextMatchesExpected(context: BrowserContextObservation): bool
     && !context.color_scheme_dark
     && context.reduced_motion_reduce
     && context.theme_state === "dark"
-    && context.astryx_theme === "neutral"
+    && context.astryx_theme === "astryx"
 }
 
 async function goto(page: Page, path: string, ready: string): Promise<void> {

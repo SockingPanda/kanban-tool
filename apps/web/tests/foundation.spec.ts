@@ -56,7 +56,7 @@ test.describe("kanban-tool product shell", () => {
     await page.getByTestId("identity-actor-save").click()
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1b1b1b")
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#0f1113")
 
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))

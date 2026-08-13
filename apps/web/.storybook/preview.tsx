@@ -2,12 +2,12 @@ import { useEffect, type ReactNode } from "react"
 
 import { InternationalizationProvider } from "@astryxdesign/core/i18n"
 import { Theme } from "@astryxdesign/core/theme"
-import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 import type { Preview } from "@storybook/react-vite"
 
 import "../src/styles.css"
 
 import { astryxMessages, astryxOverrides } from "../src/lib/i18n"
+import { astryxTheme } from "../src/theme/astryx.js"
 
 type StorybookLocale = "zh" | "en"
 type StorybookTheme = "light" | "dark"
@@ -65,7 +65,7 @@ function withFoundation(Story: () => ReactNode, context: { globals: Record<strin
       <LocaleSynchronizer locale={locale} />
       <DensitySynchronizer density={density} />
       <InternationalizationProvider locale={locale} messages={astryxMessages} overrides={astryxOverrides}>
-        <Theme theme={neutralTheme} mode={mode}>
+        <Theme theme={astryxTheme} mode={mode}>
           <Story />
         </Theme>
       </InternationalizationProvider>

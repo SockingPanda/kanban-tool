@@ -8,7 +8,7 @@
 /* Astryx is the component authority; its published Tailwind bridge remains static. */
 @import "@astryxdesign/core/reset.css";
 @import "@astryxdesign/core/astryx.css";
-@import "@astryxdesign/theme-neutral/theme.css";
+@import "./theme/astryx.css";
 @import "@astryxdesign/core/tailwind-theme.css";
 
 /* Product tokens are legacy-compatible aliases consumed by the shell migration. */

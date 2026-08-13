@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { InternationalizationProvider } from "@astryxdesign/core/i18n"
 import { Theme } from "@astryxdesign/core/theme"
-import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 
 import { ProductShell, type BoardListSurface } from "./ProductShell"
+import { astryxTheme } from "./theme/astryx.js"
 import { BoardFeatureRoute, type FeatureRoute } from "./features/BoardFeatureRoute"
 import { BoardLive } from "./features/board/BoardLive"
 import { boardSyncStatusForTelemetry } from "./features/board/board-live-state"
@@ -399,7 +399,7 @@ function RuntimeThemedShell() {
 
   return (
     <InternationalizationProvider locale={preferences.locale} messages={astryxMessages} overrides={astryxOverrides}>
-      <Theme theme={neutralTheme} mode={preferences.theme}>
+      <Theme theme={astryxTheme} mode={preferences.theme}>
         <ProductShell
           runtime={runtime}
           route={router.route}

@@ -17,7 +17,7 @@ const ASTRYX_INTEGRATION = {
   versions: {
     core: "0.3.0",
     cli: "0.3.0",
-    theme: "@astryxdesign/theme-neutral@0.3.0",
+    theme: "src/theme/astryx.ts (extends @astryxdesign/theme-neutral@0.3.0)",
   },
   discovery: [
     "pnpm astryx:manifest",
@@ -82,11 +82,11 @@ function CommandGroup({ title, description, commands }: {
 export const Workflow: Story = {
   render: () => (
     <CatalogPage title="Astryx integration" description="先查询组件与模板，再组合 primitives；只有必须拥有源码时才 swizzle。">
-      <CatalogSection title="Installed contract" description="Core、CLI 和 neutral theme 版本锁步，Storybook 与产品入口加载同一主题。">
+      <CatalogSection title="Installed contract" description="Core、CLI 和 app-owned Astryx theme 版本锁步，Storybook 与产品入口加载同一 built theme。">
         <HStack gap={2} wrap="wrap">
           <Badge variant="info" label={`core ${ASTRYX_INTEGRATION.versions.core}`} />
           <Badge variant="info" label={`cli ${ASTRYX_INTEGRATION.versions.cli}`} />
-          <Badge variant="neutral" label="theme-neutral 0.3.0" />
+          <Badge variant="neutral" label="astryx built theme" />
         </HStack>
       </CatalogSection>
       <CatalogSection title="CLI-first delivery loop" description="这些命令构成页面迁移和 Storybook 证据更新的默认顺序。">

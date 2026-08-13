@@ -245,6 +245,14 @@ describe("ProductShell route offline boundary", () => {
     expect(markup).toContain('data-testid="live-board-child"')
   })
 
+  test("returns taskless Runs to the current board Tasks route", () => {
+    const markup = renderWithLiveChild(parseAppRoute("http://kanban.test/app/boards/default/runs"))
+
+    expect(markup).toContain('data-testid="runs-no-task"')
+    expect(markup).toContain("返回任务")
+    expect(markup).toContain('href="/app/boards/default/board"')
+  })
+
   test("keeps the feature child visible while BoardLive stays mounted without Explorer overlap", () => {
     Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true } })
     const markup = renderToStaticMarkup(

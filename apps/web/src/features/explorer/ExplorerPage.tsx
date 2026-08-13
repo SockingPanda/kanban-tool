@@ -601,6 +601,8 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   const navigate = useCallback((target: string, options?: { readonly replace?: boolean }) => {
     if (onNavigate) void onNavigate(target, options)
   }, [onNavigate])
+  const tasksHref = routePath({ kind: "board", boardSlug: route.boardSlug, view: "board" }, { basePath: runtime.webBasePath })
+  const returnToTasks = useCallback(() => navigate(tasksHref), [navigate, tasksHref])
   const updateMapUrlState = useCallback((next: TaskMapUrlState, options?: { readonly replace?: boolean }) => {
     const query = queryForTasksView(params, "map")
     for (const key of ["filter", "show_done", "hide_isolated", "zoom", "task"]) query.delete(key)
@@ -875,7 +877,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
               </Suspense>
             </TaskMapChunkBoundary>
           ) : null}
-          {view === "runs" ? <TaskRunsView runtime={runtime} taskId={taskId} invalidationRevision={runsRevision} online={online !== false} /> : null}
+          {view === "runs" ? <TaskRunsView runtime={runtime} taskId={taskId} invalidationRevision={runsRevision} online={online !== false} tasksHref={tasksHref} onBackToTasks={onNavigate === undefined ? undefined : returnToTasks} /> : null}
           {view === "events" ? (
             <EventsView
               runtime={runtime}

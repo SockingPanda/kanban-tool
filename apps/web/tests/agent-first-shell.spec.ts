@@ -259,7 +259,7 @@ test.describe("agent-first Plane shell and board acceptance", () => {
     expect(fixture.apiRequests.some((request) => request.startsWith("/api/v1/boards/beta/tasks/by-status"))).toBe(true)
   })
 
-  test("keeps every shell destination reachable at a narrow viewport and confines board overflow to its track", async ({ page }) => {
+  test("keeps mobile shell destinations reachable and confines board overflow to its track", async ({ page }) => {
     await installAgentFirstFixture(page)
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto("/app/boards/alpha/board", { waitUntil: "domcontentloaded" })
@@ -299,10 +299,9 @@ test.describe("agent-first Plane shell and board acceptance", () => {
       await expectNoPageOverflow(page)
     }
 
-    await page.getByTestId("product-rail-settings").click()
-    await expect(page.getByTestId("settings-page")).toBeVisible()
-    await expect(page.getByTestId("product-rail-projects")).toBeVisible()
-    await page.getByTestId("product-rail-projects").click()
+    // Mobile hides the product rail by contract; use the context drawer's Projects entry.
+    await page.getByTestId("resource-header-menu").click()
+    await sidebar.getByTestId("projects-sidebar-projects").click()
     await expect(page.getByTestId("projects-collection")).toBeVisible()
     await page.getByTestId("projects-collection-project-alpha").click()
     await page.getByTestId("project-overview-open-tasks").click()

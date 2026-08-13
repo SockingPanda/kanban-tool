@@ -32,7 +32,7 @@ import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView
 import { usePreferences } from "../../lib/use-preferences"
 import { restoreExplorerFocus, type ExplorerFocusElement, type ExplorerFocusSnapshot } from "../../lib/explorer-focus"
 import { parseTasksUrl, queryForTasksView, type TasksRouteQuery } from "../../lib/tasks-url"
-import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
+import { TaskInspector, type InspectorDependency, type TaskInspectorMode, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskInspectorRelationsPanel } from "./TaskInspectorRelationsPanel"
 import { TaskInspectorAssetsPanel, type InspectorAssetAttachment, type InspectorAssetLabel } from "./TaskInspectorAssetsPanel"
 import { inspectorMutationKey, type TaskInspectorMutationHandlers, type TaskInspectorMutationSnapshot, type TaskInspectorMutationSurface } from "./task-inspector-mutation-state"
@@ -472,7 +472,8 @@ function InspectorAssetsReadOnlyFallback({
 
 export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, canonicalSnapshot, canonicalSnapshotRetry, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
   const { locale, density, setDensity } = usePreferences()
-  const isNarrowViewport = viewportMode !== "desktop"
+  const inspectorMode: TaskInspectorMode = viewportMode === "desktop" ? "side-peek" : viewportMode === "tablet" ? "dialog" : "fullscreen"
+  const isInspectorModal = inspectorMode !== "side-peek"
   const copy = explorerCopies[locale]
   const view: BoardRouteView = route.view === "signals" || route.view === "ontology" ? "board" : route.view ?? "board"
   const params = queryParams(route)
@@ -706,7 +707,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   }, [restoreFocus, taskId])
 
   useEffect(() => {
-    if (!isNarrowViewport || !showInspector || !inspectorReady) return
+    if (!isInspectorModal || !showInspector || !inspectorReady) return
     const dialog = inspectorDialogRef.current
     if (dialog === null) return
     const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
@@ -750,7 +751,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
       window.cancelAnimationFrame(frame)
       document.removeEventListener("keydown", handleKeyDown)
     }
-  }, [closeInspector, inspectorIdentity, inspectorReady, isNarrowViewport, showInspector])
+  }, [closeInspector, inspectorIdentity, inspectorReady, isInspectorModal, showInspector])
   const updateEventKindFilter = (nextKind: string) => {
     const nextParams = queryForTasksView(params, "events")
     const normalizedKind = normalizeEventKindFilter(nextKind)
@@ -816,7 +817,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   }, [inspectorRead.error, mapUrlState, taskId, updateMapUrlState, view])
 
   return (
-    <section className={styles.explorer} data-testid="explorer-page" onClickCapture={rememberTaskOpener}>
+    <section className={styles.explorer} data-testid="explorer-page" data-inspector-mode={showInspector ? inspectorMode : undefined} onClickCapture={rememberTaskOpener}>
       {view !== "board" && syncStatus && syncStatus !== "live" ? <div className={styles.boundary} data-testid="explorer-sync-banner" role="status" aria-live="polite"><strong>{syncStatusLabel(syncStatus, copy)}</strong><span> {locale === "en" ? "The last usable snapshot remains visible." : "仍显示最近一次可用快照。"}</span></div> : null}
       <TasksWorkspaceChrome
         locale={locale}
@@ -844,10 +845,10 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
         onNavigate={navigate}
         hasInspector={showInspector}
         onCloseInspector={showInspector ? closeInspector : undefined}
-        inert={isNarrowViewport && showInspector}
+        inert={isInspectorModal && showInspector}
       />
-      <div className={showInspector ? styles.contentWithInspector : styles.content}>
-        <section className={styles.primaryContent} inert={isNarrowViewport && showInspector ? true : undefined}>
+      <div className={showInspector ? styles.contentWithInspector : styles.content} data-inspector-mode={showInspector ? inspectorMode : undefined}>
+        <section className={styles.primaryContent} inert={isInspectorModal && showInspector ? true : undefined}>
           {view === "board" ? (
             boardLoading && boardModel === null ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
               : boardModel ? <BoardView state={{ kind: "ready", model: boardModel }} messages={boardMessagesForLocale(locale)} syncStatus={boardIsOffline ? "offline" : canonicalSnapshot?.stale || boardError ? "stale" : syncStatus ?? undefined} onRetry={retryCanonicalBoard} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} presentation="embedded" />
@@ -913,17 +914,17 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
           ) : null}
         </section>
         {showInspector ? (
-          <div className={styles.inspectorViewport} data-mode={isNarrowViewport ? "sheet" : "side-peek"}>
-            {isNarrowViewport ? <button type="button" className={styles.inspectorScrim} data-testid="task-inspector-scrim" aria-label={copy.closeInspector} onClick={closeInspector} /> : null}
+          <div className={styles.inspectorViewport} data-mode={inspectorMode}>
+            {isInspectorModal ? <button type="button" className={styles.inspectorScrim} data-testid="task-inspector-scrim" aria-label={copy.closeInspector} onClick={closeInspector} /> : null}
             <div
               ref={inspectorDialogRef}
               className={styles.inspectorDialog}
               data-testid="task-inspector-dialog"
-              data-mode={isNarrowViewport ? "sheet" : "side-peek"}
-              role={isNarrowViewport ? "dialog" : undefined}
-              aria-modal={isNarrowViewport ? true : undefined}
+              data-mode={inspectorMode}
+              role={isInspectorModal ? "dialog" : undefined}
+              aria-modal={isInspectorModal ? true : undefined}
               aria-label={locale === "en" ? "Task Inspector" : "任务检查器"}
-              tabIndex={isNarrowViewport ? -1 : undefined}
+              tabIndex={isInspectorModal ? -1 : undefined}
             >
               <aside className={styles.inspectorStack}>
                 {inspectorModel ? (
@@ -933,7 +934,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
                       identity={inspectorIdentity}
                       refreshRevision={inspectorRevision}
                       model={inspectorModel}
-                      mode={isNarrowViewport ? "sheet" : "side-peek"}
+                      mode={inspectorMode}
                       refreshError={inspectorRead.error instanceof Error ? inspectorRead.error.message : null}
                       refreshOffline={inspectorRead.error instanceof ExplorerReadError && inspectorRead.error.kind === "offline"}
                       online={online !== false}

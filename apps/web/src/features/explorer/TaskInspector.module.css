@@ -12,6 +12,14 @@
     overscroll-behavior: contain;
   }
 
+  .inspector[data-mode="dialog"],
+  .inspector[data-mode="fullscreen"] {
+    max-block-size: none;
+    max-height: none;
+    border-inline-start: 0;
+    overflow: visible;
+  }
+
   .stickyControls {
     position: sticky;
     z-index: 4;
@@ -60,6 +68,11 @@
     font-size: 0.82rem;
     cursor: pointer;
     touch-action: manipulation;
+  }
+
+  .inspector[data-mode="dialog"] .mobileCloseButton,
+  .inspector[data-mode="fullscreen"] .mobileCloseButton {
+    display: inline-flex;
   }
 
   .mobileCloseButton:hover {
@@ -555,21 +568,4 @@
     color: var(--color-status-error) !important;
   }
 
-  @media (max-width: 56rem) {
-    .inspector {
-      max-block-size: none;
-      max-height: none;
-      overflow: visible;
-      border-block-start: 1px solid var(--color-border);
-      border-inline-start: 0;
-    }
-
-    .stickyControls {
-      position: sticky;
-    }
-
-    .mobileCloseButton {
-      display: inline-flex;
-    }
-  }
 }

@@ -93,7 +93,7 @@
     gap: 1rem;
   }
 
-  .contentWithInspector {
+  .explorer[data-inspector-mode="side-peek"] .contentWithInspector {
     grid-template-columns: minmax(0, 1fr) minmax(26rem, 28rem);
     align-items: start;
   }
@@ -119,10 +119,64 @@
     min-height: 0;
   }
 
-  .inspectorScrim {
-    display: none;
+  .inspectorViewport[data-mode="dialog"],
+  .inspectorViewport[data-mode="fullscreen"] {
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    display: grid;
+    pointer-events: none;
   }
 
+  .inspectorViewport[data-mode="dialog"] {
+    place-items: center;
+    padding: 1rem;
+  }
+
+  .inspectorViewport[data-mode="fullscreen"] { align-items: stretch; }
+  .inspectorScrim {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    display: block;
+    width: 100%;
+    min-height: 100%;
+    border: 0;
+    padding: 0;
+    background: rgb(0 0 0 / 0.45);
+    cursor: default;
+    pointer-events: auto;
+  }
+
+  .inspectorDialog[data-mode="side-peek"] {
+    max-block-size: calc(100dvh - 11rem);
+    align-self: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .inspectorDialog[data-mode="dialog"] {
+    position: relative;
+    z-index: 1;
+    width: min(42rem, 100%);
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--kb-radius-card);
+    background: var(--color-background-surface);
+    box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.25);
+    pointer-events: auto;
+  }
+
+  .inspectorDialog[data-mode="fullscreen"] {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-height: 100%;
+    overflow: auto;
+    background: var(--color-background-surface);
+    pointer-events: auto;
+  }
   .assetsReadOnlyFallback {
     display: grid;
     gap: 0.55rem;
@@ -194,64 +248,8 @@
   }
 
   @media (max-width: 68rem) {
-    .contentWithInspector {
+    .explorer[data-inspector-mode="side-peek"] .contentWithInspector {
       grid-template-columns: minmax(0, 1fr) minmax(24rem, 26rem);
-    }
-  }
-
-  @media (min-width: 57rem) {
-    .inspectorDialog {
-      max-block-size: calc(100dvh - 11rem);
-      min-block-size: 0;
-      align-self: start;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-    }
-  }
-
-  @media (max-width: 56rem) {
-    .contentWithInspector {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .inspectorViewport {
-      position: fixed;
-      z-index: 20;
-      inset: 0;
-      display: grid;
-      align-items: end;
-      pointer-events: none;
-    }
-
-    .inspectorScrim {
-      position: absolute;
-      z-index: 0;
-      inset: 0;
-      display: block;
-      width: 100%;
-      min-height: 100%;
-      border: 0;
-      padding: 0;
-      background: rgb(0 0 0 / 0.45);
-      cursor: default;
-      pointer-events: auto;
-    }
-
-    .inspectorDialog {
-      position: relative;
-      z-index: 1;
-      width: 100%;
-      max-height: min(calc(100dvh - 0.75rem), 48rem);
-      overflow: auto;
-      border-block-start: 1px solid var(--color-border-emphasized);
-      border-radius: var(--kb-radius-card) var(--kb-radius-card) 0 0;
-      background: var(--color-background-surface);
-      box-shadow: 0 -1rem 2.5rem rgb(0 0 0 / 0.2);
-      pointer-events: auto;
-    }
-
-    .inspectorStack {
-      min-height: auto;
     }
   }
 }

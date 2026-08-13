@@ -122,12 +122,12 @@ export interface InspectorDependency {
 export interface TaskInspectorProps {
   readonly model: TaskInspectorViewModel
   readonly onSelectTask: (taskId: string) => void
-  /** Explorer owns the canonical URL close path for the mobile sheet. */
+  /** Explorer owns the canonical URL close path for modal inspector modes. */
   readonly onClose?: () => void
   /** Action label supplied by the owning Explorer surface. */
   readonly closeLabel?: string
   /** The shell chooses the responsive presentation mode. */
-  readonly mode?: "side-peek" | "sheet"
+  readonly mode?: TaskInspectorMode
   readonly locale?: Locale
   /** Runtime/session + task identity used to fence deferred section reads. */
   readonly identity: string
@@ -148,6 +148,8 @@ export interface TaskInspectorProps {
   /** Claim token is held by the shared claim-token store and never rendered. */
   readonly claimToken?: string | null
 }
+
+export type TaskInspectorMode = "side-peek" | "dialog" | "fullscreen"
 
 export type InspectorCopy = {
   readonly ariaLabel: string
@@ -1010,7 +1012,7 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
       setEventsStatus(model.events.length > 0 ? "ready" : "idle")
       setNeighborhoodStatus(model.neighborhood ? "ready" : "idle")
     }
-    // The owning modal dialog chooses the initial focus for a narrow sheet.
+    // The owning modal dialog chooses the initial focus for narrow modes.
     // Desktop side-peek keeps the existing task-heading focus behavior.
     if (mode === "side-peek" && (!mountedRef.current || identityChanged)) headingRef.current?.focus()
     mountedRef.current = true

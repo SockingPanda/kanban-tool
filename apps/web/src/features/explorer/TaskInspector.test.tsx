@@ -291,6 +291,16 @@ describe("TaskInspector", () => {
     expect(markup).toContain("Status reason")
   })
 
+  test.each([
+    ["side-peek", "side-peek"],
+    ["dialog", "dialog"],
+    ["fullscreen", "fullscreen"],
+  ] as const)("exposes the explicit %s inspector presentation mode", (mode, expected) => {
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" mode={mode} />)
+
+    expect(markup).toContain(`data-mode="${expected}"`)
+  })
+
   test("keeps execution, runtime, and metadata in a closed low-priority disclosure", () => {
     const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" />)
     const properties = markup.match(/<details[^>]*data-testid="inspector-properties"[^>]*>/)?.[0] ?? ""

@@ -533,11 +533,16 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   const reloadAttachments = attachmentsRead.reload
   const reloadVisibleInspector = useCallback<BoardTaskCanonicalReloadHandler>(async (options) => {
     if (!showInspector || !taskId) return
-    // Create navigation already owns the new task's Inspector reads. Keep
-    // those reads observable without letting a derived failure reject Board
-    // reconcile; Inspector-owned writes still require both visible reloads.
+    // Board owns its canonical projection, so derived Inspector reads are
+    // best-effort there. Inspector writes require the task read; only an
+    // attachment write also requires the independent attachment projection.
     if (options?.visibleInspectorReload === "best-effort") {
       await Promise.allSettled([reloadInspector(), reloadAttachments()])
+      return
+    }
+    if (options?.visibleInspectorReload === "task-required") {
+      const [taskResult] = await Promise.allSettled([reloadInspector(), reloadAttachments()])
+      if (taskResult.status === "rejected") throw taskResult.reason
       return
     }
     await Promise.all([reloadInspector(), reloadAttachments()])
@@ -585,7 +590,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
         await Promise.resolve(taskMutations.onCanonicalReload?.({
           reason: "retry",
           mutationKind: event.kind === "transition" ? "transition" : "edit",
-          visibleInspectorReload: "required",
+          visibleInspectorReload: event.kind === "attachment" ? "required" : "task-required",
         }))
       },
     }

@@ -23,6 +23,7 @@ export type ExplorerFixtureOptions = {
   readonly withAssets?: boolean
   readonly failLabelAddOnce?: boolean
   readonly failInspectorReadsAfterLabelAdd?: number
+  readonly failAttachmentReadsAfterLabelAdd?: number
 }
 
 export type ExplorerFixture = {
@@ -166,9 +167,13 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
   let inspectorReadFailuresAfterLabelAdd = typeof options.failInspectorReadsAfterLabelAdd === "number"
     ? Math.max(0, Math.floor(options.failInspectorReadsAfterLabelAdd))
     : 0
+  let attachmentReadFailuresAfterLabelAdd = typeof options.failAttachmentReadsAfterLabelAdd === "number"
+    ? Math.max(0, Math.floor(options.failAttachmentReadsAfterLabelAdd))
+    : 0
   const stepsByTask = new Map<string, Record<string, unknown>[]>([[TASK_ID, []]])
   let events: FixtureEvent[] = options.emptyEvents ? [] : [fixtureEvent(1, "task.created")]
   let inspectorReadFailuresRemaining = 0
+  let attachmentReadFailuresRemaining = 0
   let releaseList: () => void = () => undefined
   const listGate = options.delayList
     ? new Promise<void>((resolve) => {
@@ -483,6 +488,11 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
         await fulfillJson(route, { data: readyTask })
         return
       }
+      if (attachmentReadFailuresRemaining > 0) {
+        attachmentReadFailuresRemaining -= 1
+        await fulfillUnavailable(route)
+        return
+      }
       await fulfillJson(route, { data: attachments })
       return
     }
@@ -538,6 +548,10 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       if (inspectorReadFailuresAfterLabelAdd > 0) {
         inspectorReadFailuresRemaining = inspectorReadFailuresAfterLabelAdd
         inspectorReadFailuresAfterLabelAdd = 0
+      }
+      if (attachmentReadFailuresAfterLabelAdd > 0) {
+        attachmentReadFailuresRemaining = attachmentReadFailuresAfterLabelAdd
+        attachmentReadFailuresAfterLabelAdd = 0
       }
       await fulfillJson(route, { data: readyTask, meta: null })
       return

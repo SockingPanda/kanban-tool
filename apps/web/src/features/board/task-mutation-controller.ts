@@ -305,7 +305,7 @@ export function useBoardTaskMutationController(
       const canonical = (await surface?.onCanonicalReload?.({
         reason: reason ?? "initial",
         mutationKind,
-        visibleInspectorReload: mutationKind === "create" ? "best-effort" : "required",
+        visibleInspectorReload: "best-effort",
       })) ?? null
       return adoptCanonicalModel(canonical, generation)
     } catch {
@@ -321,7 +321,7 @@ export function useBoardTaskMutationController(
       const canonical = (await surface.onCanonicalReload?.({
         reason: "retry",
         mutationKind,
-        visibleInspectorReload: mutationKind === "create" ? "best-effort" : "required",
+        visibleInspectorReload: "best-effort",
       })) ?? null
       if (isCurrentMutation(generation)) {
         const adopted = adoptCanonicalModel(canonical, generation)

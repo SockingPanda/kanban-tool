@@ -93,4 +93,17 @@ test.describe("Inspector integration seam", () => {
     await expect(page.getByTestId("inspector-labels")).toContainText("reload-gated")
     await expect(page.getByTestId("task-inspector")).not.toContainText("stale")
   })
+
+  test("keeps task reconciliation independent from a failed attachment refresh", async ({ page }) => {
+    await installExplorerFixture(page, { withAssets: true, failAttachmentReadsAfterLabelAdd: 1 })
+    await page.goto(`${boardPath}/list?task=${taskId}`, { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("task-inspector")).toBeVisible()
+
+    await page.getByRole("textbox", { name: "标签名称" }).fill("task-owned")
+    await page.getByTestId("label-add").click()
+
+    await expect(page.getByTestId("inspector-labels")).toContainText("task-owned")
+    await expect(page.getByTestId("task-inspector-reload-feedback")).toHaveCount(0)
+    await expect(page.getByTestId("attachments-error")).toBeVisible()
+  })
 })

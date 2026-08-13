@@ -16,6 +16,7 @@
     "api.promote-task",
     "api.claim-task",
     "api.heartbeat-task",
+    "api.release-task",
     "api.complete-task",
     "api.submit-review-task",
     "api.block-task",

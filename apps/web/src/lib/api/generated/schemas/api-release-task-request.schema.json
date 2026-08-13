@@ -1,0 +1,21 @@
+{
+  "$id": "urn:kanban-tool:schema:api:release-task-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "claim_token": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "claim_token"
+  ],
+  "title": "Kanban release task request v1",
+  "type": "object"
+}

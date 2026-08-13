@@ -752,6 +752,36 @@ export const operations = [
     "sharedComponents": []
   },
   {
+    "id": "api.release-task",
+    "method": "POST",
+    "path": "/api/v1/tasks/:task_id/transitions/release",
+    "obligations": {
+      "path": {
+        "kind": "contract",
+        "contractId": "api.release-task.path"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "kind": "contract",
+        "contractId": "api.release-task.headers"
+      },
+      "body": {
+        "kind": "contract",
+        "contractId": "api.release-task.request"
+      },
+      "success": {
+        "kind": "contract",
+        "contractId": "api.release-task.response"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      }
+    },
+    "sharedComponents": []
+  },
+  {
     "id": "api.complete-task",
     "method": "POST",
     "path": "/api/v1/tasks/:task_id/transitions/complete",
@@ -1782,40 +1812,41 @@ export const operationById = {
   "api.promote-task": operations[22],
   "api.claim-task": operations[23],
   "api.heartbeat-task": operations[24],
-  "api.complete-task": operations[25],
-  "api.submit-review-task": operations[26],
-  "api.block-task": operations[27],
-  "api.unblock-task": operations[28],
-  "api.archive-task": operations[29],
-  "api.list-dependencies": operations[30],
-  "api.add-dependency": operations[31],
-  "api.remove-dependency": operations[32],
-  "api.list-steps": operations[33],
-  "api.create-step": operations[34],
-  "api.mark-execution-plan-not-required": operations[35],
-  "api.list-runs": operations[36],
-  "api.get-run-log": operations[37],
-  "api.list-comments": operations[38],
-  "api.create-comment": operations[39],
-  "api.list-attachments": operations[40],
-  "api.create-attachment": operations[41],
-  "api.download-attachment": operations[42],
-  "api.delete-attachment": operations[43],
-  "api.get-stats": operations[44],
-  "api.search-status": operations[45],
-  "api.list-events": operations[46],
-  "sse.stream-events": operations[47],
-  "api.doctor": operations[48],
-  "api.checkpoint": operations[49],
-  "api.maintenance-backup": operations[50],
-  "api.maintenance-export": operations[51],
-  "api.maintenance-import": operations[52],
-  "api.maintenance-vacuum": operations[53],
-  "api.maintenance-status": operations[54],
-  "api.maintenance-run": operations[55],
-  "api.maintenance-rebuild": operations[56],
-  "api.maintenance-cleanup": operations[57],
-  "api.maintenance-import-v30": operations[58],
+  "api.release-task": operations[25],
+  "api.complete-task": operations[26],
+  "api.submit-review-task": operations[27],
+  "api.block-task": operations[28],
+  "api.unblock-task": operations[29],
+  "api.archive-task": operations[30],
+  "api.list-dependencies": operations[31],
+  "api.add-dependency": operations[32],
+  "api.remove-dependency": operations[33],
+  "api.list-steps": operations[34],
+  "api.create-step": operations[35],
+  "api.mark-execution-plan-not-required": operations[36],
+  "api.list-runs": operations[37],
+  "api.get-run-log": operations[38],
+  "api.list-comments": operations[39],
+  "api.create-comment": operations[40],
+  "api.list-attachments": operations[41],
+  "api.create-attachment": operations[42],
+  "api.download-attachment": operations[43],
+  "api.delete-attachment": operations[44],
+  "api.get-stats": operations[45],
+  "api.search-status": operations[46],
+  "api.list-events": operations[47],
+  "sse.stream-events": operations[48],
+  "api.doctor": operations[49],
+  "api.checkpoint": operations[50],
+  "api.maintenance-backup": operations[51],
+  "api.maintenance-export": operations[52],
+  "api.maintenance-import": operations[53],
+  "api.maintenance-vacuum": operations[54],
+  "api.maintenance-status": operations[55],
+  "api.maintenance-run": operations[56],
+  "api.maintenance-rebuild": operations[57],
+  "api.maintenance-cleanup": operations[58],
+  "api.maintenance-import-v30": operations[59],
 } as const;
 
 export function getOperation<K extends WebOperationId>(id: K): (typeof operationById)[K] {

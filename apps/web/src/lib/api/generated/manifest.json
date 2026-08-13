@@ -462,6 +462,46 @@
     },
     {
       "direction": "deserialize",
+      "id": "api.release-task.path",
+      "invalidFixture": "fixtures/api-release-task-path.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:release-task-path:v1",
+      "schemaPath": "schemas/api-release-task-path.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-release-task-path.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.release-task.headers",
+      "invalidFixture": "fixtures/api-release-task-headers.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:release-task-headers:v1",
+      "schemaPath": "schemas/api-release-task-headers.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-release-task-headers.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.release-task.request",
+      "invalidFixture": "fixtures/api-release-task-request.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:release-task-request:v1",
+      "schemaPath": "schemas/api-release-task-request.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-release-task-request.valid.json"
+    },
+    {
+      "direction": "serialize",
+      "id": "api.release-task.response",
+      "invalidFixture": "fixtures/api-release-task-response.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:release-task-response:v1",
+      "schemaPath": "schemas/api-release-task-response.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-release-task-response.valid.json"
+    },
+    {
+      "direction": "deserialize",
       "id": "api.complete-task.path",
       "invalidFixture": "fixtures/api-complete-task-path.invalid.json",
       "schemaId": "urn:kanban-tool:schema:api:complete-task-path:v1",
@@ -2181,6 +2221,10 @@
     "contracts/api-promote-task-path.ts",
     "contracts/api-promote-task-request.ts",
     "contracts/api-promote-task-response.ts",
+    "contracts/api-release-task-headers.ts",
+    "contracts/api-release-task-path.ts",
+    "contracts/api-release-task-request.ts",
+    "contracts/api-release-task-response.ts",
     "contracts/api-remove-dependency-headers.ts",
     "contracts/api-remove-dependency-path.ts",
     "contracts/api-remove-dependency-response.ts",
@@ -2541,6 +2585,14 @@
     "fixtures/api-promote-task-request.valid.json",
     "fixtures/api-promote-task-response.invalid.json",
     "fixtures/api-promote-task-response.valid.json",
+    "fixtures/api-release-task-headers.invalid.json",
+    "fixtures/api-release-task-headers.valid.json",
+    "fixtures/api-release-task-path.invalid.json",
+    "fixtures/api-release-task-path.valid.json",
+    "fixtures/api-release-task-request.invalid.json",
+    "fixtures/api-release-task-request.valid.json",
+    "fixtures/api-release-task-response.invalid.json",
+    "fixtures/api-release-task-response.valid.json",
     "fixtures/api-remove-dependency-headers.invalid.json",
     "fixtures/api-remove-dependency-headers.valid.json",
     "fixtures/api-remove-dependency-path.invalid.json",
@@ -2793,6 +2845,10 @@
     "schemas/api-promote-task-path.schema.json",
     "schemas/api-promote-task-request.schema.json",
     "schemas/api-promote-task-response.schema.json",
+    "schemas/api-release-task-headers.schema.json",
+    "schemas/api-release-task-path.schema.json",
+    "schemas/api-release-task-request.schema.json",
+    "schemas/api-release-task-response.schema.json",
     "schemas/api-remove-dependency-headers.schema.json",
     "schemas/api-remove-dependency-path.schema.json",
     "schemas/api-remove-dependency-response.schema.json",
@@ -3592,6 +3648,36 @@
         }
       },
       "path": "/api/v1/tasks/:task_id/transitions/heartbeat",
+      "sharedComponents": []
+    },
+    {
+      "id": "api.release-task",
+      "method": "POST",
+      "obligations": {
+        "body": {
+          "contractId": "api.release-task.request",
+          "kind": "contract"
+        },
+        "headers": {
+          "contractId": "api.release-task.headers",
+          "kind": "contract"
+        },
+        "path": {
+          "contractId": "api.release-task.path",
+          "kind": "contract"
+        },
+        "query": {
+          "kind": "not_applicable"
+        },
+        "sse": {
+          "kind": "not_applicable"
+        },
+        "success": {
+          "contractId": "api.release-task.response",
+          "kind": "contract"
+        }
+      },
+      "path": "/api/v1/tasks/:task_id/transitions/release",
       "sharedComponents": []
     },
     {
@@ -4598,9 +4684,9 @@
   "schemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "selectionPath": "apps/web/web-contracts.json",
   "sourceHashes": {
-    "protocolEndpoints": "sha256:6feba911231500e9b3160dacf112f705fe5bfd8f769beae0be3de7821e5edafc",
+    "protocolEndpoints": "sha256:d4d5033547e6c922da68ee4d5d42e3ddd1abf244110f81312844a68d4a6a0982",
     "protocolOperations": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5",
-    "protocolSchemas": "sha256:b15ef8ab53cb7d7368020e80d4e518407d58213b4bc19eadc4c72fa467175f72",
-    "selection": "sha256:398b2df497a12af785e689c6ec31b341e50938d96198c58191b27dd88eaea95e"
+    "protocolSchemas": "sha256:0f471bde16a401690aa519c605cb176213ca8c7fa440f8ffe9be045e476e9fca",
+    "selection": "sha256:d93377cb38643bce96d762a8bf5602c98a5a64a5f5fc3c546c886e51b01a0c3f"
   }
 }

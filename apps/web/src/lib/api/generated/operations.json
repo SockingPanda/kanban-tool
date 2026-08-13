@@ -751,6 +751,36 @@
     "sharedComponents": []
   },
   {
+    "id": "api.release-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.release-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.release-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.release-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.release-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/release",
+    "sharedComponents": []
+  },
+  {
     "id": "api.complete-task",
     "method": "POST",
     "obligations": {

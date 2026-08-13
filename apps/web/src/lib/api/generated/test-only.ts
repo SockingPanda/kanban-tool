@@ -47,6 +47,10 @@ import { ApiHeartbeatTaskPathSchema, apiHeartbeatTaskPathValidator } from "./con
 import { ApiHeartbeatTaskHeadersSchema, apiHeartbeatTaskHeadersValidator } from "./contracts/api-heartbeat-task-headers";
 import { ApiHeartbeatTaskRequestSchema, apiHeartbeatTaskRequestValidator } from "./contracts/api-heartbeat-task-request";
 import { ApiHeartbeatTaskResponseSchema, apiHeartbeatTaskResponseValidator } from "./contracts/api-heartbeat-task-response";
+import { ApiReleaseTaskPathSchema, apiReleaseTaskPathValidator } from "./contracts/api-release-task-path";
+import { ApiReleaseTaskHeadersSchema, apiReleaseTaskHeadersValidator } from "./contracts/api-release-task-headers";
+import { ApiReleaseTaskRequestSchema, apiReleaseTaskRequestValidator } from "./contracts/api-release-task-request";
+import { ApiReleaseTaskResponseSchema, apiReleaseTaskResponseValidator } from "./contracts/api-release-task-response";
 import { ApiCompleteTaskPathSchema, apiCompleteTaskPathValidator } from "./contracts/api-complete-task-path";
 import { ApiCompleteTaskHeadersSchema, apiCompleteTaskHeadersValidator } from "./contracts/api-complete-task-headers";
 import { ApiCompleteTaskRequestSchema, apiCompleteTaskRequestValidator } from "./contracts/api-complete-task-request";
@@ -253,6 +257,10 @@ export const schemas = {
   "api.heartbeat-task.headers": ApiHeartbeatTaskHeadersSchema,
   "api.heartbeat-task.request": ApiHeartbeatTaskRequestSchema,
   "api.heartbeat-task.response": ApiHeartbeatTaskResponseSchema,
+  "api.release-task.path": ApiReleaseTaskPathSchema,
+  "api.release-task.headers": ApiReleaseTaskHeadersSchema,
+  "api.release-task.request": ApiReleaseTaskRequestSchema,
+  "api.release-task.response": ApiReleaseTaskResponseSchema,
   "api.complete-task.path": ApiCompleteTaskPathSchema,
   "api.complete-task.headers": ApiCompleteTaskHeadersSchema,
   "api.complete-task.request": ApiCompleteTaskRequestSchema,
@@ -458,6 +466,10 @@ export const validators = {
   "api.heartbeat-task.headers": apiHeartbeatTaskHeadersValidator,
   "api.heartbeat-task.request": apiHeartbeatTaskRequestValidator,
   "api.heartbeat-task.response": apiHeartbeatTaskResponseValidator,
+  "api.release-task.path": apiReleaseTaskPathValidator,
+  "api.release-task.headers": apiReleaseTaskHeadersValidator,
+  "api.release-task.request": apiReleaseTaskRequestValidator,
+  "api.release-task.response": apiReleaseTaskResponseValidator,
   "api.complete-task.path": apiCompleteTaskPathValidator,
   "api.complete-task.headers": apiCompleteTaskHeadersValidator,
   "api.complete-task.request": apiCompleteTaskRequestValidator,
@@ -673,6 +685,10 @@ export { parseApiHeartbeatTaskPath } from "./contracts/api-heartbeat-task-path";
 export { parseApiHeartbeatTaskHeaders } from "./contracts/api-heartbeat-task-headers";
 export { parseApiHeartbeatTaskRequest } from "./contracts/api-heartbeat-task-request";
 export { parseApiHeartbeatTaskResponse } from "./contracts/api-heartbeat-task-response";
+export { parseApiReleaseTaskPath } from "./contracts/api-release-task-path";
+export { parseApiReleaseTaskHeaders } from "./contracts/api-release-task-headers";
+export { parseApiReleaseTaskRequest } from "./contracts/api-release-task-request";
+export { parseApiReleaseTaskResponse } from "./contracts/api-release-task-response";
 export { parseApiCompleteTaskPath } from "./contracts/api-complete-task-path";
 export { parseApiCompleteTaskHeaders } from "./contracts/api-complete-task-headers";
 export { parseApiCompleteTaskRequest } from "./contracts/api-complete-task-request";

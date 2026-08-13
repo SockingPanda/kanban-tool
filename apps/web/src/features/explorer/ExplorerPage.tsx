@@ -28,6 +28,7 @@ import type { WebRuntimeConfig } from "../../lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
 import { restoreExplorerFocus, type ExplorerFocusElement, type ExplorerFocusSnapshot } from "../../lib/explorer-focus"
+import { parseTasksUrl, queryForTasksView, type TasksRouteQuery } from "../../lib/tasks-url"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskInspectorRelationsPanel } from "./TaskInspectorRelationsPanel"
 import { TaskInspectorAssetsPanel, type InspectorAssetAttachment, type InspectorAssetLabel } from "./TaskInspectorAssetsPanel"
@@ -44,7 +45,6 @@ import {
   inspectorRelationsView,
   inspectorResultView,
   parseTaskDisplay,
-  withTaskDisplay,
   type TaskListDisplay,
 } from "./ExplorerPage.logic"
 import { parseTaskMapUrlState, serializeTaskMapUrlState, type TaskMapUrlState } from "./TaskMapView.logic"
@@ -116,6 +116,7 @@ type ExplorerCopy = {
   readonly retry: string
   readonly inspectorLoading: string
   readonly inspectorError: string
+  readonly inspectorMalformed: string
   readonly inspectorOffline: string
   readonly board: string
   readonly list: string
@@ -144,6 +145,7 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
     retry: "重试",
     inspectorLoading: "正在加载任务检查器…",
     inspectorError: "任务检查器加载失败",
+    inspectorMalformed: "任务链接无效",
     inspectorOffline: "当前离线，无法加载任务检查器。",
     board: "看板",
     list: "列表",
@@ -170,6 +172,7 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
     retry: "Retry",
     inspectorLoading: "Loading Task Inspector…",
     inspectorError: "Task Inspector failed to load",
+    inspectorMalformed: "Invalid task link",
     inspectorOffline: "You are offline; Task Inspector cannot be loaded.",
     board: "Board",
     list: "List",
@@ -444,7 +447,8 @@ function InspectorBoundary({ loading, error, onRetry, copy }: { readonly loading
   if (loading) return <aside className={styles.inspectorBoundary} data-testid="task-inspector-loading" role="status"><h2>{copy.inspectorLoading}</h2></aside>
   if (error) {
     const offline = error instanceof ExplorerReadError && error.kind === "offline"
-    return <aside className={styles.inspectorBoundary} data-testid={offline ? "task-inspector-offline" : "task-inspector-error"} role={offline ? "status" : "alert"}><h2>{offline ? copy.inspectorOffline : copy.inspectorError}</h2><p>{error.message}</p><button type="button" onClick={onRetry}>{copy.retry}</button></aside>
+    const malformed = error instanceof ExplorerReadError && error.kind === "malformed_url"
+    return <aside className={styles.inspectorBoundary} data-testid={offline ? "task-inspector-offline" : malformed ? "task-inspector-malformed" : "task-inspector-error"} role={offline || malformed ? "status" : "alert"}><h2>{offline ? copy.inspectorOffline : malformed ? copy.inspectorMalformed : copy.inspectorError}</h2><p>{error.message}</p>{malformed ? null : <button type="button" onClick={onRetry}>{copy.retry}</button>}</aside>
   }
   return null
 }
@@ -487,13 +491,21 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const displayVariant: TasksListDisplay = listDisplay === "table" ? "table" : "grouped"
   const workspaceView: TasksView = view === "list" ? "list" : view === "map" ? "map" : "board"
   const [visibleColumns, setVisibleColumns] = useState<Readonly<Record<string, boolean>>>({})
-  const rawTaskId = params.get("task")?.trim() || null
+  const tasksUrl = useMemo(() => parseTasksUrl(route.query ?? ""), [route.query])
+  const taskSelector = tasksUrl.task
+  const rawTaskId = taskSelector.kind === "valid" ? taskSelector.value : null
+  const malformedTaskError = useMemo(
+    () => taskSelector.kind === "malformed"
+      ? new ExplorerReadError("malformed_url", "URL 中的 task selector 不是 canonical t_ identity。")
+      : null,
+    [taskSelector],
+  )
   const mapUrlState = useMemo(() => parseTaskMapUrlState(route.query ?? ""), [route.query])
   const taskId = view === "map" ? mapUrlState.taskId : rawTaskId
   const openerRef = useRef<ExplorerFocusSnapshot | null>(null)
   const previousTaskIdRef = useRef<string | null>(taskId)
   const kindFilter = normalizeEventKindFilter(params.get("kind"))
-  const showInspector = Boolean(taskId) && view !== "runs"
+  const showInspector = (Boolean(taskId) || malformedTaskError !== null) && view !== "runs"
   const listQuery = useMemo(() => parseTaskListQuery(new URLSearchParams(route.query ?? "")), [route.query])
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
   const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })), boardRevision, online !== false)
@@ -512,15 +524,15 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
   const inspectorIdentity = `${runtime.apiBaseUrl}\u0000${runtime.webBuildId}\u0000${inspectorKey}`
   const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false, includeAttachments: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
-  const attachmentsRead = useAsyncRead(showInspector, `${inspectorKey}\u0000attachments`, (signal) => taskId
+  const attachmentsRead = useAsyncRead(Boolean(taskId) && showInspector, `${inspectorKey}\u0000attachments`, (signal) => taskId
     ? loadTaskInspectorAttachments(runtime, route.boardSlug, taskId, { signal })
     : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
   const reloadInspector = inspectorRead.reload
   const reloadAttachments = attachmentsRead.reload
   const reloadVisibleInspector = useCallback(async () => {
-    if (!showInspector) return
+    if (!showInspector || !taskId) return
     await Promise.all([reloadInspector(), reloadAttachments()])
-  }, [reloadAttachments, reloadInspector, showInspector])
+  }, [reloadAttachments, reloadInspector, showInspector, taskId])
   useLayoutEffect(() => {
     if (!showInspector) {
       onVisibleCanonicalReloadChange?.(undefined)
@@ -607,14 +619,14 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     if (onNavigate) void onNavigate(target, options)
   }, [onNavigate])
   const updateMapUrlState = useCallback((next: TaskMapUrlState, options?: { readonly replace?: boolean }) => {
-    const query = new URLSearchParams(params)
+    const query = queryForTasksView(params, "map")
     for (const key of ["filter", "show_done", "hide_isolated", "zoom", "task"]) query.delete(key)
     const mapParams = new URLSearchParams(serializeTaskMapUrlState(next))
     mapParams.forEach((value, key) => query.set(key, value))
     navigate(routeTarget(route.boardSlug, "map", query, runtime.webBasePath), options)
   }, [navigate, params, route.boardSlug, runtime.webBasePath])
   const updateListQuery = (next: TaskListQueryState) => {
-    const nextParams = new URLSearchParams(params)
+    const nextParams = queryForTasksView(params, "list", displayVariant === "table" ? "table" : "grouped")
     for (const key of ["status", "priority", "plan", "q", "sort", "page", "limit", "include_archived"]) nextParams.delete(key)
     const listParams = new URLSearchParams(serializeTaskListQuery(next).replace(/^\?/, ""))
     listParams.forEach((value, key) => nextParams.append(key, value))
@@ -629,9 +641,10 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   }
   const clearListFilters = () => updateListQuery({ ...listQuery, status: [], priority: [], plan: [], search: "", includeArchived: false })
   const updateWorkspaceView = (nextView: TasksView, nextDisplay: TasksListDisplay) => {
-    const nextParams = nextView === "list"
-      ? withTaskDisplay(params, nextDisplay === "table" ? "table" : "list")
-      : withTaskDisplay(params, "list")
+    const targetQueryView: TasksRouteQuery = nextView === "list"
+      ? nextDisplay === "table" ? "table" : "list"
+      : nextView
+    const nextParams = queryForTasksView(params, targetQueryView, nextDisplay === "table" ? "table" : "grouped")
     navigate(routeTarget(route.boardSlug, nextView, nextParams, runtime.webBasePath))
   }
   const selectTask = (nextTaskId: string) => {
@@ -639,7 +652,10 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
       updateMapUrlState({ ...mapUrlState, taskId: nextTaskId })
       return
     }
-    const nextParams = new URLSearchParams(params)
+    const targetQueryView: TasksRouteQuery = view === "list"
+      ? listDisplay === "table" ? "table" : "list"
+      : view
+    const nextParams = queryForTasksView(params, targetQueryView, listDisplay === "table" ? "table" : "grouped")
     nextParams.set("task", nextTaskId)
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
   }
@@ -648,10 +664,13 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
       updateMapUrlState({ ...mapUrlState, taskId: null })
       return
     }
-    const nextParams = new URLSearchParams(params)
+    const targetQueryView: TasksRouteQuery = view === "list"
+      ? listDisplay === "table" ? "table" : "list"
+      : view
+    const nextParams = queryForTasksView(params, targetQueryView, listDisplay === "table" ? "table" : "grouped")
     nextParams.delete("task")
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
-  }, [mapUrlState, navigate, params, route.boardSlug, runtime.webBasePath, updateMapUrlState, view])
+  }, [listDisplay, mapUrlState, navigate, params, route.boardSlug, runtime.webBasePath, updateMapUrlState, view])
 
   const rememberTaskOpener = useCallback((event: MouseEvent<HTMLElement>) => {
     if (typeof Element === "undefined" || !(event.target instanceof Element)) return
@@ -729,7 +748,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     }
   }, [closeInspector, inspectorIdentity, inspectorReady, isNarrowViewport, showInspector])
   const updateEventKindFilter = (nextKind: string) => {
-    const nextParams = new URLSearchParams(params)
+    const nextParams = queryForTasksView(params, "events")
     const normalizedKind = normalizeEventKindFilter(nextKind)
     if (normalizedKind) nextParams.set("kind", normalizedKind)
     else nextParams.delete("kind")
@@ -740,11 +759,11 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     document.getElementById("task-list-controls")?.focus()
   }, [])
   const diagnosticLinks: readonly TasksDiagnosticLink[] = useMemo(() => {
-    const query = new URLSearchParams(params)
-    query.delete("display")
+    const runsQuery = queryForTasksView(params, "runs")
+    const eventsQuery = queryForTasksView(params, "events")
     return [
-      { id: "runs", label: copy.runs, href: routeTarget(route.boardSlug, "runs", query, runtime.webBasePath) },
-      { id: "events", label: copy.events, href: routeTarget(route.boardSlug, "events", query, runtime.webBasePath) },
+      { id: "runs", label: copy.runs, href: routeTarget(route.boardSlug, "runs", runsQuery, runtime.webBasePath) },
+      { id: "events", label: copy.events, href: routeTarget(route.boardSlug, "events", eventsQuery, runtime.webBasePath) },
       { id: "signals", label: copy.signals, href: routePath({ kind: "board", boardSlug: route.boardSlug, view: "signals" }, { basePath: runtime.webBasePath }) },
       { id: "ontology", label: copy.ontology, href: routePath({ kind: "board", boardSlug: route.boardSlug, view: "ontology" }, { basePath: runtime.webBasePath }) },
       { id: "health", label: copy.health, href: routePath({ kind: "health", boardSlug: route.boardSlug }, { basePath: runtime.webBasePath }) },
@@ -799,7 +818,10 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         locale={locale}
         scope={route.boardSlug}
         hrefForView={(nextView, nextDisplay) => {
-          const nextParams = withTaskDisplay(params, nextView === "list" && nextDisplay === "table" ? "table" : "list")
+          const targetQueryView: TasksRouteQuery = nextView === "list"
+            ? nextDisplay === "table" ? "table" : "list"
+            : nextView
+          const nextParams = queryForTasksView(params, targetQueryView, nextDisplay === "table" ? "table" : "grouped")
           return routeTarget(route.boardSlug, nextView, nextParams, runtime.webBasePath)
         }}
         activeView={workspaceView}
@@ -816,8 +838,8 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         onVisibleColumnsChange={(columnId, visible) => setVisibleColumns((current) => ({ ...current, [columnId]: visible }))}
         diagnostics={diagnosticLinks}
         onNavigate={navigate}
-        hasInspector={Boolean(taskId)}
-        onCloseInspector={taskId ? closeInspector : undefined}
+        hasInspector={showInspector}
+        onCloseInspector={showInspector ? closeInspector : undefined}
         inert={isNarrowViewport && showInspector}
       />
       <div className={showInspector ? styles.contentWithInspector : styles.content}>
@@ -962,7 +984,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
                       </>
                     ) : null}
                   </>
-                ) : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} copy={copy} />}
+                ) : <InspectorBoundary loading={inspectorRead.loading} error={malformedTaskError ?? (inspectorRead.error instanceof Error ? inspectorRead.error : null)} onRetry={inspectorRead.retry} copy={copy} />}
               </aside>
             </div>
           </div>

@@ -45,6 +45,7 @@ import {
   type HttpTransportOptions,
   type HttpTransportResponse,
 } from "./http-transport"
+import { parseTaskSelector } from "../tasks-url"
 
 export type TaskListStatus = NonNullable<ApiListTasksQueryContract["status"]>[number]
 export type TaskListSort = NonNullable<ApiListTasksQueryContract["sort"]>
@@ -868,23 +869,23 @@ export interface TaskRunsReadModel {
   readonly log: ApiGetRunLogResponseContract["data"] | null
 }
 
-function hasUnsafeTaskSelector(value: string): boolean {
-  if (value.trim() !== value || value.length === 0 || /[\\/?#]/.test(value)) return true
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0
-    if (codePoint <= 0x1f || codePoint === 0x7f) return true
-  }
-  return false
-}
-
 function validateCanonicalTaskSelector(value: string): void {
-  if (hasUnsafeTaskSelector(value) || !value.startsWith("t_") || value.length <= 2) {
+  if (parseTaskSelector(value).kind !== "valid") {
     throw new ExplorerReadError("anomaly", "请求的 task selector 必须是 canonical t_ identity。", { reason: "task-not-found" })
   }
 }
 
+function hasUnsafeSelector(value: string): boolean {
+  if (value.trim() !== value || value.length === 0 || /[\\/?#]/u.test(value)) return true
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0
+    if (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)) return true
+  }
+  return false
+}
+
 function validateRunSelector(value: string): void {
-  if (hasUnsafeTaskSelector(value) || !value.startsWith("r_") || value.length <= 2) {
+  if (hasUnsafeSelector(value) || !value.startsWith("r_") || value.length <= 2) {
     throw new ExplorerReadError("anomaly", "Run selector 必须是 canonical r_ identity。")
   }
 }

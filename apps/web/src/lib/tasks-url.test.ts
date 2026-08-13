@@ -36,7 +36,7 @@ describe("Tasks URL query ownership", () => {
 
   test("retains malformed task text as shared URL state for an explicit UI error", () => {
     const query = queryForTasksView("q=agent&task=../escape&status=ready&filter=blocked", "map")
-    expect(query.toString()).toBe("q=agent&task=../escape&filter=blocked")
+    expect(query.toString()).toBe("q=agent&task=..%2Fescape&filter=blocked")
     expect(parseTaskSelector(query)).toMatchObject({ kind: "malformed", value: "../escape" })
   })
 })

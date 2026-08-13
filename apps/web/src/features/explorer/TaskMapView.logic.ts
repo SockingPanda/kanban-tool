@@ -1,4 +1,5 @@
 import type { ExplorerBoardIdentity, ExplorerTaskMap, ExplorerTaskMapReadModel } from "../../lib/api/explorer-read-model"
+import { canonicalTaskSelector, parseTaskSelector } from "../../lib/tasks-url"
 
 export type BoardMapFilter = "all" | "blocked" | "ready" | "running" | "unplanned" | "incomplete-steps"
 
@@ -27,19 +28,11 @@ export const defaultTaskMapUrlState: TaskMapUrlState = Object.freeze({
 
 const mapFilters = new Set<BoardMapFilter>(["all", "blocked", "ready", "running", "unplanned", "incomplete-steps"])
 
-function safeTaskSelector(value: string | null): string | null {
-  if (value === null || value.trim() !== value || !value.startsWith("t_") || value.length <= 2 || /[\\/?#]/.test(value)) return null
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0
-    if (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)) return null
-  }
-  return value
-}
-
 export function parseTaskMapUrlState(input: string | URLSearchParams): TaskMapUrlState {
   const params = typeof input === "string"
     ? new URLSearchParams(input.startsWith("?") ? input.slice(1) : input)
     : input
+  const taskSelector = parseTaskSelector(params)
   const filterValue = params.get("filter")
   const rawZoom = params.get("zoom")
   const zoomValue = rawZoom !== null && rawZoom.trim() === rawZoom && rawZoom.length > 0 ? Number(rawZoom) : Number.NaN
@@ -49,7 +42,7 @@ export function parseTaskMapUrlState(input: string | URLSearchParams): TaskMapUr
     showDoneContext: params.get("show_done") === "true",
     hideIsolated: params.get("hide_isolated") === "true",
     zoom,
-    taskId: safeTaskSelector(params.get("task")),
+    taskId: taskSelector.kind === "valid" ? taskSelector.value : null,
   })
 }
 
@@ -61,7 +54,7 @@ export function serializeTaskMapUrlState(state: TaskMapUrlState): string {
   if (state.hideIsolated === true) params.set("hide_isolated", "true")
   const zoom = typeof state.zoom === "number" ? clampMapZoom(state.zoom) : defaultTaskMapUrlState.zoom
   if (zoom !== defaultTaskMapUrlState.zoom) params.set("zoom", String(zoom))
-  const taskId = safeTaskSelector(state.taskId)
+  const taskId = canonicalTaskSelector(state.taskId)
   if (taskId) params.set("task", taskId)
   return params.toString()
 }

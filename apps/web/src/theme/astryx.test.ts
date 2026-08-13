@@ -1,8 +1,21 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { describe, expect, test } from "vitest"
 
 const stylesheet = readFileSync(new URL("./astryx.css", import.meta.url), "utf8")
+
+function cssFiles(directory: string): readonly string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name)
+    return entry.isDirectory() ? cssFiles(path) : entry.name.endsWith(".css") ? [path] : []
+  })
+}
+
+function customProperties(source: string, pattern: RegExp): ReadonlySet<string> {
+  return new Set([...source.matchAll(pattern)].map((match) => match[1]))
+}
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")
@@ -48,5 +61,19 @@ describe("generated Astryx accent text tokens", () => {
 
   test("keeps the stronger text accent separate from the filled action accent", () => {
     expect(lightDarkToken("--color-text-accent")[0]).not.toBe(lightDarkToken("--color-accent")[0])
+  })
+})
+
+describe("generated Astryx color token references", () => {
+  test("resolves every product CSS color token against the generated theme", () => {
+    const sourceRoot = fileURLToPath(new URL("../", import.meta.url))
+    const productSources = cssFiles(sourceRoot).map((path) => readFileSync(path, "utf8"))
+    const declared = customProperties(stylesheet, /(--color-[a-z0-9-]+)\s*:/g)
+    const referenced = new Set(
+      productSources.flatMap((source) => [...source.matchAll(/var\(\s*(--color-[a-z0-9-]+)/g)].map((match) => match[1])),
+    )
+    const unresolved = [...referenced].filter((token) => !declared.has(token)).sort()
+
+    expect(unresolved).toEqual([])
   })
 })

@@ -200,7 +200,7 @@
   }
 
   .assetsReadOnlyError {
-    color: var(--color-status-error);
+    color: var(--color-error);
   }
 
   .boundary,

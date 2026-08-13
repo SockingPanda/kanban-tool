@@ -14,6 +14,7 @@ import {
   coalesceExplorerBoundary,
   EVENT_APPLIED_DEBOUNCE_MS,
   EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY,
+  applyCanonicalSnapshotHandoff,
   explorerEventInvalidation,
   shouldRecoverExplorerEventBatch,
 } from "./App.logic"
@@ -29,6 +30,8 @@ import type { WebRuntimeConfig } from "./lib/runtime"
 import { astryxMessages, astryxOverrides } from "./lib/i18n"
 import { boardSessionRevision, hasActiveBoardSession, reconnectActiveBoardSession, subscribeBoardSessions } from "./features/board/board-session-registry"
 import { BoardListReadError, createBoardListQuery, type BoardListReadQuery } from "./lib/api/board-list-read-model"
+import type { CanonicalSnapshotHandoffState } from "./App.logic"
+import type { BoardCanonicalSnapshot } from "./features/board/board-canonical-snapshot"
 
 const explorerInvalidationTelemetry = new Set([
   "connection-live",
@@ -198,6 +201,7 @@ function RuntimeThemedShell() {
     eventsRefreshRevision: 0,
   }))
   const [taskMutationState, setTaskMutationState] = useState<{ readonly key: string; readonly surface?: BoardTaskMutationSurface }>(() => ({ key: sessionKey }))
+  const [canonicalSnapshotState, setCanonicalSnapshotState] = useState<CanonicalSnapshotHandoffState>(() => ({ key: sessionKey, snapshot: null }))
   const visibleCanonicalReloadRef = useRef<BoardTaskCanonicalReloadHandler | null>(null)
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
   const [eventsBatchState, setEventsBatchState] = useState<{ readonly key: string; readonly batch: BoardEventsBatch | null }>(() => ({ key: sessionKey, batch: null }))
@@ -261,6 +265,13 @@ function RuntimeThemedShell() {
     }
     if (sessionKeyRef.current !== sessionKey) return
     setTaskMutationState({ key: sessionKey, surface })
+  }, [sessionKey])
+
+  const onCanonicalSnapshotChange = useCallback((snapshot: BoardCanonicalSnapshot | undefined, releasedSnapshot?: BoardCanonicalSnapshot) => {
+    setCanonicalSnapshotState((current) => {
+      const scoped = current.key === sessionKey ? current : { key: sessionKey, snapshot: null }
+      return applyCanonicalSnapshotHandoff(scoped, sessionKey, snapshot, releasedSnapshot)
+    })
   }, [sessionKey])
 
   const onMutationCommitted = useCallback((event: BoardTaskMutationCommitted) => {
@@ -381,6 +392,7 @@ function RuntimeThemedShell() {
     setSyncStatus("connecting")
     setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, boardRevision: 0, inspectorRevision: 0, runsRevision: 0, eventsRefreshRevision: 0 })
     setTaskMutationState((current) => current.key === sessionKey ? current : { key: sessionKey, surface: undefined })
+    setCanonicalSnapshotState((current) => current.key === sessionKey ? current : { key: sessionKey, snapshot: null })
     setEventsBatchState((current) => current.key === sessionKey ? current : { key: sessionKey, batch: null })
   }, [clearBoundaryTimer, clearEventAppliedTimer, sessionKey])
 
@@ -443,6 +455,7 @@ function RuntimeThemedShell() {
 
   const currentEventsBatch = eventsBatchState.key === sessionKey ? eventsBatchState.batch : null
   const taskMutations = taskMutationState.key === sessionKey ? taskMutationState.surface : undefined
+  const canonicalSnapshot = canonicalSnapshotState.key === sessionKey ? canonicalSnapshotState.snapshot : null
   const featureRoute = router.route.kind === "board" && (router.route.view === "signals" || router.route.view === "ontology")
     ? router.route as FeatureRoute
     : null
@@ -468,6 +481,7 @@ function RuntimeThemedShell() {
           eventsBatch={currentEventsBatch}
           syncStatus={sessionState.key === sessionKey ? syncStatus : "connecting"}
           taskMutations={taskMutations}
+          canonicalSnapshot={canonicalSnapshot}
           onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange}
         >
           {boardRoute ? (
@@ -481,6 +495,7 @@ function RuntimeThemedShell() {
               onTaskMutationsChange={onTaskMutationsChange}
               onMutationCommitted={onMutationCommitted}
               onCanonicalReload={onCanonicalReload}
+              onCanonicalSnapshotChange={onCanonicalSnapshotChange}
             />
           ) : null}
           {featureRoute ? <BoardFeatureRoute runtime={runtime} route={featureRoute} onNavigate={router.navigate} /> : null}

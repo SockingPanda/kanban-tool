@@ -2,12 +2,31 @@ import { mergeBoardEvents, type ExplorerEvent } from "./lib/api/explorer-read-mo
 import { createGeneratedStreamContractAdapter } from "./lib/sync/generated-adapter"
 import { classifyEvent, fullRefetchPlan } from "./lib/sync/invalidation"
 import type { CanonicalBoardId, InvalidationPlan, QueryRoot, ValidatedBusinessEvent } from "./lib/sync/contracts"
+import type { BoardCanonicalSnapshot } from "./features/board/board-canonical-snapshot"
 
 /** Keep event-applied work bounded to the same 150-event window as EventsView. */
 export const MAX_PENDING_EXPLORER_EVENTS = 150
 /** Preserve the existing event-applied aggregation window while bounding its pending batch. */
 export const EVENT_APPLIED_DEBOUNCE_MS = 200
 export const EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY = "event-batch-overflow"
+
+export interface CanonicalSnapshotHandoffState {
+  readonly key: string
+  readonly snapshot: BoardCanonicalSnapshot | null
+}
+
+/** Keep snapshot publication/release scoped to the current App session key. */
+export function applyCanonicalSnapshotHandoff(
+  current: CanonicalSnapshotHandoffState,
+  sessionKey: string,
+  snapshot: BoardCanonicalSnapshot | undefined,
+  releasedSnapshot?: BoardCanonicalSnapshot,
+): CanonicalSnapshotHandoffState {
+  if (current.key !== sessionKey) return current
+  if (snapshot !== undefined) return { key: sessionKey, snapshot }
+  if (releasedSnapshot !== undefined && current.snapshot !== releasedSnapshot) return current
+  return { key: sessionKey, snapshot: null }
+}
 
 const explorerBoundaryTelemetry = new Set([
   EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY,

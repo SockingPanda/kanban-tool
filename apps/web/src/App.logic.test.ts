@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import { asCanonicalBoardId } from "./lib/sync/contracts"
 import {
   appendExplorerEventBatch,
+  applyCanonicalSnapshotHandoff,
   coalesceExplorerBoundary,
   EVENT_APPLIED_DEBOUNCE_MS,
   EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY,
@@ -12,6 +13,7 @@ import {
   shouldRecoverExplorerEventBatch,
 } from "./App.logic"
 import type { ExplorerEvent } from "./lib/api/explorer-read-model"
+import { createBoardCanonicalSnapshot } from "./features/board/board-canonical-snapshot"
 
 const event = (id: number, eventId = `event-${id}`): ExplorerEvent => ({
   id,
@@ -26,6 +28,17 @@ const event = (id: number, eventId = `event-${id}`): ExplorerEvent => ({
 })
 
 describe("Explorer invalidation boundary", () => {
+  test("keeps canonical snapshot handoff scoped and ignores an old release", () => {
+    const first = createBoardCanonicalSnapshot("session-a", 1, { model: null, loading: false, error: null, stale: false })
+    const replacement = createBoardCanonicalSnapshot("session-a", 2, { model: null, loading: false, error: null, stale: false })
+    const installed = applyCanonicalSnapshotHandoff({ key: "session-a", snapshot: null }, "session-a", first)
+    const current = applyCanonicalSnapshotHandoff(installed, "session-a", replacement)
+
+    expect(applyCanonicalSnapshotHandoff(current, "session-a", undefined, first)).toBe(current)
+    expect(applyCanonicalSnapshotHandoff(current, "session-b", undefined, replacement)).toBe(current)
+    expect(applyCanonicalSnapshotHandoff(current, "session-a", undefined, replacement)).toEqual({ key: "session-a", snapshot: null })
+  })
+
   test("coalesces one poll boundary and completion into one refresh", () => {
     expect(coalesceExplorerBoundary(["poll-boundary-complete", "poll-complete"])).toEqual({
       invalidationDelta: 1,

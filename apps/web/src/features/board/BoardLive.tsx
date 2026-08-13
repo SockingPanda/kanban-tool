@@ -37,6 +37,12 @@ import {
   type BoardReadResource,
   type BoardSessionHandle,
 } from "./board-session-registry"
+import {
+  boardCanonicalSnapshotError,
+  createBoardCanonicalSnapshot,
+  isCurrentBoardCanonicalSnapshot,
+  type BoardCanonicalSnapshotChange,
+} from "./board-canonical-snapshot"
 
 type BoardRoute = Extract<AppRoute, { kind: "board" }>
 
@@ -56,6 +62,8 @@ export interface BoardLiveProps {
   readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void
   /** Await visible Explorer readers after the canonical session has reloaded. */
   readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => Promise<void> | void
+  /** Publish the fenced canonical raw read to the App/session owner. */
+  readonly onCanonicalSnapshotChange?: BoardCanonicalSnapshotChange
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string): BoardReadResource {
@@ -127,7 +135,7 @@ function retainResourceKey(resources: Map<string, BoardReadResource>, resource: 
   resources.set(resource.identityKey, resource)
 }
 
-export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload }: BoardLiveProps) {
+export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload, onCanonicalSnapshotChange }: BoardLiveProps) {
   const preferences = usePreferences()
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
@@ -136,6 +144,11 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
   const routeBoardSlug = route.boardSlug
   const resourcesRef = useRef(new Map<string, BoardReadResource>())
   const modelRef = useRef<BoardViewModel | null>(null)
+  const readModelRef = useRef<BoardReadModel | null>(null)
+  const canonicalSnapshotRef = useRef<ReturnType<typeof createBoardCanonicalSnapshot> | null>(null)
+  const canonicalGenerationRef = useRef(0)
+  const canonicalSnapshotCallbackRef = useRef(onCanonicalSnapshotChange)
+  canonicalSnapshotCallbackRef.current = onCanonicalSnapshotChange
   const resourceRef = useRef<BoardReadResource | null>(null)
   const loadAbortRef = useRef<AbortController | null>(null)
   const retryRequestedRef = useRef(false)
@@ -155,6 +168,20 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
     onSyncStatusChange?.(status)
   }, [onSyncStatusChange])
 
+  const publishCanonicalSnapshot = useCallback((snapshot: ReturnType<typeof createBoardCanonicalSnapshot>): boolean => {
+    if (!activeRef.current || !isCurrentBoardCanonicalSnapshot(snapshot, activeContextRef.current, canonicalGenerationRef.current)) return false
+    canonicalSnapshotRef.current = snapshot
+    canonicalSnapshotCallbackRef.current?.(snapshot)
+    return true
+  }, [])
+
+  const releaseCanonicalSnapshot = useCallback((key: string, generation?: number) => {
+    const snapshot = canonicalSnapshotRef.current
+    if (snapshot === null || snapshot.key !== key || (generation !== undefined && snapshot.generation !== generation)) return
+    canonicalSnapshotRef.current = null
+    canonicalSnapshotCallbackRef.current?.(undefined, snapshot)
+  }, [])
+
   // This render-time fence closes the A → B gap before effects have a chance to run.
   activeContextRef.current = contextKey
 
@@ -168,15 +195,18 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
       sessionHandleRef.current?.release()
       sessionHandleRef.current = null
       sessionRetryRef.current = null
+      releaseCanonicalSnapshot(canonicalSnapshotRef.current?.key ?? "")
       // BoardLive owns only its request abort. Registry-owned queries stay alive
       // while another mount still references their canonical session.
       resources.clear()
     }
-  }, [])
+  }, [releaseCanonicalSnapshot])
 
   useEffect(() => {
     const contextAtStart = contextKey
+    const canonicalGeneration = ++canonicalGenerationRef.current
     const retained = modelRef.current
+    const retainedReadModel = readModelRef.current
     const retryRequested = retryRequestedRef.current
     retryRequestedRef.current = false
 
@@ -188,6 +218,12 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
       } catch (error) {
         stateContextKeyRef.current = contextAtStart
         setState(errorState(error, translator))
+        publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+          model: null,
+          loading: false,
+          error: boardCanonicalSnapshotError(error),
+          stale: false,
+        }))
         return
       }
     }
@@ -195,9 +231,15 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
 
     const retainedIdentityKey = retained === null ? null : modelIdentityKey(retained, runtime, selector)
     const retainedForRoute = modelMatchesRoute(retained, readyResourceKeyRef.current, runtime, selector, route.kind, routeBoardSlug)
-    if (!retryRequested && retained !== null && retainedForRoute && retainedIdentityKey === readyResourceKeyRef.current) {
+    if (!retryRequested && retained !== null && retainedReadModel !== null && retainedForRoute && retainedIdentityKey === readyResourceKeyRef.current) {
       stateContextKeyRef.current = contextAtStart
       setState({ kind: "ready", model: retained })
+      publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+        model: retainedReadModel,
+        loading: false,
+        error: null,
+        stale: false,
+      }))
       return
     }
 
@@ -210,11 +252,17 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
       stateContextKeyRef.current = contextAtStart
       setState({ kind: "loading" })
     }
+    publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+      model: preserveReadyBoard ? retainedReadModel : null,
+      loading: !preserveReadyBoard,
+      error: null,
+      stale: preserveReadyBoard,
+    }))
 
     const read = retryRequested ? resource.query.reload(abort.signal) : resource.query.load(abort.signal)
     void read.then(
       (readModel) => {
-        if (!current || !activeRef.current || abort.signal.aborted || activeContextRef.current !== contextAtStart) return
+        if (!current || !activeRef.current || abort.signal.aborted || activeContextRef.current !== contextAtStart || canonicalGenerationRef.current !== canonicalGeneration) return
         try {
           const viewModel = toBoardViewModel(readModel)
           const candidateIdentityKey = modelIdentityKey(viewModel, runtime, selector)
@@ -223,9 +271,22 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
               stateContextKeyRef.current = contextAtStart
               setState({ kind: "ready", model: retained })
               setSyncStatus("stale")
+              publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+                model: retainedReadModel,
+                loading: false,
+                error: new BoardReadError("anomaly", "board read identity mismatch"),
+                stale: true,
+              }))
             } else {
               stateContextKeyRef.current = contextAtStart
-              setState(errorState(new BoardReadError("anomaly", "board read identity mismatch"), translator))
+              const error = new BoardReadError("anomaly", "board read identity mismatch")
+              setState(errorState(error, translator))
+              publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+                model: null,
+                loading: false,
+                error,
+                stale: false,
+              }))
             }
             return
           }
@@ -233,28 +294,59 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
           retainResourceKey(resourcesRef.current, resource!)
           readyResourceKeyRef.current = identityKey
           modelRef.current = viewModel
+          readModelRef.current = readModel
           stateContextKeyRef.current = contextAtStart
           setState({ kind: "ready", model: viewModel })
+          publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+            model: readModel,
+            loading: false,
+            error: null,
+            stale: false,
+          }))
         } catch (error) {
           if (preserveReadyBoard && retained !== null) {
             stateContextKeyRef.current = contextAtStart
             setState({ kind: "ready", model: retained })
             setSyncStatus("stale")
+            publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+              model: retainedReadModel,
+              loading: false,
+              error: boardCanonicalSnapshotError(error),
+              stale: true,
+            }))
           } else {
             stateContextKeyRef.current = contextAtStart
             setState(errorState(error, translator))
+            publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+              model: null,
+              loading: false,
+              error: boardCanonicalSnapshotError(error),
+              stale: false,
+            }))
           }
         }
       },
       (error: unknown) => {
-        if (!current || !activeRef.current || abort.signal.aborted || activeContextRef.current !== contextAtStart) return
+        if (!current || !activeRef.current || abort.signal.aborted || activeContextRef.current !== contextAtStart || canonicalGenerationRef.current !== canonicalGeneration) return
         if (preserveReadyBoard && retained !== null) {
           stateContextKeyRef.current = contextAtStart
           setState({ kind: "ready", model: retained })
           setSyncStatus(boardSyncStatusForTelemetry(error instanceof BoardReadError && error.kind === "offline" ? "transport-failure" : "recovery-failure") ?? "stale")
+          publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+            model: retainedReadModel,
+            loading: false,
+            error: boardCanonicalSnapshotError(error),
+            stale: true,
+          }))
         } else {
           stateContextKeyRef.current = contextAtStart
           setState(errorState(error, translator))
+          publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextAtStart, canonicalGeneration, {
+            model: null,
+            loading: false,
+            error: boardCanonicalSnapshotError(error),
+            stale: false,
+          }))
         }
       },
     )
@@ -263,8 +355,9 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
       current = false
       abort.abort()
       if (loadAbortRef.current === abort) loadAbortRef.current = null
+      releaseCanonicalSnapshot(contextAtStart, canonicalGeneration)
     }
-  }, [contextKey, retryVersion, route.kind, routeBoardSlug, runtime, selector, translator])
+  }, [contextKey, publishCanonicalSnapshot, releaseCanonicalSnapshot, retryVersion, route.kind, routeBoardSlug, runtime, selector, translator])
 
   useEffect(() => {
     setSyncStatus("connecting")
@@ -344,6 +437,7 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
     const model = modelRef.current
     if (model === null || !modelMatchesRoute(model, readyResourceKeyRef.current, runtime, selector, route.kind, routeBoardSlug)) return
     const sessionIdentityKey = resource.identityKey
+    const canonicalGeneration = canonicalGenerationRef.current
     let sessionGeneration: number | null = null
     let handle: BoardSessionHandle
     try {
@@ -358,6 +452,7 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
             || stateContextKeyRef.current !== contextKey
             || resourceRef.current !== resource
             || resource.identityKey !== sessionIdentityKey
+            || canonicalGenerationRef.current !== canonicalGeneration
             || sessionGeneration === null
             || resource.sessionGeneration !== sessionGeneration
           ) return
@@ -367,10 +462,23 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
             if (candidateIdentityKey !== sessionIdentityKey || candidateIdentityKey !== readyResourceKeyRef.current || !modelMatchesRoute(viewModel, candidateIdentityKey, runtime, selector, route.kind, routeBoardSlug)) return
             retainResourceKey(resourcesRef.current, resource)
             modelRef.current = viewModel
+            readModelRef.current = readModel
             stateContextKeyRef.current = contextKey
             setState({ kind: "ready", model: viewModel })
-          } catch {
+            publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextKey, canonicalGeneration, {
+              model: readModel,
+              loading: false,
+              error: null,
+              stale: false,
+            }))
+          } catch (error) {
             setSyncStatus("stale")
+            publishCanonicalSnapshot(createBoardCanonicalSnapshot(contextKey, canonicalGeneration, {
+              model: readModelRef.current,
+              loading: false,
+              error: boardCanonicalSnapshotError(error),
+              stale: true,
+            }))
           }
         },
         (entry) => {
@@ -401,7 +509,7 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
         sessionRetryRef.current = null
       }
     }
-  }, [canonicalBoardId, contextKey, onSessionTelemetry, route.kind, routeBoardSlug, runtime, selector, visibleStateKind])
+  }, [canonicalBoardId, contextKey, onSessionTelemetry, publishCanonicalSnapshot, route.kind, routeBoardSlug, runtime, selector, visibleStateKind])
 
   useEffect(() => {
     const onOffline = () => reportSyncStatus("offline")

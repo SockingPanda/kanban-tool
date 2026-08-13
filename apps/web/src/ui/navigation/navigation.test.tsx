@@ -62,6 +62,27 @@ describe("navigation accessibility contracts", () => {
     expect(shadows.every((declaration) => declaration.includes("var(--shadow-"))).toBe(true)
   })
 
+  test("promotes navigation hit areas to 44px on touch and narrow shells", () => {
+    expect(navigationStylesheet).toContain("--nav-touch-target: 0rem")
+    expect(navigationStylesheet).toMatch(
+      /\.navigationRoot\[data-shell-viewport="tablet"\],[\s\S]*\.navigationRoot\[data-shell-viewport="mobile"\][\s\S]*--nav-touch-target:\s*2\.75rem/,
+    )
+    expect(navigationStylesheet).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*--nav-touch-target:\s*2\.75rem/)
+
+    for (const declaration of [
+      "max(2rem, var(--nav-touch-target))",
+      "max(1.35rem, var(--nav-touch-target))",
+      "max(2.2rem, var(--nav-touch-target))",
+      "max(1.85rem, var(--nav-touch-target))",
+      "max(2.35rem, var(--nav-touch-target))",
+      "max(1.8rem, var(--nav-touch-target))",
+      "max(2.25rem, var(--nav-touch-target))",
+      "max(2.15rem, var(--nav-touch-target))",
+    ]) {
+      expect(navigationStylesheet).toContain(declaration)
+    }
+  })
+
   test("gives the narrow sidebar a real dialog seam and makes a closed drawer inert", () => {
     const open = renderToStaticMarkup(
       <ProjectsSidebar projects={[project]} open drawerId="navigation-drawer" onClose={vi.fn()} />,

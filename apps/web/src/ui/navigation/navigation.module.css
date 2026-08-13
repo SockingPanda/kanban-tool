@@ -3,6 +3,7 @@
     --nav-rail-width: 3.5rem;
     --nav-sidebar-width: 15.5rem;
     --nav-header-height: 2.75rem;
+    --nav-touch-target: 0rem;
     display: grid;
     min-width: 0;
     container: navigation-shell / inline-size;
@@ -84,6 +85,18 @@
 
   .navigationRoot[data-theme="light"] {
     color-scheme: light;
+  }
+
+  /* Keep the dense desktop shell; narrow and touch layouts promote controls to a 44px hit area. */
+  .navigationRoot[data-shell-viewport="tablet"],
+  .navigationRoot[data-shell-viewport="mobile"] {
+    --nav-touch-target: 2.75rem;
+  }
+
+  @media (pointer: coarse) {
+    .navigationRoot {
+      --nav-touch-target: 2.75rem;
+    }
   }
 
   .navigationRoot,
@@ -272,8 +285,8 @@
     display: grid;
     flex: 0 0 auto;
     place-items: center;
-    inline-size: 2rem;
-    block-size: 2rem;
+    inline-size: max(2rem, var(--nav-touch-target));
+    block-size: max(2rem, var(--nav-touch-target));
     border: 1px solid transparent;
     border-radius: var(--radius-inner);
     color: var(--color-text-secondary);
@@ -304,7 +317,7 @@
     align-items: center;
     gap: 0.65rem;
     min-inline-size: 0;
-    min-block-size: 2.35rem;
+    min-block-size: max(2.35rem, var(--nav-touch-target));
     border: 1px solid transparent;
     border-radius: var(--radius-inner);
     padding: 0.45rem 0.7rem;
@@ -389,8 +402,8 @@
   .projectPickerClear {
     display: grid;
     place-items: center;
-    inline-size: 1.35rem;
-    block-size: 1.35rem;
+    inline-size: max(1.35rem, var(--nav-touch-target));
+    block-size: max(1.35rem, var(--nav-touch-target));
     border: 0;
     border-radius: var(--radius-full);
     color: var(--color-text-secondary);
@@ -419,7 +432,7 @@
     align-items: center;
     gap: 0.6rem;
     min-inline-size: 0;
-    min-block-size: 2.2rem;
+    min-block-size: max(2.2rem, var(--nav-touch-target));
     border: 1px solid transparent;
     border-radius: var(--radius-inner);
     padding: 0.35rem 0.65rem;
@@ -505,7 +518,8 @@
 
   .projectPickerRetry {
     justify-self: start;
-    min-block-size: 1.85rem;
+    min-inline-size: max(0rem, var(--nav-touch-target));
+    min-block-size: max(1.85rem, var(--nav-touch-target));
     border: 1px solid var(--color-border-emphasized);
     border-radius: var(--radius-inner);
     padding: 0.2rem 0.55rem;
@@ -556,8 +570,8 @@
   .projectTreeToggle {
     display: grid;
     place-items: center;
-    inline-size: 1.8rem;
-    block-size: 1.8rem;
+    inline-size: max(1.8rem, var(--nav-touch-target));
+    block-size: max(1.8rem, var(--nav-touch-target));
     border: 0;
     color: var(--color-text-secondary);
     background: transparent;
@@ -574,7 +588,7 @@
     align-items: center;
     gap: 0.55rem;
     min-inline-size: 0;
-    min-block-size: 2.25rem;
+    min-block-size: max(2.25rem, var(--nav-touch-target));
     border: 1px solid transparent;
     border-radius: var(--radius-inner);
     padding: 0.4rem 0.55rem;
@@ -623,7 +637,7 @@
   .projectTreeChildButton {
     position: relative;
     z-index: 1;
-    min-block-size: 2.25rem;
+    min-block-size: max(2.25rem, var(--nav-touch-target));
     color: var(--color-text-secondary);
   }
 
@@ -723,7 +737,8 @@
     align-items: center;
     justify-content: center;
     gap: 0.45rem;
-    min-block-size: 2rem;
+    min-inline-size: max(2rem, var(--nav-touch-target));
+    min-block-size: max(2rem, var(--nav-touch-target));
     max-inline-size: 16rem;
     border: 1px solid var(--color-border-emphasized);
     border-radius: var(--radius-inner);
@@ -798,7 +813,8 @@
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    min-block-size: 2.15rem;
+    min-inline-size: max(0rem, var(--nav-touch-target));
+    min-block-size: max(2.15rem, var(--nav-touch-target));
     border: 1px solid transparent;
     border-radius: var(--radius-inner);
     padding: 0.35rem 0.55rem;

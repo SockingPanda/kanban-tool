@@ -206,7 +206,6 @@ export function SettingsPage({
   return (
     <section className={styles.page} aria-labelledby="settings-heading" data-testid="settings-page">
       <div className={styles.pageHeading}>
-        <p className={styles.eyebrow}>{t("productKicker")}</p>
         <h1 id="settings-heading">{t("settingsHeading")}</h1>
         <p className={styles.lede}>{t("settingsDescription")}</p>
       </div>
@@ -318,7 +317,6 @@ export function SettingsPage({
       <section className={styles.runtimeSection} aria-labelledby="settings-connection-heading" data-testid="settings-connection">
         <div className={styles.headingRow}>
           <div>
-            <p className={styles.eyebrow}>{t("connection")}</p>
             <h2 id="settings-connection-heading">{t("connectionHeading")}</h2>
           </div>
           <button type="button" className={styles.secondaryAction} disabled={!boardSlug || !onReconnect || reconnectState === "pending"} onClick={reconnect} data-testid="connection-reconnect">
@@ -340,7 +338,6 @@ export function SettingsPage({
       <section className={styles.runtimeSection} aria-labelledby="settings-diagnostics-heading" data-testid="settings-diagnostics">
         <div className={styles.headingRow}>
           <div>
-            <p className={styles.eyebrow}>{t("diagnostics")}</p>
             <h2 id="settings-diagnostics-heading">{t("diagnosticsHeading")}</h2>
           </div>
           {healthURL ? (

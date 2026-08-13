@@ -316,7 +316,6 @@ function RouteContent({
   if (missingReadyProject) {
     return (
       <section className={styles.boundary} role="alert" data-testid="shell-project-not-found">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
         <h1>{t("notFound")}</h1>
         <p>{t("projectNotFoundDescription")}</p>
         <code translate="no">{route.pathname}</code>
@@ -328,7 +327,6 @@ function RouteContent({
     const overviewHref = routePath(overviewTarget, { basePath: runtime.webBasePath })
     return (
       <section className={styles.boundary} role="alert" data-testid="shell-project-archived">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
         <h1>{t("archived")}</h1>
         <p>{t("archivedTasksUnavailable")}</p>
         <a
@@ -350,12 +348,11 @@ function RouteContent({
     return <BrowserConnectivityProvider online={isOnline}>{children}</BrowserConnectivityProvider>
   }
   if (effectiveBoundary === "loading") {
-    return <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-loading"><p className={styles.eyebrow}>{t("routeBoundary")}</p><h1>{t("loading")}</h1></section>
+    return <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-loading"><h1>{t("loading")}</h1></section>
   }
   if (effectiveBoundary === "error") {
     return (
       <section className={styles.boundary} role="alert" data-testid="shell-error">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
         <h1>{t("error")}</h1>
         <p>{error ?? t("errorDescription")}</p>
         {onRetry ? <Button label={t("retry")} variant="secondary" onClick={onRetry} /> : null}
@@ -363,7 +360,7 @@ function RouteContent({
     )
   }
   if (effectiveBoundary === "offline" && route.kind !== "board" && route.kind !== "project-overview" && route.kind !== "health" && route.kind !== "maintenance" && route.kind !== "settings" && route.kind !== "home") {
-    return <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline"><p className={styles.eyebrow}>{t("routeBoundary")}</p><h1>{t("offline")}</h1><p>{t("offlineDescription")}</p></section>
+    return <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline"><h1>{t("offline")}</h1><p>{t("offlineDescription")}</p></section>
   }
   if (route.kind === "home") {
     return (
@@ -380,10 +377,10 @@ function RouteContent({
     )
   }
   if (route.kind === "not-found") {
-    return <section className={styles.boundary} role="alert" data-testid="shell-not-found"><p className={styles.eyebrow}>{t("routeBoundary")}</p><h1>{t("notFound")}</h1><p>{t("notFoundDescription")}</p><code translate="no">{route.pathname}</code></section>
+    return <section className={styles.boundary} role="alert" data-testid="shell-not-found"><h1>{t("notFound")}</h1><p>{t("notFoundDescription")}</p><code translate="no">{route.pathname}</code></section>
   }
   if (route.kind === "error") {
-    return <section className={styles.boundary} role="alert" data-testid="shell-route-error"><p className={styles.eyebrow}>{t("routeBoundary")}</p><h1>{t("invalidBoardSlug")}</h1><p>{t("invalidBoardSlugDescription")}</p><code translate="no">{route.pathname}</code></section>
+    return <section className={styles.boundary} role="alert" data-testid="shell-route-error"><h1>{t("invalidBoardSlug")}</h1><p>{t("invalidBoardSlugDescription")}</p><code translate="no">{route.pathname}</code></section>
   }
 
   const hiddenSession = children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null
@@ -402,7 +399,6 @@ function RouteContent({
           : t("projectCollectionErrorDetail")
       return (
         <section className={styles.boundary} role={boardList.status === "error" || boardList.status === "offline" ? "alert" : "status"} data-testid="project-overview-unavailable" data-status={boardList.status}>
-          <p className={styles.eyebrow}>{t("routeBoundary")}</p>
           <h1>{t("projects")}</h1>
           <p>{detail}</p>
           {boardList.onRetry !== undefined ? <Button label={t("retry")} variant="secondary" onClick={boardList.onRetry} /> : null}

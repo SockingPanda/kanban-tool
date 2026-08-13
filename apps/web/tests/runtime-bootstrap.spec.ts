@@ -65,6 +65,7 @@ test.describe("同源 Web runtime bootstrap", () => {
     await expect(page.getByTestId("runtime-startup-error")).toBeVisible()
     await expect(page.getByTestId("product-shell")).toHaveCount(0)
     await expect(page.getByTestId("runtime-startup-error")).toContainText("HTTP 503")
+    await expect(page.getByTestId("runtime-startup-error")).not.toContainText("KANBAN TOOL / RUNTIME")
   })
 
   test("does not mount App when runtime schema drifts", async ({ page }) => {
@@ -81,5 +82,6 @@ test.describe("同源 Web runtime bootstrap", () => {
     await expect(page.getByTestId("runtime-startup-error")).toBeVisible()
     await expect(page.getByTestId("runtime-startup-error")).toContainText("不符合当前协议")
     await expect(page.getByTestId("product-shell")).toHaveCount(0)
+    await expect(page.getByTestId("runtime-startup-error")).not.toContainText("KANBAN TOOL / RUNTIME")
   })
 })

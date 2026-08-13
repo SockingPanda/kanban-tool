@@ -148,7 +148,6 @@ export const localeMessages = {
     errorDescription: "shell 遇到未处理的错误。",
     invalidBoardSlug: "看板地址无效",
     invalidBoardSlugDescription: "该地址中的规范看板标识不符合服务约束。",
-    routeBoundary: "路由边界",
     reported: "未报告",
     maintenanceHeading: "主机维护",
     maintenanceDescription: "通过 kanban serve 查看诊断、派生投影状态，并执行受确认保护的维护操作。",
@@ -474,7 +473,6 @@ export const localeMessages = {
     errorDescription: "The shell encountered an unhandled error.",
     invalidBoardSlug: "Invalid board address",
     invalidBoardSlugDescription: "The canonical board identity in this address does not satisfy the service rules.",
-    routeBoundary: "Route boundary",
     reported: "Not reported",
     maintenanceHeading: "Host maintenance",
     maintenanceDescription: "Inspect diagnostics and derived projection state through kanban serve, with explicit confirmation for host operations.",
@@ -658,7 +656,6 @@ export const localeMessages = {
 export const featureMessages = {
   zh: {
     signals: {
-      eyebrow: "KANBAN TOOL / SIGNALS",
       heading: "信号",
       lede: "当前看板的通用 agent 与产品信号。",
       board: "看板",
@@ -709,7 +706,6 @@ export const featureMessages = {
       loading: "正在加载信号详情",
     },
     ontology: {
-      eyebrow: "KANBAN TOOL / ONTOLOGY",
       heading: "本体审阅",
       lede: "审阅辅助，不修改 canonical 语义。生命周期操作不会修改 canonical label 语义。",
       board: "看板",
@@ -794,7 +790,6 @@ export const featureMessages = {
   },
   en: {
     signals: {
-      eyebrow: "KANBAN TOOL / SIGNALS",
       heading: "Signals",
       lede: "Generic agent and product signals for the active board.",
       board: "Board",
@@ -845,7 +840,6 @@ export const featureMessages = {
       loading: "Loading signal detail",
     },
     ontology: {
-      eyebrow: "KANBAN TOOL / ONTOLOGY",
       heading: "Ontology review",
       lede: "Review aid; does not modify canonical semantics. Lifecycle actions do not modify canonical label semantics.",
       board: "Board",

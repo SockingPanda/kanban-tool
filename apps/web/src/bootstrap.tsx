@@ -43,7 +43,6 @@ export function renderRuntimeStartupError(root: HTMLElement, error: unknown): Ro
   const reactRoot = createRoot(root)
   reactRoot.render(
     <main className={styles.boundary} role="alert" aria-live="assertive" data-testid="runtime-startup-error">
-      <p className={styles.eyebrow}>KANBAN TOOL / RUNTIME</p>
       <h1>Kanban Tool 无法启动</h1>
       <p>{runtimeErrorMessage(error)}</p>
       <p className={styles.muted}>请检查 kanban serve 与当前 Web artifact 是否来自同一版本，然后重新加载页面。</p>

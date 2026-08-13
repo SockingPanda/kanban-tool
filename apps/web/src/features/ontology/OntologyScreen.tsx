@@ -425,7 +425,6 @@ export function OntologyScreenView({
       header={(
         <SafeHStack gap={4} justify="between" align="start" wrap="wrap">
           <SafeVStack gap={1}>
-            <Text as="p" type="supporting">{copy.eyebrow}</Text>
             <Heading level={1} id="ontology-title">{copy.heading}</Heading>
             <Text as="p" type="supporting">{copy.lede}</Text>
             <Text as="p" type="supporting">{copy.board} · <MachineText>{boardName}</MachineText></Text>

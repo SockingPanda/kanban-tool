@@ -200,7 +200,7 @@ describe("Ontology screen presentation", () => {
     )
 
     expect(html).toContain("Ontology review")
-    expect(html).toContain("KANBAN TOOL / ONTOLOGY")
+    expect(html).not.toContain("KANBAN TOOL / ONTOLOGY")
     expect(html).toContain("does not modify canonical semantics")
     expect(html).toContain("Signal rows")
     expect(html).toContain("Grouped review")

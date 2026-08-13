@@ -48,6 +48,8 @@ describe("SettingsPage", () => {
     expect(markup).toContain('data-testid="diagnostics-copy"')
     expect(markup).toContain('data-testid="diagnostics-health-link"')
     expect(markup).toContain("sha256:test")
+    expect(markup).not.toContain("KANBAN TOOL / 项目")
+    expect(markup).not.toContain('class="eyebrow"')
   })
 
   test("renders a no-board connection boundary without inventing a health route", () => {

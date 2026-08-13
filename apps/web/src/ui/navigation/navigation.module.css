@@ -65,15 +65,6 @@
     box-shadow: var(--shadow-high);
   }
 
-  .navigationRoot[data-shell-viewport="tablet"] .projectsSidebar[data-open="true"] {
-    transform: translateX(0);
-    visibility: visible;
-  }
-
-  .navigationRoot[data-shell-viewport="tablet"] .projectsSidebar[data-open="false"] {
-    pointer-events: none;
-  }
-
   .navigationRoot[data-shell-viewport="tablet"] .sidebarClose,
   .navigationRoot[data-shell-viewport="tablet"] .resourceHeaderMenu {
     display: grid;
@@ -861,15 +852,6 @@
       box-shadow: var(--shadow-high);
     }
 
-    .projectsSidebar[data-open="true"] {
-      transform: translateX(0);
-      visibility: visible;
-    }
-
-    .projectsSidebar[data-open="false"] {
-      pointer-events: none;
-    }
-
     .sidebarClose {
       display: grid;
     }
@@ -933,15 +915,6 @@
       transform: translateX(-104%);
       visibility: hidden;
       box-shadow: var(--shadow-high);
-    }
-
-    .projectsSidebar[data-open="true"] {
-      transform: translateX(0);
-      visibility: visible;
-    }
-
-    .projectsSidebar[data-open="false"] {
-      pointer-events: none;
     }
 
     .sidebarClose,
@@ -1011,15 +984,6 @@
     box-shadow: var(--shadow-high);
   }
 
-  .navigationRoot[data-shell-viewport="mobile"] .projectsSidebar[data-open="true"] {
-    transform: translateX(0);
-    visibility: visible;
-  }
-
-  .navigationRoot[data-shell-viewport="mobile"] .projectsSidebar[data-open="false"] {
-    pointer-events: none;
-  }
-
   .navigationRoot[data-shell-viewport="mobile"] .sidebarClose,
   .navigationRoot[data-shell-viewport="mobile"] .resourceHeaderMenu {
     display: grid;
@@ -1053,6 +1017,16 @@
   .navigationRoot[data-shell-viewport="mobile"] .resourceHeader[data-mobile-topbar="true"] .resourceHeaderMoreTrigger {
     flex: 0 0 auto;
     max-inline-size: 10rem;
+  }
+
+  /* Drawer open/closed state is shared by the viewport and container owners. */
+  .navigationRoot .projectsSidebar[data-open="true"] {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .navigationRoot .projectsSidebar[data-open="false"] {
+    pointer-events: none;
   }
 
 }

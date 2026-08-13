@@ -83,6 +83,17 @@ describe("navigation accessibility contracts", () => {
     }
   })
 
+  test("shares drawer open state across viewport and container owners", () => {
+    expect(navigationStylesheet).toMatch(
+      /\.navigationRoot \.projectsSidebar\[data-open="true"\][\s\S]*transform: translateX\(0\);[\s\S]*visibility: visible;/,
+    )
+    expect(navigationStylesheet).toMatch(
+      /\.navigationRoot \.projectsSidebar\[data-open="false"\][\s\S]*pointer-events: none;/,
+    )
+    expect(navigationStylesheet.match(/\.projectsSidebar\[data-open="true"\]/g) ?? []).toHaveLength(1)
+    expect(navigationStylesheet.match(/\.projectsSidebar\[data-open="false"\]/g) ?? []).toHaveLength(1)
+  })
+
   test("gives the narrow sidebar a real dialog seam and makes a closed drawer inert", () => {
     const open = renderToStaticMarkup(
       <ProjectsSidebar projects={[project]} open drawerId="navigation-drawer" onClose={vi.fn()} />,

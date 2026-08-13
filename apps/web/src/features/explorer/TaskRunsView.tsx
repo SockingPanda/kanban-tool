@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react"
 
 import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Heading } from "@astryxdesign/core/Heading"
+import { Link } from "@astryxdesign/core/Link"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Text } from "@astryxdesign/core/Text"
 
@@ -25,6 +26,10 @@ export interface TaskRunsPresentationProps {
   readonly taskId: string | null
   readonly state: TaskRunsReadState
   readonly onRetry?: () => void
+  /** Canonical Tasks route used when the Runs URL has no selected task. */
+  readonly tasksHref?: string
+  /** Client-side fallback for returning to Tasks without inventing a board-wide Runs route. */
+  readonly onBackToTasks?: () => void
 }
 
 export interface TaskRunsViewProps {
@@ -32,17 +37,24 @@ export interface TaskRunsViewProps {
   readonly taskId: string | null
   readonly invalidationRevision?: number
   readonly online?: boolean
+  readonly tasksHref?: string
+  readonly onBackToTasks?: () => void
 }
 
 type RunsCopy = {
   readonly title: string
   readonly selectTask: string
+  readonly backToTasks: string
+  readonly taskScope: string
   readonly loading: string
   readonly empty: string
   readonly error: string
   readonly offline: string
   readonly retry: string
   readonly noLog: string
+  readonly logShown: string
+  readonly logAvailable: string
+  readonly noLogForRun: string
   readonly runLog: string
   readonly emptyLog: string
   readonly truncated: string
@@ -59,12 +71,17 @@ const copies: Record<Locale, RunsCopy> = {
   zh: {
     title: "运行记录",
     selectTask: "选择任务后查看运行记录。",
+    backToTasks: "返回任务",
+    taskScope: "任务",
     loading: "正在加载运行记录…",
     empty: "当前任务暂无运行记录。",
     error: "运行记录加载失败",
     offline: "当前离线，无法加载运行记录。",
     retry: "重试",
     noLog: "当前任务没有可用的运行日志。",
+    logShown: "日志已显示",
+    logAvailable: "有可用日志",
+    noLogForRun: "当前运行没有日志",
     runLog: "运行日志",
     emptyLog: "（日志为空）",
     truncated: "日志已截断",
@@ -79,12 +96,17 @@ const copies: Record<Locale, RunsCopy> = {
   en: {
     title: "Runs",
     selectTask: "Select a task to inspect runs.",
+    backToTasks: "Back to Tasks",
+    taskScope: "Task",
     loading: "Loading runs…",
     empty: "No runs for the selected task.",
     error: "Runs failed to load",
     offline: "You are offline; runs cannot be loaded.",
     retry: "Retry",
     noLog: "No log available for the selected task.",
+    logShown: "Log shown",
+    logAvailable: "Log available",
+    noLogForRun: "This run has no log",
     runLog: "Run log",
     emptyLog: "(empty log)",
     truncated: "Log truncated",
@@ -130,15 +152,48 @@ function machineToken(value: string | null | undefined, fallback: string): React
   return value ? <code translate="no"><Text type="code">{value}</Text></code> : <Text type="supporting">{fallback}</Text>
 }
 
-function RunRow({ run, copy, locale }: { readonly run: TaskRunsReadModel["runs"][number]; readonly copy: RunsCopy; readonly locale: Locale }) {
+function taskScope(taskId: string, copy: RunsCopy): ReactNode {
+  return (
+    <Text type="supporting" data-testid="runs-task-scope">
+      {copy.taskScope}: {machineToken(taskId, "—")}
+    </Text>
+  )
+}
+
+type RunLogState = "shown" | "available" | "unavailable"
+
+function runLogState(model: TaskRunsReadModel, run: TaskRunsReadModel["runs"][number]): RunLogState {
+  if (!run.has_log) return "unavailable"
+  if (run.id === model.selectedRunId && run.id === model.log?.run_id) return "shown"
+  return "available"
+}
+
+function runLogLabel(state: RunLogState, copy: RunsCopy): string {
+  if (state === "shown") return copy.logShown
+  if (state === "available") return copy.logAvailable
+  return copy.noLogForRun
+}
+
+function RunRow({ run, copy, locale, logState }: { readonly run: TaskRunsReadModel["runs"][number]; readonly copy: RunsCopy; readonly locale: Locale; readonly logState: RunLogState }) {
+  const logLabel = runLogLabel(logState, copy)
+  const isSelected = logState === "shown"
   return (
     <ListItem
       data-testid="run-row"
+      data-run-id={run.id}
+      data-has-log={run.has_log ? "true" : "false"}
+      data-log-state={logState}
+      data-selected={isSelected ? "true" : "false"}
       label={machineToken(run.id, "—")}
-      endContent={<Badge variant={statusVariant(run.status)} label={copy.status[run.status]} />}
+      endContent={(
+        <SafeHStack gap={1} align="center" wrap="wrap">
+          <Badge variant={statusVariant(run.status)} label={copy.status[run.status]} />
+          <Badge variant={logState === "shown" ? "info" : logState === "available" ? "neutral" : "warning"} label={logLabel} />
+        </SafeHStack>
+      )}
       description={(
         <Text type="supporting" wordBreak="break-word">
-          {copy.worker}: {machineToken(run.worker_profile, copy.manual)} · {copy.owner}: {machineToken(run.claim_owner, "—")} · {copy.started}: {timestamp(run.started_at, locale)} · {copy.finished}: {timestamp(run.finished_at, locale)} · {copy.exit}: {run.exit_code === null ? "—" : String(run.exit_code)}
+          {copy.worker}: {machineToken(run.worker_profile, copy.manual)} · {copy.owner}: {machineToken(run.claim_owner, "—")} · {copy.started}: {timestamp(run.started_at, locale)} · {copy.finished}: {timestamp(run.finished_at, locale)} · {copy.exit}: {run.exit_code === null ? "—" : String(run.exit_code)} · {logLabel}
           {run.error ? <> · {run.error}</> : null}
         </Text>
       )}
@@ -154,11 +209,13 @@ function LogPanel({ model, copy }: { readonly model: TaskRunsReadModel; readonly
       </SafeVStack>
     )
   }
+  const logState = model.selectedRunId === model.log.run_id ? "shown" : "available"
   return (
     <SafeVStack as="section" gap={2} padding={3} className="min-w-0" data-testid="runs-log" aria-labelledby="runs-log-heading">
-      <SafeHStack as="header" gap={2} align="center" wrap="wrap">
+      <SafeHStack as="header" gap={2} align="center" wrap="wrap" data-testid="runs-log-context" data-run-id={model.log.run_id} data-log-state={logState} data-selected={logState === "shown" ? "true" : "false"}>
         <Heading level={3} id="runs-log-heading">{copy.runLog}</Heading>
         {machineToken(model.log.run_id, "—")}
+        <Badge variant={logState === "shown" ? "info" : "neutral"} label={logState === "shown" ? copy.logShown : copy.logAvailable} />
         {model.log.truncated ? <Badge variant="warning" label={copy.truncated} /> : null}
       </SafeHStack>
       <CodeBlock
@@ -178,18 +235,52 @@ function LogPanel({ model, copy }: { readonly model: TaskRunsReadModel; readonly
   )
 }
 
+type StateBoundaryAction = {
+  readonly label: string
+  readonly href?: string
+  readonly onClick?: () => void
+}
+
+function isModifiedClick(event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>): boolean {
+  return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+}
+
+function StateBoundaryAction({ action }: { readonly action: StateBoundaryAction }) {
+  if (action.href !== undefined) {
+    return (
+      <Link
+        href={action.href}
+        isStandalone
+        onClick={(event) => {
+          if (action.onClick === undefined || isModifiedClick(event) || event.defaultPrevented) return
+          event.preventDefault()
+          action.onClick()
+        }}
+      >
+        {action.label}
+      </Link>
+    )
+  }
+  if (action.onClick === undefined) return null
+  return <Button label={action.label} variant="secondary" size="sm" onClick={action.onClick} />
+}
+
 function StateBoundary({
   testId,
   role,
   title,
   description,
   retry,
+  scope,
+  action,
 }: {
   readonly testId: string
   readonly role: "status" | "alert"
   readonly title?: string
   readonly description: string
   readonly retry?: { readonly label: string; readonly onClick: () => void }
+  readonly scope?: ReactNode
+  readonly action?: StateBoundaryAction
 }) {
   const headingId = `${testId}-heading`
   return (
@@ -197,34 +288,45 @@ function StateBoundary({
       <PageFrame
         frame="content"
         bodyLabel={title ?? description}
-        header={title ? <Heading level={2} id={headingId}>{title}</Heading> : undefined}
+        header={title ? <SafeVStack gap={1}><Heading level={2} id={headingId}>{title}</Heading>{scope}</SafeVStack> : undefined}
       >
         <SafeVStack gap={2}>
+          {!title && scope ? scope : null}
           <Text as="p" type="supporting">{description}</Text>
           {retry ? <Button label={retry.label} variant="secondary" size="sm" onClick={retry.onClick} /> : null}
+          {action ? <StateBoundaryAction action={action} /> : null}
         </SafeVStack>
       </PageFrame>
     </SafeVStack>
   )
 }
 
-export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRunsPresentationProps) {
+export function TaskRunsPresentation({ locale, taskId, state, onRetry, tasksHref, onBackToTasks }: TaskRunsPresentationProps) {
   const copy = copies[locale]
   if (!taskId) {
-    return <StateBoundary testId="runs-no-task" role="status" description={copy.selectTask} />
+    return (
+      <StateBoundary
+        testId="runs-no-task"
+        role="status"
+        description={copy.selectTask}
+        action={tasksHref !== undefined || onBackToTasks !== undefined ? { label: copy.backToTasks, href: tasksHref, onClick: onBackToTasks } : undefined}
+      />
+    )
   }
+  const scope = taskScope(taskId, copy)
   const kind = errorKind(state.error instanceof Error ? state.error : null)
   if (state.error && !state.data) {
     const offline = kind === "offline"
-    return <StateBoundary testId={offline ? "runs-offline" : "runs-error"} role={offline ? "status" : "alert"} title={offline ? copy.offline : copy.error} description={offline ? copy.offline : state.error.message} retry={onRetry ? { label: copy.retry, onClick: onRetry } : undefined} />
+    return <StateBoundary testId={offline ? "runs-offline" : "runs-error"} role={offline ? "status" : "alert"} title={offline ? copy.offline : copy.error} description={offline ? copy.offline : state.error.message} retry={onRetry ? { label: copy.retry, onClick: onRetry } : undefined} scope={scope} />
   }
   if (state.loading && !state.data) {
-    return <StateBoundary testId="runs-loading" role="status" description={copy.loading} />
+    return <StateBoundary testId="runs-loading" role="status" description={copy.loading} scope={scope} />
   }
   if (!state.data || state.data.runs.length === 0) {
-    if (kind === "offline") return <StateBoundary testId="runs-offline" role="status" description={copy.offline} retry={onRetry ? { label: copy.retry, onClick: onRetry } : undefined} />
-    return <StateBoundary testId="runs-empty" role="status" description={copy.empty} />
+    if (kind === "offline") return <StateBoundary testId="runs-offline" role="status" description={copy.offline} retry={onRetry ? { label: copy.retry, onClick: onRetry } : undefined} scope={scope} />
+    return <StateBoundary testId="runs-empty" role="status" description={copy.empty} scope={scope} />
   }
+  const model = state.data
   return (
     <PageFrame
       frame="content"
@@ -234,7 +336,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
       header={(
         <SafeVStack gap={1}>
           <Heading level={2} id="runs-heading">{copy.title}</Heading>
-          <code translate="no"><Text type="code">{taskId}</Text></code>
+          {scope}
         </SafeVStack>
       )}
     >
@@ -253,10 +355,10 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
         <SafeVStack as="section" gap={0} className="min-w-0 max-h-96 overflow-auto overscroll-contain" aria-labelledby="runs-list-heading" tabIndex={0}>
           <Heading level={3} id="runs-list-heading" className="sr-only">{copy.title}</Heading>
           <List density="compact" hasDividers className="min-w-0">
-            {state.data.runs.map((run) => <RunRow key={run.id} run={run} copy={copy} locale={locale} />)}
+            {model.runs.map((run) => <RunRow key={run.id} run={run} copy={copy} locale={locale} logState={runLogState(model, run)} />)}
           </List>
         </SafeVStack>
-        <LogPanel model={state.data} copy={copy} />
+        <LogPanel model={model} copy={copy} />
       </Grid>
       </SafeVStack>
     </PageFrame>
@@ -304,8 +406,8 @@ function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, inval
   return { ...state, retry: () => setGeneration((current) => current + 1) }
 }
 
-export function TaskRunsView({ runtime, taskId, invalidationRevision = 0, online = typeof navigator === "undefined" || navigator.onLine }: TaskRunsViewProps) {
+export function TaskRunsView({ runtime, taskId, invalidationRevision = 0, online = typeof navigator === "undefined" || navigator.onLine, tasksHref, onBackToTasks }: TaskRunsViewProps) {
   const { locale } = usePreferences()
   const state = useTaskRunsRead(runtime, taskId, invalidationRevision, online)
-  return <TaskRunsPresentation locale={locale} taskId={taskId} state={state} onRetry={state.retry} />
+  return <TaskRunsPresentation locale={locale} taskId={taskId} state={state} onRetry={state.retry} tasksHref={tasksHref} onBackToTasks={onBackToTasks} />
 }

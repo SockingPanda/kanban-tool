@@ -37,13 +37,30 @@ const ready: TaskRunsReadState = { data: readyModel, loading: false, error: null
 
 describe("TaskRunsView", () => {
   test("renders no-task, loading and empty states", () => {
-    const noTask = renderToStaticMarkup(<TaskRunsPresentation locale="zh" taskId={null} state={{ data: null, loading: false, error: null }} onRetry={vi.fn()} />)
+    const noTask = renderToStaticMarkup(<TaskRunsPresentation locale="zh" taskId={null} tasksHref="/app/boards/default/board" state={{ data: null, loading: false, error: null }} onRetry={vi.fn()} />)
     const loading = renderToStaticMarkup(<TaskRunsPresentation locale="zh" taskId="t_1" state={{ data: null, loading: true, error: null }} onRetry={vi.fn()} />)
     const empty = renderToStaticMarkup(<TaskRunsPresentation locale="zh" taskId="t_1" state={{ data: { ...readyModel, runs: [], selectedRunId: null, log: null }, loading: false, error: null }} onRetry={vi.fn()} />)
 
     expect(noTask).toContain('data-testid="runs-no-task"')
+    expect(noTask).toContain('href="/app/boards/default/board"')
+    expect(noTask).toContain("返回任务")
     expect(loading).toContain('data-testid="runs-loading"')
     expect(empty).toContain('data-testid="runs-empty"')
+  })
+
+  test("offers a callback-only return to Tasks without inventing a board-wide runs destination", () => {
+    const markup = renderToStaticMarkup(
+      <TaskRunsPresentation
+        locale="en"
+        taskId={null}
+        onBackToTasks={vi.fn()}
+        state={{ data: null, loading: false, error: null }}
+      />,
+    )
+
+    expect(markup).toContain("Back to Tasks")
+    expect(markup).toContain("<button")
+    expect(markup).not.toContain("/runs")
   })
 
   test("renders error and offline states with retry affordance", () => {
@@ -69,6 +86,17 @@ describe("TaskRunsView", () => {
     expect(markup).not.toContain("<button")
     expect(markup).not.toContain("<a ")
     expect(markup).toContain('id="runs-heading"')
+    expect(markup).toContain('data-testid="runs-task-scope"')
+    expect(markup).toContain("任务")
+    expect(markup).toMatch(/data-run-id="r_log"[^>]*data-has-log="true"[^>]*data-log-state="shown"[^>]*data-selected="true"/)
+    expect(markup).toMatch(/data-run-id="r_no_log"[^>]*data-has-log="false"[^>]*data-log-state="unavailable"[^>]*data-selected="false"/)
+    expect(markup).toMatch(/data-testid="runs-log-context"[^>]*data-run-id="r_log"[^>]*data-log-state="shown"[^>]*data-selected="true"/)
+    expect(markup).toContain("日志已显示")
+    expect(markup).toContain("当前运行没有日志")
+    expect(markup).not.toContain("重新运行")
+    expect(markup).not.toContain("取消运行")
+    expect(markup).not.toContain("Rerun")
+    expect(markup).not.toContain("Cancel run")
     expect(markup).not.toContain("<h1")
   })
 
@@ -79,5 +107,6 @@ describe("TaskRunsView", () => {
     expect(markup).toContain('data-testid="runs-no-log"')
     expect(markup).toContain("No log available for the selected task.")
     expect(markup).toContain("Runs")
+    expect(markup).toContain('data-testid="runs-task-scope"')
   })
 })

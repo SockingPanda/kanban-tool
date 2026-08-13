@@ -61,7 +61,7 @@
     max-inline-size: calc(100vw - var(--nav-rail-width));
     transform: translateX(-104%);
     visibility: hidden;
-    box-shadow: 0.8rem 0 2.2rem rgb(0 0 0 / 0.3);
+    box-shadow: var(--shadow-high);
   }
 
   .navigationRoot[data-shell-viewport="tablet"] .projectsSidebar[data-open="true"] {
@@ -971,6 +971,72 @@
       inset-inline-start: var(--nav-rail-width);
       inline-size: min(18rem, calc(100vw - var(--nav-rail-width)));
     }
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-block-size: 100vh;
+    overflow-x: hidden;
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .productRail {
+    display: none;
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .projectsSidebar {
+    position: fixed;
+    z-index: 3;
+    inset: 0;
+    inline-size: min(20rem, calc(100vw - 0.75rem));
+    max-inline-size: calc(100vw - 0.75rem);
+    transform: translateX(-104%);
+    visibility: hidden;
+    box-shadow: var(--shadow-high);
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .projectsSidebar[data-open="true"] {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .projectsSidebar[data-open="false"] {
+    pointer-events: none;
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .sidebarClose,
+  .navigationRoot[data-shell-viewport="mobile"] .resourceHeaderMenu {
+    display: grid;
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .resourceHeader[data-mobile-topbar="true"] {
+    align-items: center;
+    flex-direction: row;
+    gap: 0.5rem;
+    min-block-size: 3.25rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .resourceHeader[data-mobile-topbar="true"] .resourceHeaderMain {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    inline-size: auto;
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .resourceHeader[data-mobile-topbar="true"] .resourceHeaderActions {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    max-inline-size: 52%;
+    inline-size: auto;
+    overflow-x: auto;
+    padding-block-end: 0.1rem;
+  }
+
+  .navigationRoot[data-shell-viewport="mobile"] .resourceHeader[data-mobile-topbar="true"] .resourceHeaderProjectSwitch,
+  .navigationRoot[data-shell-viewport="mobile"] .resourceHeader[data-mobile-topbar="true"] .resourceHeaderAction,
+  .navigationRoot[data-shell-viewport="mobile"] .resourceHeader[data-mobile-topbar="true"] .resourceHeaderMoreTrigger {
+    flex: 0 0 auto;
+    max-inline-size: 10rem;
   }
 
 }

@@ -25,6 +25,12 @@
     grid-row: 1;
   }
 
+  :global(.navigationRoot[data-shell-viewport="mobile"]) .productNavigationMain {
+    grid-column: 1;
+    grid-row: 1;
+    min-block-size: 100vh;
+  }
+
   @media (max-width: 60rem) {
     .productNavigationMain {
       grid-column: 2;

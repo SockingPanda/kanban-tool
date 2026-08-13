@@ -44,6 +44,7 @@ export type ResourceHeaderProps = {
   /** Explicit ID seam shared with ProjectsSidebar's drawer element. */
   readonly menuControlsId?: string
   readonly presentation?: RoutePresentationDescriptor
+  readonly compact?: boolean
   readonly labels?: Partial<NavigationLabels>
   readonly className?: string
 }
@@ -108,6 +109,7 @@ export function ResourceHeader({
   menuOpen = false,
   menuControlsId = "projects-sidebar",
   presentation,
+  compact = false,
   labels: labelOverrides,
   className,
 }: ResourceHeaderProps) {
@@ -119,6 +121,7 @@ export function ResourceHeader({
       className={rootClassName}
       data-route-surface={presentation?.surface}
       data-route-session-scope={presentation?.sessionScope}
+      data-mobile-topbar={compact ? "true" : undefined}
       data-testid="resource-header"
     >
       <div className={styles.resourceHeaderMain}>

@@ -50,6 +50,39 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expect(drawer).toHaveAttribute("data-open", "false")
   })
 
+  test("keeps 320px and 430px mobile navigation compact, modal, and overflow-safe", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+
+    for (const width of [320, 430]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+
+      const shell = page.getByTestId("product-shell")
+      const menu = page.getByTestId("resource-header-menu")
+      const drawer = page.getByTestId("projects-sidebar")
+      await expect(shell).toHaveAttribute("data-shell-viewport", "mobile")
+      await expect(page.getByTestId("product-rail")).toBeHidden()
+      await expect(page.getByTestId("resource-header")).toHaveAttribute("data-mobile-topbar", "true")
+      await expect(menu).toBeVisible()
+      await expectNoPageOverflow(page)
+
+      await menu.click()
+      await expect(drawer).toHaveAttribute("role", "dialog")
+      await expect(drawer).toHaveAttribute("aria-modal", "true")
+      await expect(page.getByTestId("projects-sidebar-backdrop")).toBeVisible()
+      await expectTasksSurfaceAxeClean(page)
+
+      await page.keyboard.press("Escape")
+      await expect(drawer).toHaveAttribute("data-open", "false")
+      await expect(menu).toBeFocused()
+
+      await menu.click()
+      await drawer.getByTestId("project-tree-overview").click()
+      await expect(page).toHaveURL(/\/app\/boards\/default\/overview$/)
+      await expect(drawer).toHaveAttribute("data-open", "false")
+    }
+  })
+
   test("keeps desktop sidebar width bounded and keyboard/pointer/reset accessible", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
     await page.setViewportSize({ width: 1440, height: 900 })

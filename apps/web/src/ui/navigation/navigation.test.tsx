@@ -191,6 +191,20 @@ describe("navigation accessibility contracts", () => {
     expect(more).toContain('disabled=""')
   })
 
+  test("marks the mobile header as a compact topbar without changing its navigation seam", () => {
+    const header = renderToStaticMarkup(
+      <ResourceHeader
+        breadcrumbs={[{ label: "Projects" }]}
+        compact
+        onMenuToggle={vi.fn()}
+        menuControlsId="navigation-drawer"
+      />,
+    )
+
+    expect(header).toContain('data-mobile-topbar="true"')
+    expect(header).toContain('aria-controls="navigation-drawer"')
+  })
+
   test("keeps callback-less header actions deferred and removes the placeholder Home", () => {
     const sidebar = renderToStaticMarkup(<ProjectsSidebar projects={[project]} />)
     const header = renderToStaticMarkup(

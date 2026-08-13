@@ -477,6 +477,7 @@ export function ProductShell({
           onMenuToggle={() => setSidebarOpen((open) => !open)}
           menuOpen={sidebarOpen}
           menuControlsId="product-projects-sidebar"
+          compact={viewportMode === "mobile"}
           labels={{
             projects: t("projects"),
             settings: t("settings"),

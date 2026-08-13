@@ -5,7 +5,7 @@
   "version": "3.1.0",
   "type": "module",
   "astryx": {
-    "theme": "@astryxdesign/theme-neutral"
+    "theme": "./src/theme/astryx.js"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1421",
@@ -16,6 +16,8 @@
     "astryx:manifest": "astryx --json manifest",
     "astryx:search": "astryx --json search",
     "astryx:templates": "astryx --json template --list",
+    "theme:build": "astryx theme build src/theme/astryx.ts",
+    "theme:check": "astryx theme build src/theme/astryx.ts --check",
     "e2e": "playwright test",
     "e2e:plane": "playwright test --config playwright.plane.config.ts",
     "storybook": "storybook dev -p 6006",

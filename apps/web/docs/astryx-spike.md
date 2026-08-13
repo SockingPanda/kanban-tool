@@ -14,8 +14,9 @@
 - strict CSP 下禁止 runtime style injection，因此 TextInput、Dialog、Selector、Popover 在 Stage 00
   使用了语义 HTML/CSS Modules fallback。当前新增实现改为 Astryx 主路径，并允许受控 swizzle 与
   编译期 Tailwind；升级 Astryx 或迁移相关 surface 后须重跑本文的 CSP seam。
-- 主题由 `package.json.astryx.theme` 接线；`astryx.config.mjs` 只使用 CLI 0.3.0 发布的
-  `AstryxConfig` 字段。
+- 主题由 `package.json.astryx.theme` 接线到 `src/theme/astryx.js`；源文件通过 `defineTheme`
+  继承 neutral，使用 `astryx theme build` 生成静态 CSS/JS/d.ts。`astryx.config.mjs` 只使用
+  CLI 0.3.0 发布的 `AstryxConfig` 字段。
 
 ## CLI 与模板证据
 
@@ -57,7 +58,7 @@ Tailwind utility 与可追溯的 `astryx swizzle`；现存 React/CSS fallback �
 
 1. `@astryxdesign/core/reset.css`
 2. `@astryxdesign/core/astryx.css`
-3. `@astryxdesign/theme-neutral/theme.css`
+3. `src/theme/astryx.css`（由 `astryx theme build src/theme/astryx.ts` 生成）
 4. `src/layers.css` 的 `reset, astryx-base, astryx-theme, product` layer 声明
 5. `src/styles.css` 与 `src/foundation.module.css` 的产品层
 

@@ -16,6 +16,7 @@ import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { createTranslator } from "./lib/i18n"
 import { usePreferences } from "./lib/use-preferences"
+import { useResponsiveShell, type ShellViewportMode } from "./lib/responsive-shell"
 import { BrowserConnectivityProvider } from "./lib/browser-connectivity-provider"
 import { describeRoutePresentation, ProductRail, ProjectsSidebar, ResourceHeader, type NavigationProject, type ProductRailItem, type ProjectPickerStatus, type ProjectSurface, type ResourceHeaderMoreItem, type RoutePresentationDescriptor } from "./ui/navigation"
 import navigationStyles from "./ui/navigation/navigation.module.css"
@@ -111,6 +112,7 @@ function ShellNavigation({
   route,
   boardList,
   presentation,
+  viewportMode,
   basePath,
   onNavigate,
   sidebarOpen,
@@ -119,6 +121,7 @@ function ShellNavigation({
   readonly route: AppRoute
   readonly boardList?: BoardListSurface
   readonly presentation: RoutePresentationDescriptor
+  readonly viewportMode: ShellViewportMode
   readonly basePath: string
   readonly onNavigate?: ProductShellProps["onNavigate"]
   readonly sidebarOpen: boolean
@@ -126,20 +129,11 @@ function ShellNavigation({
 }) {
   const { locale } = usePreferences()
   const t = createTranslator(locale)
-  const [isNarrow, setIsNarrow] = useState(false)
+  const isNarrow = viewportMode !== "desktop"
   const routeSlug = activeProjectSlug(route)
   const selectedProject = routeProject(route, boardList?.items)
   const selectedSurface = presentation.projectNavigation.activeSurface ?? undefined
   const projects = (boardList?.items ?? []).filter((project) => project.archivedAt === null || project.slug === routeSlug)
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
-    const media = window.matchMedia("(max-width: 60rem)")
-    const update = () => setIsNarrow(media.matches)
-    update()
-    media.addEventListener?.("change", update)
-    return () => media.removeEventListener?.("change", update)
-  }, [])
 
   const navigate = (target: AppNavigationTarget) => {
     if (onNavigate === undefined) return
@@ -287,7 +281,8 @@ function RouteContent({
   syncStatus,
   taskMutations,
   onVisibleCanonicalReloadChange,
-}: ProductShellProps) {
+  viewportMode,
+}: ProductShellProps & { readonly viewportMode: ShellViewportMode }) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -410,7 +405,7 @@ function RouteContent({
   return (
     <>
       {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
-      <ExplorerPage runtime={runtime} route={route} onNavigate={childNavigate} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />
+      <ExplorerPage runtime={runtime} route={route} onNavigate={childNavigate} viewportMode={viewportMode} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />
     </>
   )
 }
@@ -439,6 +434,7 @@ export function ProductShell({
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const viewportMode = useResponsiveShell()
   const project = routeProject(route, boardList?.items)
   const slug = activeProjectSlug(route)
   const presentation = routePresentation(route, project, t)
@@ -457,8 +453,8 @@ export function ProductShell({
     : []
 
   return (
-    <div className={navigationStyles.navigationRoot} data-theme={preferences.theme === "dark" ? "dark" : preferences.theme === "light" ? "light" : undefined} data-density={preferences.density} data-testid="product-shell">
-      <ShellNavigation route={route} boardList={boardList} presentation={presentation} basePath={runtime.webBasePath} onNavigate={onNavigate} sidebarOpen={sidebarOpen} onSidebarOpenChange={setSidebarOpen} />
+    <div className={navigationStyles.navigationRoot} data-theme={preferences.theme === "dark" ? "dark" : preferences.theme === "light" ? "light" : undefined} data-density={preferences.density} data-shell-viewport={viewportMode} data-testid="product-shell">
+      <ShellNavigation route={route} boardList={boardList} presentation={presentation} viewportMode={viewportMode} basePath={runtime.webBasePath} onNavigate={onNavigate} sidebarOpen={sidebarOpen} onSidebarOpenChange={setSidebarOpen} />
       <main className={styles.productNavigationMain} aria-label={t("productName")}>
         <ResourceHeader
           breadcrumbs={breadcrumbs}
@@ -485,7 +481,7 @@ export function ProductShell({
           }}
         />
         <div className={styles.mainFrame} data-runtime-api-base-url={runtime.apiBaseUrl} data-runtime-actor={runtime.actor} data-runtime-default-board={runtime.defaultBoard} data-runtime-server-version={runtime.serverVersion} data-runtime-protocol-version={runtime.protocolVersion} data-runtime-web-build-id={runtime.webBuildId} data-runtime-web-base-path={runtime.webBasePath}>
-          <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} boardList={boardList} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange}>
+          <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} boardList={boardList} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} viewportMode={viewportMode}>
             {children}
           </RouteContent>
         </div>

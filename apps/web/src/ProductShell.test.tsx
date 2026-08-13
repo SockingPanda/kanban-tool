@@ -311,6 +311,7 @@ describe("ProductShell route offline boundary", () => {
     const positions = ["product-rail-projects", "projects-sidebar-projects", "project-tree-overview", "project-tree-tasks", "product-rail-settings"].map((testId) => markup.indexOf(`data-testid="${testId}"`))
     expect(positions.every((position) => position >= 0)).toBe(true)
     expect(markup).toContain('data-testid="projects-sidebar"')
+    expect(markup).toContain('data-shell-viewport="desktop"')
   })
 
   test("keeps operator routes as real diagnostics deep links", () => {

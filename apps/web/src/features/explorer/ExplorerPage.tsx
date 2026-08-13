@@ -25,6 +25,7 @@ import { createAttachmentDownloadClient } from "../../lib/api/attachment-downloa
 import type { CanonicalBoardSlug } from "../../lib/board-slug"
 import type { Locale } from "../../lib/preferences"
 import type { WebRuntimeConfig } from "../../lib/runtime"
+import type { ShellViewportMode } from "../../lib/responsive-shell"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
 import { restoreExplorerFocus, type ExplorerFocusElement, type ExplorerFocusSnapshot } from "../../lib/explorer-focus"
@@ -88,6 +89,8 @@ export interface ExplorerPageProps {
   readonly runtime: WebRuntimeConfig
   readonly route: Extract<AppRoute, { kind: "board" }>
   readonly onNavigate?: (target: AppNavigationTarget, options?: { readonly replace?: boolean }) => void | Promise<unknown>
+  /** ProductShell 的唯一响应式 mode owner；Explorer 不再自行读取浏览器媒体查询。 */
+  readonly viewportMode: ShellViewportMode
   /** 由 ProductShell 持有的响应式浏览器 connectivity 状态。 */
   readonly online?: boolean
   /** 现有 persistent SSE integration 持有的 revision/batch seam。 */
@@ -104,8 +107,6 @@ export interface ExplorerPageProps {
 }
 
 const MAX_EVENT_KIND_FILTER_LENGTH = 128
-const NARROW_VIEWPORT_QUERY = "(max-width: 56rem)"
-
 type ExplorerCopy = {
   readonly eyebrow: string
   readonly tabsLabel: string
@@ -193,24 +194,6 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
 
 function normalizeEventKindFilter(value: string | null | undefined): string {
   return (value ?? "").trim().slice(0, MAX_EVENT_KIND_FILTER_LENGTH)
-}
-
-function useNarrowViewport(): boolean {
-  const [isNarrow, setIsNarrow] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false
-    return window.matchMedia(NARROW_VIEWPORT_QUERY).matches
-  })
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
-    const media = window.matchMedia(NARROW_VIEWPORT_QUERY)
-    const update = () => setIsNarrow(media.matches)
-    update()
-    media.addEventListener("change", update)
-    return () => media.removeEventListener("change", update)
-  }, [])
-
-  return isNarrow
 }
 
 function syncStatusLabel(status: BoardSyncStatus, copy: ExplorerCopy): string {
@@ -481,9 +464,9 @@ function InspectorAssetsReadOnlyFallback({
   )
 }
 
-export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
+export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
   const { locale, density, setDensity } = usePreferences()
-  const isNarrowViewport = useNarrowViewport()
+  const isNarrowViewport = viewportMode !== "desktop"
   const copy = explorerCopies[locale]
   const view: BoardRouteView = route.view === "signals" || route.view === "ontology" ? "board" : route.view ?? "board"
   const params = queryParams(route)

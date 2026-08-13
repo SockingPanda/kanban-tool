@@ -11,6 +11,16 @@ async function expectTasksSurfaceAxeClean(page: import("@playwright/test").Page)
 }
 
 test.describe("Plane-only Tasks workspace acceptance", () => {
+  test("keeps the shell mode at the exact desktop, tablet, and mobile boundaries", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+
+    for (const [width, mode] of [[767, "mobile"], [768, "tablet"], [1023, "tablet"], [1024, "desktop"]] as const) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+      await expect(page.getByTestId("product-shell")).toHaveAttribute("data-shell-viewport", mode)
+    }
+  })
+
   test("switches Board, List, Table, and Map without dropping legal q and task URL state", async ({ page }) => {
     const fixture = await installPlaneAcceptanceFixture(page)
     await page.goto("/app/boards/default/board?q=agent&task=t_default_ready", { waitUntil: "domcontentloaded" })

@@ -178,7 +178,7 @@
     --color-text-primary: light-dark(#15181c, #f4f6f8);
     --color-text-secondary: light-dark(#59616a, #a7afb8);
     --color-text-disabled: light-dark(#9ca4ac, #626b75);
-    --color-text-accent: light-dark(#0877bd, #4ba9e8);
+    --color-text-accent: light-dark(#075d93, #4ba9e8);
     --color-on-dark: #ffffff;
     --color-on-light: #171717;
     --color-on-accent: light-dark(#ffffff, #0f1113);

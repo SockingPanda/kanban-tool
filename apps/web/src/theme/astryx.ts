@@ -16,7 +16,8 @@ export const astryxTheme = defineTheme({
     "--color-text-primary": ["#15181c", "#f4f6f8"],
     "--color-text-secondary": ["#59616a", "#a7afb8"],
     "--color-text-disabled": ["#9ca4ac", "#626b75"],
-    "--color-text-accent": ["#0877bd", "#4ba9e8"],
+    // active/selected 文本使用更强语义色；填充操作继续使用 --color-accent。
+    "--color-text-accent": ["#075d93", "#4ba9e8"],
     "--color-icon-accent": ["#0877bd", "#4ba9e8"],
     "--color-icon-primary": ["#15181c", "#f4f6f8"],
     "--color-icon-secondary": ["#59616a", "#a7afb8"],

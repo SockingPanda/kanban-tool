@@ -128,9 +128,12 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
         ) : null}
 
         <SafeVStack as="section" gap={3} aria-labelledby="health-runtime-heading" data-testid="health-runtime">
-          <Heading level={2} id="health-runtime-heading">{t("runtimeIdentity")}</Heading>
+          <SafeVStack gap={1}>
+            <Heading level={2} id="health-runtime-heading">{t("healthHostScope")}</Heading>
+            <Text as="p" type="supporting">{t("healthHostScopeDescription")}</Text>
+          </SafeVStack>
           <SafeMetadataList columns="multi">
-            <RuntimeFact label={t("defaultBoard")} value={runtime.defaultBoard} fallback={t("reported")} />
+            <RuntimeFact label={t("navigationContext")} value={runtime.defaultBoard} fallback={t("reported")} />
             <RuntimeFact label={t("actor")} value={runtime.actor} fallback={t("reported")} />
             <RuntimeFact label={t("api")} value={apiOriginForRuntime(runtime)} fallback={t("reported")} />
             <RuntimeFact label={t("server")} value={runtime.serverVersion} fallback={t("reported")} />

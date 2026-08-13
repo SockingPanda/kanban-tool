@@ -38,6 +38,9 @@ describe("HealthPage", () => {
     expect(markup).toContain("sha256:test")
     expect(markup).toContain(runtime.actor)
     expect(markup).toContain(runtime.webBuildId)
+    expect(markup).toContain("主机健康")
+    expect(markup).toContain("健康检查针对本机 kanban serve 主机；看板仅作导航上下文。")
+    expect(markup).toContain("导航上下文")
     expect(markup).not.toContain("style=")
   })
 

@@ -53,6 +53,21 @@ const stats = {
   active_parents_with_incomplete_required_steps: 0,
 }
 
+const searchStatus = {
+  backend: "sqlite",
+  derived_index: false,
+  stale: false,
+  index_version: null,
+  last_event_id: 1,
+  index_lag_events: 0,
+  database_instance_id: "db_fixture",
+  protocol_version: 2,
+  generation: "generation_fixture",
+  resolved_board_id: "b_fixture",
+  fallback_reason: null,
+  message: "fixture",
+}
+
 const statusWithLifecycle = {
   ...status,
   stores: [{
@@ -110,6 +125,23 @@ describe("MaintenancePage", () => {
     expect(ready).toContain('data-testid="maintenance-legacy-import-unsupported"')
     expect(ready).not.toContain("style=")
     expect(ready).not.toContain('data-testid="maintenance-import-v30-submit"')
+  })
+
+  test("keeps host diagnostics separate from the current board and shows resolved identity", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <MaintenancePage runtime={runtime} boardSlug="default" initial={{ status, stats, searchStatus }} />
+      </PreferencesProvider>,
+    )
+    expect(markup).toContain('data-testid="maintenance-host-diagnostics"')
+    expect(markup).toContain('data-testid="maintenance-board-diagnostics"')
+    expect(markup).toContain("主机诊断")
+    expect(markup).toContain("看板诊断")
+    expect(markup).toContain("当前看板")
+    expect(markup).toContain("default")
+    expect(markup).toContain("解析后的看板 ID")
+    expect(markup).toContain("b_fixture")
+    expect(markup).toContain("目标主机：kanban serve")
   })
 
   test("keeps the closed confirmation dialog hydration-safe without inline styles", () => {

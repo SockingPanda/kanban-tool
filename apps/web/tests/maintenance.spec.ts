@@ -54,6 +54,52 @@ test.describe("Maintenance operator workflow", () => {
     await expect(page.getByTestId("resource-breadcrumb")).toContainText("维护")
   })
 
+  test("retries status, stats, and search locally without replacing the global refresh", async ({ page }) => {
+    let statusAttempts = 0
+    let statsAttempts = 0
+    let searchAttempts = 0
+    await page.route("http://127.0.0.1:4173/api/v1/maintenance/status", async (route) => {
+      statusAttempts += 1
+      if (statusAttempts === 1) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "server_unavailable" } }) })
+        return
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(statusFixture) })
+    })
+    await page.route("http://127.0.0.1:4173/api/v1/stats?board=default", async (route) => {
+      statsAttempts += 1
+      if (statsAttempts === 1) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "server_unavailable" } }) })
+        return
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(statsFixture) })
+    })
+    await page.route("http://127.0.0.1:4173/api/v1/search/status?board=default", async (route) => {
+      searchAttempts += 1
+      if (searchAttempts === 1) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "server_unavailable" } }) })
+        return
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(searchFixture) })
+    })
+
+    await page.goto("/app/boards/default/maintenance", { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("maintenance-status-error")).toBeVisible()
+    await expect(page.getByTestId("maintenance-stats-error")).toBeVisible()
+    await expect(page.getByTestId("maintenance-search-error")).toBeVisible()
+    await expect(page.getByTestId("maintenance-refresh")).toBeEnabled()
+
+    await page.getByTestId("maintenance-status-retry").click()
+    await page.getByTestId("maintenance-stats-retry").click()
+    await page.getByTestId("maintenance-search-retry").click()
+    await expect(page.getByTestId("maintenance-status")).toContainText("db_fixture")
+    await expect(page.getByTestId("maintenance-stats")).toContainText("b_fixture")
+    await expect(page.getByTestId("maintenance-search-status")).toContainText("b_fixture")
+    expect(statusAttempts).toBe(2)
+    expect(statsAttempts).toBe(2)
+    expect(searchAttempts).toBe(2)
+  })
+
   test("confirms backup with keyboard and renders server path plus checksum", async ({ page }) => {
     await page.route("http://127.0.0.1:4173/api/v1/maintenance/backup", async (route) => {
       await route.fulfill({

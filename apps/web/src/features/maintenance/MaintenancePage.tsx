@@ -58,6 +58,8 @@ type QueryLoadOptions = {
   readonly silent?: boolean
 }
 
+type DiagnosticTarget = "all" | "stats" | "search"
+
 type SyncNotice = "stale" | "mutation" | null
 
 export type MaintenanceInitialState = {
@@ -167,7 +169,8 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
   const confirmOpenerRef = useRef<HTMLElement | null>(null)
   const confirmCancelRef = useRef<HTMLButtonElement | null>(null)
   const statusRequestRef = useRef<QueryRequest | null>(null)
-  const diagnosticsRequestRef = useRef<QueryRequest | null>(null)
+  const statsRequestRef = useRef<QueryRequest | null>(null)
+  const searchRequestRef = useRef<QueryRequest | null>(null)
   const doctorRequestRef = useRef<QueryRequest | null>(null)
   const mountedRef = useRef(false)
   const firstMountRef = useRef(true)
@@ -176,9 +179,10 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
   const pendingActionRef = useRef<ResultKey | "doctor" | null>(null)
 
   const abortRequests = useCallback(() => {
-    const requests = [statusRequestRef.current, diagnosticsRequestRef.current, doctorRequestRef.current]
+    const requests = [statusRequestRef.current, statsRequestRef.current, searchRequestRef.current, doctorRequestRef.current]
     statusRequestRef.current = null
-    diagnosticsRequestRef.current = null
+    statsRequestRef.current = null
+    searchRequestRef.current = null
     doctorRequestRef.current = null
     requests.forEach((request) => request?.controller.abort())
   }, [])
@@ -213,27 +217,63 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
     return promise
   }, [api, isCurrent])
 
-  const loadBoardDiagnostics = useCallback((options: QueryLoadOptions): Promise<boolean> => {
-    const current = diagnosticsRequestRef.current
+  const loadStats = useCallback((options: QueryLoadOptions): Promise<boolean> => {
+    const current = statsRequestRef.current
     if (!options.fresh && current?.generation === options.generation) return current.promise
     current?.controller.abort()
     const controller = new AbortController()
     const promise = (async () => {
+      if (!options.silent && isCurrent(options.generation)) setStats((state) => state.kind === "ready" ? state : { kind: "loading" })
       try {
-        const [statsResult, searchResult] = await Promise.allSettled([api.stats(boardSlug, controller.signal), api.searchStatus(boardSlug, controller.signal)])
-        if (!isCurrent(options.generation) || controller.signal.aborted) return false
-        if (statsResult.status === "fulfilled") setStats({ kind: "ready", value: statsResult.value })
-        else if (!isAbortError(statsResult.reason)) setStats({ kind: "error", error: statsResult.reason })
-        if (searchResult.status === "fulfilled") setSearchStatus({ kind: "ready", value: searchResult.value })
-        else if (!isAbortError(searchResult.reason)) setSearchStatus({ kind: "error", error: searchResult.reason })
-        return statsResult.status === "fulfilled" && searchResult.status === "fulfilled"
+        const value = await api.stats(boardSlug, controller.signal)
+        if (isCurrent(options.generation)) {
+          setStats({ kind: "ready", value })
+          return true
+        }
+        return false
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error) || !isCurrent(options.generation)) return false
+        setStats({ kind: "error", error })
+        return false
       } finally {
-        if (diagnosticsRequestRef.current?.controller === controller) diagnosticsRequestRef.current = null
+        if (statsRequestRef.current?.controller === controller) statsRequestRef.current = null
       }
     })()
-    diagnosticsRequestRef.current = { generation: options.generation, controller, promise }
+    statsRequestRef.current = { generation: options.generation, controller, promise }
     return promise
   }, [api, boardSlug, isCurrent])
+
+  const loadSearchStatus = useCallback((options: QueryLoadOptions): Promise<boolean> => {
+    const current = searchRequestRef.current
+    if (!options.fresh && current?.generation === options.generation) return current.promise
+    current?.controller.abort()
+    const controller = new AbortController()
+    const promise = (async () => {
+      if (!options.silent && isCurrent(options.generation)) setSearchStatus((state) => state.kind === "ready" ? state : { kind: "loading" })
+      try {
+        const value = await api.searchStatus(boardSlug, controller.signal)
+        if (isCurrent(options.generation)) {
+          setSearchStatus({ kind: "ready", value })
+          return true
+        }
+        return false
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error) || !isCurrent(options.generation)) return false
+        setSearchStatus({ kind: "error", error })
+        return false
+      } finally {
+        if (searchRequestRef.current?.controller === controller) searchRequestRef.current = null
+      }
+    })()
+    searchRequestRef.current = { generation: options.generation, controller, promise }
+    return promise
+  }, [api, boardSlug, isCurrent])
+
+  const loadBoardDiagnostics = useCallback((options: QueryLoadOptions, target: DiagnosticTarget = "all"): Promise<boolean> => {
+    if (target === "stats") return loadStats(options)
+    if (target === "search") return loadSearchStatus(options)
+    return Promise.all([loadStats(options), loadSearchStatus(options)]).then(([statsFresh, searchFresh]) => statsFresh && searchFresh)
+  }, [loadSearchStatus, loadStats])
 
   useEffect(() => {
     mountedRef.current = true
@@ -294,6 +334,18 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
     if (isCurrent(generation) && (!statusFresh || !diagnosticsFresh)) setSyncNotice("stale")
     else if (isCurrent(generation)) setSyncNotice(null)
   }, [isCurrent, loadBoardDiagnostics, loadStatus])
+
+  const retryStatus = useCallback(() => {
+    void loadStatus({ generation: generationRef.current, fresh: true })
+  }, [loadStatus])
+
+  const retryStats = useCallback(() => {
+    void loadBoardDiagnostics({ generation: generationRef.current, fresh: true }, "stats")
+  }, [loadBoardDiagnostics])
+
+  const retrySearch = useCallback(() => {
+    void loadBoardDiagnostics({ generation: generationRef.current, fresh: true }, "search")
+  }, [loadBoardDiagnostics])
 
   const settleMutation = useCallback(async <T extends Result>(action: ResultKey, work: () => Promise<T>, onSuccess?: (value: T) => void) => {
     if (pendingActionRef.current !== null || pendingAction !== null) return
@@ -442,24 +494,105 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
           <Banner status="info" title={t("loading")} container="section" role="status" aria-live="polite" data-testid="maintenance-loading" />
         ) : null}
 
-        <Grid label={t("maintenanceHeading")} columns="auto-md" gap={4}>
-          <Panel title={t("maintenanceStatusHeading")} testId="maintenance-status">
-            <StatusContent state={status} t={t} locale={locale} />
-          </Panel>
-          <Panel title={t("statsHeading")} testId="maintenance-stats">
-            <StatsContent state={stats} t={t} locale={locale} />
-          </Panel>
-          <Panel title={t("searchStatusHeading")} testId="maintenance-search-status">
-            <SearchContent state={searchStatus} t={t} />
-          </Panel>
-          <Panel title={t("doctorHeading")} testId="maintenance-doctor">
-            <SafeVStack gap={3} aria-busy={pendingAction === "doctor" || undefined}>
-              <Button label={pendingAction === "doctor" ? t("loading") : t("runDoctor")} variant="secondary" size="sm" isDisabled={isBusy} onClick={runDoctor} data-testid="maintenance-doctor-submit" />
-              {doctor.kind === "ready" ? <DoctorContent report={doctor.value} t={t} /> : null}
-              {doctor.kind === "error" ? <InlineError error={doctor.error} t={t} action="doctor" actionError={actionError} /> : null}
+        <SafeSection variant="transparent" padding={0} dividers={["bottom"]} role="region" aria-labelledby="maintenance-host-diagnostics-heading" data-testid="maintenance-host-diagnostics">
+          <SafeVStack gap={4} paddingBlock={4}>
+            <SafeVStack gap={1}>
+              <Text as="p" type="supporting" display="block">{t("hostTarget")}</Text>
+              <Heading level={2} id="maintenance-host-diagnostics-heading">{t("hostDiagnosticsHeading")}</Heading>
+              <Text as="p" type="supporting" display="block">{t("hostDiagnosticsDescription")}</Text>
             </SafeVStack>
-          </Panel>
-        </Grid>
+            <Grid label={t("hostDiagnosticsHeading")} columns="auto-md" gap={4}>
+              <Panel title={t("maintenanceStatusHeading")} testId="maintenance-status">
+                <StatusContent state={status} t={t} locale={locale} onRetry={retryStatus} />
+              </Panel>
+              <Panel title={t("doctorHeading")} testId="maintenance-doctor">
+                <SafeVStack gap={3} aria-busy={pendingAction === "doctor" || undefined}>
+                  <Button label={pendingAction === "doctor" ? t("loading") : t("runDoctor")} variant="secondary" size="sm" isDisabled={isBusy} onClick={runDoctor} data-testid="maintenance-doctor-submit" />
+                  {doctor.kind === "ready" ? <DoctorContent report={doctor.value} t={t} /> : null}
+                  {doctor.kind === "loading" ? <Boundary text={pendingAction === "doctor" ? t("loading") : t("doctorNotRun")} /> : null}
+                  {doctor.kind === "error" ? <InlineError error={doctor.error} t={t} action="doctor" actionError={actionError} /> : null}
+                </SafeVStack>
+              </Panel>
+            </Grid>
+          </SafeVStack>
+        </SafeSection>
+
+        <SafeSection variant="transparent" padding={0} dividers={["top"]} role="region" aria-labelledby="maintenance-operations-heading" aria-busy={isBusy}>
+              <SafeVStack gap={4} paddingBlock={4}>
+                <SafeVStack gap={1}>
+                  <Text as="p" type="supporting" display="block">{t("hostTarget")}</Text>
+                  <Heading level={2} id="maintenance-operations-heading">{t("maintenanceOperationsHeading")}</Heading>
+                  <Text as="p" type="supporting" display="block">{t("hostOperationsDescription")}</Text>
+                </SafeVStack>
+                <Grid label={t("maintenanceOperationsHeading")} columns="auto-md" gap={4}>
+                  <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} loadingLabel={t("loading")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
+                  <PathOperation label={t("exportPathLabel")} value={exportPath} onChange={setExportPath} buttonLabel={t("exportAction")} loadingLabel={t("loading")} disabled={isBusy || !exportPath.trim()} loading={pendingAction === "export"} onClick={() => openConfirm({ kind: "export", path: exportPath.trim() })} testId="maintenance-export" />
+                  <SafeCard padding={4} role="group" aria-labelledby="maintenance-import-heading" data-testid="maintenance-import" aria-busy={pendingAction === "import"}>
+                    <SafeVStack gap={3}>
+                      <Heading level={3} id="maintenance-import-heading">{t("portableImportHeading")}</Heading>
+                      <TextInput type="text" label={t("importPathLabel")} value={importPath} onChange={(value) => setImportPath(value)} placeholder={t("importPathPlaceholder")} htmlName="maintenance-import-path" data-testid="maintenance-import-path" />
+                      <CheckboxInput label={t("replaceImportLabel")} value={replaceImport} onChange={(checked) => setReplaceImport(checked)} size="sm" htmlName="maintenance-replace-import" />
+                      <Button label={pendingAction === "import" ? t("loading") : replaceImport ? t("replaceImportAction") : t("importAction")} variant={replaceImport ? "destructive" : "secondary"} size="sm" isDisabled={isBusy || !importPath.trim()} onClick={() => openConfirm({ kind: "import", path: importPath.trim(), replace: replaceImport })} data-testid="maintenance-import-submit" />
+                      {resultFor(results.import, "import", t)}
+                      <InlineError error={actionError?.action === "import" ? actionError.error : null} t={t} action="import" actionError={actionError} />
+                    </SafeVStack>
+                  </SafeCard>
+                  <SafeCard padding={4} role="group" aria-labelledby="maintenance-projection-heading" data-testid="maintenance-projection" aria-busy={["run", "rebuild", "cleanup", "vacuum"].includes(pendingAction as "run" | "rebuild" | "cleanup" | "vacuum")}>
+                    <SafeVStack gap={3}>
+                      <Heading level={3} id="maintenance-projection-heading">{t("projectionMaintenanceHeading")}</Heading>
+                      <Text as="p" type="supporting" display="block">{t("projectionMaintenanceDescription")}</Text>
+                      <TextInput type="text" label={t("maintenanceOwnerLabel")} value={maintenanceOwner} onChange={(value) => setMaintenanceOwner(value)} placeholder={actor || runtime.actor} htmlName="maintenance-owner" data-testid="maintenance-owner" />
+                      <SafeHStack gap={2} wrap="wrap">
+                        <Button label={pendingAction === "run" ? t("loading") : t("runMaintenanceAction")} variant="secondary" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "run", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-run-submit" />
+                        <Button label={pendingAction === "rebuild" ? t("loading") : t("rebuildAction")} variant="destructive" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "rebuild", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-rebuild-submit" />
+                        <Button label={pendingAction === "cleanup" ? t("loading") : t("cleanupAction")} variant="destructive" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "cleanup", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-cleanup-submit" />
+                        <Button label={pendingAction === "vacuum" ? t("loading") : t("vacuumAction")} variant="destructive" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "vacuum" })} data-testid="maintenance-vacuum-submit" />
+                      </SafeHStack>
+                      {resultFor(results.run, "run", t)}
+                      {resultFor(results.rebuild, "rebuild", t)}
+                      {resultFor(results.cleanup, "cleanup", t)}
+                      {resultFor(results.vacuum, "vacuum", t)}
+                      {(["run", "rebuild", "cleanup", "vacuum"] as const).map((action) => <InlineError key={action} error={actionError?.action === action ? actionError.error : null} t={t} action={action} actionError={actionError} />)}
+                    </SafeVStack>
+                  </SafeCard>
+                  <SafeCard padding={4} role="group" aria-labelledby="maintenance-checkpoint-heading" data-testid="maintenance-checkpoint" aria-busy={pendingAction === "checkpoint"}>
+                    <SafeVStack gap={3}>
+                      <Heading level={3} id="maintenance-checkpoint-heading">{t("checkpointHeading")}</Heading>
+                      <Text as="p" type="supporting" display="block">{t("checkpointDescription")}</Text>
+                      <Button label={pendingAction === "checkpoint" ? t("loading") : t("checkpointAction")} variant="secondary" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "checkpoint" })} data-testid="maintenance-checkpoint-submit" />
+                      {resultFor(results.checkpoint, "checkpoint", t)}
+                      <InlineError error={actionError?.action === "checkpoint" ? actionError.error : null} t={t} action="checkpoint" actionError={actionError} />
+                    </SafeVStack>
+                  </SafeCard>
+                  <Banner status="warning" title={t("legacyImportHeading")} description={t("legacyImportUnsupported")} container="card" data-testid="maintenance-legacy-import-unsupported" />
+                </Grid>
+                {resultFor(results.backup, "backup", t)}
+                {resultFor(results.export, "export", t)}
+                <InlineError error={actionError?.action === "backup" ? actionError.error : null} t={t} action="backup" actionError={actionError} />
+                <InlineError error={actionError?.action === "export" ? actionError.error : null} t={t} action="export" actionError={actionError} />
+              </SafeVStack>
+            </SafeSection>
+
+        <SafeSection variant="transparent" padding={0} dividers={["bottom"]} role="region" aria-labelledby="maintenance-board-diagnostics-heading" data-testid="maintenance-board-diagnostics">
+          <SafeVStack gap={4} paddingBlock={4}>
+            <SafeVStack gap={1}>
+              <SafeHStack gap={2} align="center" wrap="wrap">
+                <Text as="p" type="supporting" display="block">{t("currentBoard")}</Text>
+                <LiteralText type="code" display="block">{boardSlug}</LiteralText>
+              </SafeHStack>
+              <Heading level={2} id="maintenance-board-diagnostics-heading">{t("boardDiagnosticsHeading")}</Heading>
+              <Text as="p" type="supporting" display="block">{t("boardDiagnosticsDescription")}</Text>
+            </SafeVStack>
+            <Grid label={t("boardDiagnosticsHeading")} columns="auto-md" gap={4}>
+              <Panel title={t("statsHeading")} testId="maintenance-stats">
+                <StatsContent state={stats} t={t} locale={locale} onRetry={retryStats} />
+              </Panel>
+              <Panel title={t("searchStatusHeading")} testId="maintenance-search-status">
+                <SearchContent state={searchStatus} t={t} onRetry={retrySearch} />
+              </Panel>
+            </Grid>
+          </SafeVStack>
+        </SafeSection>
 
         {syncNotice ? (
           <Banner
@@ -473,64 +606,6 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
             endContent={<Button label={t("retry")} variant="ghost" size="sm" isDisabled={isBusy} onClick={() => { setSyncNotice(null); void refreshAll() }} data-testid="maintenance-sync-retry" />}
           />
         ) : null}
-
-        <SafeSection variant="transparent" padding={0} dividers={["top"]} role="region" aria-labelledby="maintenance-operations-heading" aria-busy={isBusy}>
-          <SafeVStack gap={4} paddingBlock={4}>
-            <SafeHStack gap={3} justify="between" align="start" wrap="wrap">
-              <SafeVStack gap={1}>
-                <Text as="p" type="supporting" display="block">{t("hostAdministration")}</Text>
-                <Heading level={2} id="maintenance-operations-heading">{t("maintenanceOperationsHeading")}</Heading>
-              </SafeVStack>
-              <LiteralText type="code" display="block">{boardSlug}</LiteralText>
-            </SafeHStack>
-            <Grid label={t("maintenanceOperationsHeading")} columns="auto-md" gap={4}>
-              <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} loadingLabel={t("loading")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
-              <PathOperation label={t("exportPathLabel")} value={exportPath} onChange={setExportPath} buttonLabel={t("exportAction")} loadingLabel={t("loading")} disabled={isBusy || !exportPath.trim()} loading={pendingAction === "export"} onClick={() => openConfirm({ kind: "export", path: exportPath.trim() })} testId="maintenance-export" />
-              <SafeCard padding={4} role="group" aria-labelledby="maintenance-import-heading" data-testid="maintenance-import" aria-busy={pendingAction === "import"}>
-                <SafeVStack gap={3}>
-                  <Heading level={3} id="maintenance-import-heading">{t("portableImportHeading")}</Heading>
-                  <TextInput type="text" label={t("importPathLabel")} value={importPath} onChange={(value) => setImportPath(value)} placeholder={t("importPathPlaceholder")} htmlName="maintenance-import-path" data-testid="maintenance-import-path" />
-                  <CheckboxInput label={t("replaceImportLabel")} value={replaceImport} onChange={(checked) => setReplaceImport(checked)} size="sm" htmlName="maintenance-replace-import" />
-                  <Button label={pendingAction === "import" ? t("loading") : replaceImport ? t("replaceImportAction") : t("importAction")} variant={replaceImport ? "destructive" : "secondary"} size="sm" isDisabled={isBusy || !importPath.trim()} onClick={() => openConfirm({ kind: "import", path: importPath.trim(), replace: replaceImport })} data-testid="maintenance-import-submit" />
-                  {resultFor(results.import, "import", t)}
-                  <InlineError error={actionError?.action === "import" ? actionError.error : null} t={t} action="import" actionError={actionError} />
-                </SafeVStack>
-              </SafeCard>
-              <SafeCard padding={4} role="group" aria-labelledby="maintenance-projection-heading" data-testid="maintenance-projection" aria-busy={(["run", "rebuild", "cleanup", "vacuum"] as const).includes(pendingAction as "run" | "rebuild" | "cleanup" | "vacuum")}>
-                <SafeVStack gap={3}>
-                  <Heading level={3} id="maintenance-projection-heading">{t("projectionMaintenanceHeading")}</Heading>
-                  <Text as="p" type="supporting" display="block">{t("projectionMaintenanceDescription")}</Text>
-                  <TextInput type="text" label={t("maintenanceOwnerLabel")} value={maintenanceOwner} onChange={(value) => setMaintenanceOwner(value)} placeholder={actor || runtime.actor} htmlName="maintenance-owner" data-testid="maintenance-owner" />
-                  <SafeHStack gap={2} wrap="wrap">
-                    <Button label={pendingAction === "run" ? t("loading") : t("runMaintenanceAction")} variant="secondary" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "run", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-run-submit" />
-                    <Button label={pendingAction === "rebuild" ? t("loading") : t("rebuildAction")} variant="destructive" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "rebuild", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-rebuild-submit" />
-                    <Button label={pendingAction === "cleanup" ? t("loading") : t("cleanupAction")} variant="destructive" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "cleanup", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-cleanup-submit" />
-                    <Button label={pendingAction === "vacuum" ? t("loading") : t("vacuumAction")} variant="destructive" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "vacuum" })} data-testid="maintenance-vacuum-submit" />
-                  </SafeHStack>
-                  {resultFor(results.run, "run", t)}
-                  {resultFor(results.rebuild, "rebuild", t)}
-                  {resultFor(results.cleanup, "cleanup", t)}
-                  {resultFor(results.vacuum, "vacuum", t)}
-                  {(["run", "rebuild", "cleanup", "vacuum"] as const).map((action) => <InlineError key={action} error={actionError?.action === action ? actionError.error : null} t={t} action={action} actionError={actionError} />)}
-                </SafeVStack>
-              </SafeCard>
-              <SafeCard padding={4} role="group" aria-labelledby="maintenance-checkpoint-heading" data-testid="maintenance-checkpoint" aria-busy={pendingAction === "checkpoint"}>
-                <SafeVStack gap={3}>
-                  <Heading level={3} id="maintenance-checkpoint-heading">{t("checkpointHeading")}</Heading>
-                  <Text as="p" type="supporting" display="block">{t("checkpointDescription")}</Text>
-                  <Button label={pendingAction === "checkpoint" ? t("loading") : t("checkpointAction")} variant="secondary" size="sm" isDisabled={isBusy} onClick={() => openConfirm({ kind: "checkpoint" })} data-testid="maintenance-checkpoint-submit" />
-                  {resultFor(results.checkpoint, "checkpoint", t)}
-                  <InlineError error={actionError?.action === "checkpoint" ? actionError.error : null} t={t} action="checkpoint" actionError={actionError} />
-                </SafeVStack>
-              </SafeCard>
-              <Banner status="warning" title={t("legacyImportHeading")} description={t("legacyImportUnsupported")} container="card" data-testid="maintenance-legacy-import-unsupported" />
-            </Grid>
-            {resultFor(results.backup, "backup", t)}
-            {resultFor(results.export, "export", t)}
-            <InlineError error={actionError?.action === "backup" ? actionError.error : null} t={t} action="backup" actionError={actionError} />
-            <InlineError error={actionError?.action === "export" ? actionError.error : null} t={t} action="export" actionError={actionError} />
-          </SafeVStack>
-        </SafeSection>
 
         <Dialog
           isOpen={confirm !== null}
@@ -573,9 +648,9 @@ function PathOperation({ label, value, onChange, buttonLabel, loadingLabel, disa
   </SafeCard>
 }
 
-function StatusContent({ state, t, locale }: { state: LoadState<MaintenanceStatus>; t: ReturnType<typeof createTranslator>; locale: Locale }) {
+function StatusContent({ state, t, locale, onRetry }: { state: LoadState<MaintenanceStatus>; t: ReturnType<typeof createTranslator>; locale: Locale; onRetry: () => void }) {
   if (state.kind === "loading") return <Boundary text={t("loading")} />
-  if (state.kind === "error") return <InlineError error={state.error} t={t} action="status" actionError={null} />
+  if (state.kind === "error") return <InlineError error={state.error} t={t} action="status" actionError={null} retry={{ label: t("retryMaintenanceStatus"), onClick: onRetry, testId: "maintenance-status-retry" }} />
   const { owner } = state.value
   return <SafeVStack gap={3}>
     <MetricGrid label={t("maintenanceStatusHeading")}>
@@ -602,9 +677,9 @@ function StatusContent({ state, t, locale }: { state: LoadState<MaintenanceStatu
   </SafeVStack>
 }
 
-function StatsContent({ state, t, locale }: { state: LoadState<QueueStats>; t: ReturnType<typeof createTranslator>; locale: Locale }) {
+function StatsContent({ state, t, locale, onRetry }: { state: LoadState<QueueStats>; t: ReturnType<typeof createTranslator>; locale: Locale; onRetry: () => void }) {
   if (state.kind === "loading") return <Boundary text={t("loading")} />
-  if (state.kind === "error") return <InlineError error={state.error} t={t} action="stats" actionError={null} />
+  if (state.kind === "error") return <InlineError error={state.error} t={t} action="stats" actionError={null} retry={{ label: t("retryQueueStats"), onClick: onRetry, testId: "maintenance-stats-retry" }} />
   return <SafeVStack gap={3}>
     <MetricGrid label={t("statsHeading")}><Metric label={t("boardId")} value={state.value.board_id} /><Metric label={t("generatedAt")} value={formatTimestamp(state.value.generated_at, locale)} /><Metric label={t("unplannedActiveTasks")} value={state.value.unplanned_active_tasks} /><Metric label={t("incompleteRequiredSteps")} value={state.value.active_parents_with_incomplete_required_steps} /></MetricGrid>
     <Heading level={3}>{t("statusCounts")}</Heading>
@@ -616,10 +691,10 @@ function StatsContent({ state, t, locale }: { state: LoadState<QueueStats>; t: R
   </SafeVStack>
 }
 
-function SearchContent({ state, t }: { state: LoadState<SearchStatus>; t: ReturnType<typeof createTranslator> }) {
+function SearchContent({ state, t, onRetry }: { state: LoadState<SearchStatus>; t: ReturnType<typeof createTranslator>; onRetry: () => void }) {
   if (state.kind === "loading") return <Boundary text={t("loading")} />
-  if (state.kind === "error") return <InlineError error={state.error} t={t} action="search" actionError={null} />
-  return <MetricGrid label={t("searchStatusHeading")}><Metric label={t("backend")} value={state.value.backend} /><Metric label={t("derivedIndex")} value={state.value.derived_index} /><Metric label={t("stale")} value={state.value.stale} tone={state.value.stale ? "primary" : "muted"} status={state.value.stale ? "error" : undefined} /><Metric label={t("generation")} value={state.value.generation} /><Metric label={t("lastEvent")} value={state.value.last_event_id} /><Metric label={t("lagEvents")} value={state.value.index_lag_events} /><Metric label={t("message")} value={diagnosticSummary(state.value.message, t)} /></MetricGrid>
+  if (state.kind === "error") return <InlineError error={state.error} t={t} action="search" actionError={null} retry={{ label: t("retrySearchStatus"), onClick: onRetry, testId: "maintenance-search-retry" }} />
+  return <MetricGrid label={t("searchStatusHeading")}><Metric label={t("resolvedBoardId")} value={state.value.resolved_board_id} /><Metric label={t("backend")} value={state.value.backend} /><Metric label={t("derivedIndex")} value={state.value.derived_index} /><Metric label={t("stale")} value={state.value.stale} tone={state.value.stale ? "primary" : "muted"} status={state.value.stale ? "error" : undefined} /><Metric label={t("generation")} value={state.value.generation} /><Metric label={t("lastEvent")} value={state.value.last_event_id} /><Metric label={t("lagEvents")} value={state.value.index_lag_events} /><Metric label={t("message")} value={diagnosticSummary(state.value.message, t)} /></MetricGrid>
 }
 
 function DoctorContent({ report, t }: { report: DoctorReport; t: ReturnType<typeof createTranslator> }) {
@@ -666,9 +741,9 @@ function LiteralText({ children, ...props }: Omit<TextProps, "children"> & { chi
 
 function Boundary({ text }: { text: string }) { return <Banner status="info" title={text} container="section" role="status" aria-live="polite" /> }
 
-function InlineError({ error, t, action, actionError }: { error: unknown; t: ReturnType<typeof createTranslator>; action: string; actionError: { action: string; error: unknown } | null }) {
+function InlineError({ error, t, action, actionError, retry }: { error: unknown; t: ReturnType<typeof createTranslator>; action: string; actionError: { action: string; error: unknown } | null; retry?: { label: string; onClick: () => void; testId: string } }) {
   if (error === null || error === undefined || (actionError !== null && actionError.action !== action)) return null
-  return <Banner status="error" title={t("maintenanceActionFailed")} description={safeErrorText(error, t)} container="card" role="alert" data-testid={`maintenance-${action}-error`} />
+  return <Banner status="error" title={t("maintenanceActionFailed")} description={safeErrorText(error, t)} container="card" role="alert" data-testid={`maintenance-${action}-error`} endContent={retry ? <Button label={retry.label} variant="ghost" size="sm" onClick={retry.onClick} data-testid={retry.testId} /> : undefined} />
 }
 
 function resultFor(result: Result | undefined, key: ResultKey, t: ReturnType<typeof createTranslator>): ReactNode {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
@@ -20,6 +20,7 @@ import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
+import { areEventRowPropsEqual, eventTimestamp } from "./EventsView.performance"
 
 export type EventsReadState = {
   readonly data: BoardEventsReadModel | null
@@ -141,25 +142,18 @@ function errorKind(error: Error | null): string | null {
   return typeof kind === "string" ? kind : null
 }
 
-function eventTimestamp(value: number, locale: Locale): { readonly display: string; readonly iso: string } {
-  const milliseconds = Math.abs(value) < 1_000_000_000_000 ? value * 1_000 : value
-  const date = new Date(milliseconds)
-  if (Number.isNaN(date.getTime())) return { display: String(value), iso: String(value) }
-  const language = locale === "en" ? "en-US" : "zh-CN"
-  let display: string
-  try {
-    display = new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(date)
-  } catch {
-    display = date.toISOString()
-  }
-  return { display, iso: date.toISOString() }
-}
-
 function machineToken(value: string | null | undefined, fallback: string): ReactNode {
   return value ? <code translate="no"><Text type="code">{value}</Text></code> : <Text type="supporting">{fallback}</Text>
 }
 
-function EventRow({ event, copy, locale, onSelectTask }: { readonly event: ExplorerEvent; readonly copy: EventsCopy; readonly locale: Locale; readonly onSelectTask?: (taskId: string) => void }) {
+type EventRowProps = {
+  readonly event: ExplorerEvent
+  readonly copy: EventsCopy
+  readonly locale: Locale
+  readonly onSelectTask?: (taskId: string) => void
+}
+
+function EventRowContent({ event, copy, locale, onSelectTask }: EventRowProps) {
   const time = eventTimestamp(event.created_at, locale)
   return (
     <TableRow data-testid="event-row" data-event-id={event.event_id}>
@@ -186,6 +180,8 @@ function EventRow({ event, copy, locale, onSelectTask }: { readonly event: Explo
     </TableRow>
   )
 }
+
+const EventRow = memo(EventRowContent, areEventRowPropsEqual)
 
 function StateBoundary({
   testId,
@@ -231,6 +227,12 @@ export function EventsPresentation({
   const error = state.error instanceof Error ? state.error : null
   const offline = !online || errorKind(error) === "offline"
   const scopedData = state.data && (taskId === null || state.data.taskId === taskId) ? state.data : null
+  const onSelectTaskRef = useRef(onSelectTask)
+  onSelectTaskRef.current = onSelectTask
+  const stableOnSelectTask = useCallback((selectedTaskId: string) => {
+    onSelectTaskRef.current?.(selectedTaskId)
+  }, [])
+  const eventTaskSelection = onSelectTask ? stableOnSelectTask : undefined
 
   if (!scopedData && (state.loading || !state.error) && !offline) {
     return <StateBoundary testId="events-loading" role="status" title={copy.title} description={copy.loading} />
@@ -320,7 +322,7 @@ export function EventsPresentation({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleEvents.map((event) => <EventRow key={`${event.id}:${event.event_id}`} event={event} copy={copy} locale={locale} onSelectTask={onSelectTask} />)}
+              {visibleEvents.map((event) => <EventRow key={`${event.id}:${event.event_id}`} event={event} copy={copy} locale={locale} onSelectTask={eventTaskSelection} />)}
             </TableBody>
           </Table>
         </SafeVStack>

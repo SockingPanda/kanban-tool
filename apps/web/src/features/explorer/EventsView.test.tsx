@@ -5,6 +5,7 @@ import { asCanonicalBoardId } from "../../lib/sync/contracts"
 import { parseCanonicalBoardSlug } from "../../lib/board-slug"
 import type { BoardEventsReadModel, ExplorerEvent } from "../../lib/api/explorer-read-model"
 import { EventsPresentation, type EventsReadState } from "./EventsView"
+import { __test } from "./EventsView.performance"
 
 const event = (id: number, overrides: Partial<ExplorerEvent> = {}): ExplorerEvent => ({
   id,
@@ -29,6 +30,35 @@ const model: BoardEventsReadModel = {
 const ready: EventsReadState = { data: model, loading: false, error: null, stale: false }
 
 describe("EventsView", () => {
+  test("caches timestamp formatters by locale and only formats rows that need rendering", () => {
+    __test.resetEventTimestampFormatters()
+    const englishFormatter = __test.eventTimestampFormatter("en")
+    const format = englishFormatter.format.bind(englishFormatter)
+    const formatCalls = vi.fn(format)
+    Object.defineProperty(englishFormatter, "format", { configurable: true, value: formatCalls })
+
+    try {
+      __test.eventTimestamp(event(1).created_at, "en")
+      __test.eventTimestamp(event(2).created_at, "en")
+      __test.eventTimestamp(event(3).created_at, "zh")
+
+      expect(__test.eventTimestampFormatter("en")).toBe(englishFormatter)
+      expect(__test.eventTimestampFormatter("zh")).not.toBe(englishFormatter)
+      expect(formatCalls).toHaveBeenCalledTimes(2)
+    } finally {
+      __test.resetEventTimestampFormatters()
+    }
+  })
+
+  test("treats the same event object as stable across unrelated parent rerenders", () => {
+    const onSelectTask = vi.fn()
+    const stableProps = { event: event(1), locale: "en" as const, onSelectTask }
+
+    expect(__test.areEventRowPropsEqual(stableProps, { ...stableProps })).toBe(true)
+    expect(__test.areEventRowPropsEqual(stableProps, { ...stableProps, event: { ...stableProps.event } })).toBe(false)
+    expect(__test.areEventRowPropsEqual(stableProps, { ...stableProps, locale: "zh" })).toBe(false)
+  })
+
   test("renders loading, empty, error, offline, and stale boundaries", () => {
     const loading = renderToStaticMarkup(<EventsPresentation locale="zh" taskId={null} kindFilter="" state={{ data: null, loading: true, error: null, stale: false }} online onRefresh={vi.fn()} />)
     const empty = renderToStaticMarkup(<EventsPresentation locale="zh" taskId={null} kindFilter="" state={{ ...ready, data: { ...model, events: [], meta: { ...model.meta, count: 0, nextAfter: 0 } } }} online onRefresh={vi.fn()} />)

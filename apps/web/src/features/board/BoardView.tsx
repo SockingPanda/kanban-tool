@@ -11,6 +11,7 @@ import {
   SafeHStack,
   SafeVStack,
   Skeleton,
+  Tooltip,
 } from "@/ui/astryx"
 
 import { taskOpenerKey } from "../../lib/explorer-focus"
@@ -387,18 +388,36 @@ function TaskCard({
             />
             {transitionOptions.map((option) => {
               const releaseDisabled = option.action === "release" && !controller.canReleaseTask(task.id)
-              return (
+              const transitionButton = (
                 <Button
                   key={option.action}
                   label={pending ? copy.mutationPending : copy.transitionNames[option.action] ?? option.action}
                   variant="secondary"
                   size="sm"
-                  isDisabled={pending || releaseDisabled}
-                  tooltip={releaseDisabled ? copy.releaseClaimRequired : undefined}
-                  onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
+                  isDisabled={pending && !releaseDisabled}
+                  ref={(button: HTMLButtonElement | null) => {
+                    if (button === null) return
+                    if (releaseDisabled) button.setAttribute("aria-disabled", "true")
+                    else button.removeAttribute("aria-disabled")
+                  }}
+                  onClick={(event) => {
+                    if (releaseDisabled) {
+                      event.preventDefault()
+                      return
+                    }
+                    controller.openTransition(task, option, event.currentTarget)
+                  }}
+                  onKeyDown={releaseDisabled ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") event.preventDefault()
+                  } : undefined}
                   data-testid={`task-transition-${option.action}-${task.id}`}
                 />
               )
+              return releaseDisabled ? (
+                <Tooltip key={option.action} content={copy.releaseClaimRequired} focusTrigger="always">
+                  {transitionButton}
+                </Tooltip>
+              ) : transitionButton
             })}
             {promoteNotReady ? <Text as="span" type="supporting" role="status" aria-live="polite">{copy.promoteNotReady}</Text> : null}
             {requiredStepsIncomplete ? <Text as="span" type="supporting" role="status" aria-live="polite">{copy.requiredStepsIncomplete}</Text> : null}

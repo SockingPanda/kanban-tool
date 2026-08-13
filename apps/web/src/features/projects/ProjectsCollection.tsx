@@ -7,6 +7,7 @@ import { StackItem } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 
 import type { BoardListItem } from "../../lib/api/board-list-read-model"
+import type { ProjectsRouteQuery } from "../../lib/router"
 import { routePath } from "../../lib/router"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
@@ -23,6 +24,9 @@ export type ProjectsCollectionProps = {
   readonly isRefreshing?: boolean
   readonly onRetry?: () => void
   readonly onOpenProject?: (project: BoardListItem) => void
+  /** URL-backed Projects collection query. */
+  readonly query?: ProjectsRouteQuery
+  readonly onQueryChange?: (query: ProjectsRouteQuery) => void
   /** Used by the progressive project links when the SPA callback is absent. */
   readonly basePath?: string
 }
@@ -44,8 +48,8 @@ function matches(project: BoardListItem, query: string): boolean {
 
 /**
  * Production Projects collection. It intentionally consumes only the global
- * BoardListItem snapshot; archived projects remain reachable by explicit deep
- * links but do not appear in the default collection.
+ * BoardListItem snapshot; the URL-backed archive filter chooses whether active
+ * or archived identities appear in the collection.
  */
 export function ProjectsCollection({
   projects,
@@ -53,14 +57,30 @@ export function ProjectsCollection({
   isRefreshing = false,
   onRetry,
   onOpenProject,
+  query: queryProp,
+  onQueryChange,
   basePath = "/app/",
 }: ProjectsCollectionProps) {
   const { locale } = usePreferences()
   const t = createTranslator(locale)
-  const [query, setQuery] = useState("")
+  const [internalQuery, setInternalQuery] = useState<ProjectsRouteQuery>({ archive: "active" })
+  const query = queryProp ?? internalQuery
+  const updateQuery = (nextQuery: ProjectsRouteQuery) => {
+    if (queryProp === undefined) setInternalQuery(nextQuery)
+    onQueryChange?.(nextQuery)
+  }
+  const archiveHref = (archive: ProjectsRouteQuery["archive"]): string => routePath({
+    kind: "home",
+    query: { archive, ...(query.q === undefined ? {} : { q: query.q }) },
+  }, { basePath })
+  const handleArchiveClick = (archive: ProjectsRouteQuery["archive"], event: MouseEvent<HTMLAnchorElement>) => {
+    if (onQueryChange === undefined || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    updateQuery({ archive, ...(query.q === undefined ? {} : { q: query.q }) })
+  }
   const activeProjects = useMemo(
-    () => projects.filter((project) => project.archivedAt === null && matches(project, query)),
-    [projects, query],
+    () => projects.filter((project) => (query.archive === "archived" ? project.archivedAt !== null : project.archivedAt === null) && matches(project, query.q ?? "")),
+    [projects, query.archive, query.q],
   )
   const hasSnapshot = projects.length > 0 || status === "ready"
   const copy = statusCopy(status, hasSnapshot, t)
@@ -70,9 +90,11 @@ export function ProjectsCollection({
   const boundaryStatus = status === "error" || status === "offline" ? "error" : status === "stale" || status === "recovering" ? "warning" : "info"
   const boundaryRole = status === "error" || status === "offline" ? "alert" : "status"
   const boundaryTitle = empty
-    ? query.trim().length > 0
-      ? `${t("projectSearchEmpty")}。`
-      : t("projectsEmpty")
+    ? (query.q ?? "").trim().length > 0
+      ? t("projectSearchEmpty")
+      : query.archive === "archived"
+        ? t("projectsArchivedEmpty")
+        : t("projectsEmpty")
     : copy.detail
 
   return (
@@ -81,6 +103,7 @@ export function ProjectsCollection({
       data-testid="projects-collection"
       data-status={status}
       data-has-snapshot={hasSnapshot ? "true" : "false"}
+      data-archive={query.archive}
       className="min-w-0"
     >
       <PageFrame
@@ -102,8 +125,8 @@ export function ProjectsCollection({
                   data-testid="projects-search"
                   label={t("projectSearch")}
                   isLabelHidden
-                  value={query}
-                  onChange={(value) => setQuery(value)}
+                  value={query.q ?? ""}
+                  onChange={(value) => updateQuery({ archive: query.archive, ...(value.length > 0 ? { q: value } : {}) })}
                   type="search"
                   placeholder={t("projectSearchPlaceholder")}
                   hasClear
@@ -112,6 +135,31 @@ export function ProjectsCollection({
                   isDisabled={status === "loading" && !hasSnapshot}
                 />
               </StackItem>
+            </StaticHStack>
+            <StaticHStack
+              as="nav"
+              gap={2}
+              wrap="wrap"
+              aria-label={t("projectArchiveFilter")}
+              data-testid="projects-archive-filter"
+            >
+              {(["active", "archived"] as const).map((archive) => {
+                const selected = query.archive === archive
+                return (
+                  <a
+                    key={archive}
+                    href={archiveHref(archive)}
+                    aria-current={selected ? "page" : undefined}
+                    data-testid={`projects-archive-${archive}`}
+                    data-archive={archive}
+                    data-selected={selected ? "true" : "false"}
+                    className={`rounded-md border px-3 py-2 text-sm no-underline focus-visible:outline-2 focus-visible:outline-accent ${selected ? "border-accent bg-muted text-primary" : "border-border-strong text-secondary hover:border-accent hover:text-primary"}`}
+                    onClick={(event) => handleArchiveClick(archive, event)}
+                  >
+                    {t(archive === "active" ? "active" : "archived")}
+                  </a>
+                )
+              })}
             </StaticHStack>
           </StaticVStack>
         )}
@@ -150,6 +198,7 @@ export function ProjectsCollection({
                       <StaticVStack gap={1} className="min-w-0 flex-1">
                         <Text as="span" type="body" weight="semibold" className="truncate">{project.name}</Text>
                         <Text as="span" type="code" color="secondary" className="truncate">{project.slug}</Text>
+                        {project.archivedAt !== null ? <Text as="span" type="supporting" color="secondary">{t("archived")}</Text> : null}
                         {project.description !== null ? <Text as="span" type="supporting" color="secondary" className="truncate">{project.description}</Text> : null}
                       </StaticVStack>
                       <NavigationIcon name="chevron-right" size={17} />

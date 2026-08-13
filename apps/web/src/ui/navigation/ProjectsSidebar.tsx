@@ -65,7 +65,7 @@ function focusableElements(root: HTMLElement): HTMLElement[] {
 
 /**
  * Projects context navigation. The rail owns product-wide destinations; this
- * sidebar owns only Home, Projects and the current project's two surfaces.
+ * sidebar owns Projects and the current project's two surfaces.
  */
 export function ProjectsSidebar({
   projects,
@@ -238,16 +238,6 @@ export function ProjectsSidebar({
 
           <div className={styles.sidebarScrollRegion}>
             <nav className={styles.sidebarNavigation} aria-label={`${labels.projects} navigation`}>
-          <button
-            type="button"
-            className={`${styles.sidebarNavItem} ${selectedSection === "home" ? styles.sidebarNavItemActive : ""}`}
-            aria-current={selectedSection === "home" ? "page" : undefined}
-            disabled
-            data-testid="projects-sidebar-home"
-          >
-            <NavigationIcon name="home" size={17} />
-            <span>{labels.home}</span>
-          </button>
           {projectsHref === undefined ? (
             <button
               type="button"

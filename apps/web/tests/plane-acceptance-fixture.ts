@@ -19,11 +19,13 @@ export type PlaneAcceptanceProject = {
   readonly id: string
   readonly slug: string
   readonly name: string
+  readonly archivedAt: number | null
 }
 
 export const planeAcceptanceProjects: readonly PlaneAcceptanceProject[] = [
-  { id: "b_default", slug: "default", name: "Default project" },
-  { id: "b_agent-first", slug: "agent-first", name: "Agent-first project" },
+  { id: "b_default", slug: "default", name: "Default project", archivedAt: null },
+  { id: "b_agent-first", slug: "agent-first", name: "Agent-first project", archivedAt: null },
+  { id: "b_archived", slug: "archived", name: "Archived project", archivedAt: 1 },
 ]
 
 export type PlaneAcceptanceFixture = {
@@ -42,7 +44,7 @@ function projectRows() {
     description: `${project.name} fixture`,
     created_at: 1,
     updated_at: 2,
-    archived_at: null,
+    archived_at: project.archivedAt,
   }))
 }
 

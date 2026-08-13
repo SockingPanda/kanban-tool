@@ -141,7 +141,7 @@ describe("navigation accessibility contracts", () => {
     expect(more).toContain('disabled=""')
   })
 
-  test("marks planned Home and callback-less header actions as deferred", () => {
+  test("keeps callback-less header actions deferred and removes the placeholder Home", () => {
     const sidebar = renderToStaticMarkup(<ProjectsSidebar projects={[project]} />)
     const header = renderToStaticMarkup(
       <ResourceHeader
@@ -151,9 +151,8 @@ describe("navigation accessibility contracts", () => {
       />,
     )
 
-    expect(sidebar).toContain("Home (planned)")
-    expect(sidebar).toContain('data-testid="projects-sidebar-home"')
-    expect(sidebar).toContain('disabled=""')
+    expect(sidebar).not.toContain("Home (planned)")
+    expect(sidebar).not.toContain('data-testid="projects-sidebar-home"')
     expect(header).toContain('data-testid="resource-header-action-diagnostics"')
     expect((header.match(/disabled=""/g) ?? []).length).toBe(2)
   })

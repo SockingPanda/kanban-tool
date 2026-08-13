@@ -46,18 +46,44 @@ function renderWithLocale(node: ReactNode, locale: Locale = "en") {
 }
 
 describe("production Projects surfaces", () => {
-  test("filters archived projects from the default collection without losing search", () => {
-    const markup = renderWithLocale(<ProjectsCollection projects={[active, archived]} onOpenProject={vi.fn()} />)
+  test("renders the active collection with an accessible archive filter and URL query value", () => {
+    const markup = renderWithLocale(
+      <ProjectsCollection
+        projects={[active, archived]}
+        query={{ archive: "active", q: "Active" }}
+        onOpenProject={vi.fn()}
+      />,
+    )
 
     expect(markup).toContain("Active project")
     expect(markup).not.toContain("Archived project")
     expect(markup).toContain('data-frame="content"')
     expect(markup).toContain('data-testid="projects-search"')
+    expect(markup).toContain('data-testid="projects-archive-filter"')
+    expect(markup).toContain('aria-label="Project archive filter"')
+    expect(markup).toContain('data-archive="active"')
+    expect(markup).toContain('data-selected="true"')
     expect(markup).toContain('data-testid="projects-collection-list"')
     const projectLink = markup.match(/<a\b[^>]*data-testid="projects-collection-project-active"[^>]*>/)?.[0]
     expect(projectLink).toContain('href="/app/boards/active/overview"')
     expect(markup).not.toMatch(/<span[^>]*><div/)
     expect(markup).not.toMatch(/\sstyle=/)
+  })
+
+  test("shows archived projects only when the archived URL filter is selected", () => {
+    const markup = renderWithLocale(
+      <ProjectsCollection
+        projects={[active, archived]}
+        query={{ archive: "archived", q: "Archive" }}
+        onOpenProject={vi.fn()}
+      />,
+    )
+
+    expect(markup).not.toContain("Active project")
+    expect(markup).toContain("Archived project")
+    expect(markup).toContain('data-archive="archived"')
+    expect(markup).toContain('data-testid="projects-archive-archived"')
+    expect(markup).toContain('href="/app/?archive=archived&amp;q=Archive"')
   })
 
   test("keeps a cached snapshot visible while offline", () => {
@@ -131,5 +157,14 @@ describe("production Projects surfaces", () => {
 
     expect(taskLink).toContain('href="/app/boards/active/board"')
     expect(recovering).not.toContain("Retry")
+  })
+
+  test("keeps overview identity-only while giving active projects a clear Tasks CTA", () => {
+    const markup = renderWithLocale(<ProjectOverview project={active} onOpenTasks={vi.fn()} />)
+
+    expect(markup).toContain('data-testid="project-overview-open-tasks"')
+    expect(markup).toContain(">Tasks<")
+    expect(markup).toContain('href="/app/boards/active/board"')
+    expect(markup).not.toMatch(/metric|owner|cover|activity|progress|risk/i)
   })
 })

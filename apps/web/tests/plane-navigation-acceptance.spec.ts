@@ -22,6 +22,36 @@ test.describe("Plane-only Projects navigation acceptance", () => {
     await expect(page).toHaveURL(/\/app\/boards\/default\/overview$/)
   })
 
+  test("keeps archive state and search in the Projects URL while retaining archived identity", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+    await page.goto("/app/?archive=archived&q=Archive", { waitUntil: "domcontentloaded" })
+
+    await expect(page).toHaveURL(/\/app\/\?archive=archived&q=Archive$/)
+    await expect(page.getByTestId("projects-collection")).toHaveAttribute("data-archive", "archived")
+    await expect(page.getByTestId("projects-search")).toHaveValue("Archive")
+    await expect(page.getByTestId("projects-collection-project-archived")).toBeVisible()
+    await expect(page.getByTestId("projects-collection-project-default")).toHaveCount(0)
+
+    await page.getByTestId("projects-archive-active").click()
+    await expect(page).toHaveURL(/\/app\/\?q=Archive$/)
+    await expect(page.getByTestId("projects-collection")).toHaveAttribute("data-archive", "active")
+
+    await page.getByTestId("projects-search").fill("Default")
+    await expect(page).toHaveURL(/\/app\/\?q=Default$/)
+    await expect(page.getByTestId("projects-collection-project-default")).toBeVisible()
+    await expect(page.getByTestId("projects-collection-project-archived")).toHaveCount(0)
+  })
+
+  test("keeps the current archived project visible as an identity-only overview", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+    await page.goto("/app/boards/archived/overview", { waitUntil: "domcontentloaded" })
+
+    await expect(page.getByTestId("project-overview")).toBeVisible()
+    await expect(page.getByTestId("project-overview")).toHaveAttribute("data-archived", "true")
+    await expect(page.getByTestId("project-tree-project")).toContainText("Archived project")
+    await expect(page.getByTestId("project-overview-open-tasks")).toHaveCount(0)
+  })
+
   test("uses the canonical project overview route and keeps the product rail limited to Projects and Settings", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
     await page.goto("/app/boards/default/overview", { waitUntil: "domcontentloaded" })

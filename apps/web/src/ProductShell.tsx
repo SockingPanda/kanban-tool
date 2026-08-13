@@ -187,7 +187,6 @@ function ShellNavigation({
           productNavigation: t("productNavigation"),
           projects: t("projects"),
           settings: t("settings"),
-          home: t("homePlanned"),
           projectPicker: t("projectPicker"),
           projectSearch: t("projectSearch"),
           projectSearchPlaceholder: t("projectSearchPlaceholder"),
@@ -364,7 +363,18 @@ function RouteContent({
     return <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline"><p className={styles.eyebrow}>{t("routeBoundary")}</p><h1>{t("offline")}</h1><p>{t("offlineDescription")}</p></section>
   }
   if (route.kind === "home") {
-    return <ProjectsCollection projects={boardList?.items ?? []} basePath={runtime.webBasePath} status={projectPickerStatus(boardList)} isRefreshing={boardList?.isRefreshing} onRetry={boardList?.onRetry} onOpenProject={(next) => void childNavigate?.({ kind: "project-overview", boardSlug: next.slug })} />
+    return (
+      <ProjectsCollection
+        projects={boardList?.items ?? []}
+        query={route.query}
+        onQueryChange={childNavigate === undefined ? undefined : (query) => void childNavigate({ kind: "home", query }, { replace: true })}
+        basePath={runtime.webBasePath}
+        status={projectPickerStatus(boardList)}
+        isRefreshing={boardList?.isRefreshing}
+        onRetry={boardList?.onRetry}
+        onOpenProject={(next) => void childNavigate?.({ kind: "project-overview", boardSlug: next.slug })}
+      />
+    )
   }
   if (route.kind === "not-found") {
     return <section className={styles.boundary} role="alert" data-testid="shell-not-found"><p className={styles.eyebrow}>{t("routeBoundary")}</p><h1>{t("notFound")}</h1><p>{t("notFoundDescription")}</p><code translate="no">{route.pathname}</code></section>

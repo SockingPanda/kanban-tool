@@ -14,7 +14,7 @@ export type ProjectSurface = "projects" | "overview" | "tasks"
 
 export type ProjectPickerStatus = "ready" | "loading" | "offline" | "error" | "stale" | "recovering"
 
-export type ContextNavigationSection = "home" | "projects" | "project"
+export type ContextNavigationSection = "projects" | "project"
 
 export type BreadcrumbItem = {
   readonly label: string
@@ -43,7 +43,6 @@ export type NavigationLabels = {
   readonly productNavigation: string
   readonly projects: string
   readonly settings: string
-  readonly home: string
   readonly projectSearch: string
   readonly projectSearchPlaceholder: string
   readonly clearSearch: string
@@ -72,7 +71,6 @@ export const defaultNavigationLabels: NavigationLabels = {
   productNavigation: "Product navigation",
   projects: "Projects",
   settings: "Settings",
-  home: "Home (planned)",
   projectSearch: "Search projects",
   projectSearchPlaceholder: "Search projects",
   clearSearch: "Clear project search",

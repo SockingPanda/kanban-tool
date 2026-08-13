@@ -6,6 +6,7 @@ import type {
   BlockTaskIntent,
   CompleteTaskIntent,
   HeartbeatTaskIntent,
+  ReleaseTaskIntent,
   SubmitReviewTaskIntent,
   TaskTransitionResponse,
 } from "../../lib/api/task-mutations"
@@ -75,6 +76,7 @@ const transitionActions = new Set<InspectorTransitionCommand["action"]>([
   "specify",
   "promote",
   "claim",
+  "release",
   "heartbeat",
   "complete",
   "submit-review",
@@ -85,6 +87,7 @@ const transitionActions = new Set<InspectorTransitionCommand["action"]>([
 
 const tokenizedActions = new Set<InspectorTransitionCommand["action"]>([
   "heartbeat",
+  "release",
   "submit-review",
   "complete",
   "block",
@@ -92,10 +95,12 @@ const tokenizedActions = new Set<InspectorTransitionCommand["action"]>([
 
 const claimRequiredActions = new Set<InspectorTransitionCommand["action"]>([
   "heartbeat",
+  "release",
   "submit-review",
 ])
 
 const terminalActions = new Set<InspectorTransitionCommand["action"]>([
+  "release",
   "submit-review",
   "complete",
   "block",
@@ -231,6 +236,10 @@ function transitionCommandWithToken(
       const input: SubmitReviewTaskIntent = { ...command.input, claim_token: command.input.claim_token || token }
       return { action: command.action, input }
     }
+    case "release": {
+      const input: ReleaseTaskIntent = { ...command.input, claim_token: token ?? "" }
+      return { action: command.action, input }
+    }
     case "complete": {
       const input: CompleteTaskIntent = { ...command.input, claim_token: command.input.claim_token || token }
       return { action: command.action, input }
@@ -260,6 +269,7 @@ async function executeTransition(
     case "specify": return client.transitionTask(taskId, "specify", command.input, { signal })
     case "promote": return client.transitionTask(taskId, "promote", command.input, { signal })
     case "claim": return client.transitionTask(taskId, "claim", command.input, { signal })
+    case "release": return client.transitionTask(taskId, "release", command.input, { signal })
     case "heartbeat": return client.transitionTask(taskId, "heartbeat", command.input, { signal })
     case "complete": return client.transitionTask(taskId, "complete", command.input, { signal })
     case "submit-review": return client.transitionTask(taskId, "submit-review", command.input, { signal })
@@ -653,6 +663,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     const taskId = surface?.scope.taskId ?? ""
     const token = surface === null ? null : (this.claimTokens(surface).get(taskId) ?? null)
     const decorated = transitionCommandWithToken(command, token)
+    if (decorated.action === "release" && (surface?.claimTokens === undefined || token === null)) return notCommittedOutcome
     if (claimRequiredActions.has(decorated.action) && !transitionInputHasToken(decorated)) return notCommittedOutcome
     return (await this.runWrite("transition", { operation: "transition", taskId, command: decorated }, (current, id, signal) => executeTransition(current.client, id, decorated, signal))).outcome
   }

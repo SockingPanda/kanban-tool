@@ -448,6 +448,61 @@ describe("Task Inspector mutation controller", () => {
     expect(transitionTask).toHaveBeenCalledTimes(1)
   })
 
+  test("requires the shared claim-token store for release and rejects a missing token", async () => {
+    const transitionTask = vi.fn(async () => response()) as unknown as InspectorTaskMutationClient["transitionTask"]
+    const claimTokens = createTaskClaimTokenStore()
+    const controller = new TaskInspectorMutationController(surface(client({ transitionTask }), scope(), { claimTokens }))
+
+    await expect(controller.transition({ action: "release", input: { claim_token: "" } })).resolves.toEqual({ committed: false, reconciled: false })
+    expect(transitionTask).not.toHaveBeenCalled()
+
+    const noStoreController = new TaskInspectorMutationController(surface(client({ transitionTask })))
+    await expect(noStoreController.transition({ action: "release", input: { claim_token: "provided-token" } })).resolves.toEqual({ committed: false, reconciled: false })
+    expect(transitionTask).not.toHaveBeenCalled()
+
+    const emptyStoreController = new TaskInspectorMutationController(surface(client({ transitionTask }), scope(), { claimTokens: createTaskClaimTokenStore() }))
+    await expect(emptyStoreController.transition({ action: "release", input: { claim_token: "provided-token" } })).resolves.toEqual({ committed: false, reconciled: false })
+    expect(transitionTask).not.toHaveBeenCalled()
+  })
+
+  test("sends release with the shared token, clears it after commit, and reconciles canonical state", async () => {
+    const transitionTask = vi.fn(async () => response()) as unknown as InspectorTaskMutationClient["transitionTask"]
+    const claimTokens = createTaskClaimTokenStore({ t_1: "release-token" })
+    const reload = vi.fn(async () => undefined)
+    const controller = new TaskInspectorMutationController(surface(client({ transitionTask }), scope(), { claimTokens, onCanonicalReload: reload }))
+
+    await expect(controller.transition({ action: "release", input: { claim_token: "" } })).resolves.toEqual({ committed: true, reconciled: true })
+    expect(transitionTask).toHaveBeenCalledWith("t_1", "release", { claim_token: "release-token" }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(claimTokens.get("t_1")).toBeNull()
+    expect(reload).toHaveBeenCalledWith({ kind: "transition", taskId: "t_1" }, scope())
+  })
+
+  test("clears a rejected release token after claim conflict and reconciles canonical state", async () => {
+    const transitionTask = vi.fn().mockRejectedValue({ status: 403, apiError: { code: "claim_token_mismatch" } })
+    const claimTokens = createTaskClaimTokenStore({ t_1: "stale-release-token" })
+    const reload = vi.fn(async () => undefined)
+    const controller = new TaskInspectorMutationController(surface(client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] }), scope(), { claimTokens, onCanonicalReload: reload }))
+
+    await expect(controller.transition({ action: "release", input: { claim_token: "" } })).resolves.toEqual({ committed: false, reconciled: true })
+    expect(transitionTask).toHaveBeenCalledWith("t_1", "release", { claim_token: "stale-release-token" }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(claimTokens.get("t_1")).toBeNull()
+    expect(controller.errorFor("transition", "t_1")).toMatchObject({ kind: "conflict", code: "claim_token_mismatch" })
+    expect(controller.retryIntentFor("transition", "t_1")).toBeNull()
+    expect(reload).toHaveBeenCalledWith({ kind: "transition", taskId: "t_1" }, scope())
+  })
+
+  test("retains a release retry intent after a recoverable server error", async () => {
+    const transitionTask = vi.fn().mockRejectedValue({ status: 503 })
+    const claimTokens = createTaskClaimTokenStore({ t_1: "retry-release-token" })
+    const controller = new TaskInspectorMutationController(surface(client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] }), scope(), { claimTokens }))
+
+    await expect(controller.transition({ action: "release", input: { claim_token: "" } })).resolves.toEqual({ committed: false, reconciled: false })
+    expect(transitionTask).toHaveBeenCalledWith("t_1", "release", { claim_token: "retry-release-token" }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(claimTokens.get("t_1")).toBe("retry-release-token")
+    expect(controller.errorFor("transition", "t_1")).toMatchObject({ kind: "error", status: 503, recoverable: true })
+    expect(controller.retryIntentFor("transition", "t_1")).toMatchObject({ operation: "transition", command: { action: "release", input: { claim_token: "retry-release-token" } } })
+  })
+
   test("does not replay a rejected claim token on retry", async () => {
     const transitionTask = vi.fn()
       .mockRejectedValueOnce({ status: 403, apiError: { code: "claim_token_mismatch" } })

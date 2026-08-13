@@ -75,6 +75,10 @@ import { parseApiPromoteTaskPath } from "./generated/contracts/api-promote-task-
 import { parseApiPromoteTaskHeaders } from "./generated/contracts/api-promote-task-headers"
 import { parseApiPromoteTaskRequest } from "./generated/contracts/api-promote-task-request"
 import { parseApiPromoteTaskResponse, type ApiPromoteTaskResponseContract } from "./generated/contracts/api-promote-task-response"
+import { parseApiReleaseTaskPath } from "./generated/contracts/api-release-task-path"
+import { parseApiReleaseTaskHeaders } from "./generated/contracts/api-release-task-headers"
+import { parseApiReleaseTaskRequest } from "./generated/contracts/api-release-task-request"
+import { parseApiReleaseTaskResponse, type ApiReleaseTaskResponseContract } from "./generated/contracts/api-release-task-response"
 import { parseApiRemoveDependencyPath } from "./generated/contracts/api-remove-dependency-path"
 import { parseApiRemoveDependencyHeaders } from "./generated/contracts/api-remove-dependency-headers"
 import { parseApiRemoveDependencyResponse, type ApiRemoveDependencyResponseContract } from "./generated/contracts/api-remove-dependency-response"
@@ -114,6 +118,7 @@ export type SpecifyTaskIntent = Omit<import("./generated/contracts/api-specify-t
 export type PromoteTaskIntent = Omit<import("./generated/contracts/api-promote-task-request").ApiPromoteTaskRequestContract, "actor">
 export type ClaimTaskIntent = Omit<import("./generated/contracts/api-claim-task-request").ApiClaimTaskRequestContract, "actor" | "ttl_ms">
   & Partial<Pick<import("./generated/contracts/api-claim-task-request").ApiClaimTaskRequestContract, "ttl_ms">>
+export type ReleaseTaskIntent = Omit<import("./generated/contracts/api-release-task-request").ApiReleaseTaskRequestContract, "actor">
 export type HeartbeatTaskIntent = Omit<import("./generated/contracts/api-heartbeat-task-request").ApiHeartbeatTaskRequestContract, "actor" | "ttl_ms">
   & Partial<Pick<import("./generated/contracts/api-heartbeat-task-request").ApiHeartbeatTaskRequestContract, "ttl_ms">>
 export type CompleteTaskIntent = Omit<import("./generated/contracts/api-complete-task-request").ApiCompleteTaskRequestContract, "actor" | "force">
@@ -137,6 +142,7 @@ export type TaskTransitionAction =
   | "specify"
   | "promote"
   | "claim"
+  | "release"
   | "heartbeat"
   | "complete"
   | "submit-review"
@@ -148,6 +154,7 @@ export type TaskTransitionIntent =
   | { readonly action: "specify"; readonly input: SpecifyTaskIntent }
   | { readonly action: "promote"; readonly input: PromoteTaskIntent }
   | { readonly action: "claim"; readonly input: ClaimTaskIntent }
+  | { readonly action: "release"; readonly input: ReleaseTaskIntent }
   | { readonly action: "heartbeat"; readonly input: HeartbeatTaskIntent }
   | { readonly action: "complete"; readonly input: CompleteTaskIntent }
   | { readonly action: "submit-review"; readonly input: SubmitReviewTaskIntent }
@@ -159,6 +166,7 @@ export type TaskTransitionResponse =
   | ApiSpecifyTaskResponseContract
   | ApiPromoteTaskResponseContract
   | ApiClaimTaskResponseContract
+  | ApiReleaseTaskResponseContract
   | ApiHeartbeatTaskResponseContract
   | ApiCompleteTaskResponseContract
   | ApiSubmitReviewTaskResponseContract
@@ -181,6 +189,7 @@ export interface TaskMutationClient {
   transitionTask(taskId: string, action: "specify", input?: SpecifyTaskIntent, options?: MutationRequestOptions): Promise<ApiSpecifyTaskResponseContract>
   transitionTask(taskId: string, action: "promote", input?: PromoteTaskIntent, options?: MutationRequestOptions): Promise<ApiPromoteTaskResponseContract>
   transitionTask(taskId: string, action: "claim", input?: ClaimTaskIntent, options?: MutationRequestOptions): Promise<ApiClaimTaskResponseContract>
+  transitionTask(taskId: string, action: "release", input: ReleaseTaskIntent, options?: MutationRequestOptions): Promise<ApiReleaseTaskResponseContract>
   transitionTask(taskId: string, action: "heartbeat", input: HeartbeatTaskIntent, options?: MutationRequestOptions): Promise<ApiHeartbeatTaskResponseContract>
   transitionTask(taskId: string, action: "complete", input?: CompleteTaskIntent, options?: MutationRequestOptions): Promise<ApiCompleteTaskResponseContract>
   transitionTask(taskId: string, action: "submit-review", input?: SubmitReviewTaskIntent, options?: MutationRequestOptions): Promise<ApiSubmitReviewTaskResponseContract>
@@ -286,6 +295,7 @@ function transitionPath(taskId: string, action: TaskTransitionAction): string {
     specify: (value) => parseApiSpecifyTaskPath(value),
     promote: (value) => parseApiPromoteTaskPath(value),
     claim: (value) => parseApiClaimTaskPath(value),
+    release: (value) => parseApiReleaseTaskPath(value),
     heartbeat: (value) => parseApiHeartbeatTaskPath(value),
     complete: (value) => parseApiCompleteTaskPath(value),
     "submit-review": (value) => parseApiSubmitReviewTaskPath(value),
@@ -341,6 +351,7 @@ function createClient(
   function transitionTask(taskId: string, action: "specify", input?: SpecifyTaskIntent, options?: MutationRequestOptions): Promise<ApiSpecifyTaskResponseContract>
   function transitionTask(taskId: string, action: "promote", input?: PromoteTaskIntent, options?: MutationRequestOptions): Promise<ApiPromoteTaskResponseContract>
   function transitionTask(taskId: string, action: "claim", input?: ClaimTaskIntent, options?: MutationRequestOptions): Promise<ApiClaimTaskResponseContract>
+  function transitionTask(taskId: string, action: "release", input: ReleaseTaskIntent, options?: MutationRequestOptions): Promise<ApiReleaseTaskResponseContract>
   function transitionTask(taskId: string, action: "heartbeat", input: HeartbeatTaskIntent, options?: MutationRequestOptions): Promise<ApiHeartbeatTaskResponseContract>
   function transitionTask(taskId: string, action: "complete", input?: CompleteTaskIntent, options?: MutationRequestOptions): Promise<ApiCompleteTaskResponseContract>
   function transitionTask(taskId: string, action: "submit-review", input?: SubmitReviewTaskIntent, options?: MutationRequestOptions): Promise<ApiSubmitReviewTaskResponseContract>
@@ -362,6 +373,10 @@ function createClient(
       case "claim": {
         const parsed = parseApiClaimTaskRequest(body)
         return requestContract(transport, "POST", path, parsed, jsonHeaders(parseApiClaimTaskHeaders, actor), parseApiClaimTaskResponse, options.signal)
+      }
+      case "release": {
+        const parsed = parseApiReleaseTaskRequest(body)
+        return requestContract(transport, "POST", path, parsed, jsonHeaders(parseApiReleaseTaskHeaders, actor), parseApiReleaseTaskResponse, options.signal)
       }
       case "heartbeat": {
         const parsed = parseApiHeartbeatTaskRequest(body)

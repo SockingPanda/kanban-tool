@@ -6,6 +6,7 @@ import type {
   HeartbeatTaskIntent,
   CompleteTaskIntent,
   PromoteTaskIntent,
+  ReleaseTaskIntent,
   SpecifyTaskIntent,
   SubmitReviewTaskIntent,
   TaskMutationClient,
@@ -96,6 +97,7 @@ const TRANSITIONS: Readonly<Record<BoardTaskStatus, readonly BoardTaskTransition
   ],
   running: [
     { action: "heartbeat", targetStatus: "running", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
+    { action: "release", targetStatus: "ready", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "submit-review", targetStatus: "review", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "complete", targetStatus: "done", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "block", targetStatus: "blocked", requiresReason: true, requiresDescription: false, requiresConfirmation: false },
@@ -155,6 +157,9 @@ function withContext(task: BoardTaskViewModel, option: BoardTaskTransitionOption
 /** Return actions legal for this task, including claim-token/force requirements. */
 export function transitionOptionsForTask(task: BoardTaskViewModel, claimToken: string | null = null): readonly BoardTaskTransitionOption[] {
   return transitionOptionsForStatus(task.status)
+    // `release` is command/drag policy support in this lane; keep it out of
+    // the existing rendered action list until its explicit affordance lands.
+    .filter((option) => option.action !== "release")
     .filter((option) => option.action !== "submit-review" || claimToken !== null)
     .filter((option) => option.action !== "heartbeat" || claimToken !== null)
     .filter((option) => option.action !== "promote" || canPromoteTask(task))
@@ -171,6 +176,10 @@ export function transitionForTaskTarget(
   if (task.status === "blocked" && targetStatus === "todo") {
     return { action: "unblock", targetStatus, requiresReason: false, requiresDescription: false, requiresConfirmation: false }
   }
+  if (task.status === "running" && targetStatus === "ready" && claimToken !== null) {
+    const release = transitionOptionsForStatus(task.status).find((candidate) => candidate.action === "release")
+    return release === undefined ? null : withContext(task, release, claimToken)
+  }
   const option = transitionOptionsForTask(task, claimToken).find((candidate) => candidate.targetStatus === targetStatus)
   return option ?? null
 }
@@ -186,6 +195,7 @@ export type BoardTaskTransitionCommand =
   | { readonly action: "specify"; readonly input: SpecifyTaskIntent }
   | { readonly action: "promote"; readonly input: PromoteTaskIntent }
   | { readonly action: "claim"; readonly input: ClaimTaskIntent }
+  | { readonly action: "release"; readonly input: ReleaseTaskIntent }
   | { readonly action: "heartbeat"; readonly input: HeartbeatTaskIntent }
   | { readonly action: "complete"; readonly input: CompleteTaskIntent }
   | { readonly action: "submit-review"; readonly input: SubmitReviewTaskIntent }
@@ -210,6 +220,10 @@ export function transitionCommandForTask(
       return { action: "promote", input: {} }
     case "claim":
       return { action: "claim", input: { ttl_ms: 300_000, worker_profile: "manual" } }
+    case "release":
+      return task.status !== "running" || option.targetStatus !== "ready" || claimToken === null
+        ? null
+        : { action: "release", input: { claim_token: claimToken } }
     case "heartbeat":
       return claimToken === null ? null : { action: "heartbeat", input: { claim_token: claimToken, ttl_ms: 300_000 } }
     case "submit-review":
@@ -244,6 +258,7 @@ export function executeBoardTaskTransition(
     case "specify": return client.transitionTask(taskId, "specify", command.input)
     case "promote": return client.transitionTask(taskId, "promote", command.input)
     case "claim": return client.transitionTask(taskId, "claim", command.input)
+    case "release": return client.transitionTask(taskId, "release", command.input)
     case "heartbeat": return client.transitionTask(taskId, "heartbeat", command.input)
     case "complete": return client.transitionTask(taskId, "complete", command.input)
     case "submit-review": return client.transitionTask(taskId, "submit-review", command.input)

@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from "vitest"
 import { assertCanonicalBoardSlug } from "../board-slug"
 import type { WebRuntimeConfig } from "../runtime"
 import type { HttpTransport } from "./http-transport"
-import { createTaskMutationClient, type BlockTaskIntent, type ClaimTaskIntent, type CompleteTaskIntent, type SubmitReviewTaskIntent } from "./task-mutations"
+import { createTaskMutationClient, type BlockTaskIntent, type ClaimTaskIntent, type CompleteTaskIntent, type ReleaseTaskIntent, type SubmitReviewTaskIntent } from "./task-mutations"
 
 const runtime = {
   apiBaseUrl: "/__kb_api__",
@@ -110,6 +110,7 @@ function transitionResponse(action: string) {
     specify: "todo",
     promote: "ready",
     heartbeat: "running",
+    release: "ready",
     complete: "done",
     "submit-review": "review",
     block: "blocked",
@@ -233,6 +234,35 @@ describe("task mutation operations", () => {
     expect(invalidCall).toBeTypeOf("function")
   })
 
+  test("keeps release claim_token required and rejects force through the generated request contract", async () => {
+    const request = vi.fn<HttpTransport["request"]>(async () => ({
+      payload: { data: task("t_1", "ready") },
+      bytes: 1,
+    }))
+    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
+
+    const invalidCall = () => {
+      // @ts-expect-error release requests must carry the generated claim_token field
+      return client.transitionTask("t_1", "release", {})
+    }
+    expect(invalidCall).toBeTypeOf("function")
+
+    const release: ReleaseTaskIntent = { claim_token: "claim-token" }
+    await client.transitionTask("t_1", "release", release)
+    expect(request).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/api/v1/tasks/t_1/transitions/release",
+      body: { actor: "web-user", claim_token: "claim-token" },
+      headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
+    })
+
+    expect(() => client.transitionTask("t_1", "release", { claim_token: "claim-token", force: true } as unknown as ReleaseTaskIntent)).toThrowError(expect.objectContaining({
+      name: "ContractValidationError",
+      contractId: "api.release-task.request",
+    }))
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+
   test("routes each legal transition to its own generated request/response validator", async () => {
     const request = vi.fn<HttpTransport["request"]>(async ({ path }) => ({
       payload: { data: task("t_1", path.endsWith("/block") ? "blocked" : "todo") },
@@ -260,6 +290,7 @@ describe("task mutation operations", () => {
       { action: "specify", run: () => client.transitionTask("t_1", "specify", { description: "ready" }) },
       { action: "promote", run: () => client.transitionTask("t_1", "promote") },
       { action: "claim", run: () => client.transitionTask("t_1", "claim", claimInput) },
+      { action: "release", run: () => client.transitionTask("t_1", "release", { claim_token: "claim-token" }) },
       { action: "heartbeat", run: () => client.transitionTask("t_1", "heartbeat", { claim_token: "claim-token" }) },
       { action: "complete", run: () => client.transitionTask("t_1", "complete", completeInput) },
       { action: "submit-review", run: () => client.transitionTask("t_1", "submit-review", reviewInput) },
@@ -270,7 +301,7 @@ describe("task mutation operations", () => {
 
     for (const transition of transitionCases) await transition.run()
 
-    expect(request).toHaveBeenCalledTimes(9)
+    expect(request).toHaveBeenCalledTimes(10)
     for (const [index, transition] of transitionCases.entries()) {
       expect(request).toHaveBeenNthCalledWith(index + 1, expect.objectContaining({
         method: "POST",
@@ -280,7 +311,8 @@ describe("task mutation operations", () => {
     }
     expect(request.mock.calls[2]?.[0]).toMatchObject({ body: { actor: "web-user", worker_profile: "default" } })
     expect(request.mock.calls[3]?.[0]).toMatchObject({ body: { actor: "web-user", claim_token: "claim-token" } })
-    expect(request.mock.calls[6]?.[0]).toMatchObject({ body: { actor: "web-user", reason: "waiting" } })
+    expect(request.mock.calls[4]?.[0]).toMatchObject({ body: { actor: "web-user", claim_token: "claim-token" } })
+    expect(request.mock.calls[7]?.[0]).toMatchObject({ body: { actor: "web-user", reason: "waiting" } })
   })
 
   test("rejects invalid response payloads before exposing a mutation result", async () => {

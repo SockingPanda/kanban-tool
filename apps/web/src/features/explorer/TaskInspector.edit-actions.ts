@@ -16,7 +16,10 @@ import type {
 import type { TaskInspectorViewModel } from "./TaskInspector"
 
 export const inspectorActionIds = ["specify", "promote", "claim", "heartbeat", "complete", "submit-review", "block", "unblock", "archive"] as const
-export type InspectorActionId = (typeof inspectorActionIds)[number]
+// `release` is supported by the shared mutation adapter, but it is deliberately
+// not in this rendered action list until the Inspector surface has an explicit
+// affordance for it.
+export type InspectorActionId = (typeof inspectorActionIds)[number] | "release"
 
 export const inspectorActionLabels: Readonly<Record<Locale, readonly string[]>> = {
   zh: ["指定", "晋级", "认领", "发送心跳", "完成", "提交审核", "阻塞", "解除阻塞", "归档"],
@@ -258,6 +261,7 @@ function actionEnabled(task: BoardTaskViewModel, action: InspectorActionId, clai
     case "promote": return canPromoteTask(task)
     case "claim": return true
     case "heartbeat":
+    case "release":
     case "submit-review": return claimToken !== null
     case "complete": return canCompleteTask(task)
     case "block":
@@ -272,6 +276,7 @@ function actionDisabledReason(task: BoardTaskViewModel, action: InspectorActionI
     case "specify": return copy.actionReasons.description
     case "promote": return task.readiness.dependencyBlocked ? copy.actionReasons.dependencies : task.readiness.executionPlanState === "unplanned" ? copy.actionReasons.plan : copy.actionReasons.promote
     case "heartbeat":
+    case "release":
     case "submit-review": return copy.actionReasons.claim
     case "complete": return copy.actionReasons.requiredSteps
     default: return copy.actionReasons.status
@@ -302,5 +307,6 @@ export function inspectorActionViews(task: TaskInspectorViewModel["task"], claim
 }
 
 export function actionLabel(action: InspectorActionId, locale: Locale): string {
+  if (action === "release") return action
   return inspectorActionLabels[locale][inspectorActionIds.indexOf(action)] ?? action
 }

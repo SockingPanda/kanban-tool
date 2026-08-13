@@ -495,6 +495,15 @@ export function useBoardTaskMutationController(
       }
       return
     }
+    if (legalOption.action === "release" && surface.claimTokens === undefined) {
+      if (retrying) {
+        setRetryIntent(null)
+        setNotice({ kind: "conflict", message: copy.conflictDescription })
+      } else {
+        setNotice({ kind: "error", message: copy.mutationError })
+      }
+      return
+    }
     const command = transitionCommandForTask(task, legalOption, { ...context, claimToken })
     if (command === null) {
       if (retrying && legalOption.requiresConfirmation) {
@@ -528,7 +537,7 @@ export function useBoardTaskMutationController(
       if (isCurrentMutation(generation)) {
         if (command.action === "claim" && "claim_token" in response.data && typeof response.data.claim_token === "string") {
           setClaimToken(taskId, response.data.claim_token)
-        } else if (command.action === "submit-review" || command.action === "complete" || command.action === "block" || command.action === "unblock" || command.action === "archive") {
+        } else if (command.action === "release" || command.action === "submit-review" || command.action === "complete" || command.action === "block" || command.action === "unblock" || command.action === "archive") {
           deleteClaimToken(taskId)
         }
       }

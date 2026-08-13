@@ -56,7 +56,7 @@ describe("board task mutation state", () => {
     expect(transitionForTarget("todo", "ready")).toMatchObject({ action: "promote", targetStatus: "ready" })
     expect(transitionForTarget("todo", "running")).toBeNull()
     expect(transitionOptionsForStatus("archived")).toEqual([])
-    expect(transitionOptionsForStatus("running").map((option) => option.targetStatus)).toEqual(["running", "review", "done", "blocked", "archived"])
+    expect(transitionOptionsForStatus("running").map((option) => option.targetStatus)).toEqual(["running", "ready", "review", "done", "blocked", "archived"])
   })
 
   test("moves a task optimistically without mutating the canonical snapshot", () => {
@@ -118,6 +118,11 @@ describe("board task mutation state", () => {
     expect(tokenized).toEqual({ action: "complete", input: { claim_token: "claim-token" } })
     const heartbeat = transitionCommandForTask(running, transitionForTaskTarget(running, "running", "claim-token")!, { claimToken: "claim-token" })
     expect(heartbeat).toEqual({ action: "heartbeat", input: { claim_token: "claim-token", ttl_ms: 300_000 } })
+    expect(transitionForTaskTarget(running, "ready")).toBeNull()
+    const releaseOption = transitionForTaskTarget(running, "ready", "claim-token")
+    if (!releaseOption) throw new Error("running release fixture missing")
+    expect(transitionCommandForTask(running, releaseOption, { claimToken: "claim-token" })).toEqual({ action: "release", input: { claim_token: "claim-token" } })
+    expect(transitionCommandForTask(running, { ...releaseOption, targetStatus: "done" }, { claimToken: "claim-token" })).toBeNull()
     const archive = transitionCommandForTask(task, transitionForTaskTarget(task, "archived")!, { confirmed: true })
     expect(archive).toEqual({ action: "archive", input: { force: true } })
     const runningArchive = transitionForTaskTarget(running, "archived", "claim-token")
@@ -134,6 +139,7 @@ describe("board task mutation state", () => {
     expect(transitionOptionsForTask({ ...task, readiness: { ...task.readiness, executionPlanState: "unplanned" } })).not.toContainEqual(expect.objectContaining({ action: "promote" }))
     const running = { ...task, status: "running" as const, readiness: { ...task.readiness, requiredStepCount: 2, completedRequiredStepCount: 1 } }
     expect(transitionOptionsForTask(running, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "complete" }))
+    expect(transitionOptionsForTask(running, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "release" }))
     const review = { ...running, status: "review" as const }
     expect(transitionOptionsForTask(review, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "complete" }))
     expect(transitionOptionsForTask(running)).toContainEqual(expect.objectContaining({ action: "archive", requiresConfirmation: true }))

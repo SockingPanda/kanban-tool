@@ -318,6 +318,15 @@ describe("ProductShell route offline boundary", () => {
     )
     expect(markup).toContain('data-testid="maintenance-page"')
     expect(markup).toContain('href="/app/boards/default/maintenance"')
+    expect(markup).toContain('data-route-surface="maintenance"')
+    expect(markup).toContain('data-more-active="true"')
+  })
+
+  test("uses descriptor project navigation for diagnostics without marking Tasks active", () => {
+    const markup = renderWithBoardList(parseAppRoute("http://kanban.test/app/boards/default/signals"))
+
+    expect(markup).toContain('data-route-surface="signals"')
+    expect(markup).not.toContain('aria-current="page" href="/app/boards/default/board" data-testid="project-tree-tasks"')
   })
 
   test("renders a canonical board switcher without inventing a second selection state", () => {

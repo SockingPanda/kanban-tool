@@ -736,6 +736,13 @@
     background: var(--nav-layer);
   }
 
+  .resourceHeaderMore[data-more-active="true"] .resourceHeaderMoreTrigger,
+  .resourceHeaderMoreItem[data-active="true"] {
+    border-color: color-mix(in srgb, var(--nav-accent-strong) 75%, transparent);
+    color: var(--nav-accent-strong);
+    background: var(--nav-accent-muted);
+  }
+
   .resourceHeaderMoreItem:disabled {
     cursor: not-allowed;
     opacity: 0.55;

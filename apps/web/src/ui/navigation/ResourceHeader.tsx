@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 
 import { NavigationIcon } from "./icons"
 import styles from "./navigation.module.css"
+import type { RoutePresentationDescriptor } from "./route-presentation"
 import { mergeNavigationLabels, type BreadcrumbItem, type NavigationLabels, type ResourceHeaderAction, type ResourceHeaderMoreItem } from "./types"
 
 export type BreadcrumbProps = {
@@ -42,6 +43,7 @@ export type ResourceHeaderProps = {
   readonly menuOpen?: boolean
   /** Explicit ID seam shared with ProjectsSidebar's drawer element. */
   readonly menuControlsId?: string
+  readonly presentation?: RoutePresentationDescriptor
   readonly labels?: Partial<NavigationLabels>
   readonly className?: string
 }
@@ -81,13 +83,13 @@ function MoreItem({ item }: { readonly item: ResourceHeaderMoreItem }) {
   )
   if (item.href !== undefined && !disabled) {
     return (
-      <a className={styles.resourceHeaderMoreItem} href={item.href} onClick={item.onSelect}>
+      <a className={styles.resourceHeaderMoreItem} href={item.href} aria-current={item.active ? "page" : undefined} data-active={item.active ? "true" : undefined} onClick={item.onSelect}>
         {content}
       </a>
     )
   }
   return (
-    <button type="button" className={styles.resourceHeaderMoreItem} disabled={disabled} onClick={disabled ? undefined : item.onSelect}>
+    <button type="button" className={styles.resourceHeaderMoreItem} aria-current={item.active ? "page" : undefined} data-active={item.active ? "true" : undefined} disabled={disabled} onClick={disabled ? undefined : item.onSelect}>
       {content}
     </button>
   )
@@ -105,6 +107,7 @@ export function ResourceHeader({
   onMenuToggle,
   menuOpen = false,
   menuControlsId = "projects-sidebar",
+  presentation,
   labels: labelOverrides,
   className,
 }: ResourceHeaderProps) {
@@ -112,7 +115,12 @@ export function ResourceHeader({
   const rootClassName = className === undefined ? styles.resourceHeader : `${styles.resourceHeader} ${className}`
 
   return (
-    <header className={rootClassName} data-testid="resource-header">
+    <header
+      className={rootClassName}
+      data-route-surface={presentation?.surface}
+      data-route-session-scope={presentation?.sessionScope}
+      data-testid="resource-header"
+    >
       <div className={styles.resourceHeaderMain}>
         {onMenuToggle !== undefined ? (
           <button
@@ -149,7 +157,7 @@ export function ResourceHeader({
         {actions.map((action) => <HeaderAction key={action.id} action={action} />)}
         {children}
         {moreItems.length > 0 ? (
-          <details className={styles.resourceHeaderMore}>
+          <details className={styles.resourceHeaderMore} data-more-active={presentation?.diagnosticsMenu.moreActive ? "true" : undefined}>
             <summary className={styles.resourceHeaderMoreTrigger}>
               <NavigationIcon name="activity" size={16} />
               <span>{labels.more}</span>

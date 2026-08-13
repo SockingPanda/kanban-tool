@@ -35,6 +35,7 @@ export type ResourceHeaderMoreItem = {
   readonly label: string
   readonly href?: string
   readonly icon?: ReactNode
+  readonly active?: boolean
   readonly disabled?: boolean
   readonly onSelect?: (event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => void
 }

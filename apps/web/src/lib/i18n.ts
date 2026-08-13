@@ -4,7 +4,6 @@ import type { MessagesByLocale, Overrides } from "@astryxdesign/core/i18n"
 export const localeMessages = {
   zh: {
     productName: "kanban-tool",
-    productKicker: "KANBAN TOOL / 项目",
     navigation: "导航",
     productNavigation: "产品导航",
     projects: "项目",
@@ -345,7 +344,6 @@ export const localeMessages = {
   },
   en: {
     productName: "kanban-tool",
-    productKicker: "KANBAN TOOL / PROJECTS",
     navigation: "Navigation",
     productNavigation: "Product navigation",
     projects: "Projects",

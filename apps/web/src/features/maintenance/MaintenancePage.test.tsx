@@ -112,6 +112,7 @@ describe("MaintenancePage", () => {
     expect(loading).toContain('aria-busy="true"')
     expect(loading).toMatch(/<div[^>]*aria-busy="true"[^>]*>[\s\S]*data-testid="maintenance-refresh"/)
     expect([...loading.matchAll(/<button\b[^>]*>/g)].every(([tag]) => !tag.includes("aria-busy"))).toBe(true)
+    expect(loading).not.toContain("KANBAN TOOL /")
     expect(loading).not.toContain("style=")
     expect(loading).toContain("维护")
 
@@ -123,6 +124,7 @@ describe("MaintenancePage", () => {
     expect(ready).toContain('data-testid="maintenance-status"')
     expect(ready).toContain("db_fixture")
     expect(ready).toContain('data-testid="maintenance-legacy-import-unsupported"')
+    expect(ready).not.toContain("KANBAN TOOL /")
     expect(ready).not.toContain("style=")
     expect(ready).not.toContain('data-testid="maintenance-import-v30-submit"')
   })

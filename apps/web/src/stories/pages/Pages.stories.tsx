@@ -732,7 +732,7 @@ export const HealthReady: Story = {
 }
 
 export const HealthLoading: Story = {
-  render: () => <PageStoryFrame><HealthPage runtime={runtime} /></PageStoryFrame>,
+  render: () => <PageStoryFrame><HealthPage runtime={runtime} read={() => new Promise<HealthReport>(() => undefined)} /></PageStoryFrame>,
 }
 
 export const MaintenanceReady: Story = {

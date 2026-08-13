@@ -1,4 +1,4 @@
-const modalFocusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+export const modalFocusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary:not([tabindex='-1']), [tabindex]:not([tabindex='-1'])"
 
 /**
  * 让焦点陷阱与浏览器 Tab 顺序一致。原生 `details` 在关闭时仍保留

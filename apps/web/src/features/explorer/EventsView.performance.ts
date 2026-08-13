@@ -26,6 +26,32 @@ export function eventTimestamp(value: number, locale: Locale): { readonly displa
   return { display, iso: date.toISOString() }
 }
 
+function stableJsonValue(value: unknown, seen: WeakSet<object>): unknown {
+  if (value === null || typeof value !== "object") {
+    return typeof value === "bigint" ? String(value) : value
+  }
+  if (seen.has(value)) return "[circular]"
+  seen.add(value)
+  try {
+    if (Array.isArray(value)) return value.map((item) => stableJsonValue(item, seen))
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, stableJsonValue(value[key as keyof typeof value], seen)]),
+    )
+  } finally {
+    seen.delete(value)
+  }
+}
+
+export function eventPayloadJson(value: unknown): string {
+  try {
+    return JSON.stringify(stableJsonValue(value, new WeakSet<object>()), null, 2) ?? "null"
+  } catch {
+    return JSON.stringify("[unserializable payload]")
+  }
+}
+
 export type EventRowIdentityProps = {
   readonly event: ExplorerEvent
   readonly locale: Locale
@@ -40,5 +66,6 @@ export const __test = {
   areEventRowPropsEqual,
   eventTimestamp,
   eventTimestampFormatter,
+  eventPayloadJson,
   resetEventTimestampFormatters: () => eventTimestampFormatters.clear(),
 }

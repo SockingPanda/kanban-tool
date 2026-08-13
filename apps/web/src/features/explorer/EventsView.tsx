@@ -6,7 +6,7 @@ import { Heading } from "@astryxdesign/core/Heading"
 import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from "@astryxdesign/core/Table"
 import { Text } from "@astryxdesign/core/Text"
 
-import { PageFrame, SafeHStack, SafeVStack, TextInput } from "@/ui/astryx"
+import { CodeBlock, PageFrame, SafeHStack, SafeVStack, TextInput } from "@/ui/astryx"
 
 import {
   ExplorerReadError,
@@ -20,7 +20,7 @@ import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
-import { areEventRowPropsEqual, eventTimestamp } from "./EventsView.performance"
+import { areEventRowPropsEqual, eventPayloadJson, eventTimestamp } from "./EventsView.performance"
 
 export type EventsReadState = {
   readonly data: BoardEventsReadModel | null
@@ -65,6 +65,14 @@ type EventsCopy = {
   readonly run: string
   readonly time: string
   readonly actor: string
+  readonly id: string
+  readonly eventId: string
+  readonly payload: string
+  readonly details: string
+  readonly showDetails: string
+  readonly copy: string
+  readonly copied: string
+  readonly copyError: string
   readonly kindFilter: string
   readonly kindFilterPlaceholder: string
   readonly loading: string
@@ -79,6 +87,7 @@ type EventsCopy = {
   readonly refresh: string
   readonly apply: string
   readonly refreshError: string
+  readonly unreadable: string
   readonly count: (count: number) => string
   readonly unknown: string
 }
@@ -92,6 +101,14 @@ const copies: Record<Locale, EventsCopy> = {
     run: "运行",
     time: "时间",
     actor: "执行者",
+    id: "ID",
+    eventId: "事件 ID",
+    payload: "Payload",
+    details: "证据",
+    showDetails: "查看事件证据",
+    copy: "复制",
+    copied: "已复制",
+    copyError: "复制失败",
     kindFilter: "事件类型筛选",
     kindFilterPlaceholder: "例如 task.updated",
     loading: "正在加载事件…",
@@ -106,6 +123,7 @@ const copies: Record<Locale, EventsCopy> = {
     refresh: "刷新",
     apply: "应用",
     refreshError: "刷新失败，仍显示旧数据。",
+    unreadable: "事件响应无法安全显示。",
     count: (count) => `${count} 条事件`,
     unknown: "—",
   },
@@ -117,6 +135,14 @@ const copies: Record<Locale, EventsCopy> = {
     run: "Run",
     time: "Time",
     actor: "Actor",
+    id: "Canonical ID",
+    eventId: "Event ID",
+    payload: "Payload",
+    details: "Evidence",
+    showDetails: "View event evidence",
+    copy: "Copy",
+    copied: "Copied",
+    copyError: "Copy failed",
     kindFilter: "Event kind filter",
     kindFilterPlaceholder: "for example task.updated",
     loading: "Loading events…",
@@ -131,6 +157,7 @@ const copies: Record<Locale, EventsCopy> = {
     refresh: "Refresh",
     apply: "Apply",
     refreshError: "Refresh failed; showing the last usable result.",
+    unreadable: "The event response could not be safely displayed.",
     count: (count) => `${count} events`,
     unknown: "—",
   },
@@ -140,6 +167,30 @@ function errorKind(error: Error | null): string | null {
   if (!error || !("kind" in error)) return null
   const kind = error.kind
   return typeof kind === "string" ? kind : null
+}
+
+const safeExplorerErrorKinds: ReadonlySet<ExplorerReadError["kind"]> = new Set([
+  "empty",
+  "offline",
+  "http",
+  "invalid_json",
+  "invalid_contract",
+  "anomaly",
+  "cross_origin",
+  "malformed_url",
+  "invalid_content_type",
+  "response_too_large",
+])
+
+function safeErrorDescription(error: Error | null, copy: EventsCopy): string {
+  if (!(error instanceof ExplorerReadError)) return copy.unreadable
+  const statusValue = error.status
+  const status = statusValue !== null && Number.isInteger(statusValue) && statusValue >= 100 && statusValue <= 599
+    ? String(statusValue)
+    : null
+  const kind = safeExplorerErrorKinds.has(error.kind) ? error.kind : null
+  const context = [kind, status].filter(Boolean).join(" · ")
+  return context.length > 0 ? `${copy.unreadable} (${context})` : copy.unreadable
 }
 
 function machineToken(value: string | null | undefined, fallback: string): ReactNode {
@@ -155,6 +206,7 @@ type EventRowProps = {
 
 function EventRowContent({ event, copy, locale, onSelectTask }: EventRowProps) {
   const time = eventTimestamp(event.created_at, locale)
+  const payload = eventPayloadJson(event.payload)
   return (
     <TableRow data-testid="event-row" data-event-id={event.event_id}>
       <TableCell>{machineToken(event.kind, copy.unknown)}</TableCell>
@@ -177,6 +229,32 @@ function EventRowContent({ event, copy, locale, onSelectTask }: EventRowProps) {
         <time dateTime={time.iso} title={time.iso}>{time.display}</time>
       </TableCell>
       <TableCell>{machineToken(event.actor, copy.unknown)}</TableCell>
+      <TableCell>
+        <details data-testid="event-detail-disclosure">
+          <summary>{copy.showDetails}</summary>
+          <SafeVStack as="section" gap={2} padding={3} data-testid="event-detail-content">
+            <Text as="p" type="supporting">{copy.id}: {machineToken(String(event.id), copy.unknown)}</Text>
+            <Text as="p" type="supporting">{copy.eventId}: {machineToken(event.event_id, copy.unknown)}</Text>
+            <Text as="p" type="supporting">{copy.task}: {machineToken(event.task_id, copy.unknown)}</Text>
+            <Text as="p" type="supporting">{copy.run}: {machineToken(event.run_id, copy.unknown)}</Text>
+            <Text as="p" type="supporting">{copy.actor}: {machineToken(event.actor, copy.unknown)}</Text>
+            <Text as="p" type="supporting">{copy.time}: <time dateTime={time.iso} title={time.iso}>{time.display}</time></Text>
+            <CodeBlock
+              code={payload}
+              language="json"
+              isWrapped
+              container="section"
+              maxHeight="evidence"
+              label={copy.payload}
+              hasCopy={false}
+              copyLabel={copy.copy}
+              copiedLabel={copy.copied}
+              errorLabel={copy.copyError}
+              data-testid="event-payload-json"
+            />
+          </SafeVStack>
+        </details>
+      </TableCell>
     </TableRow>
   )
 }
@@ -241,7 +319,7 @@ export function EventsPresentation({
     return <StateBoundary testId="events-offline" role="status" title={copy.offline} description={copy.offlineDescription} retry={{ label: copy.retry, onClick: onRefresh }} />
   }
   if (!scopedData && error) {
-    return <StateBoundary testId="events-error" role="alert" title={copy.error} description={error.message} retry={{ label: copy.retry, onClick: onRefresh }} />
+    return <StateBoundary testId="events-error" role="alert" title={copy.error} description={safeErrorDescription(error, copy)} retry={{ label: copy.retry, onClick: onRefresh }} />
   }
   if (!scopedData) return null
 
@@ -304,7 +382,7 @@ export function EventsPresentation({
           endContent={<Button label={copy.refresh} variant="ghost" size="sm" onClick={onRefresh} isDisabled={state.loading} />}
         />
       ) : null}
-      {state.error && !offline ? <Text as="p" type="supporting" role="alert">{state.error.message}</Text> : null}
+      {state.error && !offline ? <Text as="p" type="supporting" role="alert">{safeErrorDescription(error, copy)}</Text> : null}
       <FilterBar copy={copy} value={kindFilter} onChange={onKindFilterChange} />
       {visibleEvents.length === 0 ? (
         <Text as="p" type="supporting" role="status" data-testid="events-filter-empty">{copy.noMatches}</Text>
@@ -319,6 +397,7 @@ export function EventsPresentation({
                 <TableHeaderCell scope="col">{copy.run}</TableHeaderCell>
                 <TableHeaderCell scope="col">{copy.time}</TableHeaderCell>
                 <TableHeaderCell scope="col">{copy.actor}</TableHeaderCell>
+                <TableHeaderCell scope="col">{copy.details}</TableHeaderCell>
               </TableRow>
             </TableHeader>
             <TableBody>

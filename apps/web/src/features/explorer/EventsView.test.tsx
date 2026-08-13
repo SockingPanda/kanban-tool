@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from "vitest"
 
 import { asCanonicalBoardId } from "../../lib/sync/contracts"
 import { parseCanonicalBoardSlug } from "../../lib/board-slug"
-import type { BoardEventsReadModel, ExplorerEvent } from "../../lib/api/explorer-read-model"
+import { ExplorerReadError, type BoardEventsReadModel, type ExplorerEvent } from "../../lib/api/explorer-read-model"
 import { EventsPresentation, type EventsReadState } from "./EventsView"
 import { __test } from "./EventsView.performance"
 
@@ -48,6 +48,76 @@ describe("EventsView", () => {
     } finally {
       __test.resetEventTimestampFormatters()
     }
+  })
+
+  test("keeps event payload JSON deterministic and discloses verified evidence through keyboard-native details", () => {
+    const payload = {
+      zulu: "<script>alert('server')</script>",
+      alpha: { zulu: "&", alpha: "</code>" },
+    }
+    const reorderedPayload = {
+      alpha: { alpha: "</code>", zulu: "&" },
+      zulu: "<script>alert('server')</script>",
+    }
+    expect(__test.eventPayloadJson(payload)).toBe(__test.eventPayloadJson(reorderedPayload))
+
+    const markup = renderToStaticMarkup(
+      <EventsPresentation
+        locale="en"
+        taskId={null}
+        kindFilter=""
+        state={{ ...ready, data: { ...model, events: [event(7, { event_id: "event<&", payload, task_id: "t<&", run_id: "r<&", actor: "actor<&" })] } }}
+        online
+        onRefresh={vi.fn()}
+      />,
+    )
+
+    expect(markup).toMatch(/<details[^>]*data-testid="event-detail-disclosure"[^>]*>[\s\S]*<summary>View event evidence<\/summary>/)
+    expect(markup).toContain('data-testid="event-payload-json"')
+    expect(markup).toContain("Canonical ID")
+    expect(markup).toContain("Event ID")
+    expect(markup).toContain("Task")
+    expect(markup).toContain("Run")
+    expect(markup).toContain("Actor")
+    expect(markup).toContain("Time")
+    expect(markup).toContain("Payload")
+    expect(markup).toContain("&lt;script&gt;alert(&#x27;server&#x27;)&lt;/script&gt;")
+    expect(markup).not.toContain("<script>alert('server')</script>")
+    expect(markup).toContain('data-language="json"')
+    expect(markup.indexOf("&quot;alpha&quot;")).toBeLessThan(markup.indexOf("&quot;zulu&quot;"))
+    expect(markup).not.toContain('data-testid="event-detail-disclosure" open')
+  })
+
+  test("redacts server-controlled error messages while retaining safe error context", () => {
+    const secret = "server-controlled secret /internal/events"
+    const readError = new ExplorerReadError("http", secret, { status: 503 })
+    const markup = renderToStaticMarkup(
+      <EventsPresentation
+        locale="en"
+        taskId={null}
+        kindFilter=""
+        state={{ data: null, loading: false, error: readError, stale: false }}
+        online
+        onRefresh={vi.fn()}
+      />,
+    )
+    const staleMarkup = renderToStaticMarkup(
+      <EventsPresentation
+        locale="en"
+        taskId={null}
+        kindFilter=""
+        state={{ ...ready, error: readError, stale: true }}
+        online
+        onRefresh={vi.fn()}
+      />,
+    )
+
+    expect(markup).not.toContain(secret)
+    expect(staleMarkup).not.toContain(secret)
+    expect(markup).toContain("The event response could not be safely displayed.")
+    expect(staleMarkup).toContain("The event response could not be safely displayed.")
+    expect(markup).toContain("http")
+    expect(markup).toContain("503")
   })
 
   test("treats the same event object as stable across unrelated parent rerenders", () => {

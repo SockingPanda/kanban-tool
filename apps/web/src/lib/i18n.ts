@@ -681,7 +681,8 @@ export const featureMessages = {
   zh: {
     signals: {
       heading: "信号",
-      lede: "当前看板的通用 agent 与产品信号。",
+      lede: "查看当前看板的 agent 与产品信号。",
+      readOnly: "只读信号",
       board: "看板",
       refresh: "刷新",
       refreshing: "正在刷新",
@@ -731,7 +732,9 @@ export const featureMessages = {
     },
     ontology: {
       heading: "本体审阅",
-      lede: "审阅辅助，不修改 canonical 语义。生命周期操作不会修改 canonical label 语义。",
+      lede: "查看本体投影与审阅信号。",
+      readOnly: "只读审阅",
+      lifecycleAvailable: "生命周期操作可用",
       board: "看板",
       refresh: "刷新",
       refreshing: "正在刷新",
@@ -815,7 +818,8 @@ export const featureMessages = {
   en: {
     signals: {
       heading: "Signals",
-      lede: "Generic agent and product signals for the active board.",
+      lede: "Review agent and product signals for this board.",
+      readOnly: "Read-only signals",
       board: "Board",
       refresh: "Refresh",
       refreshing: "refreshing",
@@ -865,7 +869,9 @@ export const featureMessages = {
     },
     ontology: {
       heading: "Ontology review",
-      lede: "Review aid; does not modify canonical semantics. Lifecycle actions do not modify canonical label semantics.",
+      lede: "Review ontology projections and signals.",
+      readOnly: "Read-only review",
+      lifecycleAvailable: "Lifecycle actions available",
       board: "Board",
       refresh: "Refresh",
       refreshing: "refreshing",

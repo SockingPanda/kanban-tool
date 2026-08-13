@@ -201,7 +201,8 @@ describe("Ontology screen presentation", () => {
 
     expect(html).toContain("Ontology review")
     expect(html).not.toContain("KANBAN TOOL / ONTOLOGY")
-    expect(html).toContain("does not modify canonical semantics")
+    expect(html).toContain("Read-only review")
+    expect(html).toContain("Review ontology projections and signals.")
     expect(html).toContain("Signal rows")
     expect(html).toContain("Grouped review")
     expect(html).toContain("Candidate atom")
@@ -415,6 +416,34 @@ describe("Ontology screen presentation", () => {
       onExplainAtom: () => undefined,
     })
     expect(findButtonByText(tree, "Confirm signal")?.props.isDisabled).toBe(true)
+  })
+
+  test("labels lifecycle capability from the supplied writer seam", () => {
+    const renderView = (lifecycleEnabled: boolean) => renderToStaticMarkup(
+      <OntologyScreenView
+        boardName="Default"
+        filters={filters}
+        signals={{ phase: "success", data: [signalFixture()], error: null }}
+        groups={{ phase: "success", data: [reviewGroupFixture()], error: null }}
+        detail={{ phase: "success", data: detailFixture(), error: null }}
+        atom={{ phase: "idle", data: null, error: null }}
+        selectedSignalId="los_1"
+        atomRef=""
+        online
+        actionReason="Reviewed"
+        actionPending={false}
+        lifecycleEnabled={lifecycleEnabled}
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+        onActionReasonChange={() => undefined}
+        onLifecycleAction={() => undefined}
+        onExplainAtom={() => undefined}
+        onAtomSearch={() => undefined}
+      />,
+    )
+    expect(renderView(false)).toContain("Read-only review")
+    expect(renderView(true)).toContain("Lifecycle actions available")
   })
 
   test("freezes A retry after switching to B and fences the stale async response", async () => {

@@ -426,6 +426,7 @@ export function OntologyScreenView({
         <SafeHStack gap={4} justify="between" align="start" wrap="wrap">
           <SafeVStack gap={1}>
             <Heading level={1} id="ontology-title">{copy.heading}</Heading>
+            <Badge variant={lifecycleEnabled ? "info" : "neutral"} label={lifecycleEnabled ? copy.lifecycleAvailable : copy.readOnly} />
             <Text as="p" type="supporting">{copy.lede}</Text>
             <Text as="p" type="supporting">{copy.board} · <MachineText>{boardName}</MachineText></Text>
           </SafeVStack>

@@ -72,7 +72,8 @@ describe("Signals screen presentation", () => {
 
     expect(html).toContain("Signals")
     expect(html).not.toContain("KANBAN TOOL / SIGNALS")
-    expect(html).toContain("Generic agent and product signals for the active board.")
+    expect(html).toContain("Read-only signals")
+    expect(html).toContain("Review agent and product signals for this board.")
     expect(html).toContain("Open + confirmed")
     expect(html).toContain("CLI friction")
     expect(html).toContain("Evidence JSON")

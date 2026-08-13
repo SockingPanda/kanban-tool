@@ -255,6 +255,7 @@ export function SignalsScreenView({
         <SafeHStack gap={4} justify="between" align="start" wrap="wrap">
             <SafeVStack gap={1}>
               <Heading level={1} id="signals-title">{copy.heading}</Heading>
+              <Badge variant="neutral" label={copy.readOnly} />
               <Text as="p" type="supporting">{copy.lede}</Text>
               <Text as="p" type="supporting">{copy.board} · <code translate="no">{boardName}</code></Text>
             </SafeVStack>

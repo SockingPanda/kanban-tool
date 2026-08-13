@@ -269,6 +269,7 @@ function RuntimeThemedShell() {
   }, [sessionKey])
 
   const onCanonicalSnapshotChange = useCallback((snapshot: BoardCanonicalSnapshot | undefined, releasedSnapshot?: BoardCanonicalSnapshot) => {
+    if (sessionKeyRef.current !== sessionKey) return
     setCanonicalSnapshotState((current) => {
       const scoped = current.key === sessionKey ? current : { key: sessionKey, snapshot: null }
       return applyCanonicalSnapshotHandoff(scoped, sessionKey, snapshot, releasedSnapshot)
@@ -276,8 +277,8 @@ function RuntimeThemedShell() {
   }, [sessionKey])
 
   const onCanonicalSnapshotRetryChange = useCallback((retry: (() => void) | undefined, releasedRetry?: () => void) => {
+    if (sessionKeyRef.current !== sessionKey) return
     if (retry !== undefined) {
-      if (sessionKeyRef.current !== sessionKey) return
       setCanonicalSnapshotRetryState({ key: sessionKey, retry })
       return
     }

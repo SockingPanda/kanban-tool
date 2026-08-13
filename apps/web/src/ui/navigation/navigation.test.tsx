@@ -109,6 +109,24 @@ describe("navigation accessibility contracts", () => {
     expect(sidebar).toContain('href="/app/boards/navigation/board"')
   })
 
+  test("exposes a desktop sidebar resize separator without inline style state", () => {
+    const markup = renderToStaticMarkup(
+      <ProjectsSidebar
+        projects={[project]}
+        sidebarWidthStep={62}
+        onSidebarWidthStepChange={vi.fn()}
+        onSidebarWidthReset={vi.fn()}
+      />,
+    )
+
+    expect(markup).toContain('role="separator"')
+    expect(markup).toContain('aria-valuemin="56"')
+    expect(markup).toContain('aria-valuemax="80"')
+    expect(markup).toContain('aria-valuenow="62"')
+    expect(markup).toContain('data-testid="sidebar-resize-handle"')
+    expect(markup).not.toContain('style=')
+  })
+
   test("keeps the picker query API controlled when both props are supplied", () => {
     const onQueryChange = vi.fn()
     const markup = renderToStaticMarkup(

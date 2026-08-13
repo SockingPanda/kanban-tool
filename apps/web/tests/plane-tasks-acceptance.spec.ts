@@ -21,6 +21,41 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     }
   })
 
+  test("keeps desktop sidebar width bounded and keyboard/pointer/reset accessible", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+
+    const shell = page.getByTestId("product-shell")
+    const handle = page.getByTestId("sidebar-resize-handle")
+    await expect(shell).toHaveAttribute("data-shell-viewport", "desktop")
+    await expect(shell).toHaveAttribute("data-sidebar-width-step", "62")
+    await expect(handle).toHaveAttribute("role", "separator")
+
+    await handle.focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(shell).toHaveAttribute("data-sidebar-width-step", "63")
+    await page.keyboard.press("Home")
+    await expect(shell).toHaveAttribute("data-sidebar-width-step", "56")
+    await page.keyboard.press("End")
+    await expect(shell).toHaveAttribute("data-sidebar-width-step", "80")
+    await page.keyboard.press("Home")
+    await expect(shell).toHaveAttribute("data-sidebar-width-step", "56")
+
+    const box = await handle.boundingBox()
+    expect(box).not.toBeNull()
+    if (box === null) return
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + 16, box.y + box.height / 2)
+    await page.mouse.up()
+    await expect(shell).toHaveAttribute("data-sidebar-width-step", "60")
+
+    await handle.dblclick()
+    await expect(shell).toHaveAttribute("data-sidebar-width-step", "62")
+    await expect(page.locator("[style]")).toHaveCount(0)
+  })
+
   test("switches Board, List, Table, and Map without dropping legal q and task URL state", async ({ page }) => {
     const fixture = await installPlaneAcceptanceFixture(page)
     await page.goto("/app/boards/default/board?q=agent&task=t_default_ready", { waitUntil: "domcontentloaded" })

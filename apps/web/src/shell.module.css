@@ -13,6 +13,13 @@
     background: var(--kb-color-canvas);
   }
 
+  @media (min-width: 1024px) {
+    .productNavigationMain {
+      grid-column: 3;
+      grid-row: 1;
+    }
+  }
+
   @media (max-width: 60rem) {
     .productNavigationMain {
       grid-column: 2;

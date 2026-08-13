@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, type MouseEvent } from "react"
 import { NavigationIcon } from "./icons"
 import { ProjectPicker } from "./ProjectPicker"
 import { ProjectTree } from "./ProjectTree"
+import { SidebarResizeHandle } from "./SidebarResizeHandle"
 import styles from "./navigation.module.css"
 import {
   mergeNavigationLabels,
@@ -31,6 +32,9 @@ type ProjectsSidebarBaseProps = {
   readonly onClose?: () => void
   /** Explicit seam shared with ResourceHeader's `aria-controls`. */
   readonly drawerId?: string
+  readonly sidebarWidthStep?: number
+  readonly onSidebarWidthStepChange?: (step: number) => void
+  readonly onSidebarWidthReset?: () => void
   readonly labels?: Partial<NavigationLabels>
   readonly className?: string
 }
@@ -86,6 +90,9 @@ export function ProjectsSidebar({
   open,
   onClose,
   drawerId: drawerIdOverride,
+  sidebarWidthStep,
+  onSidebarWidthStepChange,
+  onSidebarWidthReset,
   labels: labelOverrides,
   className,
 }: ProjectsSidebarProps) {
@@ -292,6 +299,9 @@ export function ProjectsSidebar({
               />
             ) : null}
           </div>
+          {!isDrawer && sidebarWidthStep !== undefined && onSidebarWidthStepChange !== undefined && onSidebarWidthReset !== undefined ? (
+            <SidebarResizeHandle step={sidebarWidthStep} onStepChange={onSidebarWidthStepChange} onReset={onSidebarWidthReset} />
+          ) : null}
         </div>
       </aside>
     </>

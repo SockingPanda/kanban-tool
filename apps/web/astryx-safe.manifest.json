@@ -100,8 +100,8 @@
   ],
   "residualCss": [
     { "path": "src/ui/foundations/tokens.css", "maxLoc": 109, "owner": "foundations", "reason": "Legacy token aliases are still consumed by the migrated shell.", "exitCondition": "Remove kb-* aliases after all consumers use Astryx tokens." },
-    { "path": "src/shell.module.css", "maxLoc": 563, "owner": "product-shell", "reason": "Existing shell fallback remains while surfaces migrate to Astryx and utilities.", "exitCondition": "Replace shell layout rules with Astryx layout and token-backed utilities." },
-    { "path": "src/ui/navigation/navigation.module.css", "maxLoc": 889, "owner": "navigation", "reason": "Existing navigation fallback remains while the shared shell migrates.", "exitCondition": "Replace navigation selectors with Astryx navigation composition." },
+    { "path": "src/shell.module.css", "maxLoc": 570, "owner": "product-shell", "reason": "Existing shell fallback remains while surfaces migrate to Astryx and utilities.", "exitCondition": "Replace shell layout rules with Astryx layout and token-backed utilities." },
+    { "path": "src/ui/navigation/navigation.module.css", "maxLoc": 961, "owner": "navigation", "reason": "Existing navigation fallback remains while the shared shell migrates.", "exitCondition": "Replace navigation selectors with Astryx navigation composition." },
     { "path": "src/ui/tasks/tasks.module.css", "maxLoc": 850, "owner": "tasks", "reason": "Existing task fallback remains while task projections migrate.", "exitCondition": "Replace task projection selectors with Astryx components and utilities." },
     { "path": "src/features/board/BoardView.module.css", "maxLoc": 921, "owner": "board", "reason": "Existing board projection fallback remains during migration.", "exitCondition": "Migrate board projection layout and state styling to Astryx utilities." },
     { "path": "src/features/explorer/EventsView.module.css", "maxLoc": 199, "owner": "events", "reason": "Existing events projection fallback remains during migration.", "exitCondition": "Migrate events projection styling to Astryx utilities." },
@@ -157,6 +157,7 @@
     { "path": "src/ui/navigation/ProjectTree.tsx", "maxCount": 1, "owner": "navigation", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
     { "path": "src/ui/navigation/ProjectsSidebar.tsx", "maxCount": 4, "owner": "navigation", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
     { "path": "src/ui/navigation/ResourceHeader.tsx", "maxCount": 3, "owner": "navigation", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
+    { "path": "src/ui/navigation/SidebarResizeHandle.tsx", "maxCount": 1, "owner": "navigation", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." },
     { "path": "src/ui/tasks/TasksPatterns.tsx", "maxCount": 15, "owner": "tasks", "exitCondition": "Replace raw layout containers with Astryx primitives or Tailwind utilities." }
   ],
   "cssImports": [
@@ -168,6 +169,7 @@
     { "importer": "src/ProductShell.tsx", "path": "src/shell.module.css" },
     { "importer": "src/ui/navigation/ProjectTree.tsx", "path": "src/ui/navigation/navigation.module.css" },
     { "importer": "src/ui/navigation/ProjectsSidebar.tsx", "path": "src/ui/navigation/navigation.module.css" },
+    { "importer": "src/ui/navigation/SidebarResizeHandle.tsx", "path": "src/ui/navigation/navigation.module.css" },
     { "importer": "src/ui/navigation/ProjectPicker.tsx", "path": "src/ui/navigation/navigation.module.css" },
     { "importer": "src/ui/navigation/ProductRail.tsx", "path": "src/ui/navigation/navigation.module.css" },
     { "importer": "src/stories/primitives/States.stories.tsx", "path": "src/stories/primitives/primitives.stories.css" },

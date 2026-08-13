@@ -32,6 +32,38 @@
     line-height: 1.4;
   }
 
+  .navigationRoot[data-shell-viewport="desktop"] {
+    grid-template-columns: var(--nav-rail-width) var(--nav-sidebar-width) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-block-size: 100vh;
+  }
+
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="56"] { --nav-sidebar-width: 14rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="57"] { --nav-sidebar-width: 14.25rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="58"] { --nav-sidebar-width: 14.5rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="59"] { --nav-sidebar-width: 14.75rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="60"] { --nav-sidebar-width: 15rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="61"] { --nav-sidebar-width: 15.25rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="62"] { --nav-sidebar-width: 15.5rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="63"] { --nav-sidebar-width: 15.75rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="64"] { --nav-sidebar-width: 16rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="65"] { --nav-sidebar-width: 16.25rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="66"] { --nav-sidebar-width: 16.5rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="67"] { --nav-sidebar-width: 16.75rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="68"] { --nav-sidebar-width: 17rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="69"] { --nav-sidebar-width: 17.25rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="70"] { --nav-sidebar-width: 17.5rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="71"] { --nav-sidebar-width: 17.75rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="72"] { --nav-sidebar-width: 18rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="73"] { --nav-sidebar-width: 18.25rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="74"] { --nav-sidebar-width: 18.5rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="75"] { --nav-sidebar-width: 18.75rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="76"] { --nav-sidebar-width: 19rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="77"] { --nav-sidebar-width: 19.25rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="78"] { --nav-sidebar-width: 19.5rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="79"] { --nav-sidebar-width: 19.75rem; }
+  .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="80"] { --nav-sidebar-width: 20rem; }
+
   .navigationRoot[data-theme="dark"] {
     color-scheme: dark;
   }
@@ -146,6 +178,39 @@
     border-inline-end: 1px solid var(--nav-border);
     background: var(--nav-surface);
     transition: transform 160ms ease-out, visibility 160ms ease-out;
+  }
+
+  .sidebarResizeHandle {
+    position: absolute;
+    z-index: 4;
+    inset-block: 0;
+    inset-inline-end: -1.375rem;
+    inline-size: 2.75rem;
+    min-block-size: 2.75rem;
+    border: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .sidebarResizeHandle::before {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 50%;
+    inline-size: 1px;
+    background: var(--nav-border);
+    content: "";
+    transform: translateX(-50%);
+  }
+
+  .sidebarResizeHandle:hover::before,
+  .sidebarResizeHandle:focus-visible::before {
+    background: var(--nav-accent-strong);
+  }
+
+  .sidebarResizeHandle:focus-visible {
+    outline: var(--kb-focus-ring-width) solid var(--nav-accent-strong);
+    outline-offset: -0.15rem;
   }
 
   .sidebarDrawerContent {

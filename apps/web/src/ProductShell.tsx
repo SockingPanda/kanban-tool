@@ -127,7 +127,7 @@ function ShellNavigation({
   readonly sidebarOpen: boolean
   readonly onSidebarOpenChange: (open: boolean) => void
 }) {
-  const { locale } = usePreferences()
+  const { locale, sidebarWidthStep, setSidebarWidthStep, resetSidebarWidth } = usePreferences()
   const t = createTranslator(locale)
   const isNarrow = viewportMode !== "desktop"
   const routeSlug = activeProjectSlug(route)
@@ -180,6 +180,9 @@ function ShellNavigation({
         open={isNarrow ? sidebarOpen : undefined}
         onClose={() => onSidebarOpenChange(false)}
         drawerId="product-projects-sidebar"
+        sidebarWidthStep={sidebarWidthStep}
+        onSidebarWidthStepChange={setSidebarWidthStep}
+        onSidebarWidthReset={resetSidebarWidth}
         labels={{
           productNavigation: t("productNavigation"),
           projects: t("projects"),
@@ -453,7 +456,7 @@ export function ProductShell({
     : []
 
   return (
-    <div className={navigationStyles.navigationRoot} data-theme={preferences.theme === "dark" ? "dark" : preferences.theme === "light" ? "light" : undefined} data-density={preferences.density} data-shell-viewport={viewportMode} data-testid="product-shell">
+    <div className={navigationStyles.navigationRoot} data-theme={preferences.theme === "dark" ? "dark" : preferences.theme === "light" ? "light" : undefined} data-density={preferences.density} data-shell-viewport={viewportMode} data-sidebar-width-step={preferences.sidebarWidthStep} data-testid="product-shell">
       <ShellNavigation route={route} boardList={boardList} presentation={presentation} viewportMode={viewportMode} basePath={runtime.webBasePath} onNavigate={onNavigate} sidebarOpen={sidebarOpen} onSidebarOpenChange={setSidebarOpen} />
       <main className={styles.productNavigationMain} aria-label={t("productName")}>
         <ResourceHeader

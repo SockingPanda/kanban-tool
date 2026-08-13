@@ -533,7 +533,9 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   const reloadAttachments = attachmentsRead.reload
   const reloadVisibleInspector = useCallback(async () => {
     if (!showInspector || !taskId) return
-    await Promise.all([reloadInspector(), reloadAttachments()])
+    // Inspector and attachment reads own independent visible states. A missing
+    // task snapshot must not make the canonical Board reload look failed.
+    await Promise.allSettled([reloadInspector(), reloadAttachments()])
   }, [reloadAttachments, reloadInspector, showInspector, taskId])
   useLayoutEffect(() => {
     if (!showInspector) {

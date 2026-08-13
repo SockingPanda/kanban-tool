@@ -692,8 +692,8 @@ test.describe("board task mutation DOM behavior", () => {
     await expect.poll(() => postStepTodoReads).toBeGreaterThan(0)
     expect(postStepTodoResponsesWithCreatedTask).toBeGreaterThan(0)
     const createdCard = page.getByTestId("board-task").filter({ hasText: "Created with step" })
-    await expect(createdCard).toContainText("计划：已规划")
-    await expect(createdCard).toContainText("必需步骤：0 / 1")
+    await expect(createdCard.getByTestId("board-task-plan")).toHaveText("已规划")
+    await expect(createdCard.getByTestId("board-task-required-steps")).toHaveText("必需步骤：0 / 1")
   })
 
   test("rejects external text/plain drops and performs keyboard movement through the action path", async ({ page }) => {

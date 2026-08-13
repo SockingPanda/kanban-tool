@@ -31,15 +31,6 @@ UI intent 只能消费生成边界。
 MCP 与 CLI 都只面向本地开发和 Storybook fixture。它们不连接 Turso、生产 API/SSE 或 canonical
 mutation path；静态 Storybook build 仍只输出到根目录 `output/storybook/`。
 
-09C formal proof 的浏览器 context 与当前 Web/Storybook fixture 保持同一基线：`colorScheme=light`、
-`reducedMotion=reduce`、Web preference `theme=dark`、Astryx theme `astryx`。`system` 仍是有效的
-用户偏好选项，但不是 09C formal aggregate 的基线；`neutral` 是 Astryx 的继承主题，不是运行时
-theme identity。
-
-Stage09 fixed candidate 上的根 `just ci-full` 与 09A、09C、09D、09E formal proof 均分别通过；
-`ci-full` 是独立 built-in gate，不编排这四条 proof lane。09A 的 real-host lane 由根
-`just release-proof-09a` 编排：它先构建同一 `apps/web/dist`，再以临时 DB/显式 loopback port
-启动 `kanban serve --web-dir apps/web/dist`，经 canonical CLI seed、重启 host 后运行 Chromium
-full 与 Firefox key 的 [`release-proof.spec.ts`](tests/release-proof.spec.ts)。现有 `web-e2e`
-的 Preview/fixture specs 是独立 mock lane，不计入这些 proof receipt；本 README 不构成
-release/publish-ready 声明。
+09C formal proof 使用固定的浏览器 context：`colorScheme=light`、`reducedMotion=reduce`、Web
+preference `theme=dark`、Astryx theme `astryx`。`system` 仍是有效的用户偏好选项，但不是 09C
+formal aggregate 的基线；`neutral` 是 Astryx 的继承主题，不是运行时 theme identity。

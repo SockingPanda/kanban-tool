@@ -87,6 +87,13 @@ Plane 是唯一绑定的产品工艺参考。学习其双层导航、canvas/surf
 窄屏不压缩成缩小版桌面：context sidebar 变为 drawer，task inspector 变为 sheet/full-screen，
 board/table 只在自身 region 横向滚动，页面本身不得横向溢出。
 
+响应式 shell 由 [`responsive-shell.ts`](src/lib/responsive-shell.ts) 统一决定，边界是：`mobile`
+`<768px`、`tablet` `768px–<1024px`、`desktop` `>=1024px`。`mobile` 隐藏 `ProductRail`，使用
+compact topbar 和 sidebar drawer；`tablet` 保留 `ProductRail`，将 context sidebar 作为 modal
+drawer；`desktop` 使用 rail/sidebar/main 三列，sidebar 可在 `14rem–20rem` 内调整。Task inspector
+随 shell mode 分别呈现为 `fullscreen`、`dialog`、`side-peek`；这些模式和无页面横向溢出由
+[`plane-tasks-acceptance.spec.ts`](tests/plane-tasks-acceptance.spec.ts) 验收。
+
 ## Surface and Depth
 
 - `canvas` 只出现一次，承载整页背景。

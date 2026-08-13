@@ -6,7 +6,6 @@ import { Text } from "@astryxdesign/core/Text"
 
 import {
   CheckboxInput,
-  PageFrame,
   SafeHStack,
   SafeVStack,
   Selector,
@@ -32,6 +31,8 @@ export interface TasksWorkspaceChromeProps {
   readonly activeView: TasksView
   readonly displayVariant: TasksListDisplay
   readonly density: DensityMode
+  /** Shared URL-owned task search; every Tasks projection renders the same value. */
+  readonly searchQuery?: string
   readonly listQuery?: TaskListQueryState
   readonly onViewChange: (view: TasksView, displayVariant: TasksListDisplay) => void
   readonly onSearchChange?: (search: string) => void
@@ -215,18 +216,18 @@ function DisplayControls({
   )
 }
 
-export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, displayVariant, density, listQuery, onViewChange, onSearchChange, onOpenFilters, onRemoveFilter, onClearFilters, onDensityChange, visibleColumns, onVisibleColumnsChange, diagnostics, onNavigate, hasInspector, onCloseInspector, inert = false }: TasksWorkspaceChromeProps) {
+export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, displayVariant, density, searchQuery = "", listQuery, onViewChange, onSearchChange, onOpenFilters, onRemoveFilter, onClearFilters, onDensityChange, visibleColumns, onVisibleColumnsChange, diagnostics, onNavigate, hasInspector, onCloseInspector, inert = false }: TasksWorkspaceChromeProps) {
   const copy = locale === "en"
     ? {
-        title: "Tasks", views: "Task views", search: "Search tasks", searchLabel: "Task search", filters: "Filters", display: "Display", more: "More", diagnostics: "Diagnostics", close: "Close Inspector", density: "Density", dense: "Compact", comfortable: "Comfortable", visibleFields: "Visible fields", select: "Select", loading: "Loading", active: "Active filters", clear: "Clear filters", removeFilter: "Remove filter",
+        title: "Tasks", views: "Task views", search: "Search tasks", searchLabel: "Task search", toolbar: "Task toolbar", filters: "Filters", unsupportedFilters: "View filters are below", display: "Display", more: "More", diagnostics: "Diagnostics", close: "Close Inspector", selectedTask: "Task selected", noTask: "No task selected", density: "Density", dense: "Compact", comfortable: "Comfortable", visibleFields: "Visible fields", select: "Select", loading: "Loading", active: "Active filters", clear: "Clear filters", removeFilter: "Remove filter",
       }
     : {
-        title: "任务", views: "任务视图", search: "搜索任务", searchLabel: "任务搜索", filters: "筛选", display: "显示", more: "更多", diagnostics: "诊断", close: "关闭任务检查器", density: "密度", dense: "紧凑", comfortable: "舒适", visibleFields: "可见字段", select: "选择", loading: "加载中", active: "当前筛选", clear: "清除筛选", removeFilter: "移除筛选",
+        title: "任务", views: "任务视图", search: "搜索任务", searchLabel: "任务搜索", toolbar: "任务工具栏", filters: "筛选", unsupportedFilters: "视图筛选位于下方", display: "显示", more: "更多", diagnostics: "诊断", close: "关闭任务检查器", selectedTask: "已选择任务", noTask: "未选择任务", density: "密度", dense: "紧凑", comfortable: "舒适", visibleFields: "可见字段", select: "选择", loading: "加载中", active: "当前筛选", clear: "清除筛选", removeFilter: "移除筛选",
       }
   const columns = Object.values(locale === "en" ? displayColumnsEnglish : displayColumns)
   const filters = activeView === "list" ? listFilters(listQuery, locale) : []
-  const querySearch = activeView === "list" ? listQuery?.search ?? "" : ""
-  const searchDisabled = activeView !== "list" || onSearchChange === undefined
+  const taskState = hasInspector ? "selected" : "none"
+  const searchSupported = activeView === "list" && onSearchChange !== undefined
 
   const header = (
     <SafeHStack className="min-w-0 flex-wrap gap-3" align="center" justify="between">
@@ -237,7 +238,10 @@ export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, d
       <SafeHStack className="min-w-0 flex-wrap gap-2" align="center" justify="end">
         <TaskViewNavigation activeView={activeView} displayVariant={displayVariant} hrefForView={hrefForView} label={copy.views} locale={locale} onViewChange={onViewChange} />
         <DisplayControls columns={activeView === "list" ? columns : []} copy={copy} density={density} onDensityChange={onDensityChange} visibleColumns={visibleColumns} onVisibleColumnsChange={onVisibleColumnsChange} />
-        {hasInspector && onCloseInspector ? <Button label={copy.close} variant="ghost" size="sm" onClick={onCloseInspector} /> : null}
+        <SafeHStack as="div" align="center" className="min-w-0 gap-2" role="status" aria-live="polite" data-task-state={taskState}>
+          <Text type="supporting">{hasInspector ? copy.selectedTask : copy.noTask}</Text>
+          {hasInspector && onCloseInspector ? <Button label={copy.close} variant="ghost" size="sm" onClick={onCloseInspector} /> : null}
+        </SafeHStack>
         {diagnostics.length > 0 ? (
           <details className="relative min-w-0">
             <summary className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm text-primary outline-none hover:bg-overlay-hover focus-visible:outline-2 focus-visible:outline-accent">{copy.more}</summary>
@@ -251,9 +255,11 @@ export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, d
   )
 
   const toolbar = (
-    <SafeHStack as="section" role="search" aria-label={copy.searchLabel} className="min-w-0 flex-wrap gap-3" align="end">
-      <TextInput type="search" label={copy.search} value={querySearch} placeholder={copy.search} isDisabled={searchDisabled} isLabelHidden htmlName="task-search" data-testid="list-search" onChange={(value) => onSearchChange?.(value)} />
-      <Button label={copy.filters} variant="secondary" size="sm" isDisabled={searchDisabled || onOpenFilters === undefined} onClick={onOpenFilters} />
+    <SafeHStack as="div" role="toolbar" aria-label={copy.toolbar} data-testid="tasks-workspace-toolbar" className="min-w-0 max-w-full flex-wrap gap-3" align="end">
+      <SafeHStack as="div" role="search" aria-label={copy.searchLabel} className="min-w-0 max-w-full flex-1 flex-wrap gap-3" align="end">
+        <TextInput type="search" label={copy.search} value={searchQuery} placeholder={copy.search} isDisabled={!searchSupported} isLabelHidden htmlName="task-search" data-testid="list-search" data-search-support={searchSupported ? "list" : "url-only"} onChange={(value) => onSearchChange?.(value)} />
+      </SafeHStack>
+      <Button label={copy.filters} variant="secondary" size="sm" isDisabled={onOpenFilters === undefined} onClick={onOpenFilters} data-view-filter={activeView} aria-label={activeView === "list" ? copy.filters : `${copy.filters}: ${copy.unsupportedFilters}`} />
       {filters.length > 0 ? (
         <SafeHStack as="section" aria-label={copy.active} className="min-w-0 flex-wrap gap-2" align="center">
           <Text type="supporting">{copy.active}</Text>
@@ -266,18 +272,12 @@ export function TasksWorkspaceChrome({ locale, scope, hrefForView, activeView, d
     </SafeHStack>
   )
 
-  const frameHeader = (
-    <SafeVStack className="min-w-0 gap-3">
-      {header}
-      {toolbar}
-    </SafeVStack>
-  )
-
   return (
-    <SafeVStack as="section" className="min-w-0" inert={inert || undefined} data-testid="tasks-workspace-chrome">
-      <PageFrame frame="content" aria-labelledby="tasks-workspace-heading" bodyLabel={copy.title} header={frameHeader}>
-        <SafeVStack className="sr-only" aria-hidden="true" />
-      </PageFrame>
+    <SafeVStack as="section" className="min-w-0 max-w-full gap-3" inert={inert || undefined} data-testid="tasks-workspace-chrome">
+      <SafeVStack as="header" className="min-w-0 max-w-full gap-3" aria-labelledby="tasks-workspace-heading">
+        {header}
+        {toolbar}
+      </SafeVStack>
     </SafeVStack>
   )
 }

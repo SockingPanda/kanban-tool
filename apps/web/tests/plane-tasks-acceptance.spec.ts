@@ -105,6 +105,36 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expectTasksSurfaceAxeClean(page)
   })
 
+  test("keeps one shared task toolbar with URL q awareness on desktop and 430px", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+    await page.goto("/app/boards/default/board?q=agent", { waitUntil: "domcontentloaded" })
+
+    const toolbar = page.getByTestId("tasks-workspace-toolbar")
+    await expect(toolbar).toHaveCount(1)
+    await expect(toolbar).toHaveAttribute("role", "toolbar")
+    await expect(page.getByTestId("list-search")).toHaveValue("agent")
+    await expect(page.getByTestId("list-search")).toBeDisabled()
+    await expect(toolbar.getByRole("button", { name: /筛选:/ })).toBeEnabled()
+    await expect(toolbar.locator('[data-view-filter="board"]')).toHaveCount(1)
+    await expect(page.getByTestId("list-search")).toHaveAttribute("data-search-support", "url-only")
+    await expect(toolbar.locator("[data-frame]")).toHaveCount(0)
+
+    const views = page.getByRole("group", { name: "任务视图" })
+    await views.getByRole("link", { name: "列表", exact: true }).click()
+    await expect(page.getByTestId("list-search")).toHaveValue("agent")
+    await expect(page.getByTestId("list-search")).toBeEnabled()
+    await expect(toolbar.getByRole("button", { name: "筛选", exact: true })).toBeEnabled()
+    await expect(toolbar.locator('[data-view-filter="list"]')).toHaveCount(1)
+    await page.getByTestId("list-search").fill("agent next")
+    await expect(page).toHaveURL(/\/app\/boards\/default\/list\?q=agent(?:%20|\+)next$/)
+
+    await page.setViewportSize({ width: 430, height: 900 })
+    await expect(toolbar).toBeVisible()
+    await expectNoPageOverflow(page)
+    await expect(toolbar).toHaveAttribute("aria-label", "任务工具栏")
+    await expect(toolbar.getByRole("search")).toHaveAttribute("aria-label", "任务搜索")
+  })
+
   test("keeps the 430px shell usable with a drawer, inspector fullscreen dialog, and no page overflow", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
     await page.setViewportSize({ width: 430, height: 900 })

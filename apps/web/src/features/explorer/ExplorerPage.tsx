@@ -31,7 +31,7 @@ import type { ShellViewportMode } from "../../lib/responsive-shell"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
 import { restoreExplorerFocus, type ExplorerFocusElement, type ExplorerFocusSnapshot } from "../../lib/explorer-focus"
-import { parseTasksUrl, queryForTasksView, type TasksRouteQuery } from "../../lib/tasks-url"
+import { normalizeTaskSearch, parseTasksUrl, queryForTasksView, type TasksRouteQuery } from "../../lib/tasks-url"
 import { TaskInspector, type InspectorDependency, type TaskInspectorMode, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskInspectorRelationsPanel } from "./TaskInspectorRelationsPanel"
 import { TaskInspectorAssetsPanel, type InspectorAssetAttachment, type InspectorAssetLabel } from "./TaskInspectorAssetsPanel"
@@ -477,6 +477,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   const listDisplay: TaskListDisplay = parseTaskDisplay(params)
   const displayVariant: TasksListDisplay = listDisplay === "table" ? "table" : "grouped"
   const workspaceView: TasksView = view === "list" ? "list" : view === "map" ? "map" : "board"
+  const isTasksWorkspace = route.view === undefined || route.view === "board" || route.view === "list" || route.view === "map"
   const [visibleColumns, setVisibleColumns] = useState<Readonly<Record<string, boolean>>>({})
   const tasksUrl = useMemo(() => parseTasksUrl(route.query ?? ""), [route.query])
   const taskSelector = tasksUrl.task
@@ -635,6 +636,18 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
     if (taskId) nextParams.set("task", taskId)
     navigate(routeTarget(route.boardSlug, "list", nextParams, runtime.webBasePath))
   }
+  const updateSharedTaskSearch = (nextSearch: string) => {
+    if (view === "list") {
+      updateListQuery({ ...listQuery, search: nextSearch })
+      return
+    }
+    const targetQueryView: TasksRouteQuery = view === "map" ? "map" : "board"
+    const nextParams = queryForTasksView(params, targetQueryView)
+    const normalizedSearch = normalizeTaskSearch(nextSearch)
+    if (normalizedSearch) nextParams.set("q", normalizedSearch)
+    else nextParams.delete("q")
+    navigate(routeTarget(route.boardSlug, targetQueryView, nextParams, runtime.webBasePath))
+  }
   const updateListFilter = (id: string) => {
     if (id === "status") updateListQuery({ ...listQuery, status: [] })
     else if (id === "priority") updateListQuery({ ...listQuery, priority: [] })
@@ -758,8 +771,13 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   }
   const focusTaskFilters = useCallback(() => {
     if (typeof document === "undefined") return
-    document.getElementById("task-list-controls")?.focus()
-  }, [])
+    const selector = view === "list"
+      ? "#task-list-controls"
+      : view === "map"
+        ? '[data-testid="task-map"] [role="toolbar"] button'
+        : '[data-testid="board-attention-lens"] button'
+    document.querySelector<HTMLElement>(selector)?.focus()
+  }, [view])
   const diagnosticLinks: readonly TasksDiagnosticLink[] = useMemo(() => {
     const runsQuery = queryForTasksView(params, "runs")
     const eventsQuery = queryForTasksView(params, "events")
@@ -816,34 +834,37 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   return (
     <section className={styles.explorer} data-testid="explorer-page" data-inspector-mode={showInspector ? inspectorMode : undefined} onClickCapture={rememberTaskOpener}>
       {view !== "board" && syncStatus && syncStatus !== "live" ? <div className={styles.boundary} data-testid="explorer-sync-banner" role="status" aria-live="polite"><strong>{syncStatusLabel(syncStatus, copy)}</strong><span> {locale === "en" ? "The last usable snapshot remains visible." : "仍显示最近一次可用快照。"}</span></div> : null}
-      <TasksWorkspaceChrome
-        locale={locale}
-        scope={route.boardSlug}
-        hrefForView={(nextView, nextDisplay) => {
-          const targetQueryView: TasksRouteQuery = nextView === "list"
-            ? nextDisplay === "table" ? "table" : "list"
-            : nextView
-          const nextParams = queryForTasksView(params, targetQueryView, nextDisplay === "table" ? "table" : "grouped")
-          return routeTarget(route.boardSlug, nextView, nextParams, runtime.webBasePath)
-        }}
-        activeView={workspaceView}
-        displayVariant={displayVariant}
-        density={density}
-        listQuery={view === "list" ? listQuery : undefined}
-        onViewChange={updateWorkspaceView}
-        onSearchChange={view === "list" ? (search) => updateListQuery({ ...listQuery, search }) : undefined}
-        onOpenFilters={view === "list" ? focusTaskFilters : undefined}
-        onRemoveFilter={view === "list" ? updateListFilter : undefined}
-        onClearFilters={view === "list" ? clearListFilters : undefined}
-        onDensityChange={setDensity}
-        visibleColumns={visibleColumns}
-        onVisibleColumnsChange={(columnId, visible) => setVisibleColumns((current) => ({ ...current, [columnId]: visible }))}
-        diagnostics={diagnosticLinks}
-        onNavigate={navigate}
-        hasInspector={showInspector}
-        onCloseInspector={showInspector ? closeInspector : undefined}
-        inert={isInspectorModal && showInspector}
-      />
+      {isTasksWorkspace ? (
+        <TasksWorkspaceChrome
+          locale={locale}
+          scope={route.boardSlug}
+          hrefForView={(nextView, nextDisplay) => {
+            const targetQueryView: TasksRouteQuery = nextView === "list"
+              ? nextDisplay === "table" ? "table" : "list"
+              : nextView
+            const nextParams = queryForTasksView(params, targetQueryView, nextDisplay === "table" ? "table" : "grouped")
+            return routeTarget(route.boardSlug, nextView, nextParams, runtime.webBasePath)
+          }}
+          activeView={workspaceView}
+          displayVariant={displayVariant}
+          density={density}
+          searchQuery={tasksUrl.search}
+          listQuery={view === "list" ? listQuery : undefined}
+          onViewChange={updateWorkspaceView}
+          onSearchChange={updateSharedTaskSearch}
+          onOpenFilters={focusTaskFilters}
+          onRemoveFilter={view === "list" ? updateListFilter : undefined}
+          onClearFilters={view === "list" ? clearListFilters : undefined}
+          onDensityChange={setDensity}
+          visibleColumns={visibleColumns}
+          onVisibleColumnsChange={(columnId, visible) => setVisibleColumns((current) => ({ ...current, [columnId]: visible }))}
+          diagnostics={diagnosticLinks}
+          onNavigate={navigate}
+          hasInspector={showInspector}
+          onCloseInspector={showInspector ? closeInspector : undefined}
+          inert={isInspectorModal && showInspector}
+        />
+      ) : null}
       <div className={showInspector ? styles.contentWithInspector : styles.content} data-inspector-mode={showInspector ? inspectorMode : undefined}>
         <section className={styles.primaryContent} inert={isInspectorModal && showInspector ? true : undefined}>
           {view === "board" ? (

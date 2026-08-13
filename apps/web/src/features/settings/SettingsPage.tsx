@@ -332,7 +332,6 @@ export function SettingsPage({
           <div><dt>{t("protocol")}</dt><dd translate="no" data-testid="connection-protocol-version">{reported(runtime.protocolVersion, t("reported"))}</dd></div>
           <div><dt>{t("build")}</dt><dd translate="no" data-testid="connection-web-build">{reported(runtime.webBuildId, t("reported"))}</dd></div>
           <div><dt>{t("actor")}</dt><dd translate="no" data-testid="connection-actor">{reported(preferences.actor || runtime.actor, t("reported"))}</dd></div>
-          <div><dt>{t("sidebarState")}</dt><dd data-testid="connection-sidebar-state">{preferences.sidebarExpanded ? t("sidebarExpanded") : t("sidebarCollapsed")}</dd></div>
         </dl>
         {!boardSlug ? <p className={styles.muted} data-testid="settings-no-board">{t("noBoardDescription")}</p> : null}
         {reconnectFeedback ? <p className={styles.inlineStatus} role="status" aria-live="polite" data-testid="connection-feedback">{reconnectFeedback}</p> : null}

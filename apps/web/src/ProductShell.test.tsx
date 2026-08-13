@@ -287,15 +287,15 @@ describe("ProductShell route offline boundary", () => {
       <PreferencesContext.Provider value={{
         theme: "light",
         locale: "zh",
-        sidebarExpanded: false,
+        sidebarWidthStep: 62,
         density: "comfortable",
         actor: "",
         setTheme: () => undefined,
         setLocale: () => undefined,
         setDensity: () => undefined,
         setActor: () => undefined,
-        setSidebarExpanded: () => undefined,
-        toggleSidebar: () => undefined,
+        setSidebarWidthStep: () => undefined,
+        resetSidebarWidth: () => undefined,
       }}>
         <ProductShell
           runtime={runtime}
@@ -325,15 +325,15 @@ describe("ProductShell route offline boundary", () => {
       <PreferencesContext.Provider value={{
         theme: "light",
         locale: "zh",
-        sidebarExpanded: true,
+        sidebarWidthStep: 62,
         density: "comfortable",
         actor: "",
         setTheme: () => undefined,
         setLocale: () => undefined,
         setDensity: () => undefined,
         setActor: () => undefined,
-        setSidebarExpanded: () => undefined,
-        toggleSidebar: () => undefined,
+        setSidebarWidthStep: () => undefined,
+        resetSidebarWidth: () => undefined,
       }}>
         <ProductShell
           runtime={runtime}

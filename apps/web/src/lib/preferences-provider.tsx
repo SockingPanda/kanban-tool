@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import {
   applyWebPreferencesToDocument,
   readStoredPreferences,
+  resetSidebarWidthPreference,
+  updateSidebarWidthPreference,
   writeStoredPreferences,
   type DensityMode,
   type Locale,
@@ -51,17 +53,18 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const setLocale = useCallback((locale: Locale) => setPreferences((current) => ({ ...current, locale })), [])
   const setDensity = useCallback((density: DensityMode) => setPreferences((current) => ({ ...current, density })), [])
   const setActor = useCallback((actor: string) => setPreferences((current) => ({ ...current, actor })), [])
-  const setSidebarExpanded = useCallback(
-    (sidebarExpanded: boolean) => setPreferences((current) => ({ ...current, sidebarExpanded })),
+  const setSidebarWidthStep = useCallback(
+    (step: number) => setPreferences((current) => updateSidebarWidthPreference(current, step)),
     [],
   )
-  const toggleSidebar = useCallback(() => {
-    setPreferences((current) => ({ ...current, sidebarExpanded: !current.sidebarExpanded }))
-  }, [])
+  const resetSidebarWidth = useCallback(
+    () => setPreferences((current) => resetSidebarWidthPreference(current)),
+    [],
+  )
 
   const value = useMemo(
-    () => ({ ...preferences, setTheme, setLocale, setDensity, setActor, setSidebarExpanded, toggleSidebar }),
-    [preferences, setActor, setDensity, setLocale, setSidebarExpanded, setTheme, toggleSidebar],
+    () => ({ ...preferences, setTheme, setLocale, setDensity, setActor, setSidebarWidthStep, resetSidebarWidth }),
+    [preferences, resetSidebarWidth, setActor, setDensity, setLocale, setSidebarWidthStep, setTheme],
   )
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>
 }

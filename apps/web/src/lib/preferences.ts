@@ -2,10 +2,15 @@ export type ThemeMode = "system" | "light" | "dark"
 export type Locale = "zh" | "en"
 export type DensityMode = "compact" | "comfortable"
 
+export const SIDEBAR_WIDTH_STEP_MIN = 56
+export const SIDEBAR_WIDTH_STEP_MAX = 80
+export const DEFAULT_SIDEBAR_WIDTH_STEP = 62
+export const SIDEBAR_WIDTH_STEP_REM = 0.25
+
 export type WebPreferences = {
   theme: ThemeMode
   locale: Locale
-  sidebarExpanded: boolean
+  sidebarWidthStep: number
   density: DensityMode
   /** User-selected actor preference; an empty value uses the host actor when transport integration consumes it. */
   actor: string
@@ -14,7 +19,7 @@ export type WebPreferences = {
 export const DEFAULT_PREFERENCES: WebPreferences = {
   theme: "dark",
   locale: "zh",
-  sidebarExpanded: true,
+  sidebarWidthStep: DEFAULT_SIDEBAR_WIDTH_STEP,
   density: "comfortable",
   actor: "",
 }
@@ -22,7 +27,7 @@ export const DEFAULT_PREFERENCES: WebPreferences = {
 export const PREFERENCE_STORAGE_KEYS = {
   theme: "kb:web:theme",
   locale: "kb:web:locale",
-  sidebar: "kb:web:sidebar",
+  sidebarWidth: "kb:web:sidebar-width",
   density: "kb:web:density",
   actor: "kb:web:actor",
 } as const
@@ -48,6 +53,37 @@ export function parseLocalePreference(value: unknown): Locale | null {
 
 export function parseDensityPreference(value: unknown): DensityMode | null {
   return value === "compact" || value === "comfortable" ? value : null
+}
+
+/** Parse the persisted sidebar width step; only canonical integers are valid. */
+export function parseSidebarWidthStep(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isInteger(value) && value >= SIDEBAR_WIDTH_STEP_MIN && value <= SIDEBAR_WIDTH_STEP_MAX ? value : null
+  }
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim())) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed >= SIDEBAR_WIDTH_STEP_MIN && parsed <= SIDEBAR_WIDTH_STEP_MAX ? parsed : null
+}
+
+/** Keep a caller-provided width step inside the persisted integer contract. */
+export function normalizeSidebarWidthStep(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value < SIDEBAR_WIDTH_STEP_MIN) return SIDEBAR_WIDTH_STEP_MIN
+    if (value > SIDEBAR_WIDTH_STEP_MAX) return SIDEBAR_WIDTH_STEP_MAX
+  }
+  return parseSidebarWidthStep(value) ?? DEFAULT_SIDEBAR_WIDTH_STEP
+}
+
+/** Apply a whole-step delta without coupling width changes to keyboard or pointer events. */
+export function shiftSidebarWidthStep(current: unknown, delta: number): number {
+  const safeCurrent = normalizeSidebarWidthStep(current)
+  if (!Number.isInteger(delta)) return safeCurrent
+  return normalizeSidebarWidthStep(safeCurrent + delta)
+}
+
+/** Convert a normalized step to the CSS rem value consumed by the shell. */
+export function sidebarWidthRem(step: unknown): string {
+  return `${normalizeSidebarWidthStep(step) * SIDEBAR_WIDTH_STEP_REM}rem`
 }
 
 const MAX_ACTOR_LENGTH = 128
@@ -77,8 +113,8 @@ function validLocale(value: string | null): Locale {
   return parseLocalePreference(value) ?? DEFAULT_PREFERENCES.locale
 }
 
-function validSidebar(value: string | null): boolean {
-  return value === "collapsed" || value === "false" || value === "0" ? false : DEFAULT_PREFERENCES.sidebarExpanded
+function validSidebarWidth(value: string | null): number {
+  return parseSidebarWidthStep(value) ?? DEFAULT_PREFERENCES.sidebarWidthStep
 }
 
 function validDensity(value: string | null): DensityMode {
@@ -95,7 +131,7 @@ export function readStoredPreferences(storage: PreferenceStorage | null = browse
     return {
       theme: validTheme(storage.getItem(PREFERENCE_STORAGE_KEYS.theme)),
       locale: validLocale(storage.getItem(PREFERENCE_STORAGE_KEYS.locale)),
-      sidebarExpanded: validSidebar(storage.getItem(PREFERENCE_STORAGE_KEYS.sidebar)),
+      sidebarWidthStep: validSidebarWidth(storage.getItem(PREFERENCE_STORAGE_KEYS.sidebarWidth)),
       density: validDensity(storage.getItem(PREFERENCE_STORAGE_KEYS.density)),
       actor: validActor(storage.getItem(PREFERENCE_STORAGE_KEYS.actor)),
     }
@@ -109,7 +145,7 @@ export function writeStoredPreferences(storage: PreferenceStorage | null, prefer
   try {
     storage.setItem(PREFERENCE_STORAGE_KEYS.theme, preferences.theme)
     storage.setItem(PREFERENCE_STORAGE_KEYS.locale, preferences.locale)
-    storage.setItem(PREFERENCE_STORAGE_KEYS.sidebar, preferences.sidebarExpanded ? "expanded" : "collapsed")
+    storage.setItem(PREFERENCE_STORAGE_KEYS.sidebarWidth, String(normalizeSidebarWidthStep(preferences.sidebarWidthStep)))
     storage.setItem(PREFERENCE_STORAGE_KEYS.density, preferences.density)
     // An empty actor intentionally remains in the Web namespace so the
     // preference shape is deterministic; transport falls back to runtime.actor.
@@ -117,6 +153,16 @@ export function writeStoredPreferences(storage: PreferenceStorage | null, prefer
   } catch {
     // Private browsing and disabled storage should not make the shell unusable.
   }
+}
+
+/** Pure provider transition for a resize surface; input events stay outside the preference contract. */
+export function updateSidebarWidthPreference(preferences: WebPreferences, step: unknown): WebPreferences {
+  return { ...preferences, sidebarWidthStep: normalizeSidebarWidthStep(step) }
+}
+
+/** Pure provider transition for restoring the committed default width. */
+export function resetSidebarWidthPreference(preferences: WebPreferences): WebPreferences {
+  return { ...preferences, sidebarWidthStep: DEFAULT_PREFERENCES.sidebarWidthStep }
 }
 
 export function themeColorForMode(mode: ThemeMode, prefersDark = false): string {

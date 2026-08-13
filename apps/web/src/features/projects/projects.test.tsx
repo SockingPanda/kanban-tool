@@ -30,15 +30,15 @@ function renderWithLocale(node: ReactNode, locale: Locale = "en") {
     <PreferencesContext.Provider value={{
       theme: "light",
       locale,
-      sidebarExpanded: true,
+      sidebarWidthStep: 62,
       density: "comfortable",
       actor: "",
       setTheme: () => undefined,
       setLocale: () => undefined,
       setDensity: () => undefined,
       setActor: () => undefined,
-      setSidebarExpanded: () => undefined,
-      toggleSidebar: () => undefined,
+      setSidebarWidthStep: () => undefined,
+      resetSidebarWidth: () => undefined,
     }}>
       {node}
     </PreferencesContext.Provider>,

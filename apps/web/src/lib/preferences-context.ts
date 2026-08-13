@@ -9,8 +9,8 @@ export type PreferencesContextValue = WebPreferences & {
   setLocale: (locale: Locale) => void
   setDensity: (density: DensityMode) => void
   setActor: (actor: string) => void
-  setSidebarExpanded: (expanded: boolean) => void
-  toggleSidebar: () => void
+  setSidebarWidthStep: (step: number) => void
+  resetSidebarWidth: () => void
 }
 
 export const PreferencesContext = createContext<PreferencesContextValue | null>(null)

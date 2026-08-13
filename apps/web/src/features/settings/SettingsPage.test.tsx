@@ -44,7 +44,7 @@ describe("SettingsPage", () => {
     expect(markup).toContain('data-testid="connection-api-origin"')
     expect(markup).toContain('data-testid="connection-default-board"')
     expect(markup).toContain('data-testid="connection-protocol-version"')
-    expect(markup).toContain('data-testid="connection-sidebar-state"')
+    expect(markup).not.toContain('data-testid="connection-sidebar-state"')
     expect(markup).toContain('data-testid="diagnostics-copy"')
     expect(markup).toContain('data-testid="diagnostics-health-link"')
     expect(markup).toContain("sha256:test")

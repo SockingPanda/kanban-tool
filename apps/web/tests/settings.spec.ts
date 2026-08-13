@@ -48,7 +48,7 @@ test.describe("Astryx Settings", () => {
     expect(streamRequests).toBe(0)
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))
-      .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
+      .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar-width", "kb:web:theme"])
   })
 
   test("rejects unsafe actor input without persisting it", async ({ page }) => {

@@ -60,7 +60,7 @@ test.describe("kanban-tool product shell", () => {
 
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))
-      .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
+      .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar-width", "kb:web:theme"])
   })
 
   test("navigates between Tasks and Settings through the fixed product rail", async ({ page }) => {

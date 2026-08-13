@@ -37,6 +37,19 @@ export interface TaskListViewState {
 
 type TasksDensity = "dense" | "comfortable"
 
+type TaskTableColumn = "ref" | "title" | "status" | "priority" | "assignee" | "plan" | "steps" | "updated"
+
+const tableColumnClasses: Readonly<Record<TaskTableColumn, string>> = {
+  ref: "w-32 min-w-32",
+  title: "w-64 min-w-64",
+  status: "w-36 min-w-36",
+  priority: "w-24 min-w-24",
+  assignee: "w-40 min-w-40",
+  plan: "w-40 min-w-40",
+  steps: "w-32 min-w-32",
+  updated: "w-36 min-w-36",
+}
+
 export interface TaskListViewProps {
   readonly state: TaskListViewState
   readonly rows: readonly TaskListRow[]
@@ -354,8 +367,10 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
             dividers="rows"
             hasHover
             verticalAlign="top"
+            textOverflow="truncate"
             aria-label={copy.table}
             data-display-variant="table"
+            data-text-overflow="truncate"
             rowIndexStart={state.meta.offset + 1}
             rowCount={state.meta.total}
           >
@@ -371,14 +386,17 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
                   ["plan", copy.headers[5]],
                   ["steps", copy.headers[6]],
                   ["updated", copy.headers[7]],
-                ].filter(([id]) => id === "ref" || id === "title" || id === "status" || visibleColumns?.[id] !== false).map(([id, header]) => <TableHeaderCell key={id} scope="col">{header}</TableHeaderCell>)}
+                ].filter(([id]) => id === "ref" || id === "title" || id === "status" || visibleColumns?.[id] !== false).map(([id, header]) => {
+                  const column = id as TaskTableColumn
+                  return <TableHeaderCell key={id} scope="col" data-column-key={id} className={tableColumnClasses[column]}>{header}</TableHeaderCell>
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((task) => {
+              {rows.map((task, rowIndex) => {
                 const cells: readonly [string, ReactNode][] = [
                   ["ref", <Text type="code" key="ref"><span translate="no">{task.ref}</span></Text>],
-                  ["title", <Button label={task.title} variant="ghost" size="sm" data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)} key="title">{task.title}</Button>],
+                  ["title", <Button label={task.title} variant="ghost" size="sm" className="min-w-0 max-w-full truncate" data-task-opener={taskOpenerKey(task.id)} onClick={() => onSelectTask(task.id)} key="title">{task.title}</Button>],
                   ["status", <SafeHStack as="div" align="center" className="gap-1 flex-wrap" key="status"><Badge variant={statusBadgeVariant(task.status)} label={copy.statusValues[task.status]} />{task.dependencyBlocked ? <Text type="supporting" color="secondary">{copy.blocked}</Text> : null}</SafeHStack>],
                   ["priority", <Text type="supporting" hasTabularNumbers key="priority">P{task.priority}</Text>],
                   ["assignee", <Text type="supporting" key="assignee">{task.assignee || "—"}</Text>],
@@ -386,7 +404,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
                   ["steps", <Text type="supporting" hasTabularNumbers key="steps">{task.completedRequiredStepCount} / {task.requiredStepCount}{task.optionalStepCount ? ` + ${task.optionalStepCount}` : ""}</Text>],
                   ["updated", <Text type="code" hasTabularNumbers key="updated">{task.updatedAt}</Text>],
                 ]
-                return <TableRow key={task.id} data-testid="task-row" data-task-id={task.id}>{cells.filter(([id]) => id === "ref" || id === "title" || id === "status" || visibleColumns?.[id] !== false).map(([id, cell]) => <TableCell key={id}>{cell}</TableCell>)}</TableRow>
+                return <TableRow key={task.id} data-testid="task-row" data-task-id={task.id} aria-rowindex={state.meta.offset + rowIndex + 1}>{cells.filter(([id]) => id === "ref" || id === "title" || id === "status" || visibleColumns?.[id] !== false).map(([id, cell]) => <TableCell key={id} className={tableColumnClasses[id as TaskTableColumn]}>{cell}</TableCell>)}</TableRow>
               })}
             </TableBody>
           </Table>

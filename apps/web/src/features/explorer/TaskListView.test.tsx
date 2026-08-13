@@ -21,6 +21,24 @@ const rows: TaskListRow[] = [
   },
 ]
 
+const tableRows: TaskListRow[] = [
+  ...rows,
+  {
+    id: "t_2",
+    ref: "default#2",
+    title: "A task title that remains a single local table line on a narrow viewport",
+    status: "blocked",
+    priority: 1,
+    assignee: null,
+    executionPlanState: "unplanned",
+    dependencyBlocked: true,
+    requiredStepCount: 3,
+    completedRequiredStepCount: 0,
+    optionalStepCount: 1,
+    updatedAt: 11,
+  },
+]
+
 const state: TaskListViewState = {
   query: {
     status: ["ready"],
@@ -114,6 +132,28 @@ describe("TaskListView", () => {
     expect(dense).toContain('class="')
     expect(comfortable).toContain('data-density="comfortable"')
     expect(comfortable).toContain("<table")
+  })
+
+  test("keeps table row identity, status, order, and windowed row semantics while sizing columns locally", () => {
+    const markup = renderToStaticMarkup(
+      <TaskListView state={state} rows={tableRows} loading={false} displayVariant="table" density="dense" onQueryChange={vi.fn()} onSelectTask={vi.fn()} />,
+    )
+
+    const rowIds = [...markup.matchAll(/<tr[^>]*data-testid="task-row"[^>]*data-task-id="([^"]+)"/g)].map((match) => match[1])
+    expect(rowIds).toEqual(["t_1", "t_2"])
+    expect(markup).toContain('aria-rowcount="26"')
+    expect(markup).toContain('aria-rowindex="26"')
+    expect(markup).toContain('data-column-key="ref"')
+    expect(markup).toContain('data-column-key="title"')
+    expect(markup).toContain('data-column-key="status"')
+    expect(markup).toContain("w-32")
+    expect(markup).toContain("w-64")
+    expect(markup).toContain('data-density="compact"')
+    expect(markup).toContain('data-text-overflow="truncate"')
+    expect(markup).toContain("truncate")
+    expect(markup).toContain("已阻塞")
+    expect(markup).toContain("default#1")
+    expect(markup).toContain("default#2")
   })
 
   test("distinguishes an empty board from a filtered no-result list", () => {

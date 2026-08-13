@@ -116,6 +116,11 @@ test.describe("BoardLive browser pipeline", () => {
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("board-task").filter({ hasText: "Ready task" })).toBeVisible()
 
+    const boardColumnReads = fixture.apiRequests.filter((request) => request === "/api/v1/boards/default/columns")
+    const boardTaskReads = fixture.apiRequests.filter((request) => request.startsWith("/api/v1/boards/default/tasks/by-status?"))
+    expect(boardColumnReads).toHaveLength(1)
+    expect(boardTaskReads).toHaveLength(9)
+
     await fixture.emitHeartbeat()
     await expect(page.getByTestId("board-sync-banner")).toHaveAttribute("data-sync-state", "live")
 

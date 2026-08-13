@@ -42,6 +42,7 @@ import {
   createBoardCanonicalSnapshot,
   isCurrentBoardCanonicalSnapshot,
   type BoardCanonicalSnapshotChange,
+  type BoardCanonicalSnapshotRetryChange,
 } from "./board-canonical-snapshot"
 
 type BoardRoute = Extract<AppRoute, { kind: "board" }>
@@ -64,6 +65,8 @@ export interface BoardLiveProps {
   readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => Promise<void> | void
   /** Publish the fenced canonical raw read to the App/session owner. */
   readonly onCanonicalSnapshotChange?: BoardCanonicalSnapshotChange
+  /** Keep the visible Board retry wired to the canonical session owner. */
+  readonly onCanonicalSnapshotRetryChange?: BoardCanonicalSnapshotRetryChange
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string): BoardReadResource {
@@ -135,7 +138,7 @@ function retainResourceKey(resources: Map<string, BoardReadResource>, resource: 
   resources.set(resource.identityKey, resource)
 }
 
-export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload, onCanonicalSnapshotChange }: BoardLiveProps) {
+export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload, onCanonicalSnapshotChange, onCanonicalSnapshotRetryChange }: BoardLiveProps) {
   const preferences = usePreferences()
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
@@ -146,7 +149,8 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
   const modelRef = useRef<BoardViewModel | null>(null)
   const readModelRef = useRef<BoardReadModel | null>(null)
   const canonicalSnapshotRef = useRef<ReturnType<typeof createBoardCanonicalSnapshot> | null>(null)
-  const canonicalGenerationRef = useRef(0)
+  const canonicalContextRef = useRef(contextKey)
+  const canonicalGenerationRef = useRef(1)
   const canonicalSnapshotCallbackRef = useRef(onCanonicalSnapshotChange)
   canonicalSnapshotCallbackRef.current = onCanonicalSnapshotChange
   const resourceRef = useRef<BoardReadResource | null>(null)
@@ -184,6 +188,10 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
 
   // This render-time fence closes the A → B gap before effects have a chance to run.
   activeContextRef.current = contextKey
+  if (canonicalContextRef.current !== contextKey) {
+    canonicalContextRef.current = contextKey
+    canonicalGenerationRef.current += 1
+  }
 
   useEffect(() => {
     activeRef.current = true
@@ -204,7 +212,7 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
 
   useEffect(() => {
     const contextAtStart = contextKey
-    const canonicalGeneration = ++canonicalGenerationRef.current
+    const canonicalGeneration = canonicalGenerationRef.current
     const retained = modelRef.current
     const retainedReadModel = readModelRef.current
     const retryRequested = retryRequestedRef.current
@@ -527,6 +535,11 @@ export function BoardLive({ runtime, route, renderBoard = true, onSessionTelemet
     retryRequestedRef.current = true
     setRetryVersion((version) => version + 1)
   }, [])
+
+  useEffect(() => {
+    onCanonicalSnapshotRetryChange?.(retry)
+    return () => onCanonicalSnapshotRetryChange?.(undefined, retry)
+  }, [onCanonicalSnapshotRetryChange, retry])
 
   if (!renderBoard) return null
 

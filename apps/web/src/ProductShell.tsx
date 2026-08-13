@@ -54,6 +54,7 @@ export type ProductShellProps = {
   syncStatus?: BoardSyncStatus
   taskMutations?: BoardTaskMutationSurface
   canonicalSnapshot?: BoardCanonicalSnapshot | null
+  canonicalSnapshotRetry?: () => void
   onVisibleCanonicalReloadChange?: (reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => void
 }
 
@@ -286,6 +287,7 @@ function RouteContent({
   syncStatus,
   taskMutations,
   canonicalSnapshot,
+  canonicalSnapshotRetry,
   onVisibleCanonicalReloadChange,
   viewportMode,
 }: ProductShellProps & { readonly viewportMode: ShellViewportMode }) {
@@ -411,7 +413,7 @@ function RouteContent({
   return (
     <>
       {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
-      <ExplorerPage runtime={runtime} route={route} onNavigate={childNavigate} viewportMode={viewportMode} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} canonicalSnapshot={canonicalSnapshot} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />
+      <ExplorerPage runtime={runtime} route={route} onNavigate={childNavigate} viewportMode={viewportMode} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} canonicalSnapshot={canonicalSnapshot} canonicalSnapshotRetry={canonicalSnapshotRetry} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />
     </>
   )
 }
@@ -436,6 +438,7 @@ export function ProductShell({
   syncStatus,
   taskMutations,
   canonicalSnapshot,
+  canonicalSnapshotRetry,
   onVisibleCanonicalReloadChange,
 }: ProductShellProps) {
   const preferences = usePreferences()
@@ -488,7 +491,7 @@ export function ProductShell({
           }}
         />
         <div className={styles.mainFrame} data-runtime-api-base-url={runtime.apiBaseUrl} data-runtime-actor={runtime.actor} data-runtime-default-board={runtime.defaultBoard} data-runtime-server-version={runtime.serverVersion} data-runtime-protocol-version={runtime.protocolVersion} data-runtime-web-build-id={runtime.webBuildId} data-runtime-web-base-path={runtime.webBasePath}>
-          <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} boardList={boardList} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} canonicalSnapshot={canonicalSnapshot} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} viewportMode={viewportMode}>
+          <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} boardList={boardList} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} canonicalSnapshot={canonicalSnapshot} canonicalSnapshotRetry={canonicalSnapshotRetry} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} viewportMode={viewportMode}>
             {children}
           </RouteContent>
         </div>

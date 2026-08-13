@@ -5,6 +5,8 @@ import { MutationDialog, MutationNotice } from "../board/BoardTaskMutations"
 import { boardMessagesForLocale, type BoardViewModel } from "../board/types"
 import { useBoardTaskMutationController } from "../board/task-mutation-controller"
 import { toBoardViewModel } from "../board/board-adapter"
+import { BoardReadError } from "../../lib/api/board-read-model"
+import type { BoardCanonicalSnapshot } from "../board/board-canonical-snapshot"
 import type { BoardSyncStatus } from "../board/types"
 import type { BoardTaskCanonicalReloadHandler, BoardTaskMutationSurface } from "../board/task-mutation-state"
 import {
@@ -103,6 +105,10 @@ export interface ExplorerPageProps {
   readonly eventsBatch?: BoardEventsBatch | null
   readonly syncStatus?: BoardSyncStatus
   readonly taskMutations?: BoardTaskMutationSurface
+  /** Board view read model published by the hidden canonical BoardLive owner. */
+  readonly canonicalSnapshot?: BoardCanonicalSnapshot | null
+  /** Retry the canonical BoardLive read without creating a second query owner. */
+  readonly canonicalSnapshotRetry?: () => void
   readonly onVisibleCanonicalReloadChange?: (reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => void
 }
 
@@ -464,7 +470,7 @@ function InspectorAssetsReadOnlyFallback({
   )
 }
 
-export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
+export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, canonicalSnapshot, canonicalSnapshotRetry, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
   const { locale, density, setDensity } = usePreferences()
   const isNarrowViewport = viewportMode !== "desktop"
   const copy = explorerCopies[locale]
@@ -491,7 +497,20 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   const showInspector = (Boolean(taskId) || malformedTaskError !== null) && view !== "runs"
   const listQuery = useMemo(() => parseTaskListQuery(new URLSearchParams(route.query ?? "")), [route.query])
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
-  const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })), boardRevision, online !== false)
+  const boardProjection = useMemo<{ readonly model: BoardViewModel | null; readonly error: Error | null }>(() => {
+    if (canonicalSnapshot?.model === null || canonicalSnapshot?.model === undefined) return { model: null, error: null }
+    try {
+      return { model: toBoardViewModel(canonicalSnapshot.model), error: null }
+    } catch (error) {
+      return { model: null, error: error instanceof Error ? error : new Error(String(error)) }
+    }
+  }, [canonicalSnapshot?.model])
+  const boardModel = boardProjection.model
+  const boardError = boardProjection.error ?? canonicalSnapshot?.error ?? null
+  const boardLoading = canonicalSnapshot === null || canonicalSnapshot === undefined || canonicalSnapshot.loading
+  const boardIsOffline = boardError instanceof ExplorerReadError && boardError.kind === "offline"
+    || boardError instanceof BoardReadError && boardError.kind === "offline"
+  const retryCanonicalBoard = canonicalSnapshotRetry ?? (() => undefined)
   const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }), boardRevision, online !== false)
   const listMutationModel = useMemo<BoardViewModel | null>(() => {
     const board = listRead.data?.board
@@ -830,9 +849,9 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
       <div className={showInspector ? styles.contentWithInspector : styles.content}>
         <section className={styles.primaryContent} inert={isNarrowViewport && showInspector ? true : undefined}>
           {view === "board" ? (
-            boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
-              : boardRead.data ? <BoardView state={{ kind: "ready", model: toBoardViewModel(boardRead.data) }} messages={boardMessagesForLocale(locale)} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} presentation="embedded" />
-              : boardRead.error ? <div className={styles.boundary} data-testid={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "board-offline" : "board-error"} role={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "status" : "alert"}><h2>{boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? copy.boardOffline : copy.boardError}</h2><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>{copy.retry}</button></div> : null
+            boardLoading && boardModel === null ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
+              : boardModel ? <BoardView state={{ kind: "ready", model: boardModel }} messages={boardMessagesForLocale(locale)} syncStatus={boardIsOffline ? "offline" : canonicalSnapshot?.stale || boardError ? "stale" : syncStatus ?? undefined} onRetry={retryCanonicalBoard} onSelectTask={selectTask} headingLevel={2} taskMutations={taskMutations} presentation="embedded" />
+              : boardError ? <div className={styles.boundary} data-testid={boardIsOffline ? "board-offline" : "board-error"} role={boardIsOffline ? "status" : "alert"}><h2>{boardIsOffline ? copy.boardOffline : copy.boardError}</h2><p>{boardError.message}</p><button type="button" onClick={retryCanonicalBoard}>{copy.retry}</button></div> : null
           ) : null}
           {view === "list" ? (
             <>

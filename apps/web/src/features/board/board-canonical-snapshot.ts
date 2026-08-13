@@ -19,6 +19,11 @@ export type BoardCanonicalSnapshotChange = (
   releasedSnapshot?: BoardCanonicalSnapshot,
 ) => void
 
+export type BoardCanonicalSnapshotRetryChange = (
+  retry: (() => void) | undefined,
+  releasedRetry?: () => void,
+) => void
+
 export function createBoardCanonicalSnapshot(
   key: string,
   generation: number,

@@ -1,6 +1,7 @@
 import { ExplorerReadError } from "../../lib/api/explorer-read-model"
 import type { TaskInspectorReadModel } from "../../lib/api/explorer-read-model"
 import type { BoardRouteView } from "../../lib/router"
+import type { TaskInspectorViewModel } from "./TaskInspector"
 import type {
   TaskInspectorCommentView,
   TaskInspectorDependenciesView,
@@ -148,4 +149,9 @@ export function inspectorRelationsView(model: InspectorRelationsReadModel): {
       },
     },
   }
+}
+
+/** Keep canonical result fields intact while projecting snake_case wire names for the Inspector. */
+export function inspectorResultView(task: Pick<TaskInspectorReadModel["task"], "result_summary" | "result">): Pick<TaskInspectorViewModel["task"], "resultSummary" | "result"> {
+  return { resultSummary: task.result_summary, result: task.result }
 }

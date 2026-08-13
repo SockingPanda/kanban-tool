@@ -43,6 +43,8 @@ const model: TaskInspectorViewModel = {
     completedRequiredStepCount: 1,
     optionalStepCount: 1,
     metadata: { source: "fixture" },
+    resultSummary: "Completed with evidence",
+    result: { ok: true },
     claimOwner: "runner",
     claimExpiresAt: 20,
     lastHeartbeatAt: 19,
@@ -329,6 +331,97 @@ describe("TaskInspector", () => {
 
     expect(markup).toContain("当前离线，保留最近一次任务数据。")
     expect(markup).toContain("r_active")
+  })
+
+  test("renders no-result, string, and deterministic structured result evidence safely", () => {
+    const noResultModel = {
+      ...model,
+      task: { ...model.task, resultSummary: null, result: null },
+    } as TaskInspectorViewModel
+    const noResultMarkup = renderToStaticMarkup(<TaskInspector model={noResultModel} onSelectTask={vi.fn()} identity="runtime" locale="en" />)
+    expect(noResultMarkup).toContain('data-testid="inspector-result"')
+    expect(noResultMarkup).toContain('data-testid="inspector-result-disclosure"')
+    expect(noResultMarkup).toContain("No result")
+    expect(noResultMarkup).not.toContain("Loading")
+
+    const stringModel = {
+      ...model,
+      task: {
+        ...model.task,
+        resultSummary: "A <summary> & details",
+        result: "<script>alert('unsafe')</script>",
+      },
+    } as TaskInspectorViewModel
+    const stringMarkup = renderToStaticMarkup(<TaskInspector model={stringModel} onSelectTask={vi.fn()} identity="runtime" locale="en" />)
+    expect(stringMarkup).toContain("A &lt;summary&gt; &amp; details")
+    expect(stringMarkup).toContain("&lt;script&gt;alert(&#x27;unsafe&#x27;)&lt;/script&gt;")
+    expect(stringMarkup).not.toContain("<script>")
+    expect(stringMarkup).toContain('data-testid="inspector-result-code"')
+
+    const structuredModel = {
+      ...model,
+      task: {
+        ...model.task,
+        resultSummary: "Structured output",
+        result: {
+          zeta: "last",
+          nested: { zeta: 2, alpha: "first" },
+          alpha: ["<one>", { zeta: false, alpha: true }],
+        },
+      },
+    } as TaskInspectorViewModel
+    const structuredMarkup = renderToStaticMarkup(<TaskInspector model={structuredModel} onSelectTask={vi.fn()} identity="runtime" locale="en" />)
+    expect(structuredMarkup.indexOf('&quot;alpha&quot;: ['))
+      .toBeLessThan(structuredMarkup.indexOf('&quot;nested&quot;: {'))
+    expect(structuredMarkup).toContain('&quot;alpha&quot;: &quot;first&quot;')
+    expect(structuredMarkup).toContain("&lt;one&gt;")
+    expect(structuredMarkup).toContain('aria-label="Copy result"')
+
+    const summarylessMarkup = renderToStaticMarkup(
+      <TaskInspector
+        model={{ ...model, task: { ...model.task, resultSummary: null, result: ["kept"] } } as TaskInspectorViewModel}
+        onSelectTask={vi.fn()}
+        identity="runtime"
+        locale="en"
+      />,
+    )
+    expect(summarylessMarkup).toContain(">—</dd>")
+    expect(summarylessMarkup).not.toContain(">No result</p>")
+  })
+
+  test("keeps result evidence distinct from an offline refresh boundary", () => {
+    const resultModel = {
+      ...model,
+      task: { ...model.task, resultSummary: "Retained summary", result: { ok: true } },
+    } as TaskInspectorViewModel
+    const offlineMarkup = renderToStaticMarkup(
+      <TaskInspector
+        model={resultModel}
+        onSelectTask={vi.fn()}
+        identity="runtime"
+        locale="en"
+        online={false}
+        refreshOffline
+        refreshError="offline"
+      />,
+    )
+    expect(offlineMarkup).toContain("You are offline; the last usable task data is retained.")
+    expect(offlineMarkup).toContain("Retained summary")
+    expect(offlineMarkup).toContain('&quot;ok&quot;: true')
+    expect(offlineMarkup).not.toContain("No result")
+
+    const staleMarkup = renderToStaticMarkup(
+      <TaskInspector
+        model={resultModel}
+        onSelectTask={vi.fn()}
+        identity="runtime"
+        locale="en"
+        refreshError="newer task data is unavailable"
+      />,
+    )
+    expect(staleMarkup).toContain("Task data refresh failed.")
+    expect(staleMarkup).toContain("Retained summary")
+    expect(staleMarkup).toContain('&quot;ok&quot;: true')
   })
 
   test("aborts and rejects a late lazy result after task/session identity changes", async () => {

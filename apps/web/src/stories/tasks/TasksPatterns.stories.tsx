@@ -225,6 +225,8 @@ const inspector: TaskInspectorViewModel = {
     completedRequiredStepCount: 0,
     optionalStepCount: 0,
     metadata: null,
+    resultSummary: null,
+    result: null,
     claimOwner: null,
     claimExpiresAt: null,
     lastHeartbeatAt: null,

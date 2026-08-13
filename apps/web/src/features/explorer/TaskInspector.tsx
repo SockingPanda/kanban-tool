@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 
 import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
+import { CodeBlock } from "../../ui/astryx"
 import styles from "./TaskInspector.module.css"
 import {
   buildInspectorSaveTaskInput,
@@ -52,6 +53,8 @@ export interface TaskInspectorViewModel {
     readonly completedRequiredStepCount: number
     readonly optionalStepCount: number
     readonly metadata: unknown
+    readonly resultSummary: string | null
+    readonly result: unknown
     readonly claimOwner: string | null
     readonly claimExpiresAt: number | null
     readonly lastHeartbeatAt: number | null
@@ -155,6 +158,7 @@ export type InspectorCopy = {
     readonly relations: string
     readonly activity: string
     readonly readiness: string
+    readonly result: string
     readonly execution: string
     readonly rawMetadata: string
     readonly claim: string
@@ -181,6 +185,7 @@ export type InspectorCopy = {
     readonly currentRun: string
     readonly retry: string
     readonly blockedParents: string
+    readonly resultSummary: string
     readonly actor: string
     readonly api: string
     readonly server: string
@@ -192,7 +197,9 @@ export type InspectorCopy = {
   readonly description: string
   readonly showDescription: string
   readonly showMetadata: string
+  readonly showResult: string
   readonly noDescription: string
+  readonly noResult: string
   readonly noItems: string
   readonly noSteps: string
   readonly noComments: string
@@ -240,6 +247,9 @@ export type InspectorCopy = {
   readonly retryAction: string
   readonly mutationError: string
   readonly mutationRetrying: string
+  readonly copyResult: string
+  readonly copiedResult: string
+  readonly copyResultError: string
   readonly actionReasons: {
     readonly description: string
     readonly dependencies: string
@@ -261,14 +271,16 @@ const copies: Record<Locale, InspectorCopy> = {
     ariaLabel: "任务检查器",
     eyebrow: "任务检查器",
     dependencyBlocked: "依赖阻塞",
-    sections: { overview: "概览", properties: "属性", relations: "关系", activity: "活动", readiness: "就绪摘要", execution: "执行与归属", rawMetadata: "原始元数据", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
-    facts: { statusReason: "状态原因", assignee: "执行者", plan: "执行计划", readiness: "就绪度", requiredSteps: "必需步骤", optionalSteps: "可选步骤", createdAt: "创建时间", updatedAt: "更新时间", claimOwner: "认领者", claimExpires: "认领到期", heartbeat: "最近心跳", currentRun: "当前运行", retry: "重试", blockedParents: "阻塞父任务", actor: "执行者", api: "API", server: "服务版本", protocol: "协议版本", build: "Web 构建" },
+    sections: { overview: "概览", properties: "属性", relations: "关系", activity: "活动", readiness: "就绪摘要", result: "结果证据", execution: "执行与归属", rawMetadata: "原始元数据", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
+    facts: { statusReason: "状态原因", assignee: "执行者", plan: "执行计划", readiness: "就绪度", requiredSteps: "必需步骤", optionalSteps: "可选步骤", createdAt: "创建时间", updatedAt: "更新时间", claimOwner: "认领者", claimExpires: "认领到期", heartbeat: "最近心跳", currentRun: "当前运行", retry: "重试", blockedParents: "阻塞父任务", resultSummary: "结果摘要", actor: "执行者", api: "API", server: "服务版本", protocol: "协议版本", build: "Web 构建" },
     parents: "父任务",
     children: "子任务",
     description: "描述",
     showDescription: "展开描述",
     showMetadata: "查看原始元数据",
+    showResult: "查看完整结果",
     noDescription: "暂无描述。",
+    noResult: "无结果",
     noItems: "无",
     noSteps: "暂无步骤。",
     noComments: "暂无评论。",
@@ -316,6 +328,9 @@ const copies: Record<Locale, InspectorCopy> = {
     retryAction: "重试操作",
     mutationError: "操作失败，请检查提示后重试。",
     mutationRetrying: "正在重试操作…",
+    copyResult: "复制结果",
+    copiedResult: "结果已复制",
+    copyResultError: "复制结果失败",
     actionReasons: { description: "需要任务描述", dependencies: "依赖仍未满足", plan: "请先完成执行计划", promote: "规格、排期或就绪条件未满足", claim: "需要当前认领令牌", requiredSteps: "必需步骤尚未完成", status: "当前状态不允许此操作" },
     status: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
@@ -327,14 +342,16 @@ const copies: Record<Locale, InspectorCopy> = {
     ariaLabel: "Task Inspector",
     eyebrow: "TASK INSPECTOR",
     dependencyBlocked: "Blocked by dependencies",
-    sections: { overview: "Overview", properties: "Properties", relations: "Relations", activity: "Activity", readiness: "Readiness summary", execution: "Execution & ownership", rawMetadata: "Raw metadata", claim: "Runtime / Claim", steps: "Steps", dependencies: "Dependencies", comments: "Comments", runs: "Runs", events: "Events", neighborhood: "Neighborhood / Map", runtime: "Runtime" },
-    facts: { statusReason: "Status reason", assignee: "Assignee", plan: "Execution plan", readiness: "Readiness", requiredSteps: "Required steps", optionalSteps: "Optional steps", createdAt: "Created", updatedAt: "Updated", claimOwner: "Claim owner", claimExpires: "Claim expires", heartbeat: "Last heartbeat", currentRun: "Current run", retry: "Retry", blockedParents: "Blocked parents", actor: "Actor", api: "API", server: "Server version", protocol: "Protocol version", build: "Web build" },
+    sections: { overview: "Overview", properties: "Properties", relations: "Relations", activity: "Activity", readiness: "Readiness summary", result: "Result evidence", execution: "Execution & ownership", rawMetadata: "Raw metadata", claim: "Runtime / Claim", steps: "Steps", dependencies: "Dependencies", comments: "Comments", runs: "Runs", events: "Events", neighborhood: "Neighborhood / Map", runtime: "Runtime" },
+    facts: { statusReason: "Status reason", assignee: "Assignee", plan: "Execution plan", readiness: "Readiness", requiredSteps: "Required steps", optionalSteps: "Optional steps", createdAt: "Created", updatedAt: "Updated", claimOwner: "Claim owner", claimExpires: "Claim expires", heartbeat: "Last heartbeat", currentRun: "Current run", retry: "Retry", blockedParents: "Blocked parents", resultSummary: "Result summary", actor: "Actor", api: "API", server: "Server version", protocol: "Protocol version", build: "Web build" },
     parents: "Parents",
     children: "Children",
     description: "Description",
     showDescription: "Show description",
     showMetadata: "Show raw metadata",
+    showResult: "Show full result",
     noDescription: "No description.",
+    noResult: "No result",
     noItems: "None",
     noSteps: "No steps.",
     noComments: "No comments.",
@@ -382,6 +399,9 @@ const copies: Record<Locale, InspectorCopy> = {
     retryAction: "Retry action",
     mutationError: "Action failed. Review the message and try again.",
     mutationRetrying: "Retrying operation…",
+    copyResult: "Copy result",
+    copiedResult: "Result copied",
+    copyResultError: "Result copy failed",
     actionReasons: { description: "Task description is required", dependencies: "Dependencies are still blocked", plan: "Complete the execution plan first", promote: "Specification, schedule, or readiness is incomplete", claim: "A current claim token is required", requiredSteps: "Required steps are incomplete", status: "The current status does not allow this action" },
     status: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
@@ -401,6 +421,25 @@ function jsonValue(value: unknown): string {
     return JSON.stringify(value) ?? "{}"
   } catch {
     return "[unserializable metadata]"
+  }
+}
+
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableJsonValue)
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>
+    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, stableJsonValue(record[key])]))
+  }
+  return value
+}
+
+function resultValue(value: unknown): string {
+  if (typeof value === "string") return value
+  try {
+    const formatted = JSON.stringify(stableJsonValue(value), null, 2)
+    return formatted ?? String(value)
+  } catch {
+    return "[unserializable result]"
   }
 }
 
@@ -495,6 +534,35 @@ function MetadataDisclosure({ metadata, copy }: { readonly metadata: unknown; re
       <summary>{copy.showMetadata}</summary>
       <pre className={styles.codeBlock} translate="no">{jsonValue(metadata)}</pre>
     </details>
+  )
+}
+
+function ResultDisclosure({ summary, result, copy }: { readonly summary: string | null; readonly result: unknown; readonly copy: InspectorCopy }) {
+  const resultCode = result === null ? null : resultValue(result)
+  const resultSummary = summary === null || summary.trim().length === 0
+    ? resultCode === null ? copy.noResult : "—"
+    : summary
+  return (
+    <>
+      <Facts facts={[[copy.facts.resultSummary, resultSummary]]} />
+      <details className={styles.metadataDisclosure} data-testid="inspector-result-disclosure">
+        <summary>{copy.showResult}</summary>
+        {resultCode === null ? <Empty>{copy.noResult}</Empty> : (
+          <CodeBlock
+            code={resultCode}
+            language={typeof result === "string" ? "plaintext" : "json"}
+            isWrapped
+            container="section"
+            maxHeight="evidence"
+            label={copy.sections.result}
+            copyLabel={copy.copyResult}
+            copiedLabel={copy.copiedResult}
+            errorLabel={copy.copyResultError}
+            data-testid="inspector-result-code"
+          />
+        )}
+      </details>
+    </>
   )
 }
 
@@ -1053,6 +1121,9 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
               [copy.facts.statusReason, valueOrDash(task.statusReason)],
               [copy.facts.readiness, `${copy.planState[task.executionPlanState]} · ${task.completedRequiredStepCount} / ${task.requiredStepCount}`],
             ]} />
+          </Section>
+          <Section id="inspector-result" title={copy.sections.result} level={3}>
+            <ResultDisclosure summary={task.resultSummary} result={task.result} copy={copy} />
           </Section>
         </InspectorGroup>
 

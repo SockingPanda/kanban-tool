@@ -402,6 +402,8 @@ const INSPECTOR: TaskInspectorViewModel = {
     completedRequiredStepCount: 1,
     optionalStepCount: 0,
     metadata: null,
+    resultSummary: null,
+    result: null,
     claimOwner: null,
     claimExpiresAt: null,
     lastHeartbeatAt: null,

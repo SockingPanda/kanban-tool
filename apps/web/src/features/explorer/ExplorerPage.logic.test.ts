@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import { ExplorerReadError } from "../../lib/api/explorer-read-model"
-import { asyncReadToken, inspectorRelationsView, parseTaskDisplay, serializeTaskDisplay, shouldClearMapTaskFromInspector, visibleAsyncReadState, withTaskDisplay } from "./ExplorerPage.logic"
+import { asyncReadToken, inspectorRelationsView, inspectorResultView, parseTaskDisplay, serializeTaskDisplay, shouldClearMapTaskFromInspector, visibleAsyncReadState, withTaskDisplay } from "./ExplorerPage.logic"
 
 describe("Tasks list display URL contract", () => {
   test("uses list as the canonical default and recognizes only table", () => {
@@ -87,5 +87,16 @@ describe("ExplorerPage task URL authority", () => {
     expect(view.dependencies.children.map((child) => child.id)).toEqual(["t_child"])
     expect(view.steps.steps.map((step) => step.id)).toEqual(["s_1", "s_2"])
     expect(view.steps.steps[0]?.title).toBe("first step")
+  })
+
+  test("maps canonical ApiTask result fields into the Inspector read model", () => {
+    expect(inspectorResultView({ result_summary: "summary", result: { zeta: 2, alpha: 1 } })).toEqual({
+      resultSummary: "summary",
+      result: { zeta: 2, alpha: 1 },
+    })
+    expect(inspectorResultView({ result_summary: null, result: null })).toEqual({
+      resultSummary: null,
+      result: null,
+    })
   })
 })

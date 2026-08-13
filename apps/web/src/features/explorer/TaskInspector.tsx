@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type SyntheticEvent } from "react"
 
+import { Badge } from "@astryxdesign/core/Badge"
 import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
-import { CodeBlock } from "../../ui/astryx"
+import { CodeBlock, SafeHStack, SafeVStack } from "../../ui/astryx"
 import styles from "./TaskInspector.module.css"
 import {
   buildInspectorSaveTaskInput,
@@ -150,10 +151,10 @@ export interface TaskInspectorProps {
 
 export type InspectorCopy = {
   readonly ariaLabel: string
-  readonly eyebrow: string
   readonly dependencyBlocked: string
   readonly sections: {
     readonly overview: string
+    readonly status: string
     readonly properties: string
     readonly relations: string
     readonly activity: string
@@ -271,9 +272,8 @@ export type InspectorCopy = {
 const copies: Record<Locale, InspectorCopy> = {
   zh: {
     ariaLabel: "任务检查器",
-    eyebrow: "任务检查器",
     dependencyBlocked: "依赖阻塞",
-    sections: { overview: "概览", properties: "属性", relations: "关系", activity: "活动", readiness: "就绪摘要", result: "结果证据", execution: "执行与归属", rawMetadata: "原始元数据", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
+    sections: { overview: "概览", status: "状态", properties: "属性", relations: "关系", activity: "活动", readiness: "就绪摘要", result: "结果证据", execution: "执行与归属", rawMetadata: "原始元数据", claim: "运行时 / 认领", steps: "步骤", dependencies: "依赖", comments: "评论", runs: "运行记录", events: "事件", neighborhood: "邻域 / 关系图", runtime: "运行时" },
     facts: { statusReason: "状态原因", assignee: "执行者", plan: "执行计划", readiness: "就绪度", requiredSteps: "必需步骤", optionalSteps: "可选步骤", createdAt: "创建时间", updatedAt: "更新时间", claimOwner: "认领者", claimExpires: "认领到期", heartbeat: "最近心跳", currentRun: "当前运行", retry: "重试", blockedParents: "阻塞父任务", resultSummary: "结果摘要", actor: "执行者", api: "API", server: "服务版本", protocol: "协议版本", build: "Web 构建" },
     parents: "父任务",
     children: "子任务",
@@ -343,9 +343,8 @@ const copies: Record<Locale, InspectorCopy> = {
   },
   en: {
     ariaLabel: "Task Inspector",
-    eyebrow: "TASK INSPECTOR",
     dependencyBlocked: "Blocked by dependencies",
-    sections: { overview: "Overview", properties: "Properties", relations: "Relations", activity: "Activity", readiness: "Readiness summary", result: "Result evidence", execution: "Execution & ownership", rawMetadata: "Raw metadata", claim: "Runtime / Claim", steps: "Steps", dependencies: "Dependencies", comments: "Comments", runs: "Runs", events: "Events", neighborhood: "Neighborhood / Map", runtime: "Runtime" },
+    sections: { overview: "Overview", status: "Status", properties: "Properties", relations: "Relations", activity: "Activity", readiness: "Readiness summary", result: "Result evidence", execution: "Execution & ownership", rawMetadata: "Raw metadata", claim: "Runtime / Claim", steps: "Steps", dependencies: "Dependencies", comments: "Comments", runs: "Runs", events: "Events", neighborhood: "Neighborhood / Map", runtime: "Runtime" },
     facts: { statusReason: "Status reason", assignee: "Assignee", plan: "Execution plan", readiness: "Readiness", requiredSteps: "Required steps", optionalSteps: "Optional steps", createdAt: "Created", updatedAt: "Updated", claimOwner: "Claim owner", claimExpires: "Claim expires", heartbeat: "Last heartbeat", currentRun: "Current run", retry: "Retry", blockedParents: "Blocked parents", resultSummary: "Result summary", actor: "Actor", api: "API", server: "Server version", protocol: "Protocol version", build: "Web build" },
     parents: "Parents",
     children: "Children",
@@ -420,6 +419,30 @@ function valueOrDash(value: string | number | null): string {
   return String(value)
 }
 
+function statusBadgeVariant(status: InspectorTaskStatus): "neutral" | "info" | "success" | "warning" | "error" {
+  switch (status) {
+    case "ready":
+    case "done": return "success"
+    case "running": return "info"
+    case "blocked": return "error"
+    case "review": return "warning"
+    default: return "neutral"
+  }
+}
+
+function priorityBadgeVariant(priority: number): "neutral" | "info" | "success" | "warning" | "error" {
+  if (priority >= 3) return "error"
+  if (priority === 2) return "warning"
+  if (priority === 1) return "info"
+  return "neutral"
+}
+
+function stepStatusBadgeVariant(status: "todo" | "done" | "skipped"): "neutral" | "success" | "warning" {
+  if (status === "done") return "success"
+  if (status === "skipped") return "warning"
+  return "neutral"
+}
+
 function jsonValue(value: unknown): string {
   try {
     return JSON.stringify(value) ?? "{}"
@@ -463,6 +486,15 @@ function InspectorGroup({ id, title, children }: { readonly id: string; readonly
       <h2 id={`${id}-heading`}>{title}</h2>
       {children}
     </section>
+  )
+}
+
+function InspectorDisclosureGroup({ id, title, children }: { readonly id: string; readonly title: string; readonly children: ReactNode }) {
+  return (
+    <details className={`${styles.group} ${styles.groupDisclosure}`} id={id} data-testid={id}>
+      <summary className={styles.groupSummary}>{title}</summary>
+      <SafeVStack as="div" gap={3} className={styles.groupContent}>{children}</SafeVStack>
+    </details>
   )
 }
 
@@ -1106,11 +1138,6 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
           {reloadError ? <div className={styles.mutationError} data-testid="task-inspector-reload-feedback" role="status" aria-live="polite"><span>{reloadError.message}</span>{retryReload ? <button type="button" onClick={retryReload}>{copy.retryAction}</button> : null}</div> : null}
           {!editing && saveError ? <div className={styles.mutationError} role="alert" aria-live="polite"><span>{saveError.message}</span>{retrySave ? <button type="button" onClick={retrySave}>{copy.retryAction}</button> : null}</div> : null}
           {mutationHandlers ? <button ref={editTriggerRef} type="button" className={styles.editButton} onClick={beginEditor} disabled={editing || mutationSavePending}>{copy.edit}</button> : null}
-          <div className={styles.badges}>
-            <span className={styles.badge}>{copy.status[task.status]}</span>
-            <span className={styles.badge}>P{task.priority}</span>
-            {task.dependencyBlocked ? <span className={styles.badge}>{copy.dependencyBlocked}</span> : null}
-          </div>
         </header>
         {mutationHandlers ? <div className={styles.actionBar} data-testid="inspector-action-bar"><TaskInspectorActionPanel task={task} claimToken={claimToken} locale={locale} copy={copy} pending={mutationTransitionPending} error={transitionError} onAction={openActionDialog} onRetry={retryTransition} retryAction={retryTransitionAction} /></div> : null}
       </div>
@@ -1119,19 +1146,30 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
         {editing && mutationHandlers ? <TaskInspectorEditForm draft={editDraft} dirty={JSON.stringify(editDraft) !== canonicalEditorDraftKey} pending={mutationSavePending} error={saveError?.message ?? null} onRetry={retrySave} retryBlocksSubmit={saveRetryMatches} copy={copy} onChange={setEditDraft} onSave={submitEditor} onCancel={closeEditor} /> : null}
 
         <InspectorGroup id="inspector-overview" title={copy.sections.overview}>
+          <Section id="inspector-status" title={copy.sections.status} level={3}>
+            <SafeHStack as="div" wrap="wrap" gap={2} className={styles.statusFacts} aria-label={copy.sections.status}>
+              <Badge variant={statusBadgeVariant(task.status)} label={copy.status[task.status]} />
+              <Badge variant={priorityBadgeVariant(task.priority)} label={`${copy.editPriority} P${task.priority}`} />
+              {task.dependencyBlocked ? <Badge variant="warning" label={copy.dependencyBlocked} /> : null}
+            </SafeHStack>
+          </Section>
           <Section id="inspector-metadata" title={copy.sections.readiness} level={3}>
-            <DescriptionDisclosure description={task.description} copy={copy} />
             <Facts facts={[
+              [copy.facts.requiredSteps, `${task.completedRequiredStepCount} / ${task.requiredStepCount}`],
+              [copy.facts.blockedParents, String(task.unfinishedParentCount)],
               [copy.facts.statusReason, valueOrDash(task.statusReason)],
-              [copy.facts.readiness, `${copy.planState[task.executionPlanState]} · ${task.completedRequiredStepCount} / ${task.requiredStepCount}`],
+              [copy.facts.readiness, copy.planState[task.executionPlanState]],
             ]} />
           </Section>
           <Section id="inspector-result" title={copy.sections.result} level={3}>
             <ResultDisclosure summary={task.resultSummary} result={task.result} copy={copy} />
           </Section>
+          <Section id="inspector-description" title={copy.description} level={3}>
+            <DescriptionDisclosure description={task.description} copy={copy} />
+          </Section>
         </InspectorGroup>
 
-        <InspectorGroup id="inspector-properties" title={copy.sections.properties}>
+        <InspectorDisclosureGroup id="inspector-properties" title={copy.sections.properties}>
           <Section id="inspector-claim" title={copy.sections.execution} level={3}>
             <Facts facts={[
               [copy.facts.assignee, valueOrDash(task.assignee)],
@@ -1161,7 +1199,7 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
               [copy.facts.build, model.runtime.webBuildId],
             ]} />
           </Section>
-        </InspectorGroup>
+        </InspectorDisclosureGroup>
 
         {!hideReadOnlyRelations ? (
           <InspectorGroup id="inspector-relations" title={copy.sections.relations}>
@@ -1174,7 +1212,7 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
                         <strong>{step.title}</strong>
                         {step.body ? <p className={styles.muted}>{step.body}</p> : null}
                       </div>
-                      <span className={styles.badge}>{copy.stepStatus[step.status]}{step.required ? ` · ${copy.required}` : ""}</span>
+                      <Badge variant={stepStatusBadgeVariant(step.status)} label={`${copy.stepStatus[step.status]}${step.required ? ` · ${copy.required}` : ""}`} />
                     </li>
                   ))}
                 </ol>

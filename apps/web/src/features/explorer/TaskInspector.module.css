@@ -67,7 +67,7 @@
   }
 
   .mobileCloseButton:focus-visible {
-    outline: 2px solid var(--color-focus, #2563eb);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
 
@@ -125,7 +125,7 @@
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible {
-    outline: 2px solid var(--color-focus, #2563eb);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
 
@@ -141,8 +141,8 @@
   }
 
   .dangerButton {
-    border-color: var(--color-status-error, #b42318);
-    color: var(--color-status-error, #b42318);
+    border-color: var(--color-status-error);
+    color: var(--color-status-error);
   }
 
   .secondaryButton {
@@ -194,7 +194,7 @@
 
   .unsaved {
     margin: 0;
-    color: var(--color-status-warning, #a15c00);
+    color: var(--color-status-warning);
     font-size: 0.78rem;
   }
 
@@ -233,9 +233,9 @@
     gap: 0.6rem;
     align-items: center;
     margin-block-start: 0.6rem;
-    border-inline-start: 0.18rem solid var(--color-status-error, #b42318);
+    border-inline-start: 0.18rem solid var(--color-status-error);
     padding: 0.45rem 0.55rem;
-    color: var(--color-status-error, #b42318);
+    color: var(--color-status-error);
     font-size: 0.8rem;
   }
 
@@ -309,19 +309,12 @@
     }
   }
 
-  .eyebrow,
   .ref,
   .identity,
   .muted,
   .empty {
     margin: 0;
     color: var(--color-text-secondary);
-  }
-
-  .eyebrow {
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
   }
 
   .announcement {
@@ -354,24 +347,11 @@
     overflow-wrap: anywhere;
   }
 
-  .badges {
+  .statusFacts {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
     padding-block-start: 0.3rem;
-  }
-
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    width: fit-content;
-    min-height: 1.45rem;
-    border: 1px solid var(--color-border-emphasized);
-    border-radius: var(--radius-element);
-    padding: 0.12rem 0.45rem;
-    color: var(--color-text-secondary);
-    font-size: 0.72rem;
-    white-space: nowrap;
   }
 
   .group {
@@ -390,6 +370,24 @@
     color: var(--color-text-primary);
     font-size: 1rem;
     letter-spacing: -0.01em;
+  }
+
+  .groupDisclosure {
+    display: grid;
+  }
+
+  .groupSummary {
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+  }
+
+  .groupContent {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+    padding-block-start: 0.2rem;
   }
 
   .section {
@@ -554,7 +552,7 @@
   }
 
   .error {
-    color: var(--color-status-error, #b42318) !important;
+    color: var(--color-status-error) !important;
   }
 
   @media (max-width: 56rem) {

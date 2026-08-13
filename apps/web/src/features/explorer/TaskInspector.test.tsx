@@ -272,6 +272,36 @@ describe("TaskInspector", () => {
     expect(markup).not.toContain("Create step")
   })
 
+  test("keeps the first viewport in evidence order and uses semantic status badges", () => {
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} />)
+    const actionIndex = markup.indexOf('data-testid="inspector-action-bar"')
+    const statusIndex = markup.indexOf('data-testid="inspector-status"')
+    const readinessIndex = markup.indexOf('data-testid="inspector-metadata"')
+    const resultIndex = markup.indexOf('data-testid="inspector-result"')
+
+    expect(actionIndex).toBeGreaterThan(-1)
+    expect(actionIndex).toBeLessThan(statusIndex)
+    expect(statusIndex).toBeLessThan(readinessIndex)
+    expect(readinessIndex).toBeLessThan(resultIndex)
+    expect(markup).toContain("Running")
+    expect(markup).toContain("P2")
+    expect(markup).toContain("Blocked by dependencies")
+    expect(markup).toContain("Required steps")
+    expect(markup).toContain("Blocked parents")
+    expect(markup).toContain("Status reason")
+  })
+
+  test("keeps execution, runtime, and metadata in a closed low-priority disclosure", () => {
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" />)
+    const properties = markup.match(/<details[^>]*data-testid="inspector-properties"[^>]*>/)?.[0] ?? ""
+
+    expect(properties).not.toContain("open")
+    expect(markup.indexOf('data-testid="inspector-result"')).toBeLessThan(markup.indexOf('data-testid="inspector-properties"'))
+    expect(markup).toContain("Execution &amp; ownership")
+    expect(markup).toContain("Raw metadata")
+    expect(markup).toContain("Runtime")
+  })
+
   test("keeps raw metadata behind a secondary disclosure", () => {
     const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" />)
 

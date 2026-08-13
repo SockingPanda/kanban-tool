@@ -278,6 +278,19 @@ const map: ExplorerTaskMap = {
 
 const mapModel: ExplorerTaskMapReadModel = { board: { selector: "default", ...boardIdentity }, map }
 const mapReady: TaskMapReadState = { data: mapModel, loading: false, error: null }
+const mapEmpty: TaskMapReadState = {
+  data: {
+    board: { selector: "default", ...boardIdentity },
+    map: {
+      ...map,
+      nodes: [],
+      edges: [],
+      meta: { ...map.meta, node_count: 0, edge_count: 0, active_statuses: [] },
+    },
+  },
+  loading: false,
+  error: null,
+}
 const mapLoading: TaskMapReadState = { data: null, loading: true, error: null }
 
 function event(id: number, overrides: Partial<ExplorerEvent> = {}): ExplorerEvent {
@@ -640,6 +653,10 @@ export const MapReady: Story = {
 
 export const MapLoading: Story = {
   render: () => <PageStoryFrame><TaskMapPresentation board={boardIdentity.slug} taskId={null} state={mapLoading} onSelectTask={noop} /></PageStoryFrame>,
+}
+
+export const MapEmpty: Story = {
+  render: () => <PageStoryFrame><TaskMapPresentation board={boardIdentity.slug} taskId={null} state={mapEmpty} onSelectTask={noop} /></PageStoryFrame>,
 }
 
 export const MapError: Story = {

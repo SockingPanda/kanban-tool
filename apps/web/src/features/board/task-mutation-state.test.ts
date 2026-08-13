@@ -130,6 +130,16 @@ describe("board task mutation state", () => {
     expect(transitionCommandForTask(running, runningArchive, { claimToken: "claim-token", confirmed: true })).toEqual({ action: "archive", input: { force: true } })
   })
 
+  test("keeps return-to-ready visible but only accepts it with a local claim token", () => {
+    const task = model.tasksByStatus.todo?.[0]
+    if (!task) throw new Error("todo fixture missing")
+    const running = { ...task, status: "running" as const }
+
+    expect(transitionOptionsForTask(running)).toContainEqual(expect.objectContaining({ action: "release", targetStatus: "ready" }))
+    expect(transitionForTaskTarget(running, "ready")).toBeNull()
+    expect(transitionForTaskTarget(running, "ready", "local-token")).toMatchObject({ action: "release", targetStatus: "ready" })
+  })
+
   test("hides promote and completion actions when canonical readiness facts fail", () => {
     const task = model.tasksByStatus.todo?.[0]
     if (!task) throw new Error("todo fixture missing")
@@ -139,7 +149,7 @@ describe("board task mutation state", () => {
     expect(transitionOptionsForTask({ ...task, readiness: { ...task.readiness, executionPlanState: "unplanned" } })).not.toContainEqual(expect.objectContaining({ action: "promote" }))
     const running = { ...task, status: "running" as const, readiness: { ...task.readiness, requiredStepCount: 2, completedRequiredStepCount: 1 } }
     expect(transitionOptionsForTask(running, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "complete" }))
-    expect(transitionOptionsForTask(running, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "release" }))
+    expect(transitionOptionsForTask(running, "claim-token")).toContainEqual(expect.objectContaining({ action: "release", targetStatus: "ready" }))
     const review = { ...running, status: "review" as const }
     expect(transitionOptionsForTask(review, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "complete" }))
     expect(transitionOptionsForTask(running)).toContainEqual(expect.objectContaining({ action: "archive", requiresConfirmation: true }))

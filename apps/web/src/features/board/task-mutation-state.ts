@@ -157,9 +157,6 @@ function withContext(task: BoardTaskViewModel, option: BoardTaskTransitionOption
 /** Return actions legal for this task, including claim-token/force requirements. */
 export function transitionOptionsForTask(task: BoardTaskViewModel, claimToken: string | null = null): readonly BoardTaskTransitionOption[] {
   return transitionOptionsForStatus(task.status)
-    // `release` is command/drag policy support in this lane; keep it out of
-    // the existing rendered action list until its explicit affordance lands.
-    .filter((option) => option.action !== "release")
     .filter((option) => option.action !== "submit-review" || claimToken !== null)
     .filter((option) => option.action !== "heartbeat" || claimToken !== null)
     .filter((option) => option.action !== "promote" || canPromoteTask(task))
@@ -180,7 +177,9 @@ export function transitionForTaskTarget(
     const release = transitionOptionsForStatus(task.status).find((candidate) => candidate.action === "release")
     return release === undefined ? null : withContext(task, release, claimToken)
   }
-  const option = transitionOptionsForTask(task, claimToken).find((candidate) => candidate.targetStatus === targetStatus)
+  const option = transitionOptionsForTask(task, claimToken).find((candidate) =>
+    candidate.targetStatus === targetStatus && (candidate.action !== "release" || claimToken !== null),
+  )
   return option ?? null
 }
 

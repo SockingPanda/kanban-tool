@@ -246,6 +246,7 @@ export type InspectorCopy = {
   readonly descriptionRequired: string
   readonly retryAction: string
   readonly mutationError: string
+  readonly conflictDescription: string
   readonly mutationRetrying: string
   readonly copyResult: string
   readonly copiedResult: string
@@ -256,6 +257,7 @@ export type InspectorCopy = {
     readonly plan: string
     readonly promote: string
     readonly claim: string
+    readonly release: string
     readonly requiredSteps: string
     readonly status: string
   }
@@ -327,11 +329,12 @@ const copies: Record<Locale, InspectorCopy> = {
     descriptionRequired: "请填写描述。",
     retryAction: "重试操作",
     mutationError: "操作失败，请检查提示后重试。",
+    conflictDescription: "任务已被其他操作更新。已重新读取 canonical 状态，请确认后重试。",
     mutationRetrying: "正在重试操作…",
     copyResult: "复制结果",
     copiedResult: "结果已复制",
     copyResultError: "复制结果失败",
-    actionReasons: { description: "需要任务描述", dependencies: "依赖仍未满足", plan: "请先完成执行计划", promote: "规格、排期或就绪条件未满足", claim: "需要当前认领令牌", requiredSteps: "必需步骤尚未完成", status: "当前状态不允许此操作" },
+    actionReasons: { description: "需要任务描述", dependencies: "依赖仍未满足", plan: "请先完成执行计划", promote: "规格、排期或就绪条件未满足", claim: "需要当前认领令牌", release: "需要当前任务的本地认领令牌才能释放回就绪。", requiredSteps: "必需步骤尚未完成", status: "当前状态不允许此操作" },
     status: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
     stepStatus: { todo: "待办", done: "已完成", skipped: "已跳过" },
@@ -398,11 +401,12 @@ const copies: Record<Locale, InspectorCopy> = {
     descriptionRequired: "Enter a description.",
     retryAction: "Retry action",
     mutationError: "Action failed. Review the message and try again.",
+    conflictDescription: "The task changed elsewhere. Canonical state was reloaded; review it before trying again.",
     mutationRetrying: "Retrying operation…",
     copyResult: "Copy result",
     copiedResult: "Result copied",
     copyResultError: "Result copy failed",
-    actionReasons: { description: "Task description is required", dependencies: "Dependencies are still blocked", plan: "Complete the execution plan first", promote: "Specification, schedule, or readiness is incomplete", claim: "A current claim token is required", requiredSteps: "Required steps are incomplete", status: "The current status does not allow this action" },
+    actionReasons: { description: "Task description is required", dependencies: "Dependencies are still blocked", plan: "Complete the execution plan first", promote: "Specification, schedule, or readiness is incomplete", claim: "A current claim token is required", release: "A local claim token for this task is required to return it to ready.", requiredSteps: "Required steps are incomplete", status: "The current status does not allow this action" },
     status: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
     stepStatus: { todo: "To do", done: "Done", skipped: "Skipped" },

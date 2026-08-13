@@ -300,6 +300,8 @@ export interface BoardMessages {
   readonly mutationUnavailable: string
   readonly conflictDescription: string
   readonly reconcileStale: string
+  readonly releaseClaimRequired: string
+  readonly releaseSuccess: string
   readonly retryReload: string
   readonly retryCreateStep: string
   readonly retryMutation: string
@@ -392,6 +394,7 @@ export const defaultBoardMessages: BoardMessages = {
     promote: "推进就绪",
     claim: "开始执行",
     heartbeat: "保持执行",
+    release: "释放回就绪",
     complete: "标记完成",
     "submit-review": "提交审查",
     block: "标记阻塞",
@@ -415,6 +418,8 @@ export const defaultBoardMessages: BoardMessages = {
   mutationUnavailable: "服务暂时不可用，请稍后重试。",
   conflictDescription: "任务已被其他操作更新。已重新读取 canonical 状态，请确认输入后重试。",
   reconcileStale: "操作已经提交，但 canonical 看板暂时无法重新读取；当前显示保留为待确认状态。",
+  releaseClaimRequired: "需要当前任务的本地认领令牌才能释放回就绪。",
+  releaseSuccess: "任务已释放回就绪。",
   retryReload: "重新读取看板",
   retryCreateStep: "重试添加首个步骤",
   retryMutation: "重新尝试",
@@ -503,6 +508,7 @@ export const englishBoardMessages: BoardMessages = {
     promote: "Promote to ready",
     claim: "Start execution",
     heartbeat: "Keep running",
+    release: "Return to ready",
     complete: "Mark done",
     "submit-review": "Submit for review",
     block: "Block task",
@@ -526,6 +532,8 @@ export const englishBoardMessages: BoardMessages = {
   mutationUnavailable: "The service is temporarily unavailable. Try again later.",
   conflictDescription: "This task changed elsewhere. Canonical state was reloaded; review your input and try again.",
   reconcileStale: "The action was submitted, but canonical board data could not be reloaded. The optimistic state is marked pending confirmation.",
+  releaseClaimRequired: "A local claim token for this task is required to return it to ready.",
+  releaseSuccess: "Task returned to ready.",
   retryReload: "Reload board",
   retryCreateStep: "Retry first required step",
   retryMutation: "Try again",

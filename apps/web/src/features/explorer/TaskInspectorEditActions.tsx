@@ -108,6 +108,7 @@ export function TaskInspectorActionPanel({
   readonly retryAction: InspectorActionId | null
 }) {
   const views = inspectorActionViews(task, claimToken, copy)
+  const errorMessage = error?.kind === "conflict" ? copy.conflictDescription : error?.message || copy.mutationError
   return (
     <PanelSection id="inspector-actions" title={copy.actions}>
       <div className={styles.actionGrid} role="group" aria-label={copy.actions}>
@@ -138,7 +139,7 @@ export function TaskInspectorActionPanel({
       </div>
       {error ? (
         <div className={styles.mutationError} role="alert" aria-live="polite">
-          <span>{error.message || copy.mutationError}</span>
+          <span>{errorMessage}</span>
           {onRetry ? <button type="button" onClick={onRetry}>{copy.retryAction}</button> : null}
         </div>
       ) : null}

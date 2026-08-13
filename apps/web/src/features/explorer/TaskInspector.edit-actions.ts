@@ -15,15 +15,12 @@ import type {
 } from "./task-inspector-mutation-state"
 import type { TaskInspectorViewModel } from "./TaskInspector"
 
-export const inspectorActionIds = ["specify", "promote", "claim", "heartbeat", "complete", "submit-review", "block", "unblock", "archive"] as const
-// `release` is supported by the shared mutation adapter, but it is deliberately
-// not in this rendered action list until the Inspector surface has an explicit
-// affordance for it.
-export type InspectorActionId = (typeof inspectorActionIds)[number] | "release"
+export const inspectorActionIds = ["specify", "promote", "claim", "heartbeat", "release", "complete", "submit-review", "block", "unblock", "archive"] as const
+export type InspectorActionId = (typeof inspectorActionIds)[number]
 
 export const inspectorActionLabels: Readonly<Record<Locale, readonly string[]>> = {
-  zh: ["指定", "晋级", "认领", "发送心跳", "完成", "提交审核", "阻塞", "解除阻塞", "归档"],
-  en: ["Specify", "Promote", "Claim", "Heartbeat", "Complete", "Submit Review", "Block", "Unblock", "Archive"],
+  zh: ["指定", "晋级", "认领", "发送心跳", "释放回就绪", "完成", "提交审核", "阻塞", "解除阻塞", "归档"],
+  en: ["Specify", "Promote", "Claim", "Heartbeat", "Return to ready", "Complete", "Submit Review", "Block", "Unblock", "Archive"],
 }
 
 export function inspectorMutationCommitted(outcome: InspectorMutationOutcome | null): boolean {
@@ -147,6 +144,7 @@ export interface InspectorActionCopy {
     readonly plan: string
     readonly promote: string
     readonly claim: string
+    readonly release: string
     readonly requiredSteps: string
     readonly status: string
   }
@@ -276,8 +274,8 @@ function actionDisabledReason(task: BoardTaskViewModel, action: InspectorActionI
     case "specify": return copy.actionReasons.description
     case "promote": return task.readiness.dependencyBlocked ? copy.actionReasons.dependencies : task.readiness.executionPlanState === "unplanned" ? copy.actionReasons.plan : copy.actionReasons.promote
     case "heartbeat":
-    case "release":
     case "submit-review": return copy.actionReasons.claim
+    case "release": return copy.actionReasons.release
     case "complete": return copy.actionReasons.requiredSteps
     default: return copy.actionReasons.status
   }
@@ -307,6 +305,5 @@ export function inspectorActionViews(task: TaskInspectorViewModel["task"], claim
 }
 
 export function actionLabel(action: InspectorActionId, locale: Locale): string {
-  if (action === "release") return action
   return inspectorActionLabels[locale][inspectorActionIds.indexOf(action)] ?? action
 }

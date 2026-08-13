@@ -64,20 +64,28 @@ const model: TaskInspectorViewModel = {
 }
 
 describe("TaskInspector", () => {
-  test("renders the editor trigger and the exact nine legal transition labels", () => {
+  test("renders the editor trigger and the exact ten legal transition labels", () => {
     const handlers = {} as TaskInspectorMutationHandlers
     const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" mutationHandlers={handlers} claimToken="claim_1" />)
 
     expect(markup).toContain("Edit task")
     expect(markup).toContain('data-testid="inspector-actions"')
-    expect(inspectorActionIds).toEqual(["specify", "promote", "claim", "heartbeat", "complete", "submit-review", "block", "unblock", "archive"])
-    for (const label of [inspectorActionLabels.en[3], inspectorActionLabels.en[4], inspectorActionLabels.en[5], inspectorActionLabels.en[6], inspectorActionLabels.en[8]]) {
+    expect(inspectorActionIds).toEqual(["specify", "promote", "claim", "heartbeat", "release", "complete", "submit-review", "block", "unblock", "archive"])
+    for (const label of [inspectorActionLabels.en[3], inspectorActionLabels.en[4], inspectorActionLabels.en[5], inspectorActionLabels.en[6], inspectorActionLabels.en[9]]) {
       expect(markup).toContain(label)
     }
     expect(markup).toContain("Required steps are incomplete")
     expect(markup).toContain("aria-describedby=\"inspector-action-reason-complete\"")
-    expect(markup).not.toContain("Release")
+    expect(markup).toContain("Return to ready")
     expect(markup).not.toContain("Reopen")
+    expect(markup).not.toMatch(/>release<|>release task</i)
+  })
+
+  test("renders return-to-ready disabled copy when the local claim token is absent", () => {
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" mutationHandlers={{} as TaskInspectorMutationHandlers} />)
+
+    expect(markup).toContain("Return to ready")
+    expect(markup).toContain("A local claim token for this task is required to return it to ready.")
   })
 
   test("builds a typed save input with the current lock version", () => {

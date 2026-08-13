@@ -14,11 +14,57 @@ describe("App route parser", () => {
     expect(parseAppRoute("https://kanban.test/app")).toEqual({
       kind: "home",
       pathname: "/app/",
+      query: { archive: "active" },
     })
     expect(parseAppRoute("/app/?from=bookmark")).toEqual({
       kind: "home",
       pathname: "/app/",
+      query: { archive: "active" },
     })
+  })
+
+  test("parses and normalizes the typed Projects collection query", () => {
+    expect(parseAppRoute("/app/?archive=archived&q=%20Alpha%20")).toEqual({
+      kind: "home",
+      pathname: "/app/",
+      query: { archive: "archived", q: "Alpha" },
+    })
+    expect(parseAppRoute("/app/?archive=unknown&q=needle")).toEqual({
+      kind: "home",
+      pathname: "/app/",
+      query: { archive: "active", q: "needle" },
+    })
+  })
+
+  test("rejects NUL and caps a Projects query search at 1024 characters", () => {
+    const nul = encodeURIComponent("before\u0000after")
+    expect(parseAppRoute(`/app/?archive=archived&q=${nul}`)).toEqual({
+      kind: "home",
+      pathname: "/app/",
+      query: { archive: "archived" },
+    })
+    expect(parseAppRoute(`/app/?q=${"x".repeat(1025)}`)).toEqual({
+      kind: "home",
+      pathname: "/app/",
+      query: { archive: "active", q: "x".repeat(1024) },
+    })
+  })
+
+  test("serializes the Projects collection query while omitting the active default", () => {
+    expect(routePath({ kind: "home", query: { archive: "active" } })).toBe("/app/")
+    expect(routePath({ kind: "home", query: { archive: "archived", q: " Alpha " } })).toBe("/app/?archive=archived&q=Alpha")
+    expect(routePath({ kind: "home", query: { archive: "active", q: ` ${"x".repeat(1025)} ` } })).toBe(`/app/?q=${"x".repeat(1024)}`)
+    expect(routePath({ kind: "home", query: { archive: "archived", q: "before\u0000after" } })).toBe("/app/?archive=archived")
+  })
+
+  test("round-trips typed Projects query through history navigation", async () => {
+    const history = { pushState: vi.fn(), replaceState: vi.fn() }
+    const target = { kind: "home" as const, query: { archive: "archived" as const, q: "needle" } }
+    const route = await navigateApp(target, { history })
+
+    expect(route).toEqual({ kind: "home", pathname: "/app/", query: { archive: "archived", q: "needle" } })
+    expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/?archive=archived&q=needle")
+    expect(parseAppRoute(history.pushState.mock.calls[0]?.[2] as string)).toEqual(route)
   })
 
   test("parses a board route without decoding a slash into a slug", () => {
@@ -182,7 +228,7 @@ describe("History API navigation", () => {
       history,
     })
 
-    expect(route).toEqual({ kind: "home", pathname: "/app/" })
+    expect(route).toEqual({ kind: "home", pathname: "/app/", query: { archive: "active" } })
     expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/")
     expect(history.replaceState).not.toHaveBeenCalled()
   })
@@ -191,7 +237,7 @@ describe("History API navigation", () => {
     const history = { pushState: vi.fn(), replaceState: vi.fn() }
     const route = await navigateApp("/app/", { defaultBoard: "selector:active", history })
 
-    expect(route).toEqual({ kind: "home", pathname: "/app/" })
+    expect(route).toEqual({ kind: "home", pathname: "/app/", query: { archive: "active" } })
     expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/")
     expect(history.replaceState).not.toHaveBeenCalled()
   })
@@ -240,7 +286,7 @@ describe("History API navigation", () => {
       history,
     })
 
-    expect(route).toEqual({ kind: "home", pathname: "/app/" })
+    expect(route).toEqual({ kind: "home", pathname: "/app/", query: { archive: "active" } })
     expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/")
     expect(history.replaceState).not.toHaveBeenCalled()
   })

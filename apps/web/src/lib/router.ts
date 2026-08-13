@@ -17,6 +17,18 @@ export type InvalidBoardRoute = {
 export type BoardRouteView = "board" | "list" | "map" | "runs" | "events"
 export type BoardView = BoardRouteView | "signals" | "ontology"
 
+export type ProjectsArchive = "active" | "archived"
+
+export interface ProjectsRouteQuery {
+  readonly archive: ProjectsArchive
+  readonly q?: string
+}
+
+type ProjectsRouteQueryInput = {
+  readonly archive?: ProjectsArchive
+  readonly q?: string
+}
+
 export interface SignalsRouteFilters {
   readonly status?: "review" | "all" | "open" | "confirmed" | "resolved" | "rejected" | "superseded"
   readonly kinds?: readonly string[]
@@ -34,7 +46,7 @@ export interface OntologyRouteFilters {
 export type BoardRouteFilters = SignalsRouteFilters | OntologyRouteFilters
 
 export type AppRoute =
-  | { kind: "home"; pathname: string }
+  | { kind: "home"; pathname: string; query: ProjectsRouteQuery }
   | { kind: "board"; boardSlug: CanonicalBoardSlug; pathname: string; view?: BoardView; query?: string; filters?: BoardRouteFilters }
   | { kind: "project-overview"; boardSlug: CanonicalBoardSlug; pathname: string }
   | { kind: "health"; boardSlug: CanonicalBoardSlug; pathname: string }
@@ -45,7 +57,7 @@ export type AppRoute =
 
 export type AppNavigationTarget =
   | AppRoute
-  | { kind: "home" }
+  | { kind: "home"; query?: ProjectsRouteQueryInput }
   | {
       kind: "board"
       boardSlug: CanonicalBoardSlug
@@ -97,6 +109,42 @@ function queryFromInput(input: string): string {
   } catch {
     return input.split("?", 2)[1]?.split("#", 1)[0] ?? ""
   }
+}
+
+const MAX_PROJECTS_QUERY_LENGTH = 1024
+
+function normalizeProjectsSearch(value: string | undefined): string | undefined {
+  if (value === undefined || value.includes("\u0000")) return undefined
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return undefined
+  return trimmed.length <= MAX_PROJECTS_QUERY_LENGTH ? trimmed : trimmed.slice(0, MAX_PROJECTS_QUERY_LENGTH)
+}
+
+function normalizeProjectsQuery(query: ProjectsRouteQueryInput | undefined): ProjectsRouteQuery {
+  const archive: ProjectsArchive = query?.archive === "archived" ? "archived" : "active"
+  const q = normalizeProjectsSearch(query?.q)
+  return {
+    archive,
+    ...(q === undefined ? {} : { q }),
+  }
+}
+
+export function parseProjectsQuery(input: string | URLSearchParams): ProjectsRouteQuery {
+  const params = typeof input === "string"
+    ? new URLSearchParams(input.startsWith("?") ? input.slice(1) : input)
+    : input
+  return normalizeProjectsQuery({
+    archive: params.get("archive") === "archived" ? "archived" : "active",
+    q: params.get("q") ?? undefined,
+  })
+}
+
+export function serializeProjectsQuery(query: ProjectsRouteQueryInput | undefined): string {
+  const normalized = normalizeProjectsQuery(query)
+  const params = new URLSearchParams()
+  if (normalized.archive !== "active") params.set("archive", normalized.archive)
+  if (normalized.q !== undefined) params.set("q", normalized.q)
+  return params.toString()
 }
 
 function canonicalPathname(pathname: string, basePath: string): string {
@@ -197,7 +245,7 @@ export function parseAppRoute(
   const baseWithoutTrailingSlash = basePath.length > 1 ? basePath.slice(0, -1) : basePath
 
   if (pathname === basePath || pathname === baseWithoutTrailingSlash) {
-    return { kind: "home", pathname: basePath }
+    return { kind: "home", pathname: basePath, query: parseProjectsQuery(query) }
   }
   if (pathname === `${baseWithoutTrailingSlash}/settings`) {
     return { kind: "settings", pathname: `${baseWithoutTrailingSlash}/settings` }
@@ -255,7 +303,7 @@ export function parseAppRoute(
 
 type RoutePathInput =
   | AppRoute
-  | { kind: "home" }
+  | { kind: "home"; query?: ProjectsRouteQueryInput }
   | { kind: "board"; boardSlug: CanonicalBoardSlug; view?: BoardView; query?: string; filters?: BoardRouteFilters }
   | { kind: "project-overview"; boardSlug: CanonicalBoardSlug }
   | { kind: "health"; boardSlug: CanonicalBoardSlug }
@@ -266,7 +314,7 @@ function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOpt
   if (typeof target === "string") return parseAppRoute(target, options)
   switch (target.kind) {
     case "home":
-      return { kind: "home", pathname: routePath(target, options) }
+      return { kind: "home", pathname: routePath({ kind: "home" }, options), query: normalizeProjectsQuery(target.query) }
     case "board":
       if (!parseCanonicalBoardSlug(target.boardSlug)) return invalidBoardRoute(routePath({ kind: "home" }, options), target.boardSlug)
       // `AppRoute` is a valid navigation target too. Preserve its explorer
@@ -299,8 +347,10 @@ function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOpt
 export function routePath(route: RoutePathInput, options: { basePath?: string } = {}): string {
   const basePath = normalizeBasePath(options.basePath)
   switch (route.kind) {
-    case "home":
-      return basePath
+    case "home": {
+      const search = serializeProjectsQuery(route.query)
+      return search.length > 0 ? `${basePath}?${search}` : basePath
+    }
     case "settings":
       return `${basePath.replace(/\/$/, "")}/settings`
     case "board": {

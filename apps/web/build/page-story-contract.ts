@@ -1,41 +1,35 @@
 /** Formal Storybook page metadata contract and build-time catalog gates. */
 
-export const PAGE_STORY_ROUTES = [
-  { path: "/app/", kind: "home", routerKind: "home" },
-  { path: "/app/boards/:boardSlug/overview", kind: "project-overview", routerKind: "project-overview" },
-  { path: "/app/boards/:boardSlug/board", kind: "board", routerKind: "board", view: "board" },
-  { path: "/app/boards/:boardSlug/list", kind: "list", routerKind: "board", view: "list" },
-  { path: "/app/boards/:boardSlug/map", kind: "map", routerKind: "board", view: "map" },
-  { path: "/app/boards/:boardSlug/runs", kind: "runs", routerKind: "board", view: "runs" },
-  { path: "/app/boards/:boardSlug/events", kind: "events", routerKind: "board", view: "events" },
-  { path: "/app/boards/:boardSlug/signals", kind: "signals", routerKind: "board", view: "signals" },
-  { path: "/app/boards/:boardSlug/ontology", kind: "ontology", routerKind: "board", view: "ontology" },
-  { path: "/app/boards/:boardSlug/health", kind: "health", routerKind: "health" },
-  { path: "/app/boards/:boardSlug/maintenance", kind: "maintenance", routerKind: "maintenance" },
-  { path: "/app/settings", kind: "settings", routerKind: "settings" },
-] as const
+import {
+  PAGE_STORY_ROUTES,
+  PAGE_STORY_ROUTER_ALIASES,
+  PAGE_STORY_ROUTER_BOUNDARIES,
+} from "../src/stories/pages/page-story-catalog"
+import type {
+  PageStoryCatalogEntry,
+  PageStoryContract,
+  PageStoryRouterAlias,
+  PageStoryRouterBoundary,
+} from "../src/stories/pages/page-story-catalog"
 
-export type PageStoryRoute = (typeof PAGE_STORY_ROUTES)[number] & Readonly<{ productionOwner: string }>
-export type PageStoryKind = PageStoryRoute["kind"]
-export type PageStoryFrame = "content" | "workspace"
-
-export type PageStoryContract = Readonly<{
-  route: PageStoryRoute
-  fixture: Readonly<{
-    canonicalSafe: true
-    api: false
-    sse: false
-    mutation: false
-  }>
-  responsive: Readonly<{ wide: string; narrow: string }>
-  states: readonly string[]
-  frame: PageStoryFrame
-  astryx: Readonly<{
-    package: string
-    commands: readonly string[]
-    adopted: readonly string[]
-  }>
-}>
+export {
+  PAGE_STORY_CATALOG,
+  PAGE_STORY_ROUTES,
+  PAGE_STORY_ROUTER_ALIASES,
+  PAGE_STORY_ROUTER_BOUNDARIES,
+} from "../src/stories/pages/page-story-catalog"
+export type {
+  PageStoryCatalogEntry,
+  PageStoryCatalogInput,
+  PageStoryContract,
+  PageStoryFrame,
+  PageStoryKind,
+  PageStoryRoute,
+  PageStoryRouterAlias,
+  PageStoryRouterBoundary,
+  PageStoryState,
+  PageStoryView,
+} from "../src/stories/pages/page-story-catalog"
 
 export function definePageStoryContract<const Contract extends PageStoryContract>(contract: Contract): Contract {
   return contract
@@ -66,28 +60,6 @@ export type PageStoryValidationResult = Readonly<{
   diagnostics: readonly PageStoryDiagnostic[]
   errors: readonly PageStoryDiagnostic[]
 }>
-
-export type PageStoryRouterAlias = Readonly<{
-  aliasKind: "default-board"
-  path: string
-  canonicalPath: string
-}>
-
-export type PageStoryRouterBoundary = Readonly<{
-  pathPattern: string
-  kind: "not-found" | "invalid-board-slug"
-  expectedKind: "not-found" | "error"
-  errorCode?: "invalid-board-slug"
-}>
-
-export const PAGE_STORY_ROUTER_ALIASES: readonly PageStoryRouterAlias[] = Object.freeze([
-  { aliasKind: "default-board", path: "/app/boards/:boardSlug", canonicalPath: "/app/boards/:boardSlug/board" },
-])
-
-export const PAGE_STORY_ROUTER_BOUNDARIES: readonly PageStoryRouterBoundary[] = Object.freeze([
-  { pathPattern: "/app/not-a-route", kind: "not-found", expectedKind: "not-found" },
-  { pathPattern: "/app/boards/%2F/board", kind: "invalid-board-slug", expectedKind: "error", errorCode: "invalid-board-slug" },
-])
 
 type UnknownRecord = Record<string, unknown>
 
@@ -175,13 +147,6 @@ export function validatePageStoryContract(input: unknown): PageStoryValidationRe
 export function isValidPageStoryContract(input: unknown): input is PageStoryContract {
   return validatePageStoryContract(input).ok
 }
-
-export type PageStoryCatalogEntry = Readonly<{ contract: PageStoryContract; readyStoryId: string }>
-export type PageStoryCatalogInput = Readonly<{
-  routes: readonly PageStoryCatalogEntry[]
-  aliases: readonly PageStoryRouterAlias[]
-  boundaries: readonly PageStoryRouterBoundary[]
-}>
 
 export type PageStoryCatalogValidationResult = Readonly<{
   ok: boolean

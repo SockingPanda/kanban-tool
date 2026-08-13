@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  PAGE_STORY_CATALOG,
   PAGE_STORY_ROUTES,
   PAGE_STORY_ROUTER_ALIASES,
   PAGE_STORY_ROUTER_BOUNDARIES,
@@ -59,6 +60,13 @@ describe("PageStoryContract", () => {
 })
 
 describe("PageStoryCatalog and router coverage", () => {
+  test("uses the typed page-story catalog as the formal route source", () => {
+    expect(PAGE_STORY_CATALOG.routes).toHaveLength(12)
+    expect(PAGE_STORY_ROUTES).toEqual(PAGE_STORY_CATALOG.routes.map(({ contract: { route } }) => route))
+    expect(validatePageStoryCatalog(PAGE_STORY_CATALOG).ok).toBe(true)
+    expect(PAGE_STORY_CATALOG.routes.every(({ readyStoryId }) => readyStoryId.startsWith("pages-routes--"))).toBe(true)
+  })
+
   const routes = PAGE_STORY_ROUTES.map((route) => ({ contract: contract(route.path), readyStoryId: `story-${route.kind}` }))
   const complete = { routes, aliases: PAGE_STORY_ROUTER_ALIASES, boundaries: PAGE_STORY_ROUTER_BOUNDARIES }
 

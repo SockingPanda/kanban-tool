@@ -65,13 +65,35 @@ describe("TaskRunsView", () => {
 
   test("renders error and offline states with retry affordance", () => {
     const retry = vi.fn()
-    const error = renderToStaticMarkup(<TaskRunsPresentation locale="zh" taskId="t_1" state={{ data: null, loading: false, error: new ExplorerReadError("http", "runs failed") }} onRetry={retry} />)
-    const offline = renderToStaticMarkup(<TaskRunsPresentation locale="en" taskId="t_1" state={{ data: null, loading: false, error: new ExplorerReadError("offline", "offline") }} onRetry={retry} />)
+    const error = renderToStaticMarkup(<TaskRunsPresentation locale="zh" taskId="t_1" state={{ data: null, loading: false, error: new ExplorerReadError("http", "secret runs failure", { status: 503 }) }} onRetry={retry} />)
+    const offline = renderToStaticMarkup(<TaskRunsPresentation locale="en" taskId="t_1" state={{ data: null, loading: false, error: new ExplorerReadError("offline", "secret offline detail") }} onRetry={retry} />)
 
     expect(error).toContain('data-testid="runs-error"')
     expect(offline).toContain('data-testid="runs-offline"')
     expect(offline).toContain("You are offline")
+    expect(error).toContain("无法读取")
+    expect(error).toContain("http")
+    expect(error).toContain("503")
+    expect(error).not.toContain("secret runs failure")
+    expect(offline).not.toContain("secret offline detail")
     expect(error).toContain("重试")
+  })
+
+  test("redacts retained snapshot refresh errors and keeps retry copy local", () => {
+    const secret = "secret retained runs response"
+    const markup = renderToStaticMarkup(
+      <TaskRunsPresentation
+        locale="en"
+        taskId="t_1"
+        state={{ ...ready, error: new ExplorerReadError("http", secret, { status: 502 }) }}
+        onRetry={vi.fn()}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="runs-ready"')
+    expect(markup).toContain("unreadable response")
+    expect(markup).toContain("Retry")
+    expect(markup).not.toContain(secret)
   })
 
   test("renders ready run rows and the first available log without clickable rows", () => {

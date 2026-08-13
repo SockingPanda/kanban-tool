@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
 import { queryWithAttentionLens } from "../attention/attention-lens"
+import { ExplorerReadError } from "../../lib/api/explorer-read-model"
 import { TaskListView, type TaskListRow, type TaskListViewState } from "./TaskListView"
 
 const rows: TaskListRow[] = [
@@ -98,6 +99,61 @@ describe("TaskListView", () => {
     expect(empty).toContain('data-empty-kind="filter"')
     expect(empty).toContain('data-testid="task-list-filter-empty"')
     expect(empty).not.toContain('data-testid="task-row"')
+  })
+
+  test("redacts initial and retained list errors while preserving offline and retry states", () => {
+    const retry = vi.fn()
+    const secret = "secret task list transport response"
+    const failed = renderToStaticMarkup(
+      <TaskListView
+        state={state}
+        rows={[]}
+        loading={false}
+        error={new ExplorerReadError("http", secret, { status: 503 })}
+        onQueryChange={vi.fn()}
+        onSelectTask={vi.fn()}
+        onRetry={retry}
+        locale="en"
+      />,
+    )
+    const offline = renderToStaticMarkup(
+      <TaskListView
+        state={state}
+        rows={[]}
+        loading={false}
+        error={new ExplorerReadError("offline", "secret offline task list detail")}
+        onQueryChange={vi.fn()}
+        onSelectTask={vi.fn()}
+        onRetry={retry}
+        locale="en"
+      />,
+    )
+    const stale = renderToStaticMarkup(
+      <TaskListView
+        state={state}
+        rows={rows}
+        loading={false}
+        error={new ExplorerReadError("http", secret, { status: 503 })}
+        onQueryChange={vi.fn()}
+        onSelectTask={vi.fn()}
+        onRetry={retry}
+        locale="en"
+      />,
+    )
+
+    expect(failed).toContain('data-testid="task-list-error"')
+    expect(failed).toContain("unreadable response")
+    expect(failed).toContain("http")
+    expect(failed).toContain("503")
+    expect(failed).toContain("Retry")
+    expect(failed).not.toContain(secret)
+    expect(offline).toContain('data-testid="task-list-offline"')
+    expect(offline).toContain("You are offline")
+    expect(offline).not.toContain("secret offline task list detail")
+    expect(stale).toContain('data-testid="task-list-error"')
+    expect(stale).toContain("unreadable response")
+    expect(stale).toContain("Retry")
+    expect(stale).not.toContain(secret)
   })
 
   test("renders List and Table as distinct projections over the same rows", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import { HttpTransportError } from "../lib/api/http-transport"
+import { ExplorerReadError } from "../lib/api/explorer-read-model"
 import { SignalsOntologyReadError } from "../lib/api/signals-ontology-read-model"
 import { localizedErrorMessage } from "./safe-error"
 
@@ -22,5 +23,22 @@ describe("safe localized feature errors", () => {
     const error = new SignalsOntologyReadError("board_scope", "board=b_other")
     expect(localizedErrorMessage(error, "fallback", "en")).toContain("another board")
     expect(localizedErrorMessage(error, "fallback", "en")).not.toContain("b_other")
+  })
+
+  test("maps explorer errors to local copy while retaining allowlisted kind and status", () => {
+    const error = new ExplorerReadError("http", "secret server detail", { status: 503 })
+    const message = localizedErrorMessage(error, "fallback", "en")
+
+    expect(message).toContain("unreadable response")
+    expect(message).toContain("http")
+    expect(message).toContain("503")
+    expect(message).not.toContain("secret server detail")
+  })
+
+  test("keeps explorer offline errors distinct and local", () => {
+    const error = new ExplorerReadError("offline", "secret offline detail")
+
+    expect(localizedErrorMessage(error, "fallback", "en")).toContain("local service is unreachable")
+    expect(localizedErrorMessage(error, "fallback", "en")).not.toContain("secret offline detail")
   })
 })

@@ -16,6 +16,7 @@ import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
+import { localizedErrorMessage } from "../safe-error"
 import {
   Grid,
   PageFrame,
@@ -441,7 +442,7 @@ function TaskMapToolbar({
   )
 }
 
-function TaskMapError({ copy, error, onRetry }: { readonly copy: MapCopy; readonly error: Error; readonly onRetry?: () => void }) {
+function TaskMapError({ copy, locale, error, onRetry }: { readonly copy: MapCopy; readonly locale: Locale; readonly error: Error; readonly onRetry?: () => void }) {
   const notFound = errorReason(error) === "board-not-found"
   const offline = error instanceof ExplorerReadError && error.kind === "offline"
   return (
@@ -450,7 +451,7 @@ function TaskMapError({ copy, error, onRetry }: { readonly copy: MapCopy; readon
         status={offline ? "warning" : "error"}
         role={offline ? "status" : "alert"}
         title={offline ? copy.offline : notFound ? copy.notFound : copy.error}
-        description={!offline ? error.message : undefined}
+        description={!offline ? localizedErrorMessage(error, copy.error, locale) : undefined}
         endContent={onRetry ? <Button label={copy.retry} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
       />
     </SafeSection>
@@ -568,7 +569,7 @@ export function TaskMapPresentation({
             status={offline ? "warning" : "error"}
             role={offline ? "status" : "alert"}
             title={offline ? copy.offline : copy.refreshError}
-            description={!offline ? state.error.message : undefined}
+            description={!offline ? localizedErrorMessage(state.error, copy.refreshError, locale) : undefined}
             data-testid={offline ? "task-map-offline" : "task-map-refresh-error"}
           />
         ) : null}
@@ -576,7 +577,7 @@ export function TaskMapPresentation({
           <Banner status="warning" role="alert" title={copy.truncated} description={`${copy.limit} ${mapMeta.limit_nodes}${locale === "zh" ? "。" : "."}`} data-testid="task-map-truncated" />
         ) : null}
 
-        {state.error && !sourceGraph ? <TaskMapError copy={copy} error={state.error} onRetry={onRetry} /> : null}
+        {state.error && !sourceGraph ? <TaskMapError copy={copy} locale={locale} error={state.error} onRetry={onRetry} /> : null}
         {!state.error && state.loading && !sourceGraph ? (
           <SafeSection variant="transparent" padding={0} data-testid="task-map-loading">
             <Banner status="info" role="status" title={copy.loading} description={copy.loadingDescription} />

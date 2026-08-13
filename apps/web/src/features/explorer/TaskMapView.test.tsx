@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
-import type { ExplorerTaskMap, ExplorerTaskMapReadModel } from "../../lib/api/explorer-read-model"
+import { ExplorerReadError, type ExplorerTaskMap, type ExplorerTaskMapReadModel } from "../../lib/api/explorer-read-model"
 import { assertCanonicalBoardSlug } from "../../lib/board-slug"
 import { PreferencesProvider } from "../../lib/preferences-provider"
 import { asCanonicalBoardId } from "../../lib/sync/contracts"
@@ -284,5 +284,54 @@ describe("TaskMapView", () => {
     expect(empty).toContain('data-testid="task-map-empty"')
     expect(failed).toContain('data-testid="task-map-error"')
     expect(missing).toContain('data-testid="task-map-not-found"')
+  })
+
+  test("redacts initial and retained map errors while preserving offline and retry states", () => {
+    const retry = vi.fn()
+    const secret = "secret map transport response"
+    const failed = renderToStaticMarkup(
+      <TaskMapPresentation
+        locale="en"
+        board="default"
+        taskId={null}
+        state={{ data: null, loading: false, error: new ExplorerReadError("http", secret, { status: 502 }) }}
+        onSelectTask={() => undefined}
+        onRetry={retry}
+      />,
+    )
+    const offline = renderToStaticMarkup(
+      <TaskMapPresentation
+        locale="en"
+        board="default"
+        taskId={null}
+        state={{ data: null, loading: false, error: new ExplorerReadError("offline", "secret offline map detail") }}
+        onSelectTask={() => undefined}
+        onRetry={retry}
+      />,
+    )
+    const stale = renderToStaticMarkup(
+      <TaskMapPresentation
+        locale="en"
+        board="default"
+        taskId={null}
+        state={{ ...ready, error: new ExplorerReadError("http", secret, { status: 502 }) }}
+        onSelectTask={() => undefined}
+        onRetry={retry}
+      />,
+    )
+
+    expect(failed).toContain('data-testid="task-map-error"')
+    expect(failed).toContain("unreadable response")
+    expect(failed).toContain("http")
+    expect(failed).toContain("502")
+    expect(failed).toContain("Retry")
+    expect(failed).not.toContain(secret)
+    expect(offline).toContain('data-testid="task-map-offline"')
+    expect(offline).toContain("You are offline")
+    expect(offline).not.toContain("secret offline map detail")
+    expect(stale).toContain('data-testid="task-map-refresh-error"')
+    expect(stale).toContain("unreadable response")
+    expect(stale).toContain("Refresh")
+    expect(stale).not.toContain(secret)
   })
 })

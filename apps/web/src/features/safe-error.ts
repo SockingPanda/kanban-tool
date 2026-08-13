@@ -1,4 +1,5 @@
 import type { Locale } from "../lib/preferences"
+import { ExplorerReadError } from "../lib/api/explorer-read-model"
 import { HttpTransportError } from "../lib/api/http-transport"
 import { SignalsOntologyReadError } from "../lib/api/signals-ontology-read-model"
 
@@ -54,9 +55,53 @@ function transportMessage(error: HttpTransportError, copy: ErrorCopy): string {
   return copy.unreadable
 }
 
+const explorerErrorKinds: ReadonlySet<ExplorerReadError["kind"]> = new Set([
+  "empty",
+  "offline",
+  "http",
+  "invalid_json",
+  "invalid_contract",
+  "anomaly",
+  "cross_origin",
+  "malformed_url",
+  "invalid_content_type",
+  "response_too_large",
+])
+
+function explorerContext(error: ExplorerReadError): string {
+  const kind = explorerErrorKinds.has(error.kind) ? error.kind : null
+  const statusValue = error.status
+  const status = statusValue !== null && Number.isInteger(statusValue) && statusValue >= 100 && statusValue <= 599
+    ? `HTTP ${statusValue}`
+    : null
+  return [kind, status].filter(Boolean).join(" · ")
+}
+
+function explorerMessage(error: ExplorerReadError, copy: ErrorCopy): string {
+  let message: string
+  switch (error.apiError?.code) {
+    case "not_found": message = copy.notFound; break
+    case "conflict":
+    case "idempotency_conflict":
+    case "claim_conflict":
+    case "claim_token_mismatch":
+    case "invalid_transition": message = copy.conflict; break
+    case "invalid_input": message = copy.invalidInput; break
+    case "server_unavailable": message = copy.offline; break
+    default:
+      if (error.reason === "board-not-found" || error.reason === "task-not-found") message = copy.notFound
+      else if (error.kind === "offline") message = copy.offline
+      else if (error.kind === "cross_origin" || error.kind === "malformed_url") message = copy.invalidIdentity
+      else message = copy.unreadable
+  }
+  const context = explorerContext(error)
+  return context.length > 0 ? `${message} (${context})` : message
+}
+
 /** Keep server internals and arbitrary Error messages out of rendered product copy. */
 export function localizedErrorMessage(error: unknown, fallback: string, locale: Locale): string {
   const copy = copies[locale]
+  if (error instanceof ExplorerReadError) return explorerMessage(error, copy)
   if (error instanceof SignalsOntologyReadError) {
     if (error.kind === "identity") return copy.invalidIdentity
     if (error.kind === "board_scope") return copy.wrongBoard

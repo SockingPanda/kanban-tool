@@ -14,6 +14,7 @@ import { ExplorerReadError, loadTaskRuns, type TaskRunsReadModel } from "../../l
 import type { Locale } from "../../lib/preferences"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { usePreferences } from "../../lib/use-preferences"
+import { localizedErrorMessage } from "../safe-error"
 
 export type TaskRunsReadState = {
   readonly data: TaskRunsReadModel | null
@@ -317,7 +318,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry, tasksHref
   const kind = errorKind(state.error instanceof Error ? state.error : null)
   if (state.error && !state.data) {
     const offline = kind === "offline"
-    return <StateBoundary testId={offline ? "runs-offline" : "runs-error"} role={offline ? "status" : "alert"} title={offline ? copy.offline : copy.error} description={offline ? copy.offline : state.error.message} retry={onRetry ? { label: copy.retry, onClick: onRetry } : undefined} scope={scope} />
+    return <StateBoundary testId={offline ? "runs-offline" : "runs-error"} role={offline ? "status" : "alert"} title={offline ? copy.offline : copy.error} description={offline ? copy.offline : localizedErrorMessage(state.error, copy.error, locale)} retry={onRetry ? { label: copy.retry, onClick: onRetry } : undefined} scope={scope} />
   }
   if (state.loading && !state.data) {
     return <StateBoundary testId="runs-loading" role="status" description={copy.loading} scope={scope} />
@@ -345,7 +346,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry, tasksHref
         <Banner
           status={kind === "offline" ? "info" : "error"}
           title={kind === "offline" ? copy.offline : copy.error}
-          description={kind === "offline" ? copy.offline : state.error.message}
+          description={kind === "offline" ? copy.offline : localizedErrorMessage(state.error, copy.error, locale)}
           container="section"
           role={kind === "offline" ? "status" : "alert"}
           endContent={onRetry ? <Button label={copy.retry} variant="ghost" size="sm" onClick={onRetry} /> : undefined}

@@ -13,6 +13,7 @@ import type { ExplorerReadError, TaskListPlanFilter, TaskListQueryState, TaskLis
 import { taskOpenerKey } from "../../lib/explorer-focus"
 import type { Locale } from "../../lib/preferences"
 import { activeAttentionLens, attentionCounts, attentionLenses, queryWithAttentionLens, type AttentionLens } from "../attention/attention-lens"
+import { localizedErrorMessage } from "../safe-error"
 import { CheckboxInput, MultiSelector, SafeHStack, SafeSection, SafeVStack, Selector, TextInput } from "@/ui/astryx"
 
 export interface TaskListRow {
@@ -214,7 +215,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
           status={offline ? "warning" : "error"}
           role={offline ? "status" : "alert"}
           title={offline ? copy.offline : copy.error}
-          description={!offline ? error.message : undefined}
+          description={!offline ? localizedErrorMessage(error, copy.error, locale) : undefined}
           endContent={onRetry ? <Button label={copy.retry} variant="ghost" size="sm" onClick={onRetry} /> : undefined}
         />
       </SafeSection>
@@ -297,7 +298,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
             status={offline ? "warning" : "error"}
             role={offline ? "status" : "alert"}
             title={offline ? copy.offline : copy.error}
-            description={!offline ? error.message : undefined}
+            description={!offline ? localizedErrorMessage(error, copy.error, locale) : undefined}
             endContent={onRetry ? <Button label={copy.retry} variant="ghost" size="sm" onClick={onRetry} /> : undefined}
             data-testid={offline ? "task-list-offline" : "task-list-error"}
           />

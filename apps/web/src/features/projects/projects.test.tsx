@@ -116,11 +116,24 @@ describe("production Projects surfaces", () => {
     expect(loading).toContain('id="projects-search"')
     expect(loading).toContain("disabled")
     expect(loading).toContain('data-testid="projects-collection-loading"')
+    expect(loading).toMatch(/data-testid="projects-collection-loading"[\s\S]*Loading projects[\s\S]*Reading the canonical board list\./)
+    expect(loading).toContain('data-testid="projects-collection-loading-skeleton"')
+    expect((loading.match(/data-size="row"/g) ?? []).length).toBe(3)
     expect(refreshing).toContain("Refreshing projects")
     expect(refreshing).not.toContain('data-testid="projects-collection-ready"')
 
     const recovering = renderWithLocale(<ProjectsCollection projects={[active]} status="recovering" onRetry={vi.fn()} />)
     expect(recovering).not.toContain("Retry")
+  })
+
+  test("makes active and archived project identity states explicit in collection rows", () => {
+    const markup = renderWithLocale(<ProjectsCollection projects={[active, archived]} query={{ archive: "active" }} />)
+
+    expect(markup).toMatch(/data-testid="projects-collection-project-state-active"[^>]*>Active<\/span>/)
+    expect(markup).not.toContain("Archived project")
+
+    const archivedMarkup = renderWithLocale(<ProjectsCollection projects={[active, archived]} query={{ archive: "archived" }} />)
+    expect(archivedMarkup).toMatch(/data-testid="projects-collection-project-state-archived"[^>]*>Archived<\/span>/)
   })
 
   test("renders only board identity, description and archive state on overview", () => {
@@ -147,6 +160,7 @@ describe("production Projects surfaces", () => {
 
     expect(markup).toContain('data-testid="project-overview-status"')
     expect(markup).toContain('data-status="stale"')
+    expect(markup).toMatch(/data-testid="project-overview-status"[\s\S]*Project list is stale[\s\S]*Showing the last successful canonical snapshot\./)
     expect(markup).toContain("Showing the last successful canonical snapshot.")
   })
 

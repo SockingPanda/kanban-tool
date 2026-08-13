@@ -1,4 +1,5 @@
 import type { MouseEvent } from "react"
+import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Code } from "@astryxdesign/core/Code"
 import { Button } from "@astryxdesign/core/Button"
@@ -31,13 +32,13 @@ export function ProjectOverview({ project, onOpenTasks, basePath = "/app/", stat
   const { locale } = usePreferences()
   const t = createTranslator(locale)
   const statusCopy = status === "offline"
-    ? t("projectCollectionOfflineDetail")
+    ? { label: t("projectCollectionOffline"), detail: t("projectCollectionOfflineDetail") }
     : status === "error"
-      ? t("projectCollectionErrorDetail")
+      ? { label: t("projectCollectionError"), detail: t("projectCollectionErrorDetail") }
       : status === "stale"
-        ? t("projectCollectionStaleDetail")
+        ? { label: t("projectCollectionStale"), detail: t("projectCollectionStaleDetail") }
         : status === "recovering"
-          ? t("projectCollectionRecoveringDetail")
+          ? { label: t("projectCollectionRecovering"), detail: t("projectCollectionRecoveringDetail") }
           : undefined
   const boundaryStatus = status === "offline" || status === "error" ? "error" : "warning"
   const boundaryRole = status === "offline" || status === "error" ? "alert" : "status"
@@ -65,7 +66,8 @@ export function ProjectOverview({ project, onOpenTasks, basePath = "/app/", stat
               status={boundaryStatus}
               role={boundaryRole}
               aria-live="polite"
-              title={statusCopy}
+              title={statusCopy.label}
+              description={statusCopy.detail}
               container="section"
               endContent={onRetry !== undefined && status !== "recovering" ? <Button label={t("retry")} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
               data-testid="project-overview-status"
@@ -75,7 +77,11 @@ export function ProjectOverview({ project, onOpenTasks, basePath = "/app/", stat
           <StaticMetadataList data-testid="project-overview-identity">
             <StaticMetadataListItem label={t("slug")}><span translate="no"><Code>{project.slug}</Code></span></StaticMetadataListItem>
             <StaticMetadataListItem label={t("archiveState")}>
-              {project.archivedAt === null ? t("active") : t("archived")}
+              <Badge
+                variant={project.archivedAt === null ? "info" : "neutral"}
+                label={project.archivedAt === null ? t("active") : t("archived")}
+                data-testid="project-overview-archive-state"
+              />
             </StaticMetadataListItem>
           </StaticMetadataList>
           {project.archivedAt === null ? (

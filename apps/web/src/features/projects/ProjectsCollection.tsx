@@ -1,4 +1,5 @@
 import { useMemo, useState, type MouseEvent } from "react"
+import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Heading } from "@astryxdesign/core/Heading"
@@ -12,6 +13,7 @@ import { routePath } from "../../lib/router"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
 import { TextInput } from "../../ui/astryx/fields/TextInput"
+import { Skeleton } from "../../ui/astryx/primitives/Skeleton"
 import { PageFrame } from "../../ui/astryx/page-frame/PageFrame"
 import { StaticHStack, StaticVStack } from "../../ui/astryx/primitives/safe-core"
 import { NavigationIcon } from "../../ui/navigation"
@@ -171,15 +173,24 @@ export function ProjectsCollection({
               status={boundaryStatus}
               role={boundaryRole}
               aria-live="polite"
-              title={boundaryTitle}
+              title={empty ? boundaryTitle : copy.label}
+              description={empty ? undefined : copy.detail}
               container="section"
               endContent={onRetry !== undefined && status !== "loading" && status !== "recovering" && !isRefreshing ? <Button label={t("retry")} variant="secondary" size="sm" onClick={onRetry} /> : undefined}
               data-testid={"projects-collection-" + (empty ? "empty" : status)}
             />
           ) : null}
 
+          {status === "loading" && !hasSnapshot ? (
+            <StaticVStack gap={2} data-testid="projects-collection-loading-skeleton" aria-hidden="true">
+              <Skeleton size="row" />
+              <Skeleton size="row" />
+              <Skeleton size="row" />
+            </StaticVStack>
+          ) : null}
+
           {activeProjects.length > 0 ? (
-            <List density="spacious" hasDividers data-testid="projects-collection-list">
+            <List density="compact" hasDividers data-testid="projects-collection-list">
               {activeProjects.map((project) => (
                 <ListItem
                   key={project.id}
@@ -187,7 +198,7 @@ export function ProjectsCollection({
                     <a
                       href={routePath({ kind: "project-overview", boardSlug: project.slug }, { basePath })}
                       data-testid={"projects-collection-project-" + project.slug}
-                      className="flex min-w-0 items-center gap-3 rounded-md px-3 py-3 text-start text-primary no-underline hover:bg-muted focus-visible:outline-2 focus-visible:outline-accent"
+                      className="flex min-w-0 items-center gap-3 rounded-md px-3 py-2 text-start text-primary no-underline hover:bg-muted focus-visible:outline-2 focus-visible:outline-accent"
                       onClick={onOpenProject === undefined ? undefined : (event: MouseEvent<HTMLAnchorElement>) => {
                         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
                         event.preventDefault()
@@ -196,9 +207,15 @@ export function ProjectsCollection({
                     >
                       <NavigationIcon name="folder" size={22} />
                       <StaticVStack gap={1} className="min-w-0 flex-1">
-                        <Text as="span" type="body" weight="semibold" className="truncate">{project.name}</Text>
+                        <StaticHStack gap={2} align="center" className="min-w-0">
+                          <Text as="span" type="body" weight="semibold" className="min-w-0 flex-1 truncate">{project.name}</Text>
+                          <Badge
+                            variant={project.archivedAt === null ? "info" : "neutral"}
+                            label={project.archivedAt === null ? t("active") : t("archived")}
+                            data-testid={`projects-collection-project-state-${project.archivedAt === null ? "active" : "archived"}`}
+                          />
+                        </StaticHStack>
                         <Text as="span" type="code" color="secondary" className="truncate">{project.slug}</Text>
-                        {project.archivedAt !== null ? <Text as="span" type="supporting" color="secondary">{t("archived")}</Text> : null}
                         {project.description !== null ? <Text as="span" type="supporting" color="secondary" className="truncate">{project.description}</Text> : null}
                       </StaticVStack>
                       <NavigationIcon name="chevron-right" size={17} />

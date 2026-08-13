@@ -20,6 +20,11 @@
     }
   }
 
+  :global(.navigationRoot[data-shell-viewport="tablet"]) .productNavigationMain {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
   @media (max-width: 60rem) {
     .productNavigationMain {
       grid-column: 2;

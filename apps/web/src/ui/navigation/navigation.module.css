@@ -45,6 +45,39 @@
   .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="79"] { --nav-sidebar-width: 19.75rem; }
   .navigationRoot[data-shell-viewport="desktop"][data-sidebar-width-step="80"] { --nav-sidebar-width: 20rem; }
 
+  .navigationRoot[data-shell-viewport="tablet"] {
+    grid-template-columns: var(--nav-rail-width) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-block-size: 100vh;
+    overflow-x: hidden;
+  }
+
+  .navigationRoot[data-shell-viewport="tablet"] .projectsSidebar {
+    position: fixed;
+    z-index: 3;
+    inset-block: 0;
+    inset-inline-start: var(--nav-rail-width);
+    inline-size: min(var(--nav-sidebar-width), calc(100vw - var(--nav-rail-width) - 1rem));
+    max-inline-size: calc(100vw - var(--nav-rail-width));
+    transform: translateX(-104%);
+    visibility: hidden;
+    box-shadow: 0.8rem 0 2.2rem rgb(0 0 0 / 0.3);
+  }
+
+  .navigationRoot[data-shell-viewport="tablet"] .projectsSidebar[data-open="true"] {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .navigationRoot[data-shell-viewport="tablet"] .projectsSidebar[data-open="false"] {
+    pointer-events: none;
+  }
+
+  .navigationRoot[data-shell-viewport="tablet"] .sidebarClose,
+  .navigationRoot[data-shell-viewport="tablet"] .resourceHeaderMenu {
+    display: grid;
+  }
+
   .navigationRoot[data-theme="dark"] {
     color-scheme: dark;
   }
@@ -939,4 +972,5 @@
       inline-size: min(18rem, calc(100vw - var(--nav-rail-width)));
     }
   }
+
 }

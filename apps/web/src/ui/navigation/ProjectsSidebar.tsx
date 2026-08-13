@@ -108,6 +108,7 @@ export function ProjectsSidebar({
   const currentProject = projects.find((project) => project.slug === activeProjectSlug)
   const selectedSection = activeSection ?? (currentProject === undefined ? "projects" : "project")
   const rootClassName = className === undefined ? styles.projectsSidebar : `${styles.projectsSidebar} ${className}`
+  const SidebarTag = isDrawer ? "div" : "aside"
 
   useEffect(() => {
     onCloseRef.current = onClose
@@ -219,8 +220,10 @@ export function ProjectsSidebar({
           onClick={onClose}
         />
       ) : null}
-      <aside
-        ref={sidebarRef}
+      <SidebarTag
+        ref={(node) => {
+          sidebarRef.current = node
+        }}
         id={drawerId}
         className={rootClassName}
         role={isDrawer ? "dialog" : undefined}
@@ -303,7 +306,7 @@ export function ProjectsSidebar({
             <SidebarResizeHandle step={sidebarWidthStep} onStepChange={onSidebarWidthStepChange} onReset={onSidebarWidthReset} />
           ) : null}
         </div>
-      </aside>
+      </SidebarTag>
     </>
   )
 }

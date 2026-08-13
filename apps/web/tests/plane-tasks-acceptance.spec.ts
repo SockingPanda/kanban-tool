@@ -11,14 +11,43 @@ async function expectTasksSurfaceAxeClean(page: import("@playwright/test").Page)
 }
 
 test.describe("Plane-only Tasks workspace acceptance", () => {
-  test("keeps the shell mode at the exact desktop, tablet, and mobile boundaries", async ({ page }) => {
+  test("keeps the shell mode and navigation ownership at exact responsive boundaries", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
 
-    for (const [width, mode] of [[767, "mobile"], [768, "tablet"], [1023, "tablet"], [1024, "desktop"]] as const) {
+    for (const [width, mode] of [[768, "tablet"], [1023, "tablet"], [1024, "desktop"]] as const) {
       await page.setViewportSize({ width, height: 900 })
       await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
-      await expect(page.getByTestId("product-shell")).toHaveAttribute("data-shell-viewport", mode)
+      const shell = page.getByTestId("product-shell")
+      await expect(shell).toHaveAttribute("data-shell-viewport", mode)
+      if (mode === "tablet") {
+        await expect(page.getByTestId("product-rail")).toBeVisible()
+        await expect(page.getByTestId("resource-header-menu")).toBeVisible()
+      }
     }
+  })
+
+  test("keeps the tablet navigation drawer modal, closable, and overflow-safe", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+    await page.setViewportSize({ width: 1023, height: 900 })
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+
+    const menu = page.getByTestId("resource-header-menu")
+    const drawer = page.getByTestId("projects-sidebar")
+    await menu.click()
+    await expect(drawer).toHaveAttribute("role", "dialog")
+    await expect(drawer).toHaveAttribute("aria-modal", "true")
+    await expect(page.getByTestId("projects-sidebar-backdrop")).toBeVisible()
+    await expectNoPageOverflow(page)
+    await expectTasksSurfaceAxeClean(page)
+
+    await page.keyboard.press("Escape")
+    await expect(drawer).toHaveAttribute("data-open", "false")
+    await expect(menu).toBeFocused()
+
+    await menu.click()
+    await drawer.getByTestId("project-tree-overview").click()
+    await expect(page).toHaveURL(/\/app\/boards\/default\/overview$/)
+    await expect(drawer).toHaveAttribute("data-open", "false")
   })
 
   test("keeps desktop sidebar width bounded and keyboard/pointer/reset accessible", async ({ page }) => {

@@ -3,11 +3,11 @@ import { useRef, type PointerEvent, type KeyboardEvent } from "react"
 import {
   SIDEBAR_WIDTH_STEP_MAX,
   SIDEBAR_WIDTH_STEP_MIN,
-  SIDEBAR_WIDTH_STEP_REM,
   normalizeSidebarWidthStep,
   shiftSidebarWidthStep,
   sidebarWidthRem,
 } from "../../lib/preferences"
+import { sidebarWidthStepForPointerDelta } from "./sidebar-resize"
 import styles from "./navigation.module.css"
 
 export type SidebarResizeHandleProps = {
@@ -21,11 +21,6 @@ function rootFontSize(): number {
   if (typeof document === "undefined" || typeof window === "undefined") return 16
   const value = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize)
   return Number.isFinite(value) && value > 0 ? value : 16
-}
-
-export function sidebarWidthStepForPointerDelta(startStep: number, deltaX: number, fontSize = 16): number {
-  const pixelsPerStep = SIDEBAR_WIDTH_STEP_REM * (Number.isFinite(fontSize) && fontSize > 0 ? fontSize : 16)
-  return shiftSidebarWidthStep(startStep, Math.round(deltaX / pixelsPerStep))
 }
 
 function keyboardStep(currentStep: number, key: string): number | null {

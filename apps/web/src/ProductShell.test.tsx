@@ -322,6 +322,36 @@ describe("ProductShell route offline boundary", () => {
     expect(markup).toContain('data-shell-viewport="desktop"')
   })
 
+  test("keeps the rendered shell attached to the Astryx theme seam without inline styling", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesContext.Provider value={{
+        theme: "light",
+        locale: "zh",
+        sidebarWidthStep: 62,
+        density: "comfortable",
+        actor: "",
+        setTheme: () => undefined,
+        setLocale: () => undefined,
+        setDensity: () => undefined,
+        setActor: () => undefined,
+        setSidebarWidthStep: () => undefined,
+        resetSidebarWidth: () => undefined,
+      }}>
+        <ProductShell
+          runtime={runtime}
+          canonicalBoardSlug={assertCanonicalBoardSlug("default")}
+          route={parseAppRoute("http://kanban.test/app/boards/default/board")}
+          boardList={boardListSurface()}
+        />
+      </PreferencesContext.Provider>,
+    )
+
+    expect(markup).toContain('data-testid="product-shell"')
+    expect(markup).toContain('data-theme="light"')
+    expect(markup).toContain('data-density="comfortable"')
+    expect(markup).not.toContain("style=")
+  })
+
   test("keeps operator routes as real diagnostics deep links", () => {
     const markup = renderToStaticMarkup(
       <PreferencesProvider>

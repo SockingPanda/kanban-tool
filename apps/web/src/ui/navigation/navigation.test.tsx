@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
@@ -8,6 +9,7 @@ import { ProjectTree } from "./ProjectTree"
 import { ProjectsSidebar } from "./ProjectsSidebar"
 import { ProductRail } from "./ProductRail"
 import { ResourceHeader } from "./ResourceHeader"
+import { sidebarWidthStepForPointerDelta } from "./sidebar-resize"
 import type { NavigationProject, ProjectPickerStatus } from "./types"
 
 const project: NavigationProject = Object.freeze({
@@ -17,6 +19,10 @@ const project: NavigationProject = Object.freeze({
   description: "Navigation fixture",
   archivedAt: null,
 })
+
+const navigationStylesheet = readFileSync(new URL("./navigation.module.css", import.meta.url), "utf8")
+const shellStylesheet = readFileSync(new URL("../../shell.module.css", import.meta.url), "utf8")
+const themeStylesheet = readFileSync(new URL("../../theme/astryx.css", import.meta.url), "utf8")
 
 type PickerOverrides = {
   readonly status?: ProjectPickerStatus
@@ -30,6 +36,32 @@ function pickerMarkup(overrides: PickerOverrides = {}): string {
 }
 
 describe("navigation accessibility contracts", () => {
+  test("keeps pointer resize math pure and clamps it to the preference range", () => {
+    expect(sidebarWidthStepForPointerDelta(62, 8, 16)).toBe(64)
+    expect(sidebarWidthStepForPointerDelta(62, -32, 16)).toBe(56)
+    expect(sidebarWidthStepForPointerDelta(62, Number.NaN, 16)).toBe(62)
+    expect(sidebarWidthStepForPointerDelta(62, 8, 0)).toBe(64)
+  })
+
+  test("keeps ProductShell surfaces on built Astryx semantic tokens", () => {
+    for (const stylesheet of [navigationStylesheet, shellStylesheet]) {
+      expect(stylesheet).not.toMatch(/--kb-/)
+      expect(stylesheet).not.toMatch(/gradient\s*\(/)
+      const fontSizes = stylesheet.match(/font-size:[^;]+;/g) ?? []
+      expect(fontSizes.every((declaration) => declaration.includes("var(--font-size-"))).toBe(true)
+    }
+
+    expect(navigationStylesheet).toContain("var(--color-background-body)")
+    expect(navigationStylesheet).toContain("var(--color-overlay)")
+    expect(navigationStylesheet).toContain("var(--shadow-high)")
+    expect(themeStylesheet).toContain("--font-size-lg: 1rem")
+    expect(navigationStylesheet).not.toMatch(/background:\s*rgb\(/)
+
+    const shadows = navigationStylesheet.match(/box-shadow:[^;]+;/g) ?? []
+    expect(shadows).toHaveLength(3)
+    expect(shadows.every((declaration) => declaration.includes("var(--shadow-"))).toBe(true)
+  })
+
   test("gives the narrow sidebar a real dialog seam and makes a closed drawer inert", () => {
     const open = renderToStaticMarkup(
       <ProjectsSidebar projects={[project]} open drawerId="navigation-drawer" onClose={vi.fn()} />,

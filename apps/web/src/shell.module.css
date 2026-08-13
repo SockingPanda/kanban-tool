@@ -10,7 +10,7 @@
     grid-template-rows: auto minmax(0, 1fr);
     min-block-size: 100vh;
     min-inline-size: 0;
-    background: var(--kb-color-canvas);
+    background: var(--color-background-body);
   }
 
   @media (min-width: 1024px) {
@@ -30,7 +30,7 @@
     display: block;
     inline-size: 0.45rem;
     block-size: 0.45rem;
-    border-radius: 50%;
+    border-radius: var(--radius-full);
     background: currentColor;
   }
 
@@ -85,7 +85,7 @@
   .boardSwitcherLabel {
     min-width: 0;
     color: var(--color-text-secondary);
-    font-size: 0.7rem;
+    font-size: var(--font-size-sm);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -145,7 +145,7 @@
   .boardSwitcherBoundary {
     min-width: 0;
     color: var(--color-text-secondary);
-    font-size: 0.75rem;
+    font-size: var(--font-size-sm);
     line-height: 1.4;
   }
 
@@ -198,7 +198,7 @@
     min-width: 0;
     overflow-wrap: anywhere;
     color: var(--color-text-primary);
-    font-size: 0.95rem;
+    font-size: var(--font-size-lg);
     font-weight: 700;
   }
 
@@ -244,7 +244,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.75rem;
+    font-size: var(--font-size-sm);
   }
 
   .mainFrame:focus {
@@ -275,7 +275,7 @@
   .pageHeading h1,
   .boundary h1 {
     margin: 0;
-    font-size: clamp(2rem, 4vw, 3.6rem);
+    font-size: var(--font-size-xl);
     letter-spacing: -0.04em;
     line-height: 1;
     text-wrap: balance;
@@ -285,13 +285,13 @@
   .settingsSection h2,
   .runtimeSection h2 {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: var(--font-size-lg);
   }
 
   .eyebrow {
     margin: 0;
     color: var(--color-text-secondary);
-    font-size: 0.7rem;
+    font-size: var(--font-size-sm);
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -301,7 +301,7 @@
     max-width: 58ch;
     margin: 0;
     color: var(--color-text-secondary);
-    font-size: 1.05rem;
+    font-size: var(--font-size-lg);
     line-height: 1.6;
   }
 
@@ -314,8 +314,8 @@
     padding: 0.65rem 0.85rem;
     background: var(--color-background-surface);
     color: var(--color-text-secondary);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.8rem;
+    font-family: var(--font-family-code);
+    font-size: var(--font-size-sm);
     overflow-wrap: anywhere;
     white-space: normal;
   }
@@ -366,7 +366,7 @@
   }
 
   .identityForm input[aria-invalid="true"] {
-    border-color: var(--color-status-error);
+    border-color: var(--color-error);
   }
 
   .headingRow {
@@ -378,7 +378,7 @@
 
   .headingRow h2 {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: var(--font-size-lg);
   }
 
   .secondaryAction {
@@ -416,11 +416,11 @@
   }
 
   .inlineError {
-    color: var(--color-text-error, var(--color-text-primary));
+    color: var(--color-error);
   }
 
   .inlineSuccess {
-    color: var(--color-text-success, var(--color-text-primary));
+    color: var(--color-success);
   }
 
   .inlineStatus {
@@ -446,7 +446,7 @@
     display: grid;
     gap: 0.4rem;
     color: var(--color-text-secondary);
-    font-size: 0.85rem;
+    font-size: var(--font-size-base);
   }
 
   .field select {
@@ -499,15 +499,15 @@
 
   .runtimeFacts dt {
     color: var(--color-text-secondary);
-    font-size: 0.75rem;
+    font-size: var(--font-size-sm);
   }
 
   .runtimeFacts dd {
     margin: 0;
     overflow-wrap: anywhere;
     color: var(--color-text-primary);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.8rem;
+    font-family: var(--font-family-code);
+    font-size: var(--font-size-sm);
   }
 
   .healthRetry {

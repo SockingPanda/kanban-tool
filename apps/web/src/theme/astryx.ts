@@ -33,6 +33,8 @@ export const astryxTheme = defineTheme({
     "--color-warning": ["#9a6500", "#e9ac38"],
     "--color-warning-muted": ["#fff4d9", "#3b2c12"],
     "--color-on-warning": ["#ffffff", "#0f1113"],
+    // Operate shell type scale: 12 / 14 / 16 / 20px for metadata → title.
+    "--font-size-lg": "1rem",
   },
   icons: neutralIconRegistry,
 })

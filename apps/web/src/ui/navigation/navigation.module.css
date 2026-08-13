@@ -1,34 +1,15 @@
 @layer product {
   .navigationRoot {
-    --nav-canvas: var(--kb-color-canvas);
-    --nav-surface: var(--kb-color-surface);
-    --nav-layer: var(--kb-color-layer);
-    --nav-layer-active: var(--kb-color-layer-active);
-    --nav-border: var(--kb-color-border);
-    --nav-border-strong: var(--kb-color-border-strong);
-    --nav-text: var(--kb-color-text-primary);
-    --nav-text-secondary: var(--kb-color-text-secondary);
-    --nav-text-tertiary: var(--kb-color-text-tertiary);
-    --nav-text-disabled: var(--kb-color-text-disabled);
-    --nav-accent: var(--kb-color-accent);
-    --nav-accent-strong: var(--kb-color-accent-strong);
-    --nav-accent-muted: var(--kb-color-accent-muted);
-    --nav-on-accent: var(--kb-color-on-accent);
-    --nav-success: var(--kb-color-success);
-    --nav-warning: var(--kb-color-warning);
-    --nav-danger: var(--kb-color-danger);
-    --nav-control-radius: var(--kb-radius-control);
-    --nav-card-radius: var(--kb-radius-card);
     --nav-rail-width: 3.5rem;
     --nav-sidebar-width: 15.5rem;
     --nav-header-height: 2.75rem;
     display: grid;
     min-width: 0;
     container: navigation-shell / inline-size;
-    color: var(--nav-text);
-    background: var(--nav-canvas);
-    font-family: var(--kb-font-family-body);
-    font-size: 0.875rem;
+    color: var(--color-text-primary);
+    background: var(--color-background-body);
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-base);
     line-height: 1.4;
   }
 
@@ -78,7 +59,7 @@
   }
 
   .navigationRoot :where(a, button, input):focus-visible {
-    outline: var(--kb-focus-ring-width) solid var(--nav-accent-strong);
+    outline: 0.125rem solid var(--color-text-accent);
     outline-offset: 0.15rem;
   }
 
@@ -99,8 +80,8 @@
     flex-direction: column;
     min-block-size: 100%;
     inline-size: var(--nav-rail-width);
-    border-inline-end: 1px solid var(--nav-border);
-    background: var(--nav-surface);
+    border-inline-end: 1px solid var(--color-border);
+    background: var(--color-background-surface);
   }
 
   .brandMark {
@@ -109,9 +90,9 @@
     inline-size: 2.15rem;
     block-size: 2.15rem;
     margin: 0.75rem auto 1rem;
-    border: 1px solid var(--nav-accent-strong);
-    border-radius: var(--nav-control-radius);
-    color: var(--nav-text);
+    border: 1px solid var(--color-text-accent);
+    border-radius: var(--radius-inner);
+    color: var(--color-text-primary);
   }
 
   .brandMark svg {
@@ -137,9 +118,9 @@
     min-inline-size: 0;
     min-block-size: 3.15rem;
     border: 1px solid transparent;
-    border-radius: var(--nav-control-radius);
+    border-radius: var(--radius-inner);
     padding: 0.4rem 0.15rem;
-    color: var(--nav-text-secondary);
+    color: var(--color-text-secondary);
     background: transparent;
     font: inherit;
     text-decoration: none;
@@ -147,21 +128,21 @@
   }
 
   .railItem:hover {
-    color: var(--nav-text);
-    background: color-mix(in srgb, var(--nav-layer) 78%, transparent);
+    color: var(--color-text-primary);
+    background: color-mix(in srgb, var(--color-background-muted) 78%, transparent);
   }
 
   .railItemActive,
   .railItem[aria-current="page"] {
-    border-color: color-mix(in srgb, var(--nav-accent-strong) 75%, transparent);
-    color: var(--nav-accent-strong);
-    background: var(--nav-accent-muted);
+    border-color: color-mix(in srgb, var(--color-text-accent) 75%, transparent);
+    color: var(--color-text-accent);
+    background: var(--color-accent-muted);
   }
 
   .railItemLabel {
     max-inline-size: 100%;
     overflow: hidden;
-    font-size: 0.6875rem;
+    font-size: var(--font-size-sm);
     line-height: 1.1;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -175,8 +156,8 @@
     min-block-size: 100%;
     inline-size: var(--nav-sidebar-width);
     min-inline-size: 0;
-    border-inline-end: 1px solid var(--nav-border);
-    background: var(--nav-surface);
+    border-inline-end: 1px solid var(--color-border);
+    background: var(--color-background-surface);
     transition: transform 160ms ease-out, visibility 160ms ease-out;
   }
 
@@ -198,18 +179,18 @@
     inset-block: 0;
     inset-inline-start: 50%;
     inline-size: 1px;
-    background: var(--nav-border);
+    background: var(--color-border);
     content: "";
     transform: translateX(-50%);
   }
 
   .sidebarResizeHandle:hover::before,
   .sidebarResizeHandle:focus-visible::before {
-    background: var(--nav-accent-strong);
+    background: var(--color-text-accent);
   }
 
   .sidebarResizeHandle:focus-visible {
-    outline: var(--kb-focus-ring-width) solid var(--nav-accent-strong);
+    outline: 0.125rem solid var(--color-text-accent);
     outline-offset: -0.15rem;
   }
 
@@ -227,7 +208,7 @@
     inset: 0;
     border: 0;
     padding: 0;
-    background: rgb(0 0 0 / 0.48);
+    background: var(--color-overlay);
     cursor: pointer;
   }
 
@@ -238,15 +219,15 @@
     gap: 0.5rem;
     min-block-size: var(--nav-header-height);
     padding: 0 1.15rem;
-    border-block-end: 1px solid var(--nav-border);
+    border-block-end: 1px solid var(--color-border);
   }
 
   .sidebarTitle {
     min-inline-size: 0;
     margin: 0;
     overflow: hidden;
-    color: var(--nav-text);
-    font-size: 1rem;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-lg);
     font-weight: 600;
     letter-spacing: -0.015em;
     text-overflow: ellipsis;
@@ -261,17 +242,17 @@
     inline-size: 2rem;
     block-size: 2rem;
     border: 1px solid transparent;
-    border-radius: var(--nav-control-radius);
-    color: var(--nav-text-secondary);
+    border-radius: var(--radius-inner);
+    color: var(--color-text-secondary);
     background: transparent;
     cursor: pointer;
   }
 
   .sidebarClose:hover,
   .iconButton:hover {
-    border-color: var(--nav-border-strong);
-    color: var(--nav-text);
-    background: var(--nav-layer);
+    border-color: var(--color-border-emphasized);
+    color: var(--color-text-primary);
+    background: var(--color-background-muted);
   }
 
   .sidebarClose {
@@ -292,9 +273,9 @@
     min-inline-size: 0;
     min-block-size: 2.35rem;
     border: 1px solid transparent;
-    border-radius: var(--nav-control-radius);
+    border-radius: var(--radius-inner);
     padding: 0.45rem 0.7rem;
-    color: var(--nav-text-secondary);
+    color: var(--color-text-secondary);
     background: transparent;
     font: inherit;
     text-align: start;
@@ -304,13 +285,13 @@
 
   .sidebarNavItem:hover,
   .sidebarSectionButton:hover {
-    color: var(--nav-text);
-    background: var(--nav-layer);
+    color: var(--color-text-primary);
+    background: var(--color-background-muted);
   }
 
   .sidebarNavItem:disabled,
   .sidebarSectionButton:disabled {
-    color: var(--nav-text-disabled);
+    color: var(--color-text-disabled);
     cursor: not-allowed;
     opacity: 0.8;
   }
@@ -318,14 +299,14 @@
   .sidebarNavItemActive,
   .sidebarNavItem[aria-current="page"] {
     border-color: transparent;
-    color: var(--nav-accent-strong);
-    background: var(--nav-accent-muted);
+    color: var(--color-text-accent);
+    background: var(--color-accent-muted);
   }
 
   .sidebarDivider {
     block-size: 1px;
     margin: 0.65rem 0.7rem;
-    background: var(--nav-border);
+    background: var(--color-border);
   }
 
   .sidebarScrollRegion {
@@ -347,15 +328,15 @@
     gap: 0.45rem;
     min-inline-size: 0;
     min-block-size: 2.2rem;
-    border: 1px solid var(--nav-border-strong);
-    border-radius: var(--nav-control-radius);
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-inner);
     padding-inline: 0.6rem;
-    color: var(--nav-text-secondary);
-    background: var(--nav-layer);
+    color: var(--color-text-secondary);
+    background: var(--color-background-muted);
   }
 
   .projectPickerSearch:focus-within {
-    border-color: var(--nav-accent-strong);
+    border-color: var(--color-text-accent);
   }
 
   .projectPickerSearchInput {
@@ -363,13 +344,13 @@
     flex: 1;
     border: 0;
     outline: 0;
-    color: var(--nav-text);
+    color: var(--color-text-primary);
     background: transparent;
     font: inherit;
   }
 
   .projectPickerSearchInput::placeholder {
-    color: var(--nav-text-tertiary);
+    color: var(--color-text-secondary);
   }
 
   .projectPickerClear {
@@ -378,15 +359,15 @@
     inline-size: 1.35rem;
     block-size: 1.35rem;
     border: 0;
-    border-radius: 50%;
-    color: var(--nav-text-secondary);
+    border-radius: var(--radius-full);
+    color: var(--color-text-secondary);
     background: transparent;
     cursor: pointer;
   }
 
   .projectPickerClear:hover {
-    color: var(--nav-text);
-    background: var(--nav-layer-active);
+    color: var(--color-text-primary);
+    background: var(--color-overlay-hover);
   }
 
   .projectPickerList {
@@ -407,9 +388,9 @@
     min-inline-size: 0;
     min-block-size: 2.2rem;
     border: 1px solid transparent;
-    border-radius: var(--nav-control-radius);
+    border-radius: var(--radius-inner);
     padding: 0.35rem 0.65rem;
-    color: var(--nav-text-secondary);
+    color: var(--color-text-secondary);
     background: transparent;
     font: inherit;
     text-align: start;
@@ -418,18 +399,18 @@
 
   .projectPickerOptionHighlighted,
   .projectPickerOption[data-active="true"] {
-    color: var(--nav-text);
-    background: var(--nav-layer);
+    color: var(--color-text-primary);
+    background: var(--color-background-muted);
   }
 
   .projectPickerOption:hover,
   .projectPickerOption[aria-selected="true"] {
-    color: var(--nav-text);
-    background: var(--nav-layer);
+    color: var(--color-text-primary);
+    background: var(--color-background-muted);
   }
 
   .projectPickerOption[aria-selected="true"] {
-    border-color: var(--nav-border-strong);
+    border-color: var(--color-border-emphasized);
   }
 
   .projectPickerOption:focus-visible {
@@ -456,21 +437,21 @@
   }
 
   .projectPickerOptionMeta {
-    color: var(--nav-text-tertiary);
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    font-family: var(--font-family-code);
+    font-size: var(--font-size-sm);
   }
 
   .projectPickerOptionArchive {
-    color: var(--nav-warning);
-    font-size: 0.75rem;
+    color: var(--color-warning);
+    font-size: var(--font-size-sm);
   }
 
   .projectPickerMessage {
     margin: 0;
     padding: 0.35rem 0.65rem;
-    color: var(--nav-text-secondary);
-    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
   }
 
   .projectPickerBoundary {
@@ -478,31 +459,31 @@
     gap: 0.45rem;
     margin: 0 0.65rem;
     padding: 0.65rem;
-    border: 1px solid var(--nav-border);
-    border-radius: var(--nav-control-radius);
-    color: var(--nav-text-secondary);
-    background: var(--nav-layer);
-    font-size: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-inner);
+    color: var(--color-text-secondary);
+    background: var(--color-background-muted);
+    font-size: var(--font-size-sm);
   }
 
   .projectPickerBoundaryError {
-    border-color: color-mix(in srgb, var(--nav-danger) 48%, var(--nav-border));
+    border-color: color-mix(in srgb, var(--color-error) 48%, var(--color-border));
   }
 
   .projectPickerRetry {
     justify-self: start;
     min-block-size: 1.85rem;
-    border: 1px solid var(--nav-border-strong);
-    border-radius: var(--nav-control-radius);
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-inner);
     padding: 0.2rem 0.55rem;
-    color: var(--nav-text);
+    color: var(--color-text-primary);
     background: transparent;
     font: inherit;
     cursor: pointer;
   }
 
   .projectPickerRetry:hover {
-    border-color: var(--nav-accent-strong);
+    border-color: var(--color-text-accent);
   }
 
   .projectTree {
@@ -515,8 +496,8 @@
     justify-content: space-between;
     gap: 0.5rem;
     margin: 0.25rem 0.7rem 0.35rem;
-    color: var(--nav-text-tertiary);
-    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
     font-weight: 600;
   }
 
@@ -535,8 +516,8 @@
     align-items: center;
     min-inline-size: 0;
     min-block-size: 2.35rem;
-    border-radius: var(--nav-control-radius);
-    color: var(--nav-text);
+    border-radius: var(--radius-inner);
+    color: var(--color-text-primary);
   }
 
   .projectTreeToggle {
@@ -545,13 +526,13 @@
     inline-size: 1.8rem;
     block-size: 1.8rem;
     border: 0;
-    color: var(--nav-text-secondary);
+    color: var(--color-text-secondary);
     background: transparent;
     cursor: pointer;
   }
 
   .projectTreeToggle:hover {
-    color: var(--nav-text);
+    color: var(--color-text-primary);
   }
 
   .projectTreeProjectButton,
@@ -562,9 +543,9 @@
     min-inline-size: 0;
     min-block-size: 2.25rem;
     border: 1px solid transparent;
-    border-radius: var(--nav-control-radius);
+    border-radius: var(--radius-inner);
     padding: 0.4rem 0.55rem;
-    color: var(--nav-text-secondary);
+    color: var(--color-text-secondary);
     background: transparent;
     font: inherit;
     text-align: start;
@@ -573,14 +554,14 @@
   }
 
   .projectTreeProjectButton {
-    color: var(--nav-text);
+    color: var(--color-text-primary);
     font-weight: 600;
   }
 
   .projectTreeProjectButton:hover,
   .projectTreeChildButton:hover {
-    color: var(--nav-text);
-    background: var(--nav-layer);
+    color: var(--color-text-primary);
+    background: var(--color-background-muted);
   }
 
   .projectTreeProjectName,
@@ -602,7 +583,7 @@
     inset-block: 0.1rem;
     inset-inline-start: 0;
     inline-size: 1px;
-    background: var(--nav-border);
+    background: var(--color-border);
     content: "";
   }
 
@@ -610,19 +591,19 @@
     position: relative;
     z-index: 1;
     min-block-size: 2.25rem;
-    color: var(--nav-text-secondary);
+    color: var(--color-text-secondary);
   }
 
   .projectTreeChildButtonActive,
   .projectTreeChildButton[aria-current="page"] {
-    border-color: color-mix(in srgb, var(--nav-accent-strong) 65%, transparent);
-    color: var(--nav-text);
-    background: var(--nav-accent-muted);
+    border-color: color-mix(in srgb, var(--color-text-accent) 65%, transparent);
+    color: var(--color-text-primary);
+    background: var(--color-accent-muted);
   }
 
   .projectTreeChildButtonActive svg,
   .projectTreeChildButton[aria-current="page"] svg {
-    color: var(--nav-accent-strong);
+    color: var(--color-text-accent);
   }
 
   .resourceHeader {
@@ -632,9 +613,9 @@
     gap: 0.75rem;
     min-inline-size: 0;
     min-block-size: var(--nav-header-height);
-    border-block-end: 1px solid var(--nav-border);
+    border-block-end: 1px solid var(--color-border);
     padding: 0.35rem 1.25rem;
-    background: var(--nav-canvas);
+    background: var(--color-background-body);
   }
 
   .resourceHeaderMain {
@@ -669,12 +650,12 @@
     align-items: center;
     min-inline-size: 0;
     gap: 0.45rem;
-    color: var(--nav-text-secondary);
+    color: var(--color-text-secondary);
     white-space: nowrap;
   }
 
   .breadcrumbItem:last-child {
-    color: var(--nav-text);
+    color: var(--color-text-primary);
     font-weight: 600;
   }
 
@@ -687,11 +668,11 @@
   }
 
   .breadcrumbItem a:hover {
-    color: var(--nav-accent-strong);
+    color: var(--color-text-accent);
   }
 
   .breadcrumbSeparator {
-    color: var(--nav-text-tertiary);
+    color: var(--color-text-secondary);
   }
 
   .resourceHeaderActions {
@@ -711,12 +692,12 @@
     gap: 0.45rem;
     min-block-size: 2rem;
     max-inline-size: 16rem;
-    border: 1px solid var(--nav-border-strong);
-    border-radius: var(--nav-control-radius);
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-inner);
     padding: 0.35rem 0.7rem;
     overflow: hidden;
-    color: var(--nav-text);
-    background: var(--nav-surface);
+    color: var(--color-text-primary);
+    background: var(--color-background-surface);
     font: inherit;
     text-decoration: none;
     text-overflow: ellipsis;
@@ -735,20 +716,20 @@
   .resourceHeaderProjectSwitch:hover,
   .resourceHeaderAction:hover,
   .resourceHeaderMoreTrigger:hover {
-    border-color: var(--nav-accent-strong);
-    background: var(--nav-layer);
+    border-color: var(--color-text-accent);
+    background: var(--color-background-muted);
   }
 
   .resourceHeaderActionPrimary {
-    border-color: var(--nav-accent);
-    color: var(--nav-on-accent);
-    background: var(--nav-accent);
+    border-color: var(--color-accent);
+    color: var(--color-on-accent);
+    background: var(--color-accent);
   }
 
   .resourceHeaderActionPrimary:hover {
-    border-color: var(--nav-accent);
-    color: var(--nav-on-accent);
-    background: color-mix(in srgb, var(--nav-accent) 86%, var(--nav-text));
+    border-color: var(--color-accent);
+    color: var(--color-on-accent);
+    background: color-mix(in srgb, var(--color-accent) 86%, var(--color-text-primary));
   }
 
   .resourceHeaderActionGhost {
@@ -774,10 +755,10 @@
     display: grid;
     min-inline-size: 12rem;
     padding: 0.35rem;
-    border: 1px solid var(--nav-border-strong);
-    border-radius: var(--nav-card-radius);
-    background: var(--nav-surface);
-    box-shadow: 0 0.8rem 2rem rgb(0 0 0 / 0.24);
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    background: var(--color-background-surface);
+    box-shadow: var(--shadow-high);
   }
 
   .resourceHeaderMoreItem {
@@ -786,9 +767,9 @@
     gap: 0.55rem;
     min-block-size: 2.15rem;
     border: 1px solid transparent;
-    border-radius: var(--nav-control-radius);
+    border-radius: var(--radius-inner);
     padding: 0.35rem 0.55rem;
-    color: var(--nav-text-secondary);
+    color: var(--color-text-secondary);
     background: transparent;
     font: inherit;
     text-align: start;
@@ -797,15 +778,15 @@
   }
 
   .resourceHeaderMoreItem:hover {
-    color: var(--nav-text);
-    background: var(--nav-layer);
+    color: var(--color-text-primary);
+    background: var(--color-background-muted);
   }
 
   .resourceHeaderMore[data-more-active="true"] .resourceHeaderMoreTrigger,
   .resourceHeaderMoreItem[data-active="true"] {
-    border-color: color-mix(in srgb, var(--nav-accent-strong) 75%, transparent);
-    color: var(--nav-accent-strong);
-    background: var(--nav-accent-muted);
+    border-color: color-mix(in srgb, var(--color-text-accent) 75%, transparent);
+    color: var(--color-text-accent);
+    background: var(--color-accent-muted);
   }
 
   .resourceHeaderMoreItem:disabled {
@@ -828,7 +809,7 @@
       inset-inline-start: var(--nav-rail-width);
       transform: translateX(-104%);
       visibility: hidden;
-      box-shadow: 0.8rem 0 2.2rem rgb(0 0 0 / 0.3);
+      box-shadow: var(--shadow-high);
     }
 
     .projectsSidebar[data-open="true"] {
@@ -902,7 +883,7 @@
       inset-inline-start: var(--nav-rail-width);
       transform: translateX(-104%);
       visibility: hidden;
-      box-shadow: 0.8rem 0 2.2rem rgb(0 0 0 / 0.3);
+      box-shadow: var(--shadow-high);
     }
 
     .projectsSidebar[data-open="true"] {

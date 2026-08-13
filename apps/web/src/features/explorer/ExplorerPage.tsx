@@ -531,11 +531,16 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
     : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
   const reloadInspector = inspectorRead.reload
   const reloadAttachments = attachmentsRead.reload
-  const reloadVisibleInspector = useCallback(async () => {
+  const reloadVisibleInspector = useCallback<BoardTaskCanonicalReloadHandler>(async (options) => {
     if (!showInspector || !taskId) return
-    // Inspector and attachment reads own independent visible states. A missing
-    // task snapshot must not make the canonical Board reload look failed.
-    await Promise.allSettled([reloadInspector(), reloadAttachments()])
+    // Create navigation already owns the new task's Inspector reads. Keep
+    // those reads observable without letting a derived failure reject Board
+    // reconcile; Inspector-owned writes still require both visible reloads.
+    if (options?.visibleInspectorReload === "best-effort") {
+      await Promise.allSettled([reloadInspector(), reloadAttachments()])
+      return
+    }
+    await Promise.all([reloadInspector(), reloadAttachments()])
   }, [reloadAttachments, reloadInspector, showInspector, taskId])
   useLayoutEffect(() => {
     if (!showInspector) {
@@ -580,6 +585,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
         await Promise.resolve(taskMutations.onCanonicalReload?.({
           reason: "retry",
           mutationKind: event.kind === "transition" ? "transition" : "edit",
+          visibleInspectorReload: "required",
         }))
       },
     }

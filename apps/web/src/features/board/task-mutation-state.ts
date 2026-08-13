@@ -57,6 +57,8 @@ export interface BoardTaskCanonicalReloadOptions {
   readonly reason?: "initial" | "retry" | "step"
   /** Preserve transition-specific invalidation when retrying a reload. */
   readonly mutationKind?: BoardTaskMutationCommitted["kind"]
+  /** Whether a visible Inspector read may fail independently of Board reconcile. */
+  readonly visibleInspectorReload?: "required" | "best-effort"
 }
 
 export type BoardTaskCanonicalReloadHandler = (options?: BoardTaskCanonicalReloadOptions) => Promise<void> | void

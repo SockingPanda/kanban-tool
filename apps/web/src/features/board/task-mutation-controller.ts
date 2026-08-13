@@ -302,7 +302,11 @@ export function useBoardTaskMutationController(
     reason?: BoardTaskCanonicalReloadOptions["reason"],
   ): Promise<boolean> => {
     try {
-      const canonical = (await surface?.onCanonicalReload?.({ reason: reason ?? "initial", mutationKind })) ?? null
+      const canonical = (await surface?.onCanonicalReload?.({
+        reason: reason ?? "initial",
+        mutationKind,
+        visibleInspectorReload: mutationKind === "create" ? "best-effort" : "required",
+      })) ?? null
       return adoptCanonicalModel(canonical, generation)
     } catch {
       return false
@@ -314,7 +318,11 @@ export function useBoardTaskMutationController(
     const generation = mutationGenerationRef.current
     setPending("reload", true)
     try {
-      const canonical = (await surface.onCanonicalReload?.({ reason: "retry", mutationKind })) ?? null
+      const canonical = (await surface.onCanonicalReload?.({
+        reason: "retry",
+        mutationKind,
+        visibleInspectorReload: mutationKind === "create" ? "best-effort" : "required",
+      })) ?? null
       if (isCurrentMutation(generation)) {
         const adopted = adoptCanonicalModel(canonical, generation)
         optimisticDirtyRef.current = !adopted

@@ -125,6 +125,7 @@ type MapCopy = {
   readonly edges: string
   readonly toolbar: string
   readonly filter: string
+  readonly visibility: string
   readonly filterOptions: Readonly<Record<BoardMapFilter, string>>
   readonly hideIsolated: string
   readonly showIsolated: string
@@ -134,6 +135,7 @@ type MapCopy = {
   readonly zoomOut: string
   readonly zoomIn: string
   readonly zoomReset: string
+  readonly refreshGroup: string
   readonly refresh: string
   readonly refreshing: string
   readonly notFound: string
@@ -175,6 +177,7 @@ const copies: Record<Locale, MapCopy> = {
     edges: "边",
     toolbar: "关系图筛选与缩放",
     filter: "关系图筛选",
+    visibility: "关系图可见性",
     filterOptions: { all: "全部活动", blocked: "阻塞", ready: "可执行", running: "运行中", unplanned: "未规划", "incomplete-steps": "未完成步骤" },
     hideIsolated: "隐藏孤立节点",
     showIsolated: "显示孤立节点",
@@ -184,6 +187,7 @@ const copies: Record<Locale, MapCopy> = {
     zoomOut: "缩小关系图",
     zoomIn: "放大关系图",
     zoomReset: "重置关系图缩放",
+    refreshGroup: "关系图刷新",
     refresh: "刷新",
     refreshing: "正在刷新…",
     notFound: "看板不存在",
@@ -223,6 +227,7 @@ const copies: Record<Locale, MapCopy> = {
     edges: "edges",
     toolbar: "Task map filters and zoom",
     filter: "Task map filter",
+    visibility: "Task map visibility",
     filterOptions: { all: "All active", blocked: "Blocked", ready: "Ready", running: "Running", unplanned: "Unplanned", "incomplete-steps": "Incomplete steps" },
     hideIsolated: "Hide isolated nodes",
     showIsolated: "Show isolated nodes",
@@ -232,6 +237,7 @@ const copies: Record<Locale, MapCopy> = {
     zoomOut: "Zoom out task map",
     zoomIn: "Zoom in task map",
     zoomReset: "Reset task map zoom",
+    refreshGroup: "Task map refresh",
     refresh: "Refresh",
     refreshing: "Refreshing…",
     notFound: "Board not found",
@@ -388,28 +394,49 @@ function TaskMapToolbar({
   readonly onRetry?: () => void
 }) {
   return (
-    <SafeHStack className="min-w-0 flex-wrap gap-2 border border-border bg-surface p-2" role="toolbar" aria-label={copy.toolbar}>
-      <SafeHStack className="min-w-0 max-w-full gap-1 overflow-x-auto" role="group" aria-label={copy.filter}>
-        {(Object.keys(copy.filterOptions) as BoardMapFilter[]).map((value) => (
-          <Button
-            key={value}
-            label={copy.filterOptions[value]}
-            variant={filter === value ? "primary" : "secondary"}
-            size="sm"
-            aria-pressed={filter === value}
-            onClick={() => onFilterChange(value)}
-          />
-        ))}
-      </SafeHStack>
-      <Button label={hideIsolated ? copy.showIsolated : copy.hideIsolated} variant="secondary" size="sm" aria-pressed={hideIsolated} onClick={onHideIsolatedChange} />
-      <Button label={showDoneContext ? copy.hideDone : copy.showDone} variant="secondary" size="sm" aria-pressed={showDoneContext} onClick={onShowDoneContextChange} />
-      <SafeHStack className="ms-auto gap-1" role="group" aria-label={copy.zoom}>
-        <Button label={copy.zoomOut} variant="ghost" size="sm" isDisabled={zoom <= MIN_MAP_ZOOM} onClick={() => onZoomChange(-1)} />
-        <output className="text-sm tabular-nums text-primary" data-testid="task-map-zoom" aria-live="polite">{Math.round(zoom * 100)}%</output>
-        <Button label={copy.zoomIn} variant="ghost" size="sm" isDisabled={zoom >= MAX_MAP_ZOOM} onClick={() => onZoomChange(1)} />
-        <Button label={copy.zoomReset} variant="ghost" size="sm" onClick={() => onZoomChange(0)} />
-      </SafeHStack>
-      {onRetry ? <Button label={loading ? copy.refreshing : copy.refresh} variant="secondary" size="sm" onClick={onRetry} isDisabled={loading} /> : null}
+    <SafeHStack className="min-w-0 max-w-full flex-wrap items-start gap-2 border border-border bg-surface p-2" role="toolbar" aria-label={copy.toolbar}>
+      <SafeVStack as="div" className="min-w-0 max-w-full flex-1 gap-1 border border-border bg-body p-2" role="group" aria-label={copy.filter} data-testid="task-map-controls-filter">
+        <Text as="span" type="label" color="secondary">{copy.filter}</Text>
+        <SafeHStack as="div" className="min-w-0 max-w-full flex-wrap gap-1">
+          {(Object.keys(copy.filterOptions) as BoardMapFilter[]).map((value) => (
+            <Button
+              key={value}
+              label={copy.filterOptions[value]}
+              variant={filter === value ? "primary" : "secondary"}
+              size="sm"
+              aria-pressed={filter === value}
+              onClick={() => onFilterChange(value)}
+            />
+          ))}
+        </SafeHStack>
+      </SafeVStack>
+
+      <SafeVStack as="div" className="min-w-0 max-w-full gap-1 border border-border bg-body p-2" role="group" aria-label={copy.visibility} data-testid="task-map-controls-visibility">
+        <Text as="span" type="label" color="secondary">{copy.visibility}</Text>
+        <SafeHStack as="div" className="min-w-0 max-w-full flex-wrap gap-1">
+          <Button label={hideIsolated ? copy.showIsolated : copy.hideIsolated} variant="secondary" size="sm" aria-pressed={hideIsolated} onClick={onHideIsolatedChange} />
+          <Button label={showDoneContext ? copy.hideDone : copy.showDone} variant="secondary" size="sm" aria-pressed={showDoneContext} onClick={onShowDoneContextChange} />
+        </SafeHStack>
+      </SafeVStack>
+
+      <SafeVStack as="div" className="min-w-0 max-w-full gap-1 border border-border bg-body p-2" role="group" aria-label={copy.zoom} data-testid="task-map-controls-zoom">
+        <Text as="span" type="label" color="secondary">{copy.zoom}</Text>
+        <SafeHStack as="div" className="min-w-0 max-w-full flex-wrap items-center gap-1">
+          <Button label={copy.zoomOut} variant="ghost" size="sm" data-testid="task-map-zoom-out" isDisabled={zoom <= MIN_MAP_ZOOM} onClick={() => onZoomChange(-1)} />
+          <output className="text-sm tabular-nums text-primary" data-testid="task-map-zoom" aria-live="polite">{Math.round(zoom * 100)}%</output>
+          <Button label={copy.zoomIn} variant="ghost" size="sm" data-testid="task-map-zoom-in" isDisabled={zoom >= MAX_MAP_ZOOM} onClick={() => onZoomChange(1)} />
+          <Button label={copy.zoomReset} variant="ghost" size="sm" data-testid="task-map-zoom-reset" onClick={() => onZoomChange(0)} />
+        </SafeHStack>
+      </SafeVStack>
+
+      {onRetry ? (
+        <SafeVStack as="div" className="min-w-0 max-w-full gap-1 border border-border bg-body p-2" role="group" aria-label={copy.refreshGroup} data-testid="task-map-controls-refresh">
+          <Text as="span" type="label" color="secondary">{copy.refreshGroup}</Text>
+          <SafeHStack as="div" className="min-w-0 max-w-full flex-wrap gap-1">
+            <Button label={loading ? copy.refreshing : copy.refresh} variant="secondary" size="sm" data-testid="task-map-refresh" onClick={onRetry} isDisabled={loading} />
+          </SafeHStack>
+        </SafeVStack>
+      ) : null}
     </SafeHStack>
   )
 }
@@ -565,7 +592,7 @@ export function TaskMapPresentation({
           <Grid label={copy.layout} columns="responsive-split" gap={4} className="min-w-0" data-testid="task-map-layout">
             <SafeVStack className="min-w-0 gap-2" aria-labelledby="task-map-graph-heading">
               <Heading level={3} id="task-map-graph-heading" className="sr-only">{copy.graphHeading}</Heading>
-              <SafeVStack as="div" className="min-w-0 max-h-96 overflow-auto overscroll-contain border border-border bg-body" data-testid="task-map-graph" role="region" aria-label={copy.graphRegion} tabIndex={0}>
+              <SafeVStack as="div" className={`min-w-0 overflow-auto overscroll-contain border border-border bg-body ${styles.graphRegion}`} data-testid="task-map-graph" role="region" aria-label={copy.graphRegion} tabIndex={0}>
                 <SafeVStack as="div" className={styles.graphCanvas}>
                   <SafeVStack as="div" className={zoomClassName(zoom)} data-zoom={clampMapZoom(zoom)}>
                     <SafeVStack as="div" className="min-w-0 gap-4 p-4">

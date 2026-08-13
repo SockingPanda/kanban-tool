@@ -11,6 +11,11 @@
   min-height: 26rem;
 }
 
+/* Keep graph scrolling local while allowing the relation surface to breathe. */
+.graphRegion {
+  max-height: 48rem;
+}
+
 .zoom65,
 .zoom70,
 .zoom75,

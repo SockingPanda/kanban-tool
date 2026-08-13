@@ -7,7 +7,7 @@ import { PreferencesProvider } from "../../lib/preferences-provider"
 import { asCanonicalBoardId } from "../../lib/sync/contracts"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { TaskMapPresentation, TaskMapView, type TaskMapReadState } from "./TaskMapView"
-import { __test, defaultTaskMapUrlState, fenceTaskMapReadModel, parseTaskMapUrlState, serializeTaskMapUrlState } from "./TaskMapView.logic"
+import { __test, defaultTaskMapUrlState, fenceTaskMapReadModel, MIN_MAP_ZOOM, parseTaskMapUrlState, serializeTaskMapUrlState } from "./TaskMapView.logic"
 
 type MapTask = ExplorerTaskMap["nodes"][number]["task"]
 
@@ -201,6 +201,54 @@ describe("TaskMapView", () => {
     expect(markup).toContain('aria-labelledby="task-map-edges-heading"')
     expect(markup).toContain('id="task-map-edges-heading"')
     expect(markup).toContain("当前选择")
+  })
+
+  test("groups map controls for narrow toolbars without changing control semantics", () => {
+    const markup = renderToStaticMarkup(
+      <TaskMapPresentation
+        board="default"
+        taskId="ready"
+        state={{ ...ready, loading: true }}
+        filter="all"
+        hideIsolated
+        showDoneContext
+        zoom={MIN_MAP_ZOOM}
+        onSelectTask={() => undefined}
+        onRetry={() => undefined}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="task-map-controls-filter"')
+    expect(markup).toContain('data-testid="task-map-controls-visibility"')
+    expect(markup).toContain('data-testid="task-map-controls-zoom"')
+    expect(markup).toContain('data-testid="task-map-controls-refresh"')
+    expect(markup).toContain('aria-label="关系图筛选"')
+    expect(markup).toContain('aria-label="关系图可见性"')
+    expect(markup).toContain('aria-label="关系图缩放"')
+    expect(markup).toContain('aria-label="关系图刷新"')
+    expect(markup).toContain("flex-wrap")
+    expect(markup).not.toContain("overflow-x-auto")
+
+    const groupMarkup = (start: string, end?: string): string => {
+      const startIndex = markup.indexOf(start)
+      const endIndex = end === undefined ? markup.length : markup.indexOf(end, startIndex)
+      return markup.slice(startIndex, endIndex)
+    }
+
+    const refresh = groupMarkup('data-testid="task-map-controls-refresh"')
+    expect(refresh).toContain('data-testid="task-map-refresh"')
+    expect(refresh).toContain("disabled")
+
+    const filter = groupMarkup('data-testid="task-map-controls-filter"', 'data-testid="task-map-controls-visibility"')
+    expect(filter).toContain('aria-pressed="true"')
+
+    const visibility = groupMarkup('data-testid="task-map-controls-visibility"', 'data-testid="task-map-controls-zoom"')
+    expect(visibility).toContain('aria-pressed="true"')
+
+    const zoom = groupMarkup('data-testid="task-map-controls-zoom"', 'data-testid="task-map-controls-refresh"')
+    expect(zoom).toContain('data-testid="task-map-zoom-out"')
+    expect(zoom).toContain("disabled")
+    expect(markup).toContain('data-testid="task-map-graph"')
   })
 
   test("renders the map copy in English", () => {

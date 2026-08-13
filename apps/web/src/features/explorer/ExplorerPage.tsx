@@ -39,6 +39,7 @@ import { inspectorMutationKey, type TaskInspectorMutationHandlers, type TaskInsp
 import { useTaskInspectorMutationController } from "./task-inspector-mutation-controller"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import { TaskRunsView } from "./TaskRunsView"
+import { modalFocusableElements } from "./modal-focus"
 import {
   asyncReadToken,
   shouldClearMapTaskFromInspector,
@@ -720,11 +721,10 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
     if (!isInspectorModal || !showInspector) return
     const dialog = inspectorDialogRef.current
     if (dialog === null) return
-    const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
     const focusInitial = () => {
       const active = document.activeElement
       if (active instanceof HTMLElement && active !== dialog && dialog.contains(active)) return
-      const firstFocusable = dialog.querySelector<HTMLElement>(focusableSelector)
+      const firstFocusable = modalFocusableElements(dialog)[0]
       ;(firstFocusable ?? dialog).focus()
     }
     const frame = window.requestAnimationFrame(focusInitial)
@@ -738,7 +738,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
         return
       }
       if (event.key !== "Tab") return
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      const focusable = modalFocusableElements(dialog)
       if (focusable.length === 0) {
         event.preventDefault()
         dialog.focus()

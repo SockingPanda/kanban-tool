@@ -105,7 +105,7 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expectTasksSurfaceAxeClean(page)
   })
 
-  test("keeps the 430px shell usable with a drawer, inspector sheet, and no page overflow", async ({ page }) => {
+  test("keeps the 430px shell usable with a drawer, inspector fullscreen dialog, and no page overflow", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
     await page.setViewportSize({ width: 430, height: 900 })
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
@@ -126,10 +126,10 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     const inspectorDialog = page.getByTestId("task-inspector-dialog")
     await expect(inspectorDialog).toHaveAttribute("role", "dialog")
     await expect(inspectorDialog).toHaveAttribute("aria-modal", "true")
-    await expect(inspectorDialog).toHaveAttribute("data-mode", "sheet")
+    await expect(inspectorDialog).toHaveAttribute("data-mode", "fullscreen")
     await expect(page.getByTestId("task-inspector-scrim")).toBeVisible()
     await expect(page.getByTestId("task-inspector")).toBeVisible()
-    await expect(page.getByTestId("task-inspector")).toHaveAttribute("data-mode", "sheet")
+    await expect(page.getByTestId("task-inspector")).toHaveAttribute("data-mode", "fullscreen")
     await expect(page.getByTestId("task-inspector-mobile-close")).toBeFocused()
     await page.keyboard.press("Tab")
     await expect.poll(() => page.evaluate(() => document.activeElement?.closest("[data-testid='task-inspector-dialog']") !== null)).toBe(true)
@@ -141,7 +141,7 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expect(taskOpener).toBeFocused()
   })
 
-  test("keeps a nested task action dialog trapped without closing the inspector sheet", async ({ page }) => {
+  test("keeps a nested task action dialog trapped without closing the inspector modal", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
     await page.setViewportSize({ width: 430, height: 900 })
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
@@ -175,7 +175,47 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expect(actionDialog).toHaveCount(0)
     await expect(inspector).toBeVisible()
     await expect(block).toBeFocused()
-    await expect(page.getByTestId("task-inspector-dialog")).toHaveAttribute("data-mode", "sheet")
+    await expect(page.getByTestId("task-inspector-dialog")).toHaveAttribute("data-mode", "fullscreen")
+  })
+
+  test("maps Inspector presentation to each shell mode with focus, URL, overflow, and axe evidence", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+
+    for (const [width, mode, modal] of [[320, "fullscreen", true], [430, "fullscreen", true], [768, "dialog", true], [1024, "side-peek", false]] as const) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+      const opener = page.getByRole("button", { name: /ready task$/i }).first()
+      await expect(opener).toBeVisible()
+      await opener.click()
+
+      const inspectorDialog = page.getByTestId("task-inspector-dialog")
+      await expect(inspectorDialog).toHaveAttribute("data-mode", mode)
+      await expect(page.getByTestId("task-inspector")).toHaveAttribute("data-mode", mode)
+      await expect(page).toHaveURL(/\/app\/boards\/default\/board\?task=t_default_ready$/)
+      await expectTasksSurfaceAxeClean(page)
+
+      if (modal) {
+        await expect(inspectorDialog).toHaveAttribute("role", "dialog")
+        await expect(inspectorDialog).toHaveAttribute("aria-modal", "true")
+        await expect(page.getByTestId("task-inspector-scrim")).toBeVisible()
+        await expect(page.getByTestId("task-inspector-mobile-close")).toBeFocused()
+        await expectNoPageOverflow(page)
+        if (width === 768) {
+          await page.getByTestId("task-inspector-scrim").click({ position: { x: 8, y: 8 } })
+        } else {
+          await page.keyboard.press("Escape")
+        }
+      } else {
+        await expect(inspectorDialog).not.toHaveAttribute("role")
+        await expect(inspectorDialog).not.toHaveAttribute("aria-modal")
+        await expect(page.getByTestId("task-inspector-scrim")).toHaveCount(0)
+        await expect(page.getByTestId("task-inspector").getByRole("heading", { name: /Default project ready task/ })).toBeFocused()
+        await page.getByRole("button", { name: "关闭任务检查器" }).click()
+      }
+
+      await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
+      await expect(opener).toBeFocused()
+    }
   })
 
   test("keeps product rail and task view controls keyboard reachable", async ({ page }) => {

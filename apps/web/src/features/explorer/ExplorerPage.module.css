@@ -24,16 +24,8 @@
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
-    font-size: clamp(1.6rem, 3vw, 2.35rem);
+    font-size: var(--font-size-2xl);
     letter-spacing: -0.035em;
-  }
-
-  .eyebrow {
-    margin: 0 0 0.35rem;
-    color: var(--color-text-secondary);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
   }
 
   .closeInspector,
@@ -208,7 +200,7 @@
   }
 
   .assetsReadOnlyError {
-    color: var(--color-status-error, #b42318);
+    color: var(--color-status-error);
   }
 
   .boundary,
@@ -235,8 +227,8 @@
   }
 
   .boundary span {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.75rem;
+    font-family: var(--font-family-code);
+    font-size: var(--font-size-sm);
   }
 
   .inspectorBoundary {

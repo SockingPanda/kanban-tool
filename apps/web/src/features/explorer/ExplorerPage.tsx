@@ -114,7 +114,6 @@ export interface ExplorerPageProps {
 
 const MAX_EVENT_KIND_FILTER_LENGTH = 128
 type ExplorerCopy = {
-  readonly eyebrow: string
   readonly tabsLabel: string
   readonly closeInspector: string
   readonly boardLoading: string
@@ -143,7 +142,6 @@ type ExplorerCopy = {
 
 const explorerCopies: Record<Locale, ExplorerCopy> = {
   zh: {
-    eyebrow: "KANBAN-TOOL EXPLORER",
     tabsLabel: "看板浏览视图",
     closeInspector: "关闭任务检查器",
     boardLoading: "正在加载看板…",
@@ -170,7 +168,6 @@ const explorerCopies: Record<Locale, ExplorerCopy> = {
     syncOffline: "当前离线",
   },
   en: {
-    eyebrow: "KANBAN-TOOL EXPLORER",
     tabsLabel: "Board explorer views",
     closeInspector: "Close Inspector",
     boardLoading: "Loading board…",

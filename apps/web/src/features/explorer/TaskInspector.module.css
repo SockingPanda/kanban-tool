@@ -264,7 +264,7 @@
     display: grid;
     place-items: center;
     padding: 1rem;
-    background: rgb(0 0 0 / 0.45);
+    background: var(--color-overlay);
     overscroll-behavior: contain;
   }
 
@@ -276,7 +276,7 @@
     border-radius: var(--radius-element);
     padding: 1rem;
     background: var(--color-background-surface);
-    box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.25);
+    box-shadow: var(--shadow-high);
   }
 
   .dialog h2,

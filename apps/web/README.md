@@ -31,6 +31,11 @@ UI intent 只能消费生成边界。
 MCP 与 CLI 都只面向本地开发和 Storybook fixture。它们不连接 Turso、生产 API/SSE 或 canonical
 mutation path；静态 Storybook build 仍只输出到根目录 `output/storybook/`。
 
+09C formal proof 的浏览器 context 与当前 Web/Storybook fixture 保持同一基线：`colorScheme=light`、
+`reducedMotion=reduce`、Web preference `theme=dark`、Astryx theme `astryx`。`system` 仍是有效的
+用户偏好选项，但不是 09C formal aggregate 的基线；`neutral` 是 Astryx 的继承主题，不是运行时
+theme identity。
+
 Stage09 fixed candidate 上的根 `just ci-full` 与 09A、09C、09D、09E formal proof 均分别通过；
 `ci-full` 是独立 built-in gate，不编排这四条 proof lane。09A 的 real-host lane 由根
 `just release-proof-09a` 编排：它先构建同一 `apps/web/dist`，再以临时 DB/显式 loopback port

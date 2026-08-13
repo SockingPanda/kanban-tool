@@ -270,6 +270,41 @@ test.describe("Plane-only Tasks workspace acceptance", () => {
     await expect(page.getByTestId("task-inspector-dialog")).toHaveAttribute("data-mode", "fullscreen")
   })
 
+  test("traps focus in a mobile inspector while its read model is loading", async ({ page }) => {
+    await installPlaneAcceptanceFixture(page)
+    await page.setViewportSize({ width: 430, height: 900 })
+
+    let releaseTaskRead: (() => void) | undefined
+    const taskRead = new Promise<void>((resolve) => {
+      releaseTaskRead = resolve
+    })
+    await page.route("**/api/v1/tasks/t_default_ready", async (route) => {
+      await taskRead
+      await route.fallback()
+    })
+
+    try {
+      await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+      const opener = page.getByRole("button", { name: /ready task$/i }).first()
+      await opener.click()
+
+      const inspectorDialog = page.getByTestId("task-inspector-dialog")
+      await expect(inspectorDialog).toHaveAttribute("role", "dialog")
+      await expect(page.getByTestId("task-inspector-loading")).toBeVisible()
+      await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("data-testid"))).toBe("task-inspector-dialog")
+
+      await page.keyboard.press("Tab")
+      await expect.poll(() => page.evaluate(() => document.activeElement?.closest("[data-testid='task-inspector-dialog']") !== null)).toBe(true)
+
+      releaseTaskRead?.()
+      await expect(page.getByTestId("task-inspector")).toBeVisible()
+      await page.keyboard.press("Escape")
+      await expect(opener).toBeFocused()
+    } finally {
+      releaseTaskRead?.()
+    }
+  })
+
   test("maps Inspector presentation to each shell mode with focus, URL, overflow, and axe evidence", async ({ page }) => {
     await installPlaneAcceptanceFixture(page)
 

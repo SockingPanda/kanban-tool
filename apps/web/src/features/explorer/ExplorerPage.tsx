@@ -717,14 +717,15 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
   }, [restoreFocus, taskId])
 
   useEffect(() => {
-    if (!isInspectorModal || !showInspector || !inspectorReady) return
+    if (!isInspectorModal || !showInspector) return
     const dialog = inspectorDialogRef.current
     if (dialog === null) return
     const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
     const focusInitial = () => {
       const active = document.activeElement
-      if (active instanceof HTMLElement && dialog.contains(active)) return
-      dialog.querySelector<HTMLElement>(focusableSelector)?.focus()
+      if (active instanceof HTMLElement && active !== dialog && dialog.contains(active)) return
+      const firstFocusable = dialog.querySelector<HTMLElement>(focusableSelector)
+      ;(firstFocusable ?? dialog).focus()
     }
     const frame = window.requestAnimationFrame(focusInitial)
     const handleKeyDown = (event: KeyboardEvent) => {

@@ -688,7 +688,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, onSelect
       data-board-id={board?.id}
       data-board-slug={board?.slug}
     >
-      <a className={`absolute z-10 -translate-y-full rounded-md border border-border-strong bg-surface px-3 py-2 text-primary focus:translate-y-0 ${focusRingClass}`} href={`#${id}-columns`}>
+      <a className={`absolute start-0 top-0 z-10 -translate-y-full rounded-md border border-border-strong bg-surface px-3 py-2 text-primary focus:translate-y-0 ${focusRingClass}`} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
       {pageFrame}

@@ -65,7 +65,7 @@
     background: var(--color-background-surface);
     color: var(--color-text-primary);
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--font-size-sm);
     cursor: pointer;
     touch-action: manipulation;
   }
@@ -110,7 +110,7 @@
     background: var(--color-background-surface);
     color: var(--color-text-primary);
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--font-size-sm);
     cursor: pointer;
     touch-action: manipulation;
   }
@@ -173,8 +173,8 @@
     gap: 0.28rem;
     min-width: 0;
     color: var(--color-text-secondary);
-    font-size: 0.78rem;
-    font-weight: 600;
+    font-size: var(--font-size-sm);
+    font-weight: var(--text-label-weight);
   }
 
   .editor input,
@@ -189,7 +189,7 @@
     background: var(--color-background-body);
     color: var(--color-text-primary);
     font: inherit;
-    font-size: 0.84rem;
+    font-size: var(--font-size-base);
   }
 
   .editor textarea,
@@ -208,7 +208,7 @@
   .unsaved {
     margin: 0;
     color: var(--color-status-warning);
-    font-size: 0.78rem;
+    font-size: var(--font-size-sm);
   }
 
   .actionGrid {
@@ -231,13 +231,13 @@
 
   .disabledReason {
     color: var(--color-text-secondary);
-    font-size: 0.72rem;
+    font-size: var(--font-size-sm);
     line-height: 1.3;
   }
 
   .pendingLabel {
     color: var(--color-text-secondary);
-    font-size: 0.72rem;
+    font-size: var(--font-size-sm);
   }
 
   .mutationError {
@@ -249,7 +249,7 @@
     border-inline-start: 0.18rem solid var(--color-status-error);
     padding: 0.45rem 0.55rem;
     color: var(--color-status-error);
-    font-size: 0.8rem;
+    font-size: var(--font-size-sm);
   }
 
   .mutationError button {
@@ -285,13 +285,13 @@
   }
 
   .dialog h2 {
-    font-size: 1rem;
+    font-size: var(--font-size-lg);
   }
 
   .dialog p {
     margin-block-start: 0.35rem;
     color: var(--color-text-secondary);
-    font-size: 0.82rem;
+    font-size: var(--font-size-sm);
   }
 
   .dialog form {
@@ -347,15 +347,15 @@
   .codeBlock,
   time,
   dd {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.78rem;
+    font-family: var(--font-family-code);
+    font-size: var(--font-size-sm);
   }
 
   .header h1,
   .header h2 {
     margin: 0;
     min-width: 0;
-    font-size: 1.35rem;
+    font-size: var(--font-size-xl);
     line-height: 1.15;
     overflow-wrap: anywhere;
   }
@@ -381,7 +381,7 @@
   .group > h2 {
     margin: 0;
     color: var(--color-text-primary);
-    font-size: 1rem;
+    font-size: var(--font-size-lg);
     letter-spacing: -0.01em;
   }
 
@@ -392,7 +392,7 @@
   .groupSummary {
     margin: 0;
     color: var(--color-text-primary);
-    font-size: 1rem;
+    font-size: var(--font-size-lg);
     letter-spacing: -0.01em;
   }
 
@@ -415,7 +415,7 @@
   .section h3,
   .dependencyGroup h3 {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: var(--font-size-base);
   }
 
   .propertyBlock {
@@ -426,7 +426,7 @@
 
   .propertyBlock h3 {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: var(--font-size-base);
   }
 
   .dependencyGroup {
@@ -450,7 +450,7 @@
 
   dt {
     color: var(--color-text-secondary);
-    font-size: 0.76rem;
+    font-size: var(--font-size-sm);
   }
 
   dd {
@@ -478,7 +478,7 @@
   summary {
     cursor: pointer;
     color: var(--color-text-primary);
-    font-weight: 600;
+    font-weight: var(--text-heading-5-weight);
   }
 
   .neighborhoodFacts {
@@ -486,7 +486,7 @@
     flex-wrap: wrap;
     gap: 0.6rem;
     color: var(--color-text-secondary);
-    font-size: 0.78rem;
+    font-size: var(--font-size-sm);
   }
 
   .codeBlock {

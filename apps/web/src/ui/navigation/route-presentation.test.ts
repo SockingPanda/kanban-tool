@@ -92,6 +92,20 @@ describe("route presentation descriptor", () => {
   })
 
   test.each([
+    "/app/boards/alpha/runs?task=t_42&task=t_43",
+    "/app/boards/alpha/runs?task=../escape",
+    "/app/boards/alpha/runs?task=task-42",
+  ])("does not describe malformed Runs task query %s as selected", (path) => {
+    const descriptor = describeRoutePresentation(route(path), { labels })
+
+    expect(descriptor.taskContext).toEqual({
+      status: "required",
+      taskId: null,
+      label: "Select a task to inspect runs.",
+    })
+  })
+
+  test.each([
     ["events", "board"],
     ["signals", "board"],
     ["ontology", "board"],

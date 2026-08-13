@@ -1,4 +1,5 @@
 import type { AppRoute } from "../../lib/router"
+import { parseTasksUrl } from "../../lib/tasks-url"
 
 export type RoutePresentationSurface =
   | "projects"
@@ -116,7 +117,8 @@ function boardViewSurface(route: Extract<AppRoute, { kind: "board" }>, labels: R
 } {
   const view = route.view ?? "board"
   if (view === "runs") {
-    const taskId = new URLSearchParams(route.query ?? "").get("task")?.trim() || null
+    const task = parseTasksUrl(route.query ?? "").task
+    const taskId = task.kind === "valid" ? task.value : null
     return {
       surface: "runs",
       title: labels.runs,

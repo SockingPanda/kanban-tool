@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, test } from "vitest"
 
 import {
@@ -65,6 +66,19 @@ describe("PageStoryCatalog and router coverage", () => {
     expect(PAGE_STORY_ROUTES).toEqual(PAGE_STORY_CATALOG.routes.map(({ contract: { route } }) => route))
     expect(validatePageStoryCatalog(PAGE_STORY_CATALOG).ok).toBe(true)
     expect(PAGE_STORY_CATALOG.routes.every(({ readyStoryId }) => readyStoryId.startsWith("pages-routes--"))).toBe(true)
+  })
+
+  test("binds every catalog ready story id to an executable Storybook export", () => {
+    const source = readFileSync(new URL("../src/stories/pages/Pages.stories.tsx", import.meta.url), "utf8")
+    const exportName = (readyStoryId: string) => readyStoryId
+      .split("--")[1]
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("")
+    for (const { readyStoryId } of PAGE_STORY_CATALOG.routes) {
+      expect(source).toContain(`export const ${exportName(readyStoryId)}: Story`)
+    }
+    expect(source).toContain("export const ListTable: Story")
   })
 
   const routes = PAGE_STORY_ROUTES.map((route) => ({ contract: contract(route.path), readyStoryId: `story-${route.kind}` }))

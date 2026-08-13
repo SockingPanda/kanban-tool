@@ -58,6 +58,7 @@ export type NavigationLabels = {
   readonly close: string
   readonly openProjectNavigation: string
   readonly closeProjectNavigation: string
+  readonly resizeProjectNavigation: string
   readonly collapse: string
   readonly expand: string
   readonly overview: string
@@ -86,6 +87,7 @@ export const defaultNavigationLabels: NavigationLabels = {
   close: "Close",
   openProjectNavigation: "Open project navigation",
   closeProjectNavigation: "Close project navigation",
+  resizeProjectNavigation: "Resize project navigation",
   collapse: "Collapse project navigation",
   expand: "Expand project navigation",
   overview: "Overview",

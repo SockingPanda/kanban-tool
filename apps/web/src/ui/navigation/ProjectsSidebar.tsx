@@ -303,7 +303,12 @@ export function ProjectsSidebar({
             ) : null}
           </div>
           {!isDrawer && sidebarWidthStep !== undefined && onSidebarWidthStepChange !== undefined && onSidebarWidthReset !== undefined ? (
-            <SidebarResizeHandle step={sidebarWidthStep} onStepChange={onSidebarWidthStepChange} onReset={onSidebarWidthReset} />
+            <SidebarResizeHandle
+              step={sidebarWidthStep}
+              onStepChange={onSidebarWidthStepChange}
+              onReset={onSidebarWidthReset}
+              label={labels.resizeProjectNavigation}
+            />
           ) : null}
         </div>
       </SidebarTag>

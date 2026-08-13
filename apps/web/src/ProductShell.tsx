@@ -205,6 +205,7 @@ function ShellNavigation({
           close: t("close"),
           openProjectNavigation: t("openProjectNavigation"),
           closeProjectNavigation: t("closeProjectNavigation"),
+          resizeProjectNavigation: t("resizeProjectNavigation"),
           collapse: t("collapse"),
           expand: t("expand"),
           overview: t("overview"),

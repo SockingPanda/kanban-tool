@@ -148,6 +148,7 @@ describe("navigation accessibility contracts", () => {
         sidebarWidthStep={62}
         onSidebarWidthStepChange={vi.fn()}
         onSidebarWidthReset={vi.fn()}
+        labels={{ resizeProjectNavigation: "调整项目导航宽度" }}
       />,
     )
 
@@ -155,6 +156,7 @@ describe("navigation accessibility contracts", () => {
     expect(markup).toContain('aria-valuemin="56"')
     expect(markup).toContain('aria-valuemax="80"')
     expect(markup).toContain('aria-valuenow="62"')
+    expect(markup).toContain('aria-label="调整项目导航宽度"')
     expect(markup).toContain('data-testid="sidebar-resize-handle"')
     expect(markup).not.toContain('style=')
   })

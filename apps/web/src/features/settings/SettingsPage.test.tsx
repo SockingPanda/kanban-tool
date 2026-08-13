@@ -52,6 +52,34 @@ describe("SettingsPage", () => {
     expect(markup).not.toContain('class="eyebrow"')
   })
 
+  test("uses the shared diagnostic loading boundary before health data arrives", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <SettingsPage runtime={runtime} read={() => new Promise<HealthReport>(() => undefined)} />
+      </PreferencesProvider>,
+    )
+
+    expect(markup).toContain('data-testid="settings-health-loading"')
+    expect(markup).toContain('role="status"')
+    expect(markup).toContain('aria-live="polite"')
+    expect(markup).toContain("astryx-banner")
+    expect(markup).toContain('data-status="info"')
+    expect(markup).not.toContain('data-testid="settings-health-error"')
+  })
+
+  test("marks health facts with the same semantic status indicators as Health", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <SettingsPage runtime={runtime} initialHealth={{ ...health, ok: false }} />
+      </PreferencesProvider>,
+    )
+
+    expect(markup).toContain('data-testid="settings-health"')
+    expect(markup).toContain('data-testid="settings-health-status-ok"')
+    expect(markup).toContain('data-testid="settings-health-status-db"')
+    expect(markup).toContain('aria-label="服务状态: false"')
+  })
+
   test("renders a no-board connection boundary without inventing a health route", () => {
     const markup = renderToStaticMarkup(
       <PreferencesProvider>

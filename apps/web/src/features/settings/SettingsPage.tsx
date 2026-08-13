@@ -1,3 +1,7 @@
+import { Banner } from "@astryxdesign/core/Banner"
+import { Button } from "@astryxdesign/core/Button"
+import { StatusDot } from "@astryxdesign/core/StatusDot"
+import { Text } from "@astryxdesign/core/Text"
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 
 import type { AppNavigationTarget } from "../../lib/router"
@@ -18,6 +22,12 @@ import { usePreferences } from "../../lib/use-preferences"
 import { callSettingsAction } from "./settings-async-actions"
 import { apiOriginForRuntime, diagnosticsText } from "./settings-diagnostics"
 import type { BoardReconnectResult } from "../board/board-session-registry"
+import {
+  SafeHStack,
+  SafeMetadataList,
+  SafeMetadataListItem,
+  SafeVStack,
+} from "../../ui/astryx/primitives"
 import styles from "../../shell.module.css"
 
 export type SettingsPageProps = {
@@ -187,9 +197,12 @@ export function SettingsPage({
     void Promise.resolve(onNavigate(healthURL)).catch(() => undefined)
   }, [healthURL, onNavigate])
 
-  const healthError = healthState.kind === "error" || healthState.kind === "ready" && healthState.staleError
-    ? presentHealthError(healthState.kind === "error" ? healthState.error : healthState.staleError, t)
-    : null
+  const healthStale = healthState.kind === "ready" && healthState.staleError !== undefined
+  const healthError = healthState.kind === "error"
+    ? presentHealthError(healthState.error, t)
+    : healthStale
+      ? presentHealthError(healthState.staleError, t)
+      : null
   const healthReport = healthState.kind === "ready" ? healthState.report : null
   const healthLoading = healthState.kind === "loading" || healthPending
   const copyFeedback = copyState === "copied" ? t("diagnosticsCopied") : copyState === "failed" ? t("diagnosticsCopyFailed") : null
@@ -346,22 +359,80 @@ export function SettingsPage({
             <button type="button" className={styles.secondaryAction} disabled data-testid="diagnostics-health-link">{t("openHealth")}</button>
           )}
         </div>
-        {healthLoading && !healthReport ? <p className={styles.statusPanel} role="status" aria-live="polite" data-testid="settings-health-loading">{t("loading")}</p> : null}
+        {healthLoading && !healthReport ? (
+          <Banner
+            status="info"
+            title={t("loading")}
+            container="section"
+            role="status"
+            aria-live="polite"
+            data-testid="settings-health-loading"
+            data-status="info"
+          />
+        ) : null}
+        {healthLoading && healthReport ? (
+          <Text as="p" type="supporting" role="status" aria-live="polite" data-testid="settings-health-refreshing">
+            {t("loading")}
+          </Text>
+        ) : null}
         {healthError ? (
-          <div className={styles.inlineError} role="alert" data-testid="settings-health-error">
-            <strong>{healthError.title}</strong>
-            <span>{healthError.detail}</span>
-            <span>{healthError.nextStep}</span>
-            <button type="button" className={styles.secondaryAction} disabled={healthPending} onClick={() => void loadHealth()} data-testid="settings-health-retry">{healthPending ? t("loading") : t("retry")}</button>
-          </div>
+          <Banner
+            status={healthStale ? "warning" : "error"}
+            title={healthError.title}
+            description={(
+              <SafeVStack gap={0.5}>
+                <Text as="p" type="body" color="inherit" data-testid="settings-health-error-detail">{healthError.detail}</Text>
+                <Text as="p" type="body" color="inherit" data-testid="settings-health-error-next-step">{healthError.nextStep}</Text>
+                {healthStale ? <Text as="p" type="body" color="inherit">{t("healthStale")}</Text> : null}
+              </SafeVStack>
+            )}
+            container="section"
+            role={healthStale ? "status" : "alert"}
+            aria-live="polite"
+            data-testid={healthStale ? "settings-health-stale" : "settings-health-error"}
+            endContent={(
+              <SafeHStack gap={1} aria-busy={healthPending || undefined}>
+                <Button
+                  type="button"
+                  label={healthPending ? t("loading") : t("retry")}
+                  variant="ghost"
+                  isDisabled={healthPending}
+                  onClick={() => void loadHealth()}
+                  data-testid="settings-health-retry"
+                />
+              </SafeHStack>
+            )}
+          />
         ) : null}
         {healthReport ? (
-          <dl className={styles.runtimeFacts} data-testid="settings-health">
-            <div><dt>{t("healthOk")}</dt><dd translate="no">{String(healthReport.ok)}</dd></div>
-            <div><dt>{t("healthDb")}</dt><dd translate="no">{reported(healthReport.db, t("reported"))}</dd></div>
-            <div><dt>{t("version")}</dt><dd translate="no">{reported(healthReport.version, t("reported"))}</dd></div>
-            <div><dt>{t("dbFingerprint")}</dt><dd translate="no">{reported(healthReport.db_fingerprint, t("reported"))}</dd></div>
-          </dl>
+          <SafeMetadataList columns="multi" data-testid="settings-health">
+            <SafeMetadataListItem label={t("healthOk")} data-testid="settings-health-metric-ok">
+              <SafeHStack gap={1} align="center" wrap="wrap">
+                <StatusDot
+                  variant={healthReport.ok ? "success" : "error"}
+                  label={`${t("healthOk")}: ${String(healthReport.ok)}`}
+                  data-testid="settings-health-status-ok"
+                />
+                <Text type="code" wordBreak="break-word"><span translate="no">{String(healthReport.ok)}</span></Text>
+              </SafeHStack>
+            </SafeMetadataListItem>
+            <SafeMetadataListItem label={t("healthDb")} data-testid="settings-health-metric-db">
+              <SafeHStack gap={1} align="center" wrap="wrap">
+                <StatusDot
+                  variant={healthReport.ok ? "success" : "error"}
+                  label={`${t("healthDb")}: ${reported(healthReport.db, t("reported"))}`}
+                  data-testid="settings-health-status-db"
+                />
+                <Text type="code" wordBreak="break-word"><span translate="no">{reported(healthReport.db, t("reported"))}</span></Text>
+              </SafeHStack>
+            </SafeMetadataListItem>
+            <SafeMetadataListItem label={t("version")}>
+              <Text type="code" wordBreak="break-word"><span translate="no">{reported(healthReport.version, t("reported"))}</span></Text>
+            </SafeMetadataListItem>
+            <SafeMetadataListItem label={t("dbFingerprint")}>
+              <Text type="code" wordBreak="break-word"><span translate="no">{reported(healthReport.db_fingerprint, t("reported"))}</span></Text>
+            </SafeMetadataListItem>
+          </SafeMetadataList>
         ) : null}
         <div className={styles.diagnosticsActions}>
           <button type="button" className={styles.secondaryAction} disabled={copyPending} onClick={copyDiagnostics} data-testid="diagnostics-copy">{t("copyDiagnostics")}</button>

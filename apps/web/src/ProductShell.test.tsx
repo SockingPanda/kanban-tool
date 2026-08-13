@@ -334,6 +334,16 @@ describe("ProductShell route offline boundary", () => {
     expect(markup).toContain('data-more-active="true"')
   })
 
+  test("marks Health as the active destination in the diagnostic More menu", () => {
+    const markup = renderWithBoardList(parseAppRoute("http://kanban.test/app/boards/default/health"))
+
+    expect(markup).toContain('data-route-surface="health"')
+    expect(markup).toContain('data-more-active="true"')
+    expect(markup).toContain('href="/app/boards/default/health"')
+    expect(markup).toContain('data-active="true"')
+    expect(markup).toContain('aria-current="page"')
+  })
+
   test("uses descriptor project navigation for diagnostics without marking Tasks active", () => {
     const markup = renderWithBoardList(parseAppRoute("http://kanban.test/app/boards/default/signals"))
 

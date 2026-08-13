@@ -270,10 +270,12 @@ export interface BoardMessages {
   readonly dependencyLabel: string
   readonly dependencyBlocked: string
   readonly dependencyClear: string
+  readonly unfinishedParentLabel: string
   readonly planLabel: string
   readonly planState: Readonly<Record<BoardExecutionPlanState, string>>
   readonly requiredStepsLabel: string
   readonly optionalStepsLabel: string
+  readonly taskDetailsLabel: string
   readonly createTask: string
   readonly editTask: string
   readonly grabTask: string
@@ -373,6 +375,7 @@ export const defaultBoardMessages: BoardMessages = {
   dependencyLabel: "依赖",
   dependencyBlocked: "依赖阻塞",
   dependencyClear: "依赖已满足",
+  unfinishedParentLabel: "未完成父任务",
   planLabel: "执行计划",
   planState: {
     unplanned: "未规划",
@@ -381,6 +384,7 @@ export const defaultBoardMessages: BoardMessages = {
   },
   requiredStepsLabel: "必需步骤",
   optionalStepsLabel: "可选步骤",
+  taskDetailsLabel: "更多任务事实",
   createTask: "新建任务",
   editTask: "编辑任务",
   grabTask: "抓取任务",
@@ -487,6 +491,7 @@ export const englishBoardMessages: BoardMessages = {
   dependencyLabel: "Dependencies",
   dependencyBlocked: "Blocked by dependencies",
   dependencyClear: "Dependencies clear",
+  unfinishedParentLabel: "Unfinished parent tasks",
   planLabel: "Execution plan",
   planState: {
     unplanned: "Unplanned",
@@ -495,6 +500,7 @@ export const englishBoardMessages: BoardMessages = {
   },
   requiredStepsLabel: "Required steps",
   optionalStepsLabel: "Optional steps",
+  taskDetailsLabel: "More task facts",
   createTask: "Create task",
   editTask: "Edit task",
   grabTask: "Grab task",

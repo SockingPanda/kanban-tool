@@ -206,6 +206,23 @@ describe("BoardView", () => {
     expect(markup).toMatch(/<details[^>]*data-testid="board-task-secondary"[\s\S]*截止时间[\s\S]*标签[\s\S]*可选步骤[\s\S]*<\/details>/)
   })
 
+  test("compact task card keeps dependency facts in the summary and moves low-frequency facts to details", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+    const summary = markup.match(/<dl[^>]*data-testid="board-task-summary"[\s\S]*?<\/dl>/)?.[0]
+    const secondary = markup.match(/<details[^>]*data-testid="board-task-secondary"[\s\S]*?<\/details>/)?.[0]
+
+    expect(summary).toBeDefined()
+    expect(summary).toContain("依赖阻塞")
+    expect(summary).toContain("未完成父任务")
+    expect(summary).toContain("必需步骤")
+    expect(summary).toContain("1 / 2")
+    expect(summary).not.toContain("执行者")
+    expect(summary).not.toContain("执行计划")
+    expect(secondary).toBeDefined()
+    expect(secondary).toContain("执行者")
+    expect(secondary).toContain("执行计划")
+  })
+
   test("卡片在排期、截止、心跳、状态原因和标签为空时使用简洁占位", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
 

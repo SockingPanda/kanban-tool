@@ -258,9 +258,7 @@ function TaskCard({
   readonly controller?: BoardTaskMutationController
   readonly onSelectTask?: (taskId: string) => void
 }) {
-  const dependencyText = task.readiness.dependencyBlocked
-    ? `${copy.dependencyBlocked}（${task.readiness.unfinishedParentCount}）`
-    : copy.dependencyClear
+  const dependencyText = task.readiness.dependencyBlocked ? copy.dependencyBlocked : copy.dependencyClear
   const scheduledAt = taskTimestamp(task.scheduledAt, copy.dateLocale)
   const dueAt = taskTimestamp(task.dueAt, copy.dateLocale)
   const lastHeartbeatAt = taskTimestamp(task.lastHeartbeatAt, copy.dateLocale)
@@ -310,21 +308,17 @@ function TaskCard({
           <dd className="m-0 min-w-0 break-words text-primary" translate="no" data-status={task.status}>{task.status}</dd>
         </SafeHStack>
         <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
-          <dt>{copy.assigneeLabel}</dt>
-          <dd className="m-0 min-w-0 break-words text-primary">{task.assignee ?? copy.unassigned}</dd>
-        </SafeHStack>
-        <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
           <dt>{copy.readinessLabel}</dt>
           <dd className="m-0 min-w-0 text-primary">
             <SafeHStack as="div" wrap="wrap" gap={2} className="min-w-0">
-              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2">
-              {copy.dependencyLabel}：{dependencyText}
+              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2" data-testid="board-task-dependency">
+                {copy.dependencyLabel}：{dependencyText}
               </Text>
-              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2">
-              {copy.planLabel}：{copy.planState[task.readiness.executionPlanState]}
+              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2" data-testid="board-task-unfinished-parents">
+                {copy.unfinishedParentLabel}：{task.readiness.unfinishedParentCount}
               </Text>
-              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2">
-              {copy.requiredStepsLabel}：{task.readiness.completedRequiredStepCount} / {task.readiness.requiredStepCount}
+              <Text as="span" type="supporting" className="border-s-2 border-border-strong ps-2" data-testid="board-task-required-steps">
+                {copy.requiredStepsLabel}：{task.readiness.completedRequiredStepCount} / {task.readiness.requiredStepCount}
               </Text>
             </SafeHStack>
           </dd>
@@ -332,9 +326,17 @@ function TaskCard({
       </dl>
       <details className="mt-2 min-w-0 border-t border-border pt-2" data-testid="board-task-secondary">
         <summary onKeyDown={(event) => event.stopPropagation()}>
-          {copy.statusReasonLabel} · {copy.scheduledLabel} · {copy.labelsLabel}
+          {copy.taskDetailsLabel}
         </summary>
         <dl className="mt-2 grid min-w-0 gap-1 text-xs text-secondary">
+          <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
+            <dt>{copy.assigneeLabel}</dt>
+            <dd className="m-0 min-w-0 break-words text-primary" data-testid="board-task-assignee">{task.assignee ?? copy.unassigned}</dd>
+          </SafeHStack>
+          <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
+            <dt>{copy.planLabel}</dt>
+            <dd className="m-0 min-w-0 break-words text-primary" data-testid="board-task-plan">{copy.planState[task.readiness.executionPlanState]}</dd>
+          </SafeHStack>
           <SafeHStack as="div" align="start" gap={2} className="grid min-w-0 grid-cols-2">
             <dt>{copy.statusReasonLabel}</dt>
             <dd className="m-0 min-w-0 break-words text-primary" data-testid="board-task-status-reason">{statusReason}</dd>

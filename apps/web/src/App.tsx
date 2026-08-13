@@ -9,7 +9,14 @@ import { BoardLive } from "./features/board/BoardLive"
 import { boardSyncStatusForTelemetry } from "./features/board/board-live-state"
 import type { BoardTaskCanonicalReloadHandler, BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
 import type { BoardSyncStatus } from "./features/board/types"
-import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation } from "./App.logic"
+import {
+  appendExplorerEventBatch,
+  coalesceExplorerBoundary,
+  EVENT_APPLIED_DEBOUNCE_MS,
+  EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY,
+  explorerEventInvalidation,
+  shouldRecoverExplorerEventBatch,
+} from "./App.logic"
 import { parseBoardEvent, type BoardEventsBatch, type ExplorerEvent } from "./lib/api/explorer-read-model"
 import type { SyncTelemetryEntry } from "./lib/sync"
 import type { CanonicalBoardId } from "./lib/sync/contracts"
@@ -43,8 +50,6 @@ const explorerInvalidationTelemetry = new Set([
   "circuit-open",
   "detached-async-failure",
 ])
-
-const EVENT_APPLIED_DEBOUNCE_MS = 200
 
 function boardListRuntimeKey(runtime: WebRuntimeConfig): string {
   return [runtime.apiBaseUrl, runtime.webBasePath, runtime.webBuildId, runtime.serverVersion, runtime.protocolVersion].join("\u0000")
@@ -197,13 +202,37 @@ function RuntimeThemedShell() {
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
   const [eventsBatchState, setEventsBatchState] = useState<{ readonly key: string; readonly batch: BoardEventsBatch | null }>(() => ({ key: sessionKey, batch: null }))
   const eventAppliedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventAppliedTimerGenerationRef = useRef(0)
   const boundaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const boundaryTimerGenerationRef = useRef(0)
   const pendingEventsRef = useRef<ExplorerEvent[]>([])
   const pendingBoardIdRef = useRef<CanonicalBoardId | null>(null)
   const pendingBoundaryRef = useRef(false)
   const pendingBoundaryTypesRef = useRef<Set<string>>(new Set())
   const pendingEventInvalidationRef = useRef({ projects: false, board: false, inspector: false, runs: false, fullRefetch: false })
   const pendingEventBoundarySourceRef = useRef(false)
+  const dropPendingEventsUntilBoundaryRef = useRef(false)
+
+  const clearEventAppliedTimer = useCallback(() => {
+    eventAppliedTimerGenerationRef.current += 1
+    if (eventAppliedTimerRef.current !== null) clearTimeout(eventAppliedTimerRef.current)
+    eventAppliedTimerRef.current = null
+  }, [])
+
+  const clearBoundaryTimer = useCallback(() => {
+    boundaryTimerGenerationRef.current += 1
+    if (boundaryTimerRef.current !== null) clearTimeout(boundaryTimerRef.current)
+    boundaryTimerRef.current = null
+  }, [])
+
+  const discardPendingEventBatch = useCallback(() => {
+    clearEventAppliedTimer()
+    pendingEventsRef.current = []
+    pendingBoardIdRef.current = null
+    pendingEventInvalidationRef.current = { projects: false, board: false, inspector: false, runs: false, fullRefetch: false }
+    pendingEventBoundarySourceRef.current = false
+    setEventsBatchState((current) => current.key === sessionKeyRef.current ? { key: current.key, batch: null } : current)
+  }, [clearEventAppliedTimer])
 
   const bumpExplorerRevision = useCallback((targets: { readonly board?: boolean; readonly inspector?: boolean; readonly runs?: boolean; readonly events?: boolean }) => {
     setSessionState((current) => {
@@ -287,13 +316,17 @@ function RuntimeThemedShell() {
     } catch {
       // A malformed batch is a recovery boundary; EventsView must not receive
       // an untrusted partial append.
-      setEventsBatchState({ key: sessionKeyRef.current, batch: null })
+      setEventsBatchState((current) => current.key === sessionKeyRef.current ? { key: current.key, batch: null } : current)
       pendingBoundaryRef.current = true
       pendingBoundaryTypesRef.current.add("protocol-anomaly")
       setSyncStatus("stale")
       if (boundaryTimerRef.current === null) {
+        const timerGeneration = ++boundaryTimerGenerationRef.current
+        const timerSessionKey = sessionKeyRef.current
         boundaryTimerRef.current = setTimeout(() => {
+          if (timerGeneration !== boundaryTimerGenerationRef.current) return
           boundaryTimerRef.current = null
+          if (timerSessionKey !== sessionKeyRef.current) return
           if (!pendingBoundaryRef.current) return
           pendingBoundaryRef.current = false
           pendingBoundaryTypesRef.current.clear()
@@ -307,65 +340,79 @@ function RuntimeThemedShell() {
     pendingBoundaryRef.current = true
     pendingBoundaryTypesRef.current.add(type)
     if (eventAppliedTimerRef.current !== null) {
-      clearTimeout(eventAppliedTimerRef.current)
-      eventAppliedTimerRef.current = null
+      clearEventAppliedTimer()
       flushEventBatch()
     }
     if (boundaryTimerRef.current !== null) return
+    const timerGeneration = ++boundaryTimerGenerationRef.current
+    const timerSessionKey = sessionKeyRef.current
     boundaryTimerRef.current = setTimeout(() => {
+      if (timerGeneration !== boundaryTimerGenerationRef.current) return
       boundaryTimerRef.current = null
+      if (timerSessionKey !== sessionKeyRef.current) return
       if (!pendingBoundaryRef.current) return
       if (eventAppliedTimerRef.current !== null) {
-        clearTimeout(eventAppliedTimerRef.current)
-        eventAppliedTimerRef.current = null
+        clearEventAppliedTimer()
         flushEventBatch()
       }
       pendingBoundaryRef.current = false
       const boundary = coalesceExplorerBoundary([...pendingBoundaryTypesRef.current])
       pendingBoundaryTypesRef.current.clear()
-      setEventsBatchState({ key: sessionKeyRef.current, batch: null })
+      pendingEventsRef.current = []
+      pendingBoardIdRef.current = null
+      pendingEventInvalidationRef.current = { projects: false, board: false, inspector: false, runs: false, fullRefetch: false }
+      pendingEventBoundarySourceRef.current = false
+      dropPendingEventsUntilBoundaryRef.current = false
+      setEventsBatchState((current) => current.key === sessionKeyRef.current ? { key: current.key, batch: null } : current)
       if (boundary.invalidationDelta === 1) bumpExplorerRevision({ board: true, inspector: true, runs: true, events: boundary.eventsRefreshDelta === 1 })
     }, 0)
-  }, [bumpExplorerRevision, flushEventBatch])
+  }, [bumpExplorerRevision, clearEventAppliedTimer, flushEventBatch])
 
   useEffect(() => {
-    if (eventAppliedTimerRef.current !== null) {
-      clearTimeout(eventAppliedTimerRef.current)
-      eventAppliedTimerRef.current = null
-    }
-    if (boundaryTimerRef.current !== null) {
-      clearTimeout(boundaryTimerRef.current)
-      boundaryTimerRef.current = null
-    }
+    clearEventAppliedTimer()
+    clearBoundaryTimer()
     pendingEventsRef.current = []
     pendingBoardIdRef.current = null
     pendingBoundaryRef.current = false
     pendingBoundaryTypesRef.current.clear()
     pendingEventInvalidationRef.current = { projects: false, board: false, inspector: false, runs: false, fullRefetch: false }
     pendingEventBoundarySourceRef.current = false
+    dropPendingEventsUntilBoundaryRef.current = false
     setSyncStatus("connecting")
     setSessionState((current) => current.key === sessionKey ? current : { key: sessionKey, boardRevision: 0, inspectorRevision: 0, runsRevision: 0, eventsRefreshRevision: 0 })
     setTaskMutationState((current) => current.key === sessionKey ? current : { key: sessionKey, surface: undefined })
     setEventsBatchState((current) => current.key === sessionKey ? current : { key: sessionKey, batch: null })
-  }, [sessionKey])
+  }, [clearBoundaryTimer, clearEventAppliedTimer, sessionKey])
 
   useEffect(() => () => {
-    if (eventAppliedTimerRef.current !== null) clearTimeout(eventAppliedTimerRef.current)
-    if (boundaryTimerRef.current !== null) clearTimeout(boundaryTimerRef.current)
-  }, [])
+    clearEventAppliedTimer()
+    clearBoundaryTimer()
+  }, [clearBoundaryTimer, clearEventAppliedTimer])
 
   const onSessionTelemetry = useCallback((entry: SyncTelemetryEntry) => {
+    if (sessionKeyRef.current !== sessionKey) return
     if (!explorerInvalidationTelemetry.has(entry.type)) return
     const nextSyncStatus = boardSyncStatusForTelemetry(entry.type)
     if (nextSyncStatus !== null) setSyncStatus(nextSyncStatus)
     if (entry.type === "connection-live" || entry.type === "recovery-start" || entry.type === "recovery-connection-retry") return
     if (entry.type === "event-applied") {
+      if (dropPendingEventsUntilBoundaryRef.current) return
       const event = parseBoardEvent(entry.details?.event)
       if (!event || event.board_id !== entry.boardId) {
         scheduleBoundaryRefresh("protocol-anomaly")
         return
       }
       const invalidation = explorerEventInvalidation(event, entry.boardId)
+      if (pendingBoardIdRef.current !== null && pendingBoardIdRef.current !== entry.boardId) flushEventBatch()
+      if (shouldRecoverExplorerEventBatch(pendingEventsRef.current.length)) {
+        const needsProjectReload = pendingEventInvalidationRef.current.projects || invalidation.projects
+        discardPendingEventBatch()
+        dropPendingEventsUntilBoundaryRef.current = true
+        setSyncStatus("stale")
+        if (needsProjectReload) reloadProjects()
+        scheduleBoundaryRefresh(EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY)
+        return
+      }
       pendingEventInvalidationRef.current = {
         projects: pendingEventInvalidationRef.current.projects || invalidation.projects,
         board: pendingEventInvalidationRef.current.board || invalidation.board,
@@ -376,12 +423,15 @@ function RuntimeThemedShell() {
       const source = typeof entry.details?.source === "string" ? entry.details.source : null
       if (source === "recovery" || source === "poll" || source === "poll-boundary") pendingEventBoundarySourceRef.current = true
       if (invalidation.fullRefetch) scheduleBoundaryRefresh("protocol-anomaly")
-      if (pendingBoardIdRef.current !== null && pendingBoardIdRef.current !== entry.boardId) flushEventBatch()
       pendingBoardIdRef.current = entry.boardId
       pendingEventsRef.current.push(event)
       if (eventAppliedTimerRef.current !== null) return
+      const timerGeneration = ++eventAppliedTimerGenerationRef.current
+      const timerSessionKey = sessionKeyRef.current
       eventAppliedTimerRef.current = setTimeout(() => {
+        if (timerGeneration !== eventAppliedTimerGenerationRef.current) return
         eventAppliedTimerRef.current = null
+        if (timerSessionKey !== sessionKeyRef.current) return
         flushEventBatch()
       }, EVENT_APPLIED_DEBOUNCE_MS)
       return
@@ -389,7 +439,7 @@ function RuntimeThemedShell() {
     // Recovery/poll completion and protocol anomalies are conservative
     // refresh boundaries; they are intentionally not tied to each event.
     scheduleBoundaryRefresh(entry.type)
-  }, [flushEventBatch, scheduleBoundaryRefresh])
+  }, [discardPendingEventBatch, flushEventBatch, reloadProjects, scheduleBoundaryRefresh, sessionKey])
 
   const currentEventsBatch = eventsBatchState.key === sessionKey ? eventsBatchState.batch : null
   const taskMutations = taskMutationState.key === sessionKey ? taskMutationState.surface : undefined

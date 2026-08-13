@@ -3,7 +3,14 @@ import { createGeneratedStreamContractAdapter } from "./lib/sync/generated-adapt
 import { classifyEvent, fullRefetchPlan } from "./lib/sync/invalidation"
 import type { CanonicalBoardId, InvalidationPlan, QueryRoot, ValidatedBusinessEvent } from "./lib/sync/contracts"
 
+/** Keep event-applied work bounded to the same 150-event window as EventsView. */
+export const MAX_PENDING_EXPLORER_EVENTS = 150
+/** Preserve the existing event-applied aggregation window while bounding its pending batch. */
+export const EVENT_APPLIED_DEBOUNCE_MS = 200
+export const EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY = "event-batch-overflow"
+
 const explorerBoundaryTelemetry = new Set([
+  EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY,
   "recovery-complete",
   "poll-complete",
   "poll-boundary-complete",
@@ -19,6 +26,10 @@ const explorerBoundaryTelemetry = new Set([
   "circuit-open",
   "detached-async-failure",
 ])
+
+export function shouldRecoverExplorerEventBatch(pendingCount: number): boolean {
+  return !Number.isSafeInteger(pendingCount) || pendingCount < 0 || pendingCount >= MAX_PENDING_EXPLORER_EVENTS
+}
 
 export interface ExplorerEventInvalidation {
   readonly projects: boolean

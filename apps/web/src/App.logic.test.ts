@@ -1,7 +1,16 @@
 import { describe, expect, test } from "vitest"
 
 import { asCanonicalBoardId } from "./lib/sync/contracts"
-import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation, explorerEventInvalidationPlan } from "./App.logic"
+import {
+  appendExplorerEventBatch,
+  coalesceExplorerBoundary,
+  EVENT_APPLIED_DEBOUNCE_MS,
+  EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY,
+  explorerEventInvalidation,
+  explorerEventInvalidationPlan,
+  MAX_PENDING_EXPLORER_EVENTS,
+  shouldRecoverExplorerEventBatch,
+} from "./App.logic"
 import type { ExplorerEvent } from "./lib/api/explorer-read-model"
 
 const event = (id: number, eventId = `event-${id}`): ExplorerEvent => ({
@@ -35,6 +44,17 @@ describe("Explorer invalidation boundary", () => {
     expect(coalesceExplorerBoundary(["event-applied"])).toEqual({
       invalidationDelta: 0,
       eventsRefreshDelta: 0,
+    })
+  })
+
+  test("bounds the 200ms event window before the 150-event projection window", () => {
+    expect(EVENT_APPLIED_DEBOUNCE_MS).toBe(200)
+    expect(MAX_PENDING_EXPLORER_EVENTS).toBe(150)
+    expect(shouldRecoverExplorerEventBatch(MAX_PENDING_EXPLORER_EVENTS - 1)).toBe(false)
+    expect(shouldRecoverExplorerEventBatch(MAX_PENDING_EXPLORER_EVENTS)).toBe(true)
+    expect(coalesceExplorerBoundary([EXPLORER_EVENT_BATCH_OVERFLOW_BOUNDARY])).toEqual({
+      invalidationDelta: 1,
+      eventsRefreshDelta: 1,
     })
   })
 

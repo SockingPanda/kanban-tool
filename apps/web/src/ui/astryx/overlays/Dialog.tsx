@@ -176,6 +176,12 @@ export const Dialog = forwardRef<HTMLDialogElement, DialogProps>(function Dialog
 
   useEffect(() => {
     const dialog = dialogRef.current
+    if (!dialog || !isOpen || !nativeOpen) return
+    focusInitial(dialog, initialFocusRef)
+  }, [initialFocusRef, isOpen, nativeOpen])
+
+  useEffect(() => {
+    const dialog = dialogRef.current
     if (!dialog || !isOpen) return
 
     const handleCancel = (event: Event) => {

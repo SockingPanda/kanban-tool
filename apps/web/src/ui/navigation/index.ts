@@ -8,6 +8,24 @@ export { ProjectsSidebar } from "./ProjectsSidebar"
 export type { ProjectsSidebarProps } from "./ProjectsSidebar"
 export { Breadcrumb, ResourceHeader } from "./ResourceHeader"
 export type { BreadcrumbProps, ResourceHeaderProps } from "./ResourceHeader"
+export {
+  createRoutePresentationDescriptor,
+  describeRoutePresentation,
+  routePresentationDescriptor,
+} from "./route-presentation"
+export type {
+  DiagnosticRouteId,
+  DiagnosticsMenuItem,
+  DiagnosticsMenuPresentation,
+  ProjectNavigationPresentation,
+  ProjectSelectorPresentation,
+  RoutePresentationDescriptor,
+  RoutePresentationLabels,
+  RoutePresentationOptions,
+  RoutePresentationSurface,
+  RouteSessionScope,
+  TaskPresentationContext,
+} from "./route-presentation"
 export { NavigationIcon } from "./icons"
 export type { NavigationIconName } from "./icons"
 export {

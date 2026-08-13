@@ -961,6 +961,7 @@ export function ExplorerPage({ runtime, route, onNavigate, viewportMode, online,
                       onSelectTask={selectTask}
                       onClose={closeInspector}
                       closeLabel={copy.closeInspector}
+                      showSidePeekClose={!isTasksWorkspace}
                       locale={locale}
                       onLoadRuns={loadInspectorRuns}
                       onLoadEvents={loadInspectorEvents}

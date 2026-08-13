@@ -75,6 +75,10 @@
     display: inline-flex;
   }
 
+  .inspector[data-mode="side-peek"] .mobileCloseButton[data-side-peek-close="true"] {
+    display: inline-flex;
+  }
+
   .mobileCloseButton:hover {
     background: var(--color-background-body);
   }

@@ -301,6 +301,15 @@ describe("TaskInspector", () => {
     expect(markup).toContain(`data-mode="${expected}"`)
   })
 
+  test("allows non-task side-peek surfaces to expose the shared close copy", () => {
+    const hidden = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" mode="side-peek" onClose={vi.fn()} closeLabel="Close Inspector" />)
+    const visible = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" mode="side-peek" onClose={vi.fn()} closeLabel="Close Inspector" showSidePeekClose />)
+
+    expect(hidden).not.toContain('data-side-peek-close="true"')
+    expect(visible).toContain('data-side-peek-close="true"')
+    expect(visible).toContain("Close Inspector")
+  })
+
   test("keeps execution, runtime, and metadata in a closed low-priority disclosure", () => {
     const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" locale="en" />)
     const properties = markup.match(/<details[^>]*data-testid="inspector-properties"[^>]*>/)?.[0] ?? ""

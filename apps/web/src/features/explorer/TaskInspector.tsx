@@ -126,6 +126,8 @@ export interface TaskInspectorProps {
   readonly onClose?: () => void
   /** Action label supplied by the owning Explorer surface. */
   readonly closeLabel?: string
+  /** Non-task side-peek surfaces have no workspace chrome to own the close action. */
+  readonly showSidePeekClose?: boolean
   /** The shell chooses the responsive presentation mode. */
   readonly mode?: TaskInspectorMode
   readonly locale?: Locale
@@ -638,7 +640,7 @@ interface PendingActionDialogSubmission {
   status: "pending" | "preserve"
 }
 
-export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode = "side-peek", locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, hideReadOnlyRelations = false, claimToken = null }: TaskInspectorProps) {
+export function TaskInspector({ model, onSelectTask, onClose, closeLabel, showSidePeekClose = false, mode = "side-peek", locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, hideReadOnlyRelations = false, claimToken = null }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
   const requestIdentity = identity
@@ -1130,7 +1132,7 @@ export function TaskInspector({ model, onSelectTask, onClose, closeLabel, mode =
         <header className={styles.header}>
           <div className={styles.headerTop}>
             <p className={styles.ref} translate="no">{task.ref}</p>
-            {onClose ? <button type="button" className={styles.mobileCloseButton} data-testid="task-inspector-mobile-close" onClick={onClose}>{closeLabel ?? copy.ariaLabel}</button> : null}
+            {onClose ? <button type="button" className={styles.mobileCloseButton} data-testid="task-inspector-mobile-close" data-side-peek-close={showSidePeekClose ? "true" : undefined} onClick={onClose}>{closeLabel ?? copy.ariaLabel}</button> : null}
           </div>
           <h2 ref={headingRef} tabIndex={-1}>{task.title}</h2>
           <p aria-live="polite" className={styles.announcement}>{copy.openAnnouncement}</p>

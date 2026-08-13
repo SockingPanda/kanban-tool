@@ -499,6 +499,16 @@ describe("board events read model", () => {
     expect(() => mergeBoardEvents([], [event(0)], boardId)).toThrow(/id 必须严格递增/)
   })
 
+  test("reuses frozen event identities across incremental merges", () => {
+    const boardId = asCanonicalBoardId("b_default")
+    const first = mergeBoardEvents([], [event(1), event(2)], boardId)
+    const second = mergeBoardEvents(first, [event(3)], boardId)
+
+    expect(second[0]).toBe(first[0])
+    expect(second[1]).toBe(first[1])
+    expect(second[2]).not.toBe(first[1])
+  })
+
   test("walks ASC pages to expose the newest 150 events", async () => {
     const paths: string[] = []
     const transport = {

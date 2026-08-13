@@ -554,7 +554,7 @@ export function mergeBoardEvents(
     previousIncomingId = event.id
   }
   const sorted = [...byId.values()].sort((left, right) => left.id - right.id)
-  return Object.freeze(sorted.slice(-BOARD_EVENTS_PAGE_LIMIT).map((event) => Object.freeze({ ...event })))
+  return Object.freeze(sorted.slice(-BOARD_EVENTS_PAGE_LIMIT).map((event) => Object.isFrozen(event) ? event : Object.freeze({ ...event })))
 }
 
 export function buildBoardEventsRequest(board: string, taskId: string | null = null, after = 0): string {

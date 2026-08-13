@@ -4,6 +4,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 
 import { Badge } from "@astryxdesign/core/Badge"
 import { Button } from "@astryxdesign/core/Button"
+import { Icon } from "@astryxdesign/core/Icon"
 
 import type { BoardTaskViewModel } from "../../features/board/types"
 import type { TaskInspectorViewModel } from "../../features/explorer/TaskInspector"
@@ -525,7 +526,7 @@ function ModalExceptionDemo({ locale }: { readonly locale: TasksLocale }) {
               <Button type="button" variant="ghost" label={copy.modalCancel} onClick={() => setOpen(false)} />
               <Button type="button" variant="primary" label={copy.modalConfirm} onClick={() => { setOpen(false); setConfirmed(true) }} />
             </div>
-            <button type="button" className={styles.modalClose} aria-label={copy.closeModal} onClick={() => setOpen(false)}>×</button>
+            <button type="button" className={styles.modalClose} aria-label={copy.closeModal} onClick={() => setOpen(false)}><Icon icon="close" size="sm" /></button>
           </div>
         </div>
       ) : null}

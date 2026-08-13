@@ -96,6 +96,7 @@ export interface BoardTaskMutationController {
   readonly openEdit: (task: BoardTaskViewModel, trigger?: HTMLElement | null) => void
   readonly openTransition: (task: BoardTaskViewModel, option: BoardTaskTransitionOption, trigger?: HTMLElement | null) => void
   readonly claimTokenForTask: (taskId: string) => string | null
+  readonly canReleaseTask: (taskId: string) => boolean
   readonly setDialogTitle: (title: string) => void
   readonly setDialogReason: (reason: string) => void
   readonly setDialogDescription: (description: string) => void
@@ -545,10 +546,16 @@ export function useBoardTaskMutationController(
       if (isCurrentMutation(generation)) {
         setOptimisticModel((current) => current === null ? current : rollbackTaskOptimistically(current, snapshot, taskId))
         if (isMutationConflict(error)) {
-          if (isClaimTokenConflict(error)) deleteClaimToken(taskId)
+          if (legalOption.action === "release" || isClaimTokenConflict(error)) deleteClaimToken(taskId)
           const reloaded = await reconcileAfterMutation("transition", generation)
           if (!isCurrentMutation(generation)) return
-          setRetryIntent(reloaded ? { kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true } : { kind: "reload", mutationKind: "transition" })
+          setRetryIntent(
+            reloaded && legalOption.action !== "release"
+              ? { kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true }
+              : reloaded
+                ? null
+                : { kind: "reload", mutationKind: "transition" },
+          )
           setNotice({ kind: reloaded ? "conflict" : "stale", message: reloaded ? copy.conflictDescription : copy.reconcileStale })
         } else {
           setNotice({ kind: "error", message: mutationMessage(error, copy, copy.mutationError) })
@@ -566,7 +573,7 @@ export function useBoardTaskMutationController(
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
         setRetryIntent(null)
-        setDragAnnouncement(copy.mutationSuccess)
+        setDragAnnouncement(command.action === "release" ? copy.releaseSuccess : copy.mutationSuccess)
         closeDialogState()
       } else {
         optimisticDirtyRef.current = true
@@ -581,6 +588,7 @@ export function useBoardTaskMutationController(
   if (activeModel === null || surface === undefined) return null
 
   const claimTokenForTask = (taskId: string) => getClaimToken(taskId)
+  const canReleaseTask = (taskId: string) => surface?.claimTokens !== undefined && getClaimToken(taskId) !== null
   const rememberTrigger = (trigger?: HTMLElement | null) => {
     if (trigger !== undefined) dialogTriggerRef.current = trigger
   }
@@ -703,8 +711,12 @@ export function useBoardTaskMutationController(
     const option = task === null || task.status === status ? null : transitionForTaskTarget(task, status, claimTokenForTask(task.id))
     dragStateRef.current = null
     setGrabbedTaskId(null)
-    if (task !== null && option !== null) {
-      setDragAnnouncement(copy.dropTask)
+    const releaseWithoutToken = task?.status === "running" && status === "ready" && !canReleaseTask(task.id)
+    if (releaseWithoutToken && task !== null) {
+      setDragAnnouncement(copy.releaseClaimRequired)
+      taskRefs.current.get(task.id)?.focus()
+    } else if (task !== null && option !== null) {
+      setDragAnnouncement(option.action === "release" ? copy.transitionNames.release ?? copy.dropTask : copy.dropTask)
       if (option.requiresReason || option.requiresDescription || option.requiresConfirmation) openTransition(task, option, taskRefs.current.get(task.id))
       else void runTransition(task.id, option)
       taskRefs.current.get(task.id)?.focus()
@@ -748,6 +760,12 @@ export function useBoardTaskMutationController(
     }
     event.preventDefault()
     const adjacent = keyboardTransitionForDirection(columns, task.status, event.key === "ArrowRight" ? "next" : "previous")
+    if (adjacent?.targetStatus === "ready" && task.status === "running" && !canReleaseTask(task.id)) {
+      setGrabbedTaskId(null)
+      setDragAnnouncement(copy.releaseClaimRequired)
+      taskRefs.current.get(task.id)?.focus()
+      return
+    }
     const option = adjacent === null ? null : transitionForTaskTarget(task, adjacent.targetStatus, claimTokenForTask(task.id))
     if (option !== null) {
       setGrabbedTaskId(null)
@@ -788,6 +806,7 @@ export function useBoardTaskMutationController(
       else taskRefs.current.set(taskId, element)
     },
     clearGrab,
+    canReleaseTask,
     dragAnnouncement,
   }
 }

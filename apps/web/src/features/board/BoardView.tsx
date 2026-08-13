@@ -383,17 +383,21 @@ function TaskCard({
               onClick={(event) => controller.openEdit(task, event.currentTarget)}
               data-testid={`task-edit-${task.id}`}
             />
-            {transitionOptions.map((option) => (
-              <Button
-                key={option.action}
-                label={pending ? copy.mutationPending : copy.transitionNames[option.action] ?? option.action}
-                variant="secondary"
-                size="sm"
-                isDisabled={pending}
-                onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
-                data-testid={`task-transition-${option.action}-${task.id}`}
-              />
-            ))}
+            {transitionOptions.map((option) => {
+              const releaseDisabled = option.action === "release" && !controller.canReleaseTask(task.id)
+              return (
+                <Button
+                  key={option.action}
+                  label={pending ? copy.mutationPending : copy.transitionNames[option.action] ?? option.action}
+                  variant="secondary"
+                  size="sm"
+                  isDisabled={pending || releaseDisabled}
+                  tooltip={releaseDisabled ? copy.releaseClaimRequired : undefined}
+                  onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
+                  data-testid={`task-transition-${option.action}-${task.id}`}
+                />
+              )
+            })}
             {promoteNotReady ? <Text as="span" type="supporting" role="status" aria-live="polite">{copy.promoteNotReady}</Text> : null}
             {requiredStepsIncomplete ? <Text as="span" type="supporting" role="status" aria-live="polite">{copy.requiredStepsIncomplete}</Text> : null}
             {pending ? <Text as="span" type="supporting" role="status" aria-live="polite">{copy.mutationPending}</Text> : null}

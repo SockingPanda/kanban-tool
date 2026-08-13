@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
-import type { BoardTaskMutationClient, BoardTaskMutationSurface } from "./task-mutation-state"
+import { createBoardTaskClaimTokenStore, type BoardTaskMutationClient, type BoardTaskMutationSurface } from "./task-mutation-state"
 import { BoardView } from "./BoardView"
 import { englishBoardMessages, type BoardViewModel } from "./types"
 
@@ -54,6 +54,21 @@ function surface(): BoardTaskMutationSurface {
   return { client, onCanonicalReload: vi.fn() }
 }
 
+const runningModel: BoardViewModel = {
+  ...model,
+  tasksByStatus: {
+    ...model.tasksByStatus,
+    running: [{
+      ...model.tasksByStatus.todo[0],
+      id: "t_running",
+      ref: "default#2",
+      title: "Running task",
+      status: "running",
+    }],
+    todo: [],
+  },
+}
+
 describe("Board task mutation surface", () => {
   test("renders create/edit affordances and legal transition actions", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} taskMutations={surface()} />)
@@ -100,5 +115,22 @@ describe("Board task mutation surface", () => {
     expect(markup).toContain("Edit task")
     expect(markup).toContain("Grab task")
     expect(markup).toContain('aria-roledescription="Draggable task card"')
+  })
+
+  test("renders a localized return-to-ready action with an accurate disabled reason", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model: runningModel }} taskMutations={surface()} />)
+
+    expect(markup).toContain("释放回就绪")
+    expect(markup).toContain("需要当前任务的本地认领令牌才能释放回就绪。")
+    expect(markup).not.toMatch(/>release<|>Release<|>release task<|>Release task</i)
+  })
+
+  test("renders the return-to-ready action in English when a shared store has no token", () => {
+    const store = createBoardTaskClaimTokenStore()
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model: runningModel }} messages={englishBoardMessages} taskMutations={{ ...surface(), claimTokens: store }} />)
+
+    expect(markup).toContain("Return to ready")
+    expect(markup).toContain("A local claim token for this task is required to return it to ready.")
+    expect(markup).not.toMatch(/>release<|>Release<|>release task<|>Release task</i)
   })
 })

@@ -75,6 +75,8 @@ async function wireBoard(page: Page, options: {
   readonly updateStatus?: number
   readonly updateStatuses?: readonly number[]
   readonly updateBody?: unknown
+  readonly releaseStatus?: number
+  readonly releaseStatuses?: readonly number[]
   readonly initialStatus?: TaskStatus
   readonly boardId?: string
   readonly boardSlug?: string
@@ -91,6 +93,7 @@ async function wireBoard(page: Page, options: {
   ]
   let status: TaskStatus = options.initialStatus ?? "todo"
   let updateCount = 0
+  let releaseCount = 0
   let taskLockVersion = 1
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request()
@@ -115,6 +118,23 @@ async function wireBoard(page: Page, options: {
       if (url.pathname.endsWith("/promote")) {
         status = "ready"
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("ready", "Draft", boardId, boardSlug) }) })
+        return
+      }
+      if (url.pathname.endsWith("/claim")) {
+        status = "running"
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(claimResponse(boardId, boardSlug)) })
+        return
+      }
+      if (url.pathname.endsWith("/release")) {
+        const responseStatus = options.releaseStatuses?.[releaseCount] ?? options.releaseStatus ?? 200
+        releaseCount += 1
+        if (responseStatus === 200) {
+          status = "ready"
+          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("ready", "Draft", boardId, boardSlug) }) })
+        } else {
+          const code = responseStatus === 409 ? "claim_conflict" : "internal"
+          await route.fulfill({ status: responseStatus, contentType: "application/json", body: JSON.stringify({ error: { code, message: "SECRET release transport detail" } }) })
+        }
         return
       }
     }
@@ -291,6 +311,71 @@ test.describe("board task mutation DOM behavior", () => {
     await card.dragTo(target)
     await promote
     await expect(page.getByTestId("task-drag-announcement")).toContainText("移动任务")
+  })
+
+  test("explains the claim-token requirement for a running task without issuing a release", async ({ page }) => {
+    await wireBoard(page, { initialStatus: "running" })
+    await openTaskActions(page, "t_todo")
+    const release = page.getByTestId("task-transition-release-t_todo")
+    await expect(release).toHaveAttribute("aria-disabled", "true")
+    await expect(release).toHaveAttribute("aria-describedby", /.+/)
+
+    const requests: string[] = []
+    page.on("request", (request) => {
+      if (request.method() === "POST" && request.url().includes("/transitions/")) requests.push(request.url())
+    })
+    await page.evaluate(() => {
+      const card = document.querySelector<HTMLElement>('[data-testid="board-task"][data-task-id="t_todo"]')
+      const target = document.querySelector<HTMLElement>('[data-testid="board-drop-target-ready"]')
+      if (card === null || target === null) throw new Error("release drag fixture missing")
+      const dataTransfer = new DataTransfer()
+      card.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer }))
+      target.dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer }))
+    })
+    await expect(page.getByTestId("task-drag-announcement")).toContainText("需要当前任务的本地认领令牌才能释放回就绪。")
+    expect(requests).toHaveLength(0)
+  })
+
+  test("returns a claimed running task to ready and announces the canonical success", async ({ page }) => {
+    await wireBoard(page, { initialStatus: "ready" })
+    await openTaskActions(page, "t_todo")
+    await page.getByTestId("task-transition-claim-t_todo").click()
+    await openTaskActions(page, "t_todo", false)
+    await expect(page.getByTestId("task-transition-release-t_todo")).toBeVisible()
+    await expect(page.getByTestId("task-transition-release-t_todo")).not.toHaveAttribute("aria-disabled", "true")
+
+    const releaseRequest = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/api/v1/tasks/t_todo/transitions/release"))
+    await page.getByTestId("task-transition-release-t_todo").click()
+    const request = await releaseRequest
+    expect(JSON.parse(request.postData() ?? "{}")).toEqual({ actor: "local", claim_token: "claim-a" })
+    await expect(page.getByTestId("task-drag-announcement")).toContainText("任务已释放回就绪。")
+    await expect(page.getByTestId("task-transition-release-t_todo")).toHaveCount(0)
+  })
+
+  test("clears a rejected release token, reconciles, and shows a conflict without retrying it", async ({ page }) => {
+    await wireBoard(page, { initialStatus: "ready", releaseStatus: 409 })
+    await openTaskActions(page, "t_todo")
+    await page.getByTestId("task-transition-claim-t_todo").click()
+    await openTaskActions(page, "t_todo", false)
+    await expect(page.getByTestId("task-transition-release-t_todo")).toBeVisible()
+    await page.getByTestId("task-transition-release-t_todo").click()
+    await expect(page.getByTestId("mutation-notice")).toHaveAttribute("data-notice-kind", "conflict")
+    await expect(page.getByTestId("mutation-notice")).toContainText("任务已被其他操作更新")
+    await expect(page.getByTestId("mutation-retry")).toHaveCount(0)
+    await expect(page.getByTestId("task-transition-release-t_todo")).toHaveAttribute("aria-disabled", "true")
+  })
+
+  test("keeps the release retry intent after an ordinary server error", async ({ page }) => {
+    await wireBoard(page, { initialStatus: "ready", releaseStatuses: [503, 200] })
+    await openTaskActions(page, "t_todo")
+    await page.getByTestId("task-transition-claim-t_todo").click()
+    await openTaskActions(page, "t_todo", false)
+    await page.getByTestId("task-transition-release-t_todo").click()
+    await expect(page.getByTestId("mutation-notice")).toHaveAttribute("data-notice-kind", "error")
+    await expect(page.getByTestId("mutation-retry")).toBeVisible()
+    await page.getByTestId("mutation-retry").click()
+    await expect(page.getByTestId("task-drag-announcement")).toContainText("任务已释放回就绪。")
+    await expect(page.getByTestId("task-transition-release-t_todo")).toHaveCount(0)
   })
 
   test("serializes task mutations across cards and releases the next dialog after settle", async ({ page }) => {

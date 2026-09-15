@@ -1,0 +1,9 @@
+import {useEffect, useState} from 'react';
+type Batch={cursor:number;events:string[]};
+function append(current:Batch,batch:Batch):Batch {return batch.cursor<=current.cursor?current:{cursor:batch.cursor,events:[...current.events,...batch.events]};}
+export function useEvents(batch:Batch|null,read:()=>Promise<Batch>) {
+ const [state,setState]=useState<Batch>({cursor:0,events:[]});
+ useEffect(()=>{void read().then(setState);},[read]);
+ useEffect(()=>{if(!batch)return;setState(current=>append(current,batch));},[batch,state.cursor]);
+ return state;
+}

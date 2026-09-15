@@ -1,27 +1,14 @@
-import { AlertDialog } from "@astryxdesign/core/AlertDialog"
-import { Button } from "@astryxdesign/core/Button"
+import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
+import { AlertDialog } from "../../components/ui/alert-dialog"
+import { Button } from "../../components/ui/button"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
-import type { Locale } from "../../lib/preferences"
-import { createTranslator } from "../../lib/i18n"
-import { requestHealthRefresh } from "../../lib/health-refresh"
-import { usePreferences } from "../../lib/use-preferences"
-import {
-  createMaintenanceApi,
-  MaintenanceApiError,
-  type BackupReport,
-  type CheckpointReport,
-  type DoctorReport,
-  type ExportReport,
-  type ImportReport,
-  type MaintenanceApi,
-  type MaintenanceRunReport,
-  type MaintenanceStatus,
-  type QueueStats,
-  type SearchStatus,
-  type VacuumReport,
-} from "../../lib/api/maintenance-api"
+import type { Locale } from "../../platform/preferences/preferences"
+import { createTranslator } from "../../application/i18n"
+import { requestHealthRefresh } from "../../application/workspace/health-refresh"
+import { usePreferences } from "../../platform/preferences/use-preferences"
+import { MaintenanceApiError, type BackupReport, type CheckpointReport, type DoctorReport, type ExportReport, type ImportReport, type MaintenanceApi, type MaintenanceRunReport, type MaintenanceStatus, type QueueStats, type SearchStatus, type VacuumReport } from "../../application/data/maintenance-api";
 import { maintenanceOwnerForAction } from "./maintenance-intents"
 import styles from "./maintenance-page.module.css"
 
@@ -138,10 +125,11 @@ function statusTone(status: { dirty: boolean; degraded: boolean; failed: number;
     : styles.ready
 }
 
-export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial, onHealthRefresh }: MaintenancePageProps) {
+function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial, onHealthRefresh }: MaintenancePageProps) {
+  const { createMaintenanceApi } = useWorkspaceOperations();
   const { locale, actor } = usePreferences()
   const t = createTranslator(locale)
-  const api = useMemo(() => providedApi ?? createMaintenanceApi({}, runtime), [providedApi, runtime])
+  const api = useMemo(() => providedApi ?? createMaintenanceApi({}, runtime), [createMaintenanceApi, providedApi, runtime])
   const [status, setStatus] = useState<LoadState<MaintenanceStatus>>(() => initial?.status ? { kind: "ready", value: initial.status } : emptyState())
   const [stats, setStats] = useState<LoadState<QueueStats>>(() => initial?.stats ? { kind: "ready", value: initial.stats } : emptyState())
   const [searchStatus, setSearchStatus] = useState<LoadState<SearchStatus>>(() => initial?.searchStatus ? { kind: "ready", value: initial.searchStatus } : emptyState())
@@ -406,6 +394,77 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
     if (opener) queueMicrotask(() => opener.focus())
   }
 
+  return {
+    t,
+    isBusy,
+    status,
+    refreshAll,
+    stats,
+    searchStatus,
+    locale,
+    pendingAction,
+    runDoctor,
+    doctor,
+    actionError,
+    syncNotice,
+    setSyncNotice,
+    boardSlug,
+    backupPath,
+    setBackupPath,
+    openConfirm,
+    exportPath,
+    setExportPath,
+    importPath,
+    setImportPath,
+    replaceImport,
+    setReplaceImport,
+    results,
+    maintenanceOwner,
+    setMaintenanceOwner,
+    actor,
+    runtime,
+    confirm,
+    setConfirm,
+    restoreConfirmFocus,
+    confirmAction
+  };
+}
+
+export function MaintenancePage(props: Parameters<typeof useMaintenancePageState>[0]) {
+  const {
+    t,
+    isBusy,
+    status,
+    refreshAll,
+    stats,
+    searchStatus,
+    locale,
+    pendingAction,
+    runDoctor,
+    doctor,
+    actionError,
+    syncNotice,
+    setSyncNotice,
+    boardSlug,
+    backupPath,
+    setBackupPath,
+    openConfirm,
+    exportPath,
+    setExportPath,
+    importPath,
+    setImportPath,
+    replaceImport,
+    setReplaceImport,
+    results,
+    maintenanceOwner,
+    setMaintenanceOwner,
+    actor,
+    runtime,
+    confirm,
+    setConfirm,
+    restoreConfirmFocus,
+    confirmAction
+  } = useMaintenancePageState(props);
   return (
     <section className={styles.page} aria-labelledby="maintenance-heading" data-testid="maintenance-page">
       <div className={styles.headingRow}>
@@ -421,86 +480,11 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
         <div className={styles.boundary} role="status" aria-live="polite" data-testid="maintenance-loading">{t("loading")}</div>
       ) : null}
 
-      <div className={styles.overviewGrid}>
-        <Panel title={t("maintenanceStatusHeading")} testId="maintenance-status">
-          <StatusContent state={status} t={t} locale={locale} />
-        </Panel>
-        <Panel title={t("statsHeading")} testId="maintenance-stats">
-          <StatsContent state={stats} t={t} locale={locale} />
-        </Panel>
-        <Panel title={t("searchStatusHeading")} testId="maintenance-search-status">
-          <SearchContent state={searchStatus} t={t} />
-        </Panel>
-        <Panel title={t("doctorHeading")} testId="maintenance-doctor">
-          <Button label={pendingAction === "doctor" ? t("loading") : t("runDoctor")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "doctor"} onClick={runDoctor} data-testid="maintenance-doctor-submit" />
-          {doctor.kind === "ready" ? <DoctorContent report={doctor.value} t={t} /> : null}
-          {doctor.kind === "error" ? <InlineError error={doctor.error} t={t} action="doctor" actionError={actionError} /> : null}
-        </Panel>
-      </div>
+      <MaintenanceOverview t={t} status={status} locale={locale} stats={stats} searchStatus={searchStatus} pendingAction={pendingAction} isBusy={isBusy} runDoctor={runDoctor} doctor={doctor} actionError={actionError} />
 
       {syncNotice ? <div className={styles.boundary} role="status" aria-live="polite" data-testid={syncNotice === "stale" ? "maintenance-stale" : "maintenance-sync-pending"} data-notice-kind={syncNotice}><span>{t(syncNotice === "stale" ? "maintenanceDataStale" : "mutationSubmittedSyncPending")}</span> <Button label={t("retry")} variant="secondary" isDisabled={isBusy} onClick={() => { setSyncNotice(null); void refreshAll() }} data-testid="maintenance-sync-retry" /></div> : null}
 
-      <section className={styles.operations} aria-labelledby="maintenance-operations-heading" aria-busy={isBusy}>
-        <div className={styles.sectionHeading}>
-          <div>
-            <p className={styles.eyebrow}>{t("hostAdministration")}</p>
-            <h2 id="maintenance-operations-heading">{t("maintenanceOperationsHeading")}</h2>
-          </div>
-          <span className={styles.scope} translate="no">{boardSlug}</span>
-        </div>
-        <div className={styles.operationGrid}>
-          <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
-          <PathOperation label={t("exportPathLabel")} value={exportPath} onChange={setExportPath} buttonLabel={t("exportAction")} disabled={isBusy || !exportPath.trim()} loading={pendingAction === "export"} onClick={() => openConfirm({ kind: "export", path: exportPath.trim() })} testId="maintenance-export" />
-          <section className={styles.operation} aria-labelledby="maintenance-import-heading" data-testid="maintenance-import" aria-busy={pendingAction === "import"}>
-            <h3 id="maintenance-import-heading">{t("portableImportHeading")}</h3>
-            <label className={styles.field} htmlFor="maintenance-import-path">
-              <span>{t("importPathLabel")}</span>
-              <input id="maintenance-import-path" name="maintenance-import-path" autoComplete="off" translate="no" value={importPath} onChange={(event) => setImportPath(event.currentTarget.value)} placeholder={t("importPathPlaceholder")} data-testid="maintenance-import-path" />
-            </label>
-            <label className={styles.checkbox}>
-              <input id="maintenance-replace-import" name="maintenance-replace-import" type="checkbox" checked={replaceImport} onChange={(event) => setReplaceImport(event.currentTarget.checked)} />
-              <span>{t("replaceImportLabel")}</span>
-            </label>
-            <Button label={replaceImport ? t("replaceImportAction") : t("importAction")} variant={replaceImport ? "destructive" : "secondary"} isDisabled={isBusy || !importPath.trim()} isLoading={pendingAction === "import"} onClick={() => openConfirm({ kind: "import", path: importPath.trim(), replace: replaceImport })} data-testid="maintenance-import-submit" />
-            {resultFor(results.import, "import", t)}
-            <InlineError error={actionError?.action === "import" ? actionError.error : null} t={t} action="import" actionError={actionError} />
-          </section>
-          <section className={styles.operation} aria-labelledby="maintenance-projection-heading" data-testid="maintenance-projection" aria-busy={(["run", "rebuild", "cleanup", "vacuum"] as const).includes(pendingAction as "run" | "rebuild" | "cleanup" | "vacuum")}>
-            <h3 id="maintenance-projection-heading">{t("projectionMaintenanceHeading")}</h3>
-            <p className={styles.muted}>{t("projectionMaintenanceDescription")}</p>
-            <label className={styles.field} htmlFor="maintenance-owner">
-              <span>{t("maintenanceOwnerLabel")}</span>
-              <input id="maintenance-owner" name="maintenance-owner" autoComplete="off" translate="no" value={maintenanceOwner} onChange={(event) => setMaintenanceOwner(event.currentTarget.value)} placeholder={actor || runtime.actor} data-testid="maintenance-owner" />
-            </label>
-            <div className={styles.buttonRow}>
-              <Button label={t("runMaintenanceAction")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "run"} onClick={() => openConfirm({ kind: "run", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-run-submit" />
-              <Button label={t("rebuildAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "rebuild"} onClick={() => openConfirm({ kind: "rebuild", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-rebuild-submit" />
-              <Button label={t("cleanupAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "cleanup"} onClick={() => openConfirm({ kind: "cleanup", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-cleanup-submit" />
-              <Button label={t("vacuumAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "vacuum"} onClick={() => openConfirm({ kind: "vacuum" })} data-testid="maintenance-vacuum-submit" />
-            </div>
-            {resultFor(results.run, "run", t)}
-            {resultFor(results.rebuild, "rebuild", t)}
-            {resultFor(results.cleanup, "cleanup", t)}
-            {resultFor(results.vacuum, "vacuum", t)}
-            {(["run", "rebuild", "cleanup", "vacuum"] as const).map((action) => <InlineError key={action} error={actionError?.action === action ? actionError.error : null} t={t} action={action} actionError={actionError} />)}
-          </section>
-          <section className={styles.operation} aria-labelledby="maintenance-checkpoint-heading" data-testid="maintenance-checkpoint" aria-busy={pendingAction === "checkpoint"}>
-            <h3 id="maintenance-checkpoint-heading">{t("checkpointHeading")}</h3>
-            <p className={styles.muted}>{t("checkpointDescription")}</p>
-            <Button label={t("checkpointAction")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "checkpoint"} onClick={() => openConfirm({ kind: "checkpoint" })} data-testid="maintenance-checkpoint-submit" />
-            {resultFor(results.checkpoint, "checkpoint", t)}
-            <InlineError error={actionError?.action === "checkpoint" ? actionError.error : null} t={t} action="checkpoint" actionError={actionError} />
-          </section>
-          <section className={styles.unsupported} aria-labelledby="maintenance-legacy-import-heading" data-testid="maintenance-legacy-import-unsupported">
-            <h3 id="maintenance-legacy-import-heading">{t("legacyImportHeading")}</h3>
-            <p>{t("legacyImportUnsupported")}</p>
-          </section>
-        </div>
-        {resultFor(results.backup, "backup", t)}
-        {resultFor(results.export, "export", t)}
-        <InlineError error={actionError?.action === "backup" ? actionError.error : null} t={t} action="backup" actionError={actionError} />
-        <InlineError error={actionError?.action === "export" ? actionError.error : null} t={t} action="export" actionError={actionError} />
-      </section>
+      <MaintenanceOperations isBusy={isBusy} t={t} boardSlug={boardSlug} backupPath={backupPath} setBackupPath={setBackupPath} pendingAction={pendingAction} openConfirm={openConfirm} exportPath={exportPath} setExportPath={setExportPath} importPath={importPath} setImportPath={setImportPath} replaceImport={replaceImport} setReplaceImport={setReplaceImport} results={results} actionError={actionError} maintenanceOwner={maintenanceOwner} setMaintenanceOwner={setMaintenanceOwner} actor={actor} runtime={runtime} />
 
       <AlertDialog
         isOpen={confirm !== null}
@@ -517,6 +501,7 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
     </section>
   )
 }
+
 
 function Panel({ title, testId, children }: { title: string; testId: string; children: ReactNode }) {
   return <section className={styles.panel} aria-labelledby={`${testId}-heading`} data-testid={testId}><h2 id={`${testId}-heading`}>{title}</h2>{children}</section>
@@ -590,8 +575,6 @@ function DoctorContent({ report, t }: { report: DoctorReport; t: ReturnType<type
     [t("errorStores"), report.derived_error_stores],
     [t("consistencyErrors"), report.consistency_errors],
     [t("consistencyWarnings"), report.consistency_warnings],
-    [t("ontologyErrors"), report.ontology_ledger_errors],
-    [t("ontologyWarnings"), report.ontology_ledger_warnings],
   ] as const
   return <div className={styles.content}><p className={report.ok ? styles.ready : styles.degraded} data-testid="maintenance-doctor-result">{report.ok ? t("doctorOk") : t("doctorFindings")}</p><dl className={styles.detailGrid}>{findings.map(([label, value]) => <Metric key={label} label={label} value={value} />)}</dl><h3 className={styles.subheading}>{t("derivedStores")}</h3>{report.derived_stores.length > 0 ? <div className={styles.storeList}>{report.derived_stores.map((store) => <div className={styles.store} key={store.store_name}><div className={styles.storeHeading}><strong translate="no">{store.store_name}</strong><span>{store.dirty ? t("degraded") : t("ready")}</span></div><dl className={styles.detailGrid}><Metric label={t("schemaVersion")} value={store.schema_version} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pendingOutbox")} value={store.pending_outbox} /><Metric label={t("runningOutbox")} value={store.running_outbox} /><Metric label={t("failedOutbox")} value={store.failed_outbox} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /></dl></div>)}</div> : <p className={styles.empty}>{t("noDerivedStores")}</p>}</div>
 }
@@ -639,4 +622,87 @@ function confirmDescription(action: ConfirmAction, t: ReturnType<typeof createTr
   }
   const descriptions: Record<Exclude<ConfirmAction["kind"], "backup" | "export" | "import" | "run" | "rebuild" | "cleanup">, string> = { checkpoint: t("confirmCheckpointDescription"), vacuum: t("confirmVacuumDescription") }
   return descriptions[action.kind]
+}
+
+function MaintenanceOverview({ t, status, locale, stats, searchStatus, pendingAction, isBusy, runDoctor, doctor, actionError }: Pick<ReturnType<typeof useMaintenancePageState>, 't' | 'status' | 'locale' | 'stats' | 'searchStatus' | 'pendingAction' | 'isBusy' | 'runDoctor' | 'doctor' | 'actionError'>) {
+  return (<div className={styles.overviewGrid}>
+        <Panel title={t("maintenanceStatusHeading")} testId="maintenance-status">
+          <StatusContent state={status} t={t} locale={locale} />
+        </Panel>
+        <Panel title={t("statsHeading")} testId="maintenance-stats">
+          <StatsContent state={stats} t={t} locale={locale} />
+        </Panel>
+        <Panel title={t("searchStatusHeading")} testId="maintenance-search-status">
+          <SearchContent state={searchStatus} t={t} />
+        </Panel>
+        <Panel title={t("doctorHeading")} testId="maintenance-doctor">
+          <Button label={pendingAction === "doctor" ? t("loading") : t("runDoctor")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "doctor"} onClick={runDoctor} data-testid="maintenance-doctor-submit" />
+          {doctor.kind === "ready" ? <DoctorContent report={doctor.value} t={t} /> : null}
+          {doctor.kind === "error" ? <InlineError error={doctor.error} t={t} action="doctor" actionError={actionError} /> : null}
+        </Panel>
+      </div>);
+}
+
+function MaintenanceOperations({ isBusy, t, boardSlug, backupPath, setBackupPath, pendingAction, openConfirm, exportPath, setExportPath, importPath, setImportPath, replaceImport, setReplaceImport, results, actionError, maintenanceOwner, setMaintenanceOwner, actor, runtime }: Pick<ReturnType<typeof useMaintenancePageState>, 'isBusy' | 't' | 'boardSlug' | 'backupPath' | 'setBackupPath' | 'pendingAction' | 'openConfirm' | 'exportPath' | 'setExportPath' | 'importPath' | 'setImportPath' | 'replaceImport' | 'setReplaceImport' | 'results' | 'actionError' | 'maintenanceOwner' | 'setMaintenanceOwner' | 'actor' | 'runtime'>) {
+  return (<section className={styles.operations} aria-labelledby="maintenance-operations-heading" aria-busy={isBusy}>
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.eyebrow}>{t("hostAdministration")}</p>
+            <h2 id="maintenance-operations-heading">{t("maintenanceOperationsHeading")}</h2>
+          </div>
+          <span className={styles.scope} translate="no">{boardSlug}</span>
+        </div>
+        <div className={styles.operationGrid}>
+          <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
+          <PathOperation label={t("exportPathLabel")} value={exportPath} onChange={setExportPath} buttonLabel={t("exportAction")} disabled={isBusy || !exportPath.trim()} loading={pendingAction === "export"} onClick={() => openConfirm({ kind: "export", path: exportPath.trim() })} testId="maintenance-export" />
+          <section className={styles.operation} aria-labelledby="maintenance-import-heading" data-testid="maintenance-import" aria-busy={pendingAction === "import"}>
+            <h3 id="maintenance-import-heading">{t("portableImportHeading")}</h3>
+            <label className={styles.field} htmlFor="maintenance-import-path">
+              <span>{t("importPathLabel")}</span>
+              <input id="maintenance-import-path" name="maintenance-import-path" autoComplete="off" translate="no" value={importPath} onChange={(event) => setImportPath(event.currentTarget.value)} placeholder={t("importPathPlaceholder")} data-testid="maintenance-import-path" />
+            </label>
+            <label className={styles.checkbox}>
+              <input id="maintenance-replace-import" name="maintenance-replace-import" type="checkbox" checked={replaceImport} onChange={(event) => setReplaceImport(event.currentTarget.checked)} />
+              <span>{t("replaceImportLabel")}</span>
+            </label>
+            <Button label={replaceImport ? t("replaceImportAction") : t("importAction")} variant={replaceImport ? "destructive" : "secondary"} isDisabled={isBusy || !importPath.trim()} isLoading={pendingAction === "import"} onClick={() => openConfirm({ kind: "import", path: importPath.trim(), replace: replaceImport })} data-testid="maintenance-import-submit" />
+            {resultFor(results.import, "import", t)}
+            <InlineError error={actionError?.action === "import" ? actionError.error : null} t={t} action="import" actionError={actionError} />
+          </section>
+          <section className={styles.operation} aria-labelledby="maintenance-projection-heading" data-testid="maintenance-projection" aria-busy={(["run", "rebuild", "cleanup", "vacuum"] as const).includes(pendingAction as "run" | "rebuild" | "cleanup" | "vacuum")}>
+            <h3 id="maintenance-projection-heading">{t("projectionMaintenanceHeading")}</h3>
+            <p className={styles.muted}>{t("projectionMaintenanceDescription")}</p>
+            <label className={styles.field} htmlFor="maintenance-owner">
+              <span>{t("maintenanceOwnerLabel")}</span>
+              <input id="maintenance-owner" name="maintenance-owner" autoComplete="off" translate="no" value={maintenanceOwner} onChange={(event) => setMaintenanceOwner(event.currentTarget.value)} placeholder={actor || runtime.actor} data-testid="maintenance-owner" />
+            </label>
+            <div className={styles.buttonRow}>
+              <Button label={t("runMaintenanceAction")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "run"} onClick={() => openConfirm({ kind: "run", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-run-submit" />
+              <Button label={t("rebuildAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "rebuild"} onClick={() => openConfirm({ kind: "rebuild", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-rebuild-submit" />
+              <Button label={t("cleanupAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "cleanup"} onClick={() => openConfirm({ kind: "cleanup", owner: maintenanceOwnerForAction(maintenanceOwner, actor, runtime.actor) })} data-testid="maintenance-cleanup-submit" />
+              <Button label={t("vacuumAction")} variant="destructive" isDisabled={isBusy} isLoading={pendingAction === "vacuum"} onClick={() => openConfirm({ kind: "vacuum" })} data-testid="maintenance-vacuum-submit" />
+            </div>
+            {resultFor(results.run, "run", t)}
+            {resultFor(results.rebuild, "rebuild", t)}
+            {resultFor(results.cleanup, "cleanup", t)}
+            {resultFor(results.vacuum, "vacuum", t)}
+            {(["run", "rebuild", "cleanup", "vacuum"] as const).map((action) => <InlineError key={action} error={actionError?.action === action ? actionError.error : null} t={t} action={action} actionError={actionError} />)}
+          </section>
+          <section className={styles.operation} aria-labelledby="maintenance-checkpoint-heading" data-testid="maintenance-checkpoint" aria-busy={pendingAction === "checkpoint"}>
+            <h3 id="maintenance-checkpoint-heading">{t("checkpointHeading")}</h3>
+            <p className={styles.muted}>{t("checkpointDescription")}</p>
+            <Button label={t("checkpointAction")} variant="secondary" isDisabled={isBusy} isLoading={pendingAction === "checkpoint"} onClick={() => openConfirm({ kind: "checkpoint" })} data-testid="maintenance-checkpoint-submit" />
+            {resultFor(results.checkpoint, "checkpoint", t)}
+            <InlineError error={actionError?.action === "checkpoint" ? actionError.error : null} t={t} action="checkpoint" actionError={actionError} />
+          </section>
+          <section className={styles.unsupported} aria-labelledby="maintenance-legacy-import-heading" data-testid="maintenance-legacy-import-unsupported">
+            <h3 id="maintenance-legacy-import-heading">{t("legacyImportHeading")}</h3>
+            <p>{t("legacyImportUnsupported")}</p>
+          </section>
+        </div>
+        {resultFor(results.backup, "backup", t)}
+        {resultFor(results.export, "export", t)}
+        <InlineError error={actionError?.action === "backup" ? actionError.error : null} t={t} action="backup" actionError={actionError} />
+        <InlineError error={actionError?.action === "export" ? actionError.error : null} t={t} action="export" actionError={actionError} />
+      </section>);
 }

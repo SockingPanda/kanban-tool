@@ -1,24 +1,30 @@
+import { useResolvedTheme } from '../../platform/preferences/use-resolved-theme';
+import './settings.css';
+import { Dialog } from '../../components/ui/dialog';
+import { Button } from '../../components/ui/button';
+import { Icon } from '../../components/ui/icon';
+import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 
-import type { AppNavigationTarget } from "../../lib/router"
-import { routePath } from "../../lib/router"
-import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "../../lib/board-slug"
-import { readHealth, type HealthReport } from "../../lib/api/health-read-model"
-import { presentHealthError } from "../health/health-error"
-import { isCurrentHealthRequest } from "../health/health-request"
+import type { AppNavigationTarget } from "../../application/navigation/router"
+import { routePath } from "../../application/navigation/router"
+import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "../../domain/board-slug"
+import { type HealthReport } from "../../application/data/health-read-model";
+import { presentHealthError } from "../../application/health/health-error"
+import { isCurrentHealthRequest } from "../../application/health/health-request"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import {
   parseActorPreference,
   parseDensityPreference,
   parseLocalePreference,
   parseThemePreference,
-} from "../../lib/preferences"
-import { createTranslator } from "../../lib/i18n"
-import { usePreferences } from "../../lib/use-preferences"
+} from "../../platform/preferences/preferences"
+import { createTranslator } from "../../application/i18n"
+import { usePreferences } from "../../platform/preferences/use-preferences"
 import { callSettingsAction } from "./settings-async-actions"
-import { apiOriginForRuntime, diagnosticsText } from "./settings-diagnostics"
-import type { BoardReconnectResult } from "../board/board-session-registry"
-import styles from "../../shell.module.css"
+import { apiOriginForRuntime, diagnosticsText } from "../../application/diagnostics"
+import type { BoardReconnectResult } from "../../application/workspace/board-session-registry"
+import styles from "../../components/layout/boundary.module.css"
 
 export type SettingsPageProps = {
   readonly runtime: WebRuntimeConfig
@@ -51,7 +57,9 @@ function browserClipboardWrite(text: string): Promise<void> {
   return clipboard.writeText(text)
 }
 
-export function SettingsPage({
+const reconnectMessage = { idle: null, pending: 'connectionReconnecting', done: 'connectionReconnected', already: 'connectionAlreadyConnected', unavailable: 'connectionReconnectUnavailable' } as const
+
+function useSettingsPageState({
   runtime,
   boardSlug: boardSlugInput,
   initialHealth,
@@ -60,6 +68,7 @@ export function SettingsPage({
   onReconnect,
   clipboardWrite,
 }: SettingsPageProps) {
+  const { readHealth } = useWorkspaceOperations();
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const boardSlug = useMemo(
@@ -113,10 +122,12 @@ export function SettingsPage({
     } finally {
       if (healthControllerRef.current === controller) {
         healthControllerRef.current = null
+// 该语句位于 finally，身份判断防止旧请求清除新请求的 pending；最小复现见 build/react-doctor-regressions.test.ts。
+// react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
         setHealthPending(false)
       }
     }
-  }, [read, runtime])
+  }, [read, readHealth, runtime])
 
   useEffect(() => {
     if (!initialHealth) void loadHealth()
@@ -193,26 +204,83 @@ export function SettingsPage({
   const healthReport = healthState.kind === "ready" ? healthState.report : null
   const healthLoading = healthState.kind === "loading" || healthPending
   const copyFeedback = copyState === "copied" ? t("diagnosticsCopied") : copyState === "failed" ? t("diagnosticsCopyFailed") : null
-  const reconnectFeedback = reconnectState === "pending"
-    ? t("connectionReconnecting")
-      : reconnectState === "done"
-        ? t("connectionReconnected")
-        : reconnectState === "already"
-          ? t("connectionAlreadyConnected")
-        : reconnectState === "unavailable"
-        ? t("connectionReconnectUnavailable")
-        : null
+  const reconnectKey = reconnectMessage[reconnectState]
+  const reconnectFeedback = reconnectKey ? t(reconnectKey) : null
 
-  return (
-    <section className={styles.page} aria-labelledby="settings-heading" data-testid="settings-page">
-      <div className={styles.pageHeading}>
-        <p className={styles.eyebrow}>{t("productKicker")}</p>
-        <h1 id="settings-heading">{t("settingsHeading")}</h1>
-        <p className={styles.lede}>{t("settingsDescription")}</p>
-      </div>
+  return {
+    t,
+    preferences,
+    saveActor,
+    actorDraft,
+    actorError,
+    setActorTouched,
+    setActorSaved,
+    setActorDraft,
+    actorSaved,
+    resetActor,
+    boardSlug,
+    onReconnect,
+    reconnectState,
+    reconnect,
+    runtime,
+    reconnectFeedback,
+    healthURL,
+    navigateHealth,
+    healthLoading,
+    healthReport,
+    healthError,
+    healthPending,
+    loadHealth,
+    copyPending,
+    copyDiagnostics,
+    copyFeedback
+  };
+}
 
-      <div className={styles.settingsGrid}>
-        <section className={styles.settingsSection} aria-labelledby="settings-appearance-heading">
+export function SettingsPage(props: Parameters<typeof useSettingsPageState>[0]) {
+  const {
+    t,
+    preferences,
+    saveActor,
+    actorDraft,
+    actorError,
+    setActorTouched,
+    setActorSaved,
+    setActorDraft,
+    actorSaved,
+    resetActor,
+    boardSlug,
+    onReconnect,
+    reconnectState,
+    reconnect,
+    runtime,
+    reconnectFeedback,
+    healthURL,
+    navigateHealth,
+    healthLoading,
+    healthReport,
+    healthError,
+    healthPending,
+    loadHealth,
+    copyPending,
+    copyDiagnostics,
+    copyFeedback
+  } = useSettingsPageState(props);
+  const resolvedTheme = useResolvedTheme();
+  const close = () => { if (boardSlug) void props.onNavigate?.(routePath({kind:'board',boardSlug,view:'list'},{basePath:runtime.webBasePath})); };
+  return <Dialog open title="设置" description="管理当前项目的连接、界面偏好与数据维护。" onClose={close} testId="settings-page">
+    <div className="settings-stack">
+      <section><div className="settings-row"><span className="settings-icon"><Icon name="database" size={20} /></span><div><strong>项目数据</strong><p>连接当前本机服务，修改由服务保存。</p></div><Button size="sm" onClick={reconnect} disabled={!onReconnect||reconnectState==='pending'}>重连</Button></div><div className="settings-actions"><Button size="sm" icon="shield" disabled={!healthURL} onClick={event=>{if(healthURL){event.preventDefault();void props.onNavigate?.(healthURL);}}}>健康检查</Button><Button size="sm" icon="settings" disabled={!boardSlug} onClick={()=>{if(boardSlug)void props.onNavigate?.(routePath({kind:'maintenance',boardSlug},{basePath:runtime.webBasePath}));}}>数据维护</Button></div>{reconnectFeedback&&<p role="status">{reconnectFeedback}</p>}</section>
+      <section><div className="settings-row"><span className="settings-icon"><Icon name={resolvedTheme==='dark'?'moon':'sun'} size={20} /></span><div><strong>界面主题</strong><p>当前使用{resolvedTheme==='dark'?'深色':'浅色'}主题。</p></div><Button size="sm" onClick={()=>preferences.setTheme(resolvedTheme==='dark'?'light':'dark')}>切换</Button></div><details className="paper-detail-options"><summary>外观与语言</summary><AppearanceSettings t={t} preferences={preferences} /><label className={styles.field}>语言<select name="locale" value={preferences.locale} onChange={event=>{const locale=parseLocalePreference(event.target.value);if(locale)preferences.setLocale(locale);}} data-testid="settings-locale"><option value="zh">简体中文</option><option value="en">English</option></select></label></details></section>
+      <section><IdentitySettings t={t} saveActor={saveActor} actorDraft={actorDraft} actorError={actorError} setActorTouched={setActorTouched} setActorSaved={setActorSaved} setActorDraft={setActorDraft} actorSaved={actorSaved} resetActor={resetActor} /></section>
+      <details className="paper-detail-options"><summary>连接与诊断</summary><ConnectionSettings t={t} boardSlug={boardSlug} onReconnect={onReconnect} reconnectState={reconnectState} reconnect={reconnect} runtime={runtime} preferences={preferences} reconnectFeedback={reconnectFeedback} /><DiagnosticsSettings t={t} healthURL={healthURL} navigateHealth={navigateHealth} healthLoading={healthLoading} healthReport={healthReport} healthError={healthError} healthPending={healthPending} loadHealth={loadHealth} copyPending={copyPending} copyDiagnostics={copyDiagnostics} copyFeedback={copyFeedback} /></details>
+      <p className="subtle-note">快捷键：Ctrl / ⌘ + K 搜索；C 新建任务；Escape 关闭对话框。</p>
+    </div>
+  </Dialog>;
+}
+
+function AppearanceSettings({ t, preferences }: Pick<ReturnType<typeof useSettingsPageState>, 't' | 'preferences'>) {
+  return (<section className={styles.settingsSection} aria-labelledby="settings-appearance-heading">
           <h2 id="settings-appearance-heading">{t("appearance")}</h2>
           <label className={styles.field} htmlFor="appearance-theme">
             <span>{t("theme")}</span>
@@ -249,30 +317,11 @@ export function SettingsPage({
               <option value="compact">{t("compactDensity")}</option>
             </select>
           </label>
-        </section>
+        </section>);
+}
 
-        <section className={styles.settingsSection} aria-labelledby="settings-language-heading">
-          <h2 id="settings-language-heading">{t("language")}</h2>
-          <label className={styles.field} htmlFor="settings-locale">
-            <span>{t("language")}</span>
-            <select
-              id="settings-locale"
-              name="locale"
-              autoComplete="off"
-              value={preferences.locale}
-              onChange={(event) => {
-                const locale = parseLocalePreference(event.currentTarget.value)
-                if (locale) preferences.setLocale(locale)
-              }}
-              data-testid="settings-locale"
-            >
-              <option value="zh">{t("chinese")}</option>
-              <option value="en">{t("english")}</option>
-            </select>
-          </label>
-        </section>
-
-        <section className={styles.settingsSection} aria-labelledby="settings-identity-heading">
+function IdentitySettings({ t, saveActor, actorDraft, actorError, setActorTouched, setActorSaved, setActorDraft, actorSaved, resetActor }: Pick<ReturnType<typeof useSettingsPageState>, 't' | 'saveActor' | 'actorDraft' | 'actorError' | 'setActorTouched' | 'setActorSaved' | 'setActorDraft' | 'actorSaved' | 'resetActor'>) {
+  return (<section className={styles.settingsSection} aria-labelledby="settings-identity-heading">
           <h2 id="settings-identity-heading">{t("identity")}</h2>
           <p className={styles.muted}>{t("identityDescription")}</p>
           <form
@@ -312,10 +361,11 @@ export function SettingsPage({
               {t("identityReset")}
             </button>
           </form>
-        </section>
-      </div>
+        </section>);
+}
 
-      <section className={styles.runtimeSection} aria-labelledby="settings-connection-heading" data-testid="settings-connection">
+function ConnectionSettings({ t, boardSlug, onReconnect, reconnectState, reconnect, runtime, preferences, reconnectFeedback }: Pick<ReturnType<typeof useSettingsPageState>, 't' | 'boardSlug' | 'onReconnect' | 'reconnectState' | 'reconnect' | 'runtime' | 'preferences' | 'reconnectFeedback'>) {
+  return (<section className={styles.runtimeSection} aria-labelledby="settings-connection-heading" data-testid="settings-connection">
         <div className={styles.headingRow}>
           <div>
             <p className={styles.eyebrow}>{t("connection")}</p>
@@ -336,9 +386,11 @@ export function SettingsPage({
         </dl>
         {!boardSlug ? <p className={styles.muted} data-testid="settings-no-board">{t("noBoardDescription")}</p> : null}
         {reconnectFeedback ? <p className={styles.inlineStatus} role="status" aria-live="polite" data-testid="connection-feedback">{reconnectFeedback}</p> : null}
-      </section>
+      </section>);
+}
 
-      <section className={styles.runtimeSection} aria-labelledby="settings-diagnostics-heading" data-testid="settings-diagnostics">
+function DiagnosticsSettings({ t, healthURL, navigateHealth, healthLoading, healthReport, healthError, healthPending, loadHealth, copyPending, copyDiagnostics, copyFeedback }: Pick<ReturnType<typeof useSettingsPageState>, 't' | 'healthURL' | 'navigateHealth' | 'healthLoading' | 'healthReport' | 'healthError' | 'healthPending' | 'loadHealth' | 'copyPending' | 'copyDiagnostics' | 'copyFeedback'>) {
+  return (<section className={styles.runtimeSection} aria-labelledby="settings-diagnostics-heading" data-testid="settings-diagnostics">
         <div className={styles.headingRow}>
           <div>
             <p className={styles.eyebrow}>{t("diagnostics")}</p>
@@ -371,7 +423,5 @@ export function SettingsPage({
           <button type="button" className={styles.secondaryAction} disabled={copyPending} onClick={copyDiagnostics} data-testid="diagnostics-copy">{t("copyDiagnostics")}</button>
           {copyFeedback ? <span role="status" aria-live="polite" data-testid="diagnostics-feedback">{copyFeedback}</span> : null}
         </div>
-      </section>
-    </section>
-  )
+      </section>);
 }

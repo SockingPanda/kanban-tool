@@ -1,0 +1,93 @@
+# Browser-first 的统一 Web UI
+
+## 状态
+
+Accepted
+
+## 背景
+
+历史产品 UI 位于 Desktop 的 React/Tauri 组合中，Tauri runtime command 与 Vite 开发配置形成了
+两种启动分支；若继续保留独立渲染实现，浏览器与桌面会持续漂移。Stage08 完成后，canonical
+rendered surface 是 `apps/web`，旧 `apps/desktop/src/**` 已退出；Tauri 只承载静态 bootstrap、
+窗口/托盘和 host 生命周期。浏览器与 Tauri 通过同一份 Web artifact，由 `kanban serve` 作为唯一
+运行时装配点。此次改造是直接升级而不是长期兼容层：旧 UI 只保留在历史 tag、构建产物或回滚材料
+中，数据库事实和 application service 不随 UI 重写改变。
+
+## 决策
+
+### 统一入口与 wire 边界
+
+- UI 采用 browser-first 架构，由 `kanban serve` 同源托管 `/app/`；浏览器和 Tauri 都加载同一份
+  Web artifact，不维护两套渲染实现。Tauri 只负责窗口、sidecar 生命周期和本机连接，不复制业务
+  状态机。
+- Web 只使用当前 HTTP API 边界：同源 `/api/v1` 作为业务 API，根健康端点是 `/health`；`GET /`
+  可以以 `307` 重定向到 `/app/`，但其他 UI 与 API 路由仍保持隔离。`/app` 资源路由与 protocol
+  API catalog 分开，SPA fallback 不得吞掉 API 或静态资源错误。
+- `kanban-protocol` 是 Web wire 的唯一事实源。Rust DTO、catalog 和生成的 Draft 2020 schema 生成
+  Web 所需的 rendered API、error、runtime 和 SSE 类型、运行时 validator、fixture 与 contract hash。
+  transport、路径/query 组装、SSE 生命周期、query invalidation 和 UI intent 保持手写，但任何跨
+  generated boundary 的数据都必须经过生成类型和 validator；禁止未经检查的泛型请求或类型断言。
+  runtime contract 也由 protocol owner 生成，不另设 Web 私有协议。
+
+### Runtime 与持久 SSE
+
+- `GET /app/runtime.json` 提供空的同源 `apiBaseUrl`、`/app/` base path、actor、默认 board、server
+  与 protocol 版本和 Web build 标识。生产浏览器与 Tauri 都通过该 runtime 配置连接，开发环境可
+  由 dev server 明确覆盖。
+- 现有 `/api/v1/stream/events` 升级为持久 SSE，SSE 是主同步路径：事件按 active board 有序、至少
+  一次投递；客户端以初始 `after` 和重连时的 `Last-Event-ID` 请求，服务端先补 catch-up 再接入 live
+  流，不能产生空洞。客户端去重；未知事件类型或检测到序列缺口时保守地 refetch 受影响 board。
+  连接每 15 秒发送 heartbeat；正常负载下 mutation-to-browser 延迟目标为 p95 不超过 1 秒、p99
+  不超过 2 秒，断线后 5 秒内开始重连。
+- 连接断开立即 refetch，并在等待重连期间使用 5 秒 polling fallback；连接恢复且完成 catch-up 后
+  切回 SSE。UI 的 query cache 只作可重建投影，不改变 canonical 状态。
+
+### 视觉基线与平台范围
+
+- 前端由 `app` 组合功能，`features` 持有领域组件，`application` 持有数据源接口、查询与异步
+  操作，`domain` 持有展示模型与纯计算，`adapters/host` 接入生成契约、HTTP 和 SSE。
+  功能之间只通过公开出口依赖；基础组件不进行数据 I/O，边界由源码图测试检查。
+- 基础控件使用 React 与静态 CSS，统一纸本浅深色主题、240px 侧栏、68px 收起状态和右侧详情。
+  窄屏详情使用模态窗口，桌面详情允许继续操作任务工作区。依赖图按需加载。
+- 生产启动显式注入 Host 数据源，连接失败提供错误和重试。查询按项目、筛选、排序和分页隔离，
+  切换项目清理订阅并丢弃旧请求结果。表单失败保留草稿，成功以服务确认结果为准。
+- Browser、Linux Tauri WebKitGTK 和窄屏布局共享功能语义。前端界面调整不改变现有后端、CLI/MCP、
+  数据库契约与版本标识，普通任务标签继续由现有服务操作。
+- Tauri 使用静态 `apps/desktop/bootstrap/`，固定导航到 `http://127.0.0.1:8721/app/`，并携带同
+  版本 `kanban serve` sidecar 与同一 Web dist。客户端先探测固定 loopback 端口并 attach；无兼容
+  host 时再 spawn 自己的 host。端口冲突必须走可诊断的恢复路径，不随机改端口。关闭窗口默认隐藏
+  并保留 host；显式 Quit 只优雅停止本进程拥有的 child，超时才 force stop，外部 host 永不被杀死。
+  sidecar 进程使用独立 session/process group，cleanup 经过 bounded reaper；浏览器只通过 HTTP
+  attach，不启动或管理 sidecar。
+- 产品仍是 local single-user；loopback probe 加 exact `serverVersion`、`protocolVersion` 和 Web
+  `buildId` identity 只防止 cooperative host 的误连/版本漂移，不提供对同 UID 恶意端口重绑的
+  cryptographic host pinning。固定端口 probe 到随后 navigation 的极窄 race 属同一 trust boundary，
+  Stage08 不引入第二套 auth，也不改变 Browser/external attach。
+- Desktop Deb 仅包含 Tauri binary、静态 bootstrap、`web/` artifact 与资源目录下的 `kanban` sidecar，
+  不把 sidecar 安装到 `/usr/bin/kanban`；CLI Deb 继续独立提供 `/usr/bin/kanban`，两者必须引用同一
+  Web artifact manifest/hash。`xdg-open` 使用固定绝对路径并由 `xdg-utils` Deb 依赖保证可用。
+
+### Cutover 与回滚
+
+- 改造期间允许旧壳与新 Web 分阶段并存，但每个阶段完成后都以新 artifact 为唯一继续演进的实现；
+  Stage08 cutover 后删除旧 Desktop React/Vite source、测试与 legacy parser/type，不保留历史 UI 的
+  运行时兼容、localStorage 迁移或双写路径。新偏好使用新的 `kb:web:*` 命名空间，cutover 时可直接
+  重置主题、语言和侧栏状态。
+- 本次 UI cutover 不做数据库 schema 或 migration 重写；若实现需要改变 canonical schema，必须另开
+  migration 阶段和 ADR。回滚只接受精确匹配版本的 host、Web dist、desktop/CLI deb 与 manifest
+  组合，数据库保持不变；不得用“旧 UI + 新 host”或“新 UI + 旧 host”的未验证混搭作为回滚方案。
+- 发布前必须运行 packaged Linux WebKitGTK/Tauri smoke：从 extracted Desktop Deb 在 `xvfb` 与
+  `dbus-run-session` 下启动，验证固定 8721 host、`/health`、`/app/runtime.json`、`/app/` page load、
+  窗口进程和 owned sidecar 的 normal Quit cleanup；缺失图形或打包前置依赖时 gate 明确失败。
+
+## 取舍与后果
+
+统一 Web artifact 和同源 host 减少了桌面/浏览器行为漂移，并把协议验证、SSE 重连和 runtime 版本
+检查集中到可测试的边界；代价是 `kanban serve` 的静态资源装配、CSP、Host/Origin 校验和 build
+一致性成为所有入口的共同前置条件。持久 SSE 提供及时更新和可恢复的事件序列，但需要维护 catch-up、
+去重、未知事件和 polling fallback 的状态机，不能把“连上 SSE”当作数据一致性的证明。
+
+直接升级省去历史兼容代码和迁移成本，却要求切换前完成 contract、artifact 和 packaged desktop
+的成套验证；精确 artifact 回滚与数据库不变约束降低了失败半径，同时意味着旧版本只能从明确的
+历史材料恢复。基础组件与主题由 Web 自身持有，功能分层和静态 CSS 让界面可以独立调整；代价是需要持续验证
+组件可访问性、跨层依赖和不同窗口尺寸下的行为。

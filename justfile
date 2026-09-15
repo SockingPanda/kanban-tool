@@ -130,6 +130,14 @@ web-typecheck:
 web-lint:
     pnpm --filter @kanban-tool/web lint
 
+# 扫描全部 Web 源码；不联网评分或检查供应链。
+web-react-doctor:
+    node apps/web/build/react-doctor.mjs full
+
+# 包含尚未跟踪的新源码；base 使用本地分支或 revision。
+web-react-doctor-diff base:
+    node apps/web/build/react-doctor.mjs changed {{quote(base)}}
+
 web-build:
     pnpm --filter @kanban-tool/web build
 
@@ -150,6 +158,7 @@ web-check:
     just web-contracts-check
     just web-typecheck
     just web-lint
+    just web-react-doctor
     just web-test
     just web-build
     just web-artifact-check

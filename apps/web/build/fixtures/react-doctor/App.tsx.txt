@@ -1,0 +1,46 @@
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { Label } from './feature/index';
+export async function replay(page: (cursor:number)=>Promise<number>, apply:(cursor:number)=>Promise<void>) {
+ let cursor=0;
+ for(let index=0;index<3;index++) {
+  cursor=await page(cursor);
+  await apply(cursor);
+ }
+}
+export function Health({read}:{read:(signal:AbortSignal)=>Promise<void>}) {
+ const [pending,setPending]=useState(false),active=useRef<AbortController|null>(null);
+ const load=useCallback(async()=>{
+  const controller=new AbortController();active.current=controller;setPending(true);
+  try {await read(controller.signal);} catch {} finally {
+   if(active.current===controller){active.current=null;setPending(false);}
+  }
+ },[read]);
+ return <button disabled={pending} onClick={()=>{void load();}}>read</button>;
+}
+export function useRegistration({onResourceChange}:{onResourceChange?:(value:unknown)=>void}) {
+ const [id]=useState("session");
+ const resource=useMemo(()=>({id,dispose(){}}),[id]);
+ useEffect(()=>{onResourceChange?.(resource);return()=>onResourceChange?.(undefined);},[onResourceChange,resource]);
+ return resource;
+}
+export function useAccumulator(batch:{cursor:number;events:string[]}|null,boardId:string) {
+ const [state,setState]=useState({boardId,data:null as {cursor:number;events:string[]}|null});
+ useEffect(()=>{
+  if(!batch)return;
+  setState(current=>{
+   if(current.boardId!==boardId || !current.data || current.data.cursor>=batch.cursor)return current;
+   const events=[...current.data.events,...batch.events];
+   return {...current,data:{...current.data,cursor:batch.cursor,events}};
+  });
+ },[batch,boardId,state.data?.cursor]);
+ return state;
+}
+export class Cursor {
+ cursor=0;
+ constructor(private consume:(id:number,after:number)=>Promise<void>) {}
+ async replay(events:readonly number[]) {
+  for (const event of events) { await this.consume(event,this.cursor); this.cursor=event; }
+ }
+}
+
+export function App(){return <Label/>;}

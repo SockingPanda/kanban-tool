@@ -1,0 +1,130 @@
+/* Owned by features/activity. Paper light/dark only. */
+
+.activity-feed {
+  max-width: 930px;
+  padding: 8px 5px 0
+}
+.activity-feed-row {
+  display: flex;
+  gap: 18px;
+  position: relative;
+  padding-bottom: 30px
+}
+.activity-feed-row:not(:last-child):before {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 35px;
+  bottom: 0;
+  width: 1px;
+  background: var(--border)
+}
+.activity-icon {
+  width: 35px;
+  height: 35px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--muted-foreground)
+}
+.activity-feed-row>div {
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 0 23px;
+  min-width: 0
+}
+.activity-feed-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px
+}
+.activity-feed-heading strong {
+  font-size: 12px;
+  font-weight: 550
+}
+.activity-feed-heading time {
+  font-size: 10px;
+  color: var(--subtle)
+}
+.activity-feed-row p {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  line-height: 1.8;
+  margin-top: 8px
+}
+.activity-feed-row .ui-button {
+  font-size: 10px;
+  margin: 9px 0 -6px -10px
+}
+.activity-kind-evidence>.activity-icon {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: color-mix(in srgb,var(--green) 10%,var(--border))
+}
+.activity-kind-map>.activity-icon {
+  background: var(--violet-soft);
+  color: var(--violet)
+}
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px
+}
+.activity-row {
+  display: flex;
+  gap: 13px;
+  padding: 5px 0 19px;
+  border-bottom: 1px solid var(--border)
+}
+.activity-row strong {
+  font-size: 12px;
+  font-weight: 550
+}
+.activity-row p {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  line-height: 1.8;
+  margin-top: 6px
+}
+.activity-row time {
+  font-size: 10px;
+  color: var(--subtle);
+  display: block;
+  margin-top: 8px
+}
+@media(max-width:600px) {
+.activity-feed-row {
+  gap: 12px;
+  padding-bottom: 21px
+}
+.activity-feed-heading {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px
+}
+.activity-feed-heading strong {
+  font-size: 12px
+}
+.activity-feed-heading time {
+  font-size: 9px
+}
+.activity-feed-row p {
+  font-size: 10px
+}
+.activity-page .page-toolbar>.ui-tabs {
+  gap: 13px;
+  flex-wrap: wrap;
+  height: auto
+}
+.activity-page .page-toolbar>.ui-tabs button {
+  font-size: 9px;
+  min-height: 33px
+}
+.activity-page .page-toolbar>.ui-badge {
+  display: none
+}
+}

@@ -73,6 +73,25 @@ import { ApiCreateStepPathSchema, apiCreateStepPathValidator } from "./contracts
 import { ApiCreateStepHeadersSchema, apiCreateStepHeadersValidator } from "./contracts/api-create-step-headers";
 import { ApiCreateStepRequestSchema, apiCreateStepRequestValidator } from "./contracts/api-create-step-request";
 import { ApiCreateStepResponseSchema, apiCreateStepResponseValidator } from "./contracts/api-create-step-response";
+import { ApiUpdateStepPathSchema, apiUpdateStepPathValidator } from "./contracts/api-update-step-path";
+import { ApiUpdateStepHeadersSchema, apiUpdateStepHeadersValidator } from "./contracts/api-update-step-headers";
+import { ApiUpdateStepRequestSchema, apiUpdateStepRequestValidator } from "./contracts/api-update-step-request";
+import { ApiUpdateStepResponseSchema, apiUpdateStepResponseValidator } from "./contracts/api-update-step-response";
+import { ApiRemoveStepPathSchema, apiRemoveStepPathValidator } from "./contracts/api-remove-step-path";
+import { ApiRemoveStepHeadersSchema, apiRemoveStepHeadersValidator } from "./contracts/api-remove-step-headers";
+import { ApiRemoveStepResponseSchema, apiRemoveStepResponseValidator } from "./contracts/api-remove-step-response";
+import { ApiCompleteStepPathSchema, apiCompleteStepPathValidator } from "./contracts/api-complete-step-path";
+import { ApiCompleteStepHeadersSchema, apiCompleteStepHeadersValidator } from "./contracts/api-complete-step-headers";
+import { ApiCompleteStepRequestSchema, apiCompleteStepRequestValidator } from "./contracts/api-complete-step-request";
+import { ApiCompleteStepResponseSchema, apiCompleteStepResponseValidator } from "./contracts/api-complete-step-response";
+import { ApiSkipStepPathSchema, apiSkipStepPathValidator } from "./contracts/api-skip-step-path";
+import { ApiSkipStepHeadersSchema, apiSkipStepHeadersValidator } from "./contracts/api-skip-step-headers";
+import { ApiSkipStepRequestSchema, apiSkipStepRequestValidator } from "./contracts/api-skip-step-request";
+import { ApiSkipStepResponseSchema, apiSkipStepResponseValidator } from "./contracts/api-skip-step-response";
+import { ApiReopenStepPathSchema, apiReopenStepPathValidator } from "./contracts/api-reopen-step-path";
+import { ApiReopenStepHeadersSchema, apiReopenStepHeadersValidator } from "./contracts/api-reopen-step-headers";
+import { ApiReopenStepRequestSchema, apiReopenStepRequestValidator } from "./contracts/api-reopen-step-request";
+import { ApiReopenStepResponseSchema, apiReopenStepResponseValidator } from "./contracts/api-reopen-step-response";
 import { ApiMarkExecutionPlanNotRequiredPathSchema, apiMarkExecutionPlanNotRequiredPathValidator } from "./contracts/api-mark-execution-plan-not-required-path";
 import { ApiMarkExecutionPlanNotRequiredHeadersSchema, apiMarkExecutionPlanNotRequiredHeadersValidator } from "./contracts/api-mark-execution-plan-not-required-headers";
 import { ApiMarkExecutionPlanNotRequiredRequestSchema, apiMarkExecutionPlanNotRequiredRequestValidator } from "./contracts/api-mark-execution-plan-not-required-request";
@@ -279,6 +298,25 @@ export const schemas = {
   "api.create-step.headers": ApiCreateStepHeadersSchema,
   "api.create-step.request": ApiCreateStepRequestSchema,
   "api.create-step.response": ApiCreateStepResponseSchema,
+  "api.update-step.path": ApiUpdateStepPathSchema,
+  "api.update-step.headers": ApiUpdateStepHeadersSchema,
+  "api.update-step.request": ApiUpdateStepRequestSchema,
+  "api.update-step.response": ApiUpdateStepResponseSchema,
+  "api.remove-step.path": ApiRemoveStepPathSchema,
+  "api.remove-step.headers": ApiRemoveStepHeadersSchema,
+  "api.remove-step.response": ApiRemoveStepResponseSchema,
+  "api.complete-step.path": ApiCompleteStepPathSchema,
+  "api.complete-step.headers": ApiCompleteStepHeadersSchema,
+  "api.complete-step.request": ApiCompleteStepRequestSchema,
+  "api.complete-step.response": ApiCompleteStepResponseSchema,
+  "api.skip-step.path": ApiSkipStepPathSchema,
+  "api.skip-step.headers": ApiSkipStepHeadersSchema,
+  "api.skip-step.request": ApiSkipStepRequestSchema,
+  "api.skip-step.response": ApiSkipStepResponseSchema,
+  "api.reopen-step.path": ApiReopenStepPathSchema,
+  "api.reopen-step.headers": ApiReopenStepHeadersSchema,
+  "api.reopen-step.request": ApiReopenStepRequestSchema,
+  "api.reopen-step.response": ApiReopenStepResponseSchema,
   "api.mark-execution-plan-not-required.path": ApiMarkExecutionPlanNotRequiredPathSchema,
   "api.mark-execution-plan-not-required.headers": ApiMarkExecutionPlanNotRequiredHeadersSchema,
   "api.mark-execution-plan-not-required.request": ApiMarkExecutionPlanNotRequiredRequestSchema,
@@ -484,6 +522,25 @@ export const validators = {
   "api.create-step.headers": apiCreateStepHeadersValidator,
   "api.create-step.request": apiCreateStepRequestValidator,
   "api.create-step.response": apiCreateStepResponseValidator,
+  "api.update-step.path": apiUpdateStepPathValidator,
+  "api.update-step.headers": apiUpdateStepHeadersValidator,
+  "api.update-step.request": apiUpdateStepRequestValidator,
+  "api.update-step.response": apiUpdateStepResponseValidator,
+  "api.remove-step.path": apiRemoveStepPathValidator,
+  "api.remove-step.headers": apiRemoveStepHeadersValidator,
+  "api.remove-step.response": apiRemoveStepResponseValidator,
+  "api.complete-step.path": apiCompleteStepPathValidator,
+  "api.complete-step.headers": apiCompleteStepHeadersValidator,
+  "api.complete-step.request": apiCompleteStepRequestValidator,
+  "api.complete-step.response": apiCompleteStepResponseValidator,
+  "api.skip-step.path": apiSkipStepPathValidator,
+  "api.skip-step.headers": apiSkipStepHeadersValidator,
+  "api.skip-step.request": apiSkipStepRequestValidator,
+  "api.skip-step.response": apiSkipStepResponseValidator,
+  "api.reopen-step.path": apiReopenStepPathValidator,
+  "api.reopen-step.headers": apiReopenStepHeadersValidator,
+  "api.reopen-step.request": apiReopenStepRequestValidator,
+  "api.reopen-step.response": apiReopenStepResponseValidator,
   "api.mark-execution-plan-not-required.path": apiMarkExecutionPlanNotRequiredPathValidator,
   "api.mark-execution-plan-not-required.headers": apiMarkExecutionPlanNotRequiredHeadersValidator,
   "api.mark-execution-plan-not-required.request": apiMarkExecutionPlanNotRequiredRequestValidator,
@@ -699,6 +756,25 @@ export { parseApiCreateStepPath } from "./contracts/api-create-step-path";
 export { parseApiCreateStepHeaders } from "./contracts/api-create-step-headers";
 export { parseApiCreateStepRequest } from "./contracts/api-create-step-request";
 export { parseApiCreateStepResponse } from "./contracts/api-create-step-response";
+export { parseApiUpdateStepPath } from "./contracts/api-update-step-path";
+export { parseApiUpdateStepHeaders } from "./contracts/api-update-step-headers";
+export { parseApiUpdateStepRequest } from "./contracts/api-update-step-request";
+export { parseApiUpdateStepResponse } from "./contracts/api-update-step-response";
+export { parseApiRemoveStepPath } from "./contracts/api-remove-step-path";
+export { parseApiRemoveStepHeaders } from "./contracts/api-remove-step-headers";
+export { parseApiRemoveStepResponse } from "./contracts/api-remove-step-response";
+export { parseApiCompleteStepPath } from "./contracts/api-complete-step-path";
+export { parseApiCompleteStepHeaders } from "./contracts/api-complete-step-headers";
+export { parseApiCompleteStepRequest } from "./contracts/api-complete-step-request";
+export { parseApiCompleteStepResponse } from "./contracts/api-complete-step-response";
+export { parseApiSkipStepPath } from "./contracts/api-skip-step-path";
+export { parseApiSkipStepHeaders } from "./contracts/api-skip-step-headers";
+export { parseApiSkipStepRequest } from "./contracts/api-skip-step-request";
+export { parseApiSkipStepResponse } from "./contracts/api-skip-step-response";
+export { parseApiReopenStepPath } from "./contracts/api-reopen-step-path";
+export { parseApiReopenStepHeaders } from "./contracts/api-reopen-step-headers";
+export { parseApiReopenStepRequest } from "./contracts/api-reopen-step-request";
+export { parseApiReopenStepResponse } from "./contracts/api-reopen-step-response";
 export { parseApiMarkExecutionPlanNotRequiredPath } from "./contracts/api-mark-execution-plan-not-required-path";
 export { parseApiMarkExecutionPlanNotRequiredHeaders } from "./contracts/api-mark-execution-plan-not-required-headers";
 export { parseApiMarkExecutionPlanNotRequiredRequest } from "./contracts/api-mark-execution-plan-not-required-request";

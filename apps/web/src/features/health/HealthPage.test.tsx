@@ -1,9 +1,9 @@
-import { renderToStaticMarkup } from "react-dom/server"
+import { renderToStaticMarkup } from "../../../tests/support/render"
 import { describe, expect, test } from "vitest"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
-import type { HealthReport } from "../../lib/api/health-read-model"
-import { PreferencesProvider } from "../../lib/preferences-provider"
+import type { HealthReport } from "../../application/data/health-read-model";
+import { PreferencesProvider } from "../../platform/preferences/preferences-provider"
 import { HealthPage } from "./HealthPage"
 import { healthMetricTone } from "./health-metrics"
 

@@ -722,6 +722,196 @@
     },
     {
       "direction": "deserialize",
+      "id": "api.update-step.path",
+      "invalidFixture": "fixtures/api-update-step-path.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:update-step-path:v1",
+      "schemaPath": "schemas/api-update-step-path.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-update-step-path.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.update-step.headers",
+      "invalidFixture": "fixtures/api-update-step-headers.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:update-step-headers:v1",
+      "schemaPath": "schemas/api-update-step-headers.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-update-step-headers.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.update-step.request",
+      "invalidFixture": "fixtures/api-update-step-request.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:update-step-request:v1",
+      "schemaPath": "schemas/api-update-step-request.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-update-step-request.valid.json"
+    },
+    {
+      "direction": "serialize",
+      "id": "api.update-step.response",
+      "invalidFixture": "fixtures/api-update-step-response.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:update-step-response:v1",
+      "schemaPath": "schemas/api-update-step-response.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-update-step-response.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.remove-step.path",
+      "invalidFixture": "fixtures/api-remove-step-path.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:remove-step-path:v1",
+      "schemaPath": "schemas/api-remove-step-path.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-remove-step-path.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.remove-step.headers",
+      "invalidFixture": "fixtures/api-remove-step-headers.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:remove-step-headers:v1",
+      "schemaPath": "schemas/api-remove-step-headers.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-remove-step-headers.valid.json"
+    },
+    {
+      "direction": "serialize",
+      "id": "api.remove-step.response",
+      "invalidFixture": "fixtures/api-remove-step-response.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:remove-step-response:v1",
+      "schemaPath": "schemas/api-remove-step-response.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-remove-step-response.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.complete-step.path",
+      "invalidFixture": "fixtures/api-complete-step-path.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:complete-step-path:v1",
+      "schemaPath": "schemas/api-complete-step-path.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-complete-step-path.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.complete-step.headers",
+      "invalidFixture": "fixtures/api-complete-step-headers.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:complete-step-headers:v1",
+      "schemaPath": "schemas/api-complete-step-headers.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-complete-step-headers.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.complete-step.request",
+      "invalidFixture": "fixtures/api-complete-step-request.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:complete-step-request:v1",
+      "schemaPath": "schemas/api-complete-step-request.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-complete-step-request.valid.json"
+    },
+    {
+      "direction": "serialize",
+      "id": "api.complete-step.response",
+      "invalidFixture": "fixtures/api-complete-step-response.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:complete-step-response:v1",
+      "schemaPath": "schemas/api-complete-step-response.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-complete-step-response.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.skip-step.path",
+      "invalidFixture": "fixtures/api-skip-step-path.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:skip-step-path:v1",
+      "schemaPath": "schemas/api-skip-step-path.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-skip-step-path.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.skip-step.headers",
+      "invalidFixture": "fixtures/api-skip-step-headers.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:skip-step-headers:v1",
+      "schemaPath": "schemas/api-skip-step-headers.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-skip-step-headers.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.skip-step.request",
+      "invalidFixture": "fixtures/api-skip-step-request.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:skip-step-request:v1",
+      "schemaPath": "schemas/api-skip-step-request.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-skip-step-request.valid.json"
+    },
+    {
+      "direction": "serialize",
+      "id": "api.skip-step.response",
+      "invalidFixture": "fixtures/api-skip-step-response.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:skip-step-response:v1",
+      "schemaPath": "schemas/api-skip-step-response.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-skip-step-response.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.reopen-step.path",
+      "invalidFixture": "fixtures/api-reopen-step-path.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:reopen-step-path:v1",
+      "schemaPath": "schemas/api-reopen-step-path.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-reopen-step-path.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.reopen-step.headers",
+      "invalidFixture": "fixtures/api-reopen-step-headers.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:reopen-step-headers:v1",
+      "schemaPath": "schemas/api-reopen-step-headers.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-reopen-step-headers.valid.json"
+    },
+    {
+      "direction": "deserialize",
+      "id": "api.reopen-step.request",
+      "invalidFixture": "fixtures/api-reopen-step-request.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:reopen-step-request:v1",
+      "schemaPath": "schemas/api-reopen-step-request.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-reopen-step-request.valid.json"
+    },
+    {
+      "direction": "serialize",
+      "id": "api.reopen-step.response",
+      "invalidFixture": "fixtures/api-reopen-step-response.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:reopen-step-response:v1",
+      "schemaPath": "schemas/api-reopen-step-response.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "api",
+      "validFixture": "fixtures/api-reopen-step-response.valid.json"
+    },
+    {
+      "direction": "deserialize",
       "id": "api.mark-execution-plan-not-required.path",
       "invalidFixture": "fixtures/api-mark-execution-plan-not-required-path.invalid.json",
       "schemaId": "urn:kanban-tool:schema:api:mark-execution-plan-not-required-path:v1",
@@ -2049,6 +2239,10 @@
     "contracts/api-claim-task-path.ts",
     "contracts/api-claim-task-request.ts",
     "contracts/api-claim-task-response.ts",
+    "contracts/api-complete-step-headers.ts",
+    "contracts/api-complete-step-path.ts",
+    "contracts/api-complete-step-request.ts",
+    "contracts/api-complete-step-response.ts",
     "contracts/api-complete-task-headers.ts",
     "contracts/api-complete-task-path.ts",
     "contracts/api-complete-task-request.ts",
@@ -2184,9 +2378,16 @@
     "contracts/api-remove-dependency-headers.ts",
     "contracts/api-remove-dependency-path.ts",
     "contracts/api-remove-dependency-response.ts",
+    "contracts/api-remove-step-headers.ts",
+    "contracts/api-remove-step-path.ts",
+    "contracts/api-remove-step-response.ts",
     "contracts/api-remove-task-label-headers.ts",
     "contracts/api-remove-task-label-path.ts",
     "contracts/api-remove-task-label-response.ts",
+    "contracts/api-reopen-step-headers.ts",
+    "contracts/api-reopen-step-path.ts",
+    "contracts/api-reopen-step-request.ts",
+    "contracts/api-reopen-step-response.ts",
     "contracts/api-review-label-ontology-headers.ts",
     "contracts/api-review-label-ontology-path.ts",
     "contracts/api-review-label-ontology-response.ts",
@@ -2197,6 +2398,10 @@
     "contracts/api-search-status-headers.ts",
     "contracts/api-search-status-query.ts",
     "contracts/api-search-status-response.ts",
+    "contracts/api-skip-step-headers.ts",
+    "contracts/api-skip-step-path.ts",
+    "contracts/api-skip-step-request.ts",
+    "contracts/api-skip-step-response.ts",
     "contracts/api-specify-task-headers.ts",
     "contracts/api-specify-task-path.ts",
     "contracts/api-specify-task-request.ts",
@@ -2216,6 +2421,10 @@
     "contracts/api-unblock-task-path.ts",
     "contracts/api-unblock-task-request.ts",
     "contracts/api-unblock-task-response.ts",
+    "contracts/api-update-step-headers.ts",
+    "contracts/api-update-step-path.ts",
+    "contracts/api-update-step-request.ts",
+    "contracts/api-update-step-response.ts",
     "contracts/api-update-task-headers.ts",
     "contracts/api-update-task-path.ts",
     "contracts/api-update-task-request.ts",
@@ -2277,6 +2486,14 @@
     "fixtures/api-claim-task-request.valid.json",
     "fixtures/api-claim-task-response.invalid.json",
     "fixtures/api-claim-task-response.valid.json",
+    "fixtures/api-complete-step-headers.invalid.json",
+    "fixtures/api-complete-step-headers.valid.json",
+    "fixtures/api-complete-step-path.invalid.json",
+    "fixtures/api-complete-step-path.valid.json",
+    "fixtures/api-complete-step-request.invalid.json",
+    "fixtures/api-complete-step-request.valid.json",
+    "fixtures/api-complete-step-response.invalid.json",
+    "fixtures/api-complete-step-response.valid.json",
     "fixtures/api-complete-task-headers.invalid.json",
     "fixtures/api-complete-task-headers.valid.json",
     "fixtures/api-complete-task-path.invalid.json",
@@ -2547,12 +2764,26 @@
     "fixtures/api-remove-dependency-path.valid.json",
     "fixtures/api-remove-dependency-response.invalid.json",
     "fixtures/api-remove-dependency-response.valid.json",
+    "fixtures/api-remove-step-headers.invalid.json",
+    "fixtures/api-remove-step-headers.valid.json",
+    "fixtures/api-remove-step-path.invalid.json",
+    "fixtures/api-remove-step-path.valid.json",
+    "fixtures/api-remove-step-response.invalid.json",
+    "fixtures/api-remove-step-response.valid.json",
     "fixtures/api-remove-task-label-headers.invalid.json",
     "fixtures/api-remove-task-label-headers.valid.json",
     "fixtures/api-remove-task-label-path.invalid.json",
     "fixtures/api-remove-task-label-path.valid.json",
     "fixtures/api-remove-task-label-response.invalid.json",
     "fixtures/api-remove-task-label-response.valid.json",
+    "fixtures/api-reopen-step-headers.invalid.json",
+    "fixtures/api-reopen-step-headers.valid.json",
+    "fixtures/api-reopen-step-path.invalid.json",
+    "fixtures/api-reopen-step-path.valid.json",
+    "fixtures/api-reopen-step-request.invalid.json",
+    "fixtures/api-reopen-step-request.valid.json",
+    "fixtures/api-reopen-step-response.invalid.json",
+    "fixtures/api-reopen-step-response.valid.json",
     "fixtures/api-review-label-ontology-headers.invalid.json",
     "fixtures/api-review-label-ontology-headers.valid.json",
     "fixtures/api-review-label-ontology-path.invalid.json",
@@ -2573,6 +2804,14 @@
     "fixtures/api-search-status-query.valid.json",
     "fixtures/api-search-status-response.invalid.json",
     "fixtures/api-search-status-response.valid.json",
+    "fixtures/api-skip-step-headers.invalid.json",
+    "fixtures/api-skip-step-headers.valid.json",
+    "fixtures/api-skip-step-path.invalid.json",
+    "fixtures/api-skip-step-path.valid.json",
+    "fixtures/api-skip-step-request.invalid.json",
+    "fixtures/api-skip-step-request.valid.json",
+    "fixtures/api-skip-step-response.invalid.json",
+    "fixtures/api-skip-step-response.valid.json",
     "fixtures/api-specify-task-headers.invalid.json",
     "fixtures/api-specify-task-headers.valid.json",
     "fixtures/api-specify-task-path.invalid.json",
@@ -2611,6 +2850,14 @@
     "fixtures/api-unblock-task-request.valid.json",
     "fixtures/api-unblock-task-response.invalid.json",
     "fixtures/api-unblock-task-response.valid.json",
+    "fixtures/api-update-step-headers.invalid.json",
+    "fixtures/api-update-step-headers.valid.json",
+    "fixtures/api-update-step-path.invalid.json",
+    "fixtures/api-update-step-path.valid.json",
+    "fixtures/api-update-step-request.invalid.json",
+    "fixtures/api-update-step-request.valid.json",
+    "fixtures/api-update-step-response.invalid.json",
+    "fixtures/api-update-step-response.valid.json",
     "fixtures/api-update-task-headers.invalid.json",
     "fixtures/api-update-task-headers.valid.json",
     "fixtures/api-update-task-path.invalid.json",
@@ -2661,6 +2908,10 @@
     "schemas/api-claim-task-path.schema.json",
     "schemas/api-claim-task-request.schema.json",
     "schemas/api-claim-task-response.schema.json",
+    "schemas/api-complete-step-headers.schema.json",
+    "schemas/api-complete-step-path.schema.json",
+    "schemas/api-complete-step-request.schema.json",
+    "schemas/api-complete-step-response.schema.json",
     "schemas/api-complete-task-headers.schema.json",
     "schemas/api-complete-task-path.schema.json",
     "schemas/api-complete-task-request.schema.json",
@@ -2796,9 +3047,16 @@
     "schemas/api-remove-dependency-headers.schema.json",
     "schemas/api-remove-dependency-path.schema.json",
     "schemas/api-remove-dependency-response.schema.json",
+    "schemas/api-remove-step-headers.schema.json",
+    "schemas/api-remove-step-path.schema.json",
+    "schemas/api-remove-step-response.schema.json",
     "schemas/api-remove-task-label-headers.schema.json",
     "schemas/api-remove-task-label-path.schema.json",
     "schemas/api-remove-task-label-response.schema.json",
+    "schemas/api-reopen-step-headers.schema.json",
+    "schemas/api-reopen-step-path.schema.json",
+    "schemas/api-reopen-step-request.schema.json",
+    "schemas/api-reopen-step-response.schema.json",
     "schemas/api-review-label-ontology-headers.schema.json",
     "schemas/api-review-label-ontology-path.schema.json",
     "schemas/api-review-label-ontology-response.schema.json",
@@ -2809,6 +3067,10 @@
     "schemas/api-search-status-headers.schema.json",
     "schemas/api-search-status-query.schema.json",
     "schemas/api-search-status-response.schema.json",
+    "schemas/api-skip-step-headers.schema.json",
+    "schemas/api-skip-step-path.schema.json",
+    "schemas/api-skip-step-request.schema.json",
+    "schemas/api-skip-step-response.schema.json",
     "schemas/api-specify-task-headers.schema.json",
     "schemas/api-specify-task-path.schema.json",
     "schemas/api-specify-task-request.schema.json",
@@ -2828,6 +3090,10 @@
     "schemas/api-unblock-task-path.schema.json",
     "schemas/api-unblock-task-request.schema.json",
     "schemas/api-unblock-task-response.schema.json",
+    "schemas/api-update-step-headers.schema.json",
+    "schemas/api-update-step-path.schema.json",
+    "schemas/api-update-step-request.schema.json",
+    "schemas/api-update-step-response.schema.json",
     "schemas/api-update-task-headers.schema.json",
     "schemas/api-update-task-path.schema.json",
     "schemas/api-update-task-request.schema.json",
@@ -3892,6 +4158,155 @@
       "sharedComponents": []
     },
     {
+      "id": "api.update-step",
+      "method": "PATCH",
+      "obligations": {
+        "body": {
+          "contractId": "api.update-step.request",
+          "kind": "contract"
+        },
+        "headers": {
+          "contractId": "api.update-step.headers",
+          "kind": "contract"
+        },
+        "path": {
+          "contractId": "api.update-step.path",
+          "kind": "contract"
+        },
+        "query": {
+          "kind": "not_applicable"
+        },
+        "sse": {
+          "kind": "not_applicable"
+        },
+        "success": {
+          "contractId": "api.update-step.response",
+          "kind": "contract"
+        }
+      },
+      "path": "/api/v1/tasks/:task_id/steps/:step_id",
+      "sharedComponents": []
+    },
+    {
+      "id": "api.remove-step",
+      "method": "DELETE",
+      "obligations": {
+        "body": {
+          "kind": "not_applicable"
+        },
+        "headers": {
+          "contractId": "api.remove-step.headers",
+          "kind": "contract"
+        },
+        "path": {
+          "contractId": "api.remove-step.path",
+          "kind": "contract"
+        },
+        "query": {
+          "kind": "not_applicable"
+        },
+        "sse": {
+          "kind": "not_applicable"
+        },
+        "success": {
+          "contractId": "api.remove-step.response",
+          "kind": "contract"
+        }
+      },
+      "path": "/api/v1/tasks/:task_id/steps/:step_id",
+      "sharedComponents": []
+    },
+    {
+      "id": "api.complete-step",
+      "method": "POST",
+      "obligations": {
+        "body": {
+          "contractId": "api.complete-step.request",
+          "kind": "contract"
+        },
+        "headers": {
+          "contractId": "api.complete-step.headers",
+          "kind": "contract"
+        },
+        "path": {
+          "contractId": "api.complete-step.path",
+          "kind": "contract"
+        },
+        "query": {
+          "kind": "not_applicable"
+        },
+        "sse": {
+          "kind": "not_applicable"
+        },
+        "success": {
+          "contractId": "api.complete-step.response",
+          "kind": "contract"
+        }
+      },
+      "path": "/api/v1/tasks/:task_id/steps/:step_id/done",
+      "sharedComponents": []
+    },
+    {
+      "id": "api.skip-step",
+      "method": "POST",
+      "obligations": {
+        "body": {
+          "contractId": "api.skip-step.request",
+          "kind": "contract"
+        },
+        "headers": {
+          "contractId": "api.skip-step.headers",
+          "kind": "contract"
+        },
+        "path": {
+          "contractId": "api.skip-step.path",
+          "kind": "contract"
+        },
+        "query": {
+          "kind": "not_applicable"
+        },
+        "sse": {
+          "kind": "not_applicable"
+        },
+        "success": {
+          "contractId": "api.skip-step.response",
+          "kind": "contract"
+        }
+      },
+      "path": "/api/v1/tasks/:task_id/steps/:step_id/skip",
+      "sharedComponents": []
+    },
+    {
+      "id": "api.reopen-step",
+      "method": "POST",
+      "obligations": {
+        "body": {
+          "contractId": "api.reopen-step.request",
+          "kind": "contract"
+        },
+        "headers": {
+          "contractId": "api.reopen-step.headers",
+          "kind": "contract"
+        },
+        "path": {
+          "contractId": "api.reopen-step.path",
+          "kind": "contract"
+        },
+        "query": {
+          "kind": "not_applicable"
+        },
+        "sse": {
+          "kind": "not_applicable"
+        },
+        "success": {
+          "contractId": "api.reopen-step.response",
+          "kind": "contract"
+        }
+      },
+      "path": "/api/v1/tasks/:task_id/steps/:step_id/reopen",
+      "sharedComponents": []
+    },
+    {
       "id": "api.mark-execution-plan-not-required",
       "method": "POST",
       "obligations": {
@@ -4598,9 +5013,9 @@
   "schemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "selectionPath": "apps/web/web-contracts.json",
   "sourceHashes": {
-    "protocolEndpoints": "sha256:6feba911231500e9b3160dacf112f705fe5bfd8f769beae0be3de7821e5edafc",
+    "protocolEndpoints": "sha256:36ef263401d037bf5192f7fc65c05239a145bbfb6bddbb1d89dcc4b16c3e8178",
     "protocolOperations": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5",
-    "protocolSchemas": "sha256:b15ef8ab53cb7d7368020e80d4e518407d58213b4bc19eadc4c72fa467175f72",
-    "selection": "sha256:398b2df497a12af785e689c6ec31b341e50938d96198c58191b27dd88eaea95e"
+    "protocolSchemas": "sha256:80cf5b99ba67220fb853e370909cea55c67b78ed181f76599426cad6b36702c5",
+    "selection": "sha256:f855f9f84e0dd9c74dce81f74a5fbb7ac368482346c71c6f4ef27279411c7da7"
   }
 }

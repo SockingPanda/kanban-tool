@@ -32,7 +32,7 @@ async function resetCaptureScroll(page: Page): Promise<void> {
     const scrollables = [
       document.scrollingElement,
       document.body,
-      document.querySelector<HTMLElement>("#astryx-app-shell-main"),
+      document.querySelector<HTMLElement>("#main-content"),
       ...Array.from(document.querySelectorAll<HTMLElement>("main, [data-testid='task-list'], [data-testid='task-map']")),
     ]
     for (const element of scrollables) {
@@ -71,7 +71,7 @@ function browserContextMatchesExpected(context: BrowserContextObservation): bool
     && !context.color_scheme_dark
     && context.reduced_motion_reduce
     && context.theme_state === "system"
-    && context.astryx_theme === "neutral"
+    && context.resolved_theme === "light"
 }
 
 test.beforeEach(async ({ page }) => {
@@ -119,7 +119,7 @@ test("captures deterministic board-ready and inspector dialog baselines", async 
   await goto(page, "/app/boards/default/board", "board-view")
   await capture(page, "board-ready")
 
-  await page.getByTestId("board-task").filter({ hasText: "A11y Seed Task" }).getByRole("button", { name: "A11y Seed Task", exact: true }).click()
+  await page.getByTestId("board-task").filter({ hasText: "A11y Seed Task" }).click()
   await expect(page.getByTestId("task-inspector")).toBeVisible()
   await capture(page, "inspector-ready")
   await page.getByRole("button", { name: "关闭任务检查器" }).click()
@@ -152,6 +152,7 @@ test("captures maintenance confirmation and settings baselines", async ({ page }
   await page.keyboard.press("Escape")
 
   await goto(page, "/app/settings", "settings-page")
+  await page.getByText("连接与诊断", { exact: true }).click()
   await expect(page.getByTestId("settings-connection")).toBeVisible()
   await capture(page, "settings-ready", ["[data-testid='connection-web-build']", "[data-testid='settings-health']"])
 })

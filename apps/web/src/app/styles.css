@@ -1,0 +1,49 @@
+@import "../styles/paper.tokens.css";
+@import "../styles/base.css";
+@import "../components/ui/primitives.css";
+@import "../components/domain/domain-ui.css";
+@import "../components/layout/overlays.css";
+@import "./shell/shell.css";
+@import "../features/tasks/tasks.css";
+
+:root {
+  --color-accent: var(--primary);
+  --color-accent-contrast: var(--primary-foreground);
+  --color-background-body: var(--background);
+  --color-background-subtle: var(--muted);
+  --color-background-surface: var(--card);
+  --color-border: var(--border);
+  --color-border-emphasized: var(--muted-foreground);
+  --color-focus: var(--ring);
+  --color-focus-ring: var(--ring);
+  --color-status-error: var(--red);
+  --color-status-negative: var(--red);
+  --color-status-positive: var(--green);
+  --color-status-warning: var(--amber);
+  --color-text-accent: var(--primary);
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--muted-foreground);
+  --radius-element: var(--control-radius);
+  --font-family-body: var(--font-sans);
+}
+body { min-width: 320px; }
+.sidebar-brand, .sidebar-nav-item { text-decoration: none; }
+.sidebar-nav-item:disabled { opacity: .6; }
+.connection-pending { background: var(--amber); }
+.main-content > section { padding: 28px 32px; }
+.paper-card { border: 1px solid var(--border); background: var(--card); border-radius: var(--card-radius); }
+.paper-banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 1px solid var(--border); padding: 12px; background: var(--muted); }
+.banner-error { background: var(--red-soft); color: var(--red); }
+.banner-warning { background: var(--amber-soft); }
+@layer product { :where(.main-content, .detail-sheet-body) :where(button:not(.ui-button):not(.sidebar-nav-item)) { border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--card); color: var(--foreground); padding: 6px 10px; } }
+.removed-page-notice { margin: 16px 32px 0; padding: 12px; border: 1px solid var(--border); color: var(--muted-foreground); }
+@media (max-width: 760px) {
+  .main-content > section { padding: 18px 16px; }
+  .project-privacy { display: none; }
+}
+.project-picker { display: grid; gap: 5px; padding: 12px 4px 0; }
+.project-picker label { font-size: 10px; color: var(--muted-foreground); }
+.project-picker select { min-width: 0; width: 100%; padding: 7px; border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--card); color: var(--foreground); }
+.navigation-compact .project-picker { display: none; }
+
+.detail-sheet { padding: 0; }

@@ -12,7 +12,7 @@ const healthFixture = {
   },
 }
 
-test.describe("Astryx Settings", () => {
+test.describe("Kanban Settings", () => {
   test.beforeEach(async ({ page }) => {
     await installRuntimeFixture(page)
     await page.route("http://127.0.0.1:4173/health", async (route) => {
@@ -31,6 +31,7 @@ test.describe("Astryx Settings", () => {
     await expect(page.getByTestId("settings-page")).toBeVisible()
     await expect(page.getByTestId("connection-reconnect")).toBeDisabled()
     await expect(page.getByTestId("diagnostics-health-link")).toBeDisabled()
+    await page.getByText("外观与语言", { exact: true }).click()
     await page.getByTestId("appearance-theme").selectOption("system")
     await page.getByTestId("appearance-density").selectOption("compact")
     await page.getByTestId("settings-locale").selectOption("en")
@@ -70,6 +71,7 @@ test.describe("Astryx Settings", () => {
         value: { writeText: async () => undefined },
       })
     })
+    await page.getByText("连接与诊断", { exact: true }).click()
     await page.getByTestId("diagnostics-copy").click()
     await expect(page.getByTestId("diagnostics-feedback")).toContainText("已复制")
     await page.getByTestId("diagnostics-health-link").click()
@@ -84,6 +86,7 @@ test.describe("Astryx Settings", () => {
       })
     })
     await page.goto("/app/settings", { waitUntil: "networkidle" })
+    await page.getByText("连接与诊断", { exact: true }).click()
     await page.getByTestId("diagnostics-copy").click()
     await expect(page.getByTestId("diagnostics-feedback")).toContainText("复制")
 
@@ -103,6 +106,7 @@ test.describe("Astryx Settings", () => {
       })
     })
     await page.goto("/app/settings", { waitUntil: "networkidle" })
+    await page.getByText("连接与诊断", { exact: true }).click()
     await expect(page.getByTestId("settings-no-board")).toBeVisible()
     await expect(page.getByTestId("connection-reconnect")).toBeDisabled()
     await expect(page.getByTestId("diagnostics-health-link")).toBeDisabled()
@@ -146,19 +150,19 @@ test.describe("Astryx Settings", () => {
     })
 
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
-    await expect(page.getByTestId("board-view")).toHaveAttribute("data-state", "ready")
+    await expect(page.getByTestId("nav-settings")).toBeVisible()
     await expect.poll(() => streamRequests).toBe(1)
 
     await page.getByTestId("nav-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
+    await page.getByText("连接与诊断", { exact: true }).click()
     await expect(page.getByTestId("connection-reconnect")).toBeEnabled()
     await page.getByTestId("connection-reconnect").click()
     await expect(page.getByTestId("connection-feedback")).toContainText("仍在连接")
     await expect.poll(() => streamRequests).toBe(1)
 
-    await page.getByTestId("nav-board").click()
-    await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
-    await expect(page.getByTestId("board-view")).toHaveAttribute("data-state", "ready")
+    await page.keyboard.press("Escape")
+    await expect(page).toHaveURL(/\/app\/boards\/default\/list$/)
     expect(streamRequests).toBe(1)
   })
 })

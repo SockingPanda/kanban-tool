@@ -71,7 +71,7 @@ export type BrowserContextObservation = {
   readonly color_scheme_dark: boolean
   readonly reduced_motion_reduce: boolean
   readonly theme_state: string
-  readonly astryx_theme: string | null
+  readonly resolved_theme: string | null
   readonly computed_color_scheme: string
 }
 
@@ -144,7 +144,7 @@ export async function observeBrowserContext(page: Page): Promise<BrowserContextO
     color_scheme_dark: window.matchMedia("(prefers-color-scheme: dark)").matches,
     reduced_motion_reduce: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     theme_state: document.documentElement.dataset.theme ?? "system",
-    astryx_theme: document.querySelector("[data-astryx-theme]")?.getAttribute("data-astryx-theme") ?? null,
+    resolved_theme: document.documentElement.dataset.resolvedTheme ?? null,
     computed_color_scheme: getComputedStyle(document.documentElement).colorScheme,
   }))
 }

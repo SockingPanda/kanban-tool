@@ -47,7 +47,7 @@ test.describe("Health operator workflow", () => {
     await expect(page.getByTestId("health-metric-db")).toContainText("turso")
     await expect(page.getByTestId("health-metric-db-fingerprint")).toContainText(healthFixture.data.db_fingerprint)
     await expect(page.getByTestId("health-runtime")).toContainText("local")
-    await expect(page.getByTestId("nav-health")).toHaveAttribute("aria-current", "page")
+    await expect(page.getByTestId("nav-settings")).toHaveAttribute("aria-current", "page")
     expect(boardRequests).toEqual([])
   })
 
@@ -123,6 +123,7 @@ test.describe("Health operator workflow", () => {
     })
 
     await page.goto("/app/settings", { waitUntil: "networkidle" })
+    await page.getByText("连接与诊断", { exact: true }).click()
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
     await expect(page.getByTestId("settings-health")).toContainText(healthFixture.data.db_fingerprint)
@@ -135,6 +136,7 @@ test.describe("Health operator workflow", () => {
     })
 
     await page.goto("/app/settings", { waitUntil: "networkidle" })
+    await page.getByText("连接与诊断", { exact: true }).click()
 
     await expect(page.getByTestId("settings-health-error")).toBeVisible()
     await expect(page.getByTestId("settings-health-error")).toContainText("kanban serve")

@@ -1049,6 +1049,155 @@ export const operations = [
     "sharedComponents": []
   },
   {
+    "id": "api.update-step",
+    "method": "PATCH",
+    "path": "/api/v1/tasks/:task_id/steps/:step_id",
+    "obligations": {
+      "path": {
+        "kind": "contract",
+        "contractId": "api.update-step.path"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "kind": "contract",
+        "contractId": "api.update-step.headers"
+      },
+      "body": {
+        "kind": "contract",
+        "contractId": "api.update-step.request"
+      },
+      "success": {
+        "kind": "contract",
+        "contractId": "api.update-step.response"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      }
+    },
+    "sharedComponents": []
+  },
+  {
+    "id": "api.remove-step",
+    "method": "DELETE",
+    "path": "/api/v1/tasks/:task_id/steps/:step_id",
+    "obligations": {
+      "path": {
+        "kind": "contract",
+        "contractId": "api.remove-step.path"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "kind": "contract",
+        "contractId": "api.remove-step.headers"
+      },
+      "body": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "kind": "contract",
+        "contractId": "api.remove-step.response"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      }
+    },
+    "sharedComponents": []
+  },
+  {
+    "id": "api.complete-step",
+    "method": "POST",
+    "path": "/api/v1/tasks/:task_id/steps/:step_id/done",
+    "obligations": {
+      "path": {
+        "kind": "contract",
+        "contractId": "api.complete-step.path"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "kind": "contract",
+        "contractId": "api.complete-step.headers"
+      },
+      "body": {
+        "kind": "contract",
+        "contractId": "api.complete-step.request"
+      },
+      "success": {
+        "kind": "contract",
+        "contractId": "api.complete-step.response"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      }
+    },
+    "sharedComponents": []
+  },
+  {
+    "id": "api.skip-step",
+    "method": "POST",
+    "path": "/api/v1/tasks/:task_id/steps/:step_id/skip",
+    "obligations": {
+      "path": {
+        "kind": "contract",
+        "contractId": "api.skip-step.path"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "kind": "contract",
+        "contractId": "api.skip-step.headers"
+      },
+      "body": {
+        "kind": "contract",
+        "contractId": "api.skip-step.request"
+      },
+      "success": {
+        "kind": "contract",
+        "contractId": "api.skip-step.response"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      }
+    },
+    "sharedComponents": []
+  },
+  {
+    "id": "api.reopen-step",
+    "method": "POST",
+    "path": "/api/v1/tasks/:task_id/steps/:step_id/reopen",
+    "obligations": {
+      "path": {
+        "kind": "contract",
+        "contractId": "api.reopen-step.path"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "kind": "contract",
+        "contractId": "api.reopen-step.headers"
+      },
+      "body": {
+        "kind": "contract",
+        "contractId": "api.reopen-step.request"
+      },
+      "success": {
+        "kind": "contract",
+        "contractId": "api.reopen-step.response"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      }
+    },
+    "sharedComponents": []
+  },
+  {
     "id": "api.mark-execution-plan-not-required",
     "method": "POST",
     "path": "/api/v1/tasks/:task_id/execution-plan/not-required",
@@ -1792,30 +1941,35 @@ export const operationById = {
   "api.remove-dependency": operations[32],
   "api.list-steps": operations[33],
   "api.create-step": operations[34],
-  "api.mark-execution-plan-not-required": operations[35],
-  "api.list-runs": operations[36],
-  "api.get-run-log": operations[37],
-  "api.list-comments": operations[38],
-  "api.create-comment": operations[39],
-  "api.list-attachments": operations[40],
-  "api.create-attachment": operations[41],
-  "api.download-attachment": operations[42],
-  "api.delete-attachment": operations[43],
-  "api.get-stats": operations[44],
-  "api.search-status": operations[45],
-  "api.list-events": operations[46],
-  "sse.stream-events": operations[47],
-  "api.doctor": operations[48],
-  "api.checkpoint": operations[49],
-  "api.maintenance-backup": operations[50],
-  "api.maintenance-export": operations[51],
-  "api.maintenance-import": operations[52],
-  "api.maintenance-vacuum": operations[53],
-  "api.maintenance-status": operations[54],
-  "api.maintenance-run": operations[55],
-  "api.maintenance-rebuild": operations[56],
-  "api.maintenance-cleanup": operations[57],
-  "api.maintenance-import-v30": operations[58],
+  "api.update-step": operations[35],
+  "api.remove-step": operations[36],
+  "api.complete-step": operations[37],
+  "api.skip-step": operations[38],
+  "api.reopen-step": operations[39],
+  "api.mark-execution-plan-not-required": operations[40],
+  "api.list-runs": operations[41],
+  "api.get-run-log": operations[42],
+  "api.list-comments": operations[43],
+  "api.create-comment": operations[44],
+  "api.list-attachments": operations[45],
+  "api.create-attachment": operations[46],
+  "api.download-attachment": operations[47],
+  "api.delete-attachment": operations[48],
+  "api.get-stats": operations[49],
+  "api.search-status": operations[50],
+  "api.list-events": operations[51],
+  "sse.stream-events": operations[52],
+  "api.doctor": operations[53],
+  "api.checkpoint": operations[54],
+  "api.maintenance-backup": operations[55],
+  "api.maintenance-export": operations[56],
+  "api.maintenance-import": operations[57],
+  "api.maintenance-vacuum": operations[58],
+  "api.maintenance-status": operations[59],
+  "api.maintenance-run": operations[60],
+  "api.maintenance-rebuild": operations[61],
+  "api.maintenance-cleanup": operations[62],
+  "api.maintenance-import-v30": operations[63],
 } as const;
 
 export function getOperation<K extends WebOperationId>(id: K): (typeof operationById)[K] {

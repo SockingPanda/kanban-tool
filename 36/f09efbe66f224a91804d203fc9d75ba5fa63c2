@@ -1,0 +1,361 @@
+crates/kanban-live-core/src/lib.rs
+  s_5b054b517a26b6::t_9aba5289e58e06 2
+xtask/src/web_contracts.rs
+  s_5b054b517a26b6::t_9aba5289e58e06 18-19,52,55-57,266-267,272-281,287,289,747,1414,1447-1448,1476,1481
+  s_5b054b517a26b6::t_66ac323b872b19 268-271,282-286,1473-1474,1477-1479,1483-1484
+  s_5b054b517a26b6::t_a35a83df0e8e18 1475
+.agents/skills/docs/SKILL.md
+  s_5b054b517a26b6::t_3f697ce6e87353 32
+crates/kanban-protocol/tests/web_artifact.rs
+  s_5b054b517a26b6::t_826789597b2e85 56,68,148,159,168-170
+  s_5b054b517a26b6::t_0093bb9b0dcd0f 171
+apps/web/src/application/data/explorer-read-model.ts
+  s_5b054b517a26b6::t_7a695b81659393 6,63,244,660
+apps/web/src/application/tasks/board-model.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 4
+apps/web/src/features/settings/SettingsPage.test.tsx
+  s_5b054b517a26b6::t_7a695b81659393 17
+apps/web/src/lib/api/generated/fixtures/runtime-web-config-output.invalid.json
+  s_5b054b517a26b6::t_80b8e23a703204 7
+docs/adr/0006_browser_first_web_ui.md
+  s_5b054b517a26b6::t_3f697ce6e87353 5,23-27,29,34-38,43,80-83
+crates/kanban-service/src/realtime/tests.rs
+  s_5b054b517a26b6::t_319188d816aaf2 25-76,210,219-223,232,248-252,350,380-384,460-464,494-498,526-527,537-541,562,588,596,606,640,715
+apps/web/src/application/query/use-deferred-read.ts
+  s_5b054b517a26b6::t_7a695b81659393 5,7,14,17,27,29,34-36
+apps/web/src/features/tasks/task-select.tsx
+  s_5b054b517a26b6::t_7a695b81659393 15,18
+crates/kanban-service/src/realtime/tests/measurement.rs
+  s_5b054b517a26b6::t_319188d816aaf2 59,105,144
+apps/web/src/adapters/host/board-read-model.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 5,14
+crates/kanban-protocol/README.md
+  s_5b054b517a26b6::t_3f697ce6e87353 4,19-22
+apps/web/src/features/tasks/EventsView.test.tsx
+  s_5b054b517a26b6::t_7a695b81659393 4
+apps/web/src/application/data/health-read-model.ts
+  s_5b054b517a26b6::t_7a695b81659393 5,44-45,55
+apps/web/src/application/workspace/use-board-session.tsx
+  s_5b054b517a26b6::t_7a695b81659393 11,20,49,56,121,256,318,391,401-402,418
+apps/web/src/adapters/host/explorer-read-model.ts
+  s_5b054b517a26b6::t_7a695b81659393 36,90-101,118-120,259,283,347,367-368,389,404
+apps/web/src/features/maintenance/MaintenancePage.tsx
+  s_5b054b517a26b6::t_7a695b81659393 125,289
+apps/web/src/lib/api/generated/schemas/api-event-data.schema.json
+  s_5b054b517a26b6::t_90f1b658691629 1-3163
+apps/web/src/domain/board-id.ts
+  s_5b054b517a26b6::t_7a695b81659393 1-7
+apps/web/src/lib/api/generated/index.ts
+  s_5b054b517a26b6::t_90f1b658691629 2
+crates/kanban-protocol/tests/g0_metadata.rs
+  s_5b054b517a26b6::t_826789597b2e85 208,220,235,247
+crates/kanban-server/src/test_support.rs
+  s_5b054b517a26b6::t_475d7ba47e07cb 40-53
+  s_5b054b517a26b6::t_1497bb506562c8 37-39
+  s_5b054b517a26b6::t_a3836fca470941 54-56
+  s_5b054b517a26b6::t_ead12dabeab724 1-8,10,12-31,33,35-36,59-62,64,66-72,75,78-80,82-90
+crates/kanban-protocol/src/web_artifact.rs
+  s_5b054b517a26b6::t_826789597b2e85 35
+apps/web/src/features/tasks/TaskMapView.tsx
+  s_5b054b517a26b6::t_7a695b81659393 251,253,258,488
+apps/web/src/application/query/use-async-read.ts
+  s_5b054b517a26b6::t_7a695b81659393 17
+crates/kanban-client/src/operations/event/stream.rs
+  s_5b054b517a26b6::t_66ac323b872b19 4,120-122
+  s_5b054b517a26b6::t_4790137a3a92e9 25
+crates/kanban-protocol/src/event_stream.rs
+  s_5b054b517a26b6::t_4790137a3a92e9 1-433
+apps/web/tests/release-rpc.ts
+  s_5b054b517a26b6::t_7a695b81659393 10
+apps/web/src/application/workspace/board-live-state.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 3,5
+apps/web/build/artifact-manifest.ts
+  s_5b054b517a26b6::t_7a695b81659393 6,12
+apps/web/src/adapters/host/task-mutations.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 11
+README.md
+  s_5b054b517a26b6::t_3f697ce6e87353 10-12,87
+apps/web/build/rpc-fetch-smoke.mjs
+  s_5b054b517a26b6::t_7a695b81659393 2,5,18,22,46-47,49-63,68,71
+apps/web/src/features/tasks/TaskMapView.test.tsx
+  s_5b054b517a26b6::t_7a695b81659393 7,95
+crates/kanban-server/README.md
+  s_5b054b517a26b6::t_b27a7086c70bed 4-6,13-16,18-19,27-28
+schemas/fixtures/runtime/web-config.v1.invalid.json
+  s_5b054b517a26b6::t_826789597b2e85 7
+crates/kanban-protocol/src/rpc/generated.rs
+  s_5b054b517a26b6::t_66ac323b872b19 10158,10160,10174,10177
+apps/web/src/adapters/host/data-source.ts
+  s_5b054b517a26b6::t_7a695b81659393 16,47
+apps/web/src/features/tasks/task-detail.tsx
+  s_5b054b517a26b6::t_7a695b81659393 37
+apps/web/src/lib/api/generated/manifest.json
+  s_5b054b517a26b6::t_90f1b658691629 1335-1338,1340-1341,2249,2530-2531,2909,3071,3091-3095,3100,3121-3125,3130,3151-3155,3160,3181-3185,3190,3212-3216,3223,3245-3249,3256,3278-3282,3287,3309-3313,3318,3339-3343,3348,3370-3374,3379,3401-3405,3410,3432-3436,3441,3463-3467,3472,3493-3497,3504,3526-3530,3537,3559-3563,3568,3590-3594,3599,3621-3625,3630,3652-3656,3661,3682-3686,3691,3712-3716,3723,3745-3749,3754,3776-3780,3785,3807-3811,3816,3838-3842,3847,3869-3873,3878,3900-3904,3909,3931-3935,3940,3962-3966,3971,3993-3997,4002,4023-4027,4032,4054-4058,4063,4084-4088,4093,4114-4118,4123,4145-4149,4154,4176-4180,4185,4206-4210,4215,4237-4241,4246,4268-4272,4277,4299-4303,4308,4330-4334,4339,4360-4364,4371,4392-4396,4401,4422-4426,4433,4455-4459,4466,4487-4491,4496,4518-4522,4527,4548-4552,4557,4578-4582,4587,4608-4612,4617,4638-4642,4647,4668-4672,4674,4679,4699-4703,4708,4728-4732,4737,4758-4762,4767,4788-4792,4797,4818-4822,4827,4847-4851,4856,4876-4880,4885,4906-4910,4915,4936-4940,4945,4966-4970,4975,4996-5000,5007-5008,5010
+  s_5b054b517a26b6::t_80b8e23a703204 5009
+apps/web/src/lib/runtime.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 17-22
+docs/adr/0001_single_host_turso.md
+  s_5b054b517a26b6::t_3f697ce6e87353 15-16
+apps/web/src/features/tasks/use-task-workspace.ts
+  s_5b054b517a26b6::t_7a695b81659393 265,281,284,287,290
+apps/web/src/lib/api/generated/fixtures/api-event-data.invalid.json
+  s_5b054b517a26b6::t_90f1b658691629 1
+crates/kanban-service/src/realtime.rs
+  s_5b054b517a26b6::t_319188d816aaf2 2
+apps/web/src/features/tasks/use-task-detail-state.ts
+  s_5b054b517a26b6::t_7a695b81659393 217,245-247
+crates/kanban-server/Cargo.toml
+  s_5b054b517a26b6::t_4790137a3a92e9 14-16,46
+apps/web/src/app/app.tsx
+  s_5b054b517a26b6::t_7a695b81659393 2,40,49-51,143
+apps/web/build/artifact-manifest.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 39-44,57,68,88
+apps/web/src/lib/web-protocol.ts
+  s_5b054b517a26b6::t_7a695b81659393 1-2
+apps/web/src/features/tasks/EventsView.tsx
+  s_5b054b517a26b6::t_7a695b81659393 11,251,253,256,273
+apps/web/src/adapters/host/health-read-model.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 3-4,7,13-14,26,36,45-46
+apps/web/src/features/tasks/task-page.tsx
+  s_5b054b517a26b6::t_7a695b81659393 26,28
+apps/web/build/host-proxy.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 15-16,115,149,158,163-164,168-171
+crates/kanban-protocol/Cargo.toml
+  s_5b054b517a26b6::t_4790137a3a92e9 49-51
+apps/web/src/lib/runtime.ts
+  s_5b054b517a26b6::t_7a695b81659393 1,103-107,109
+apps/web/tests/maintenance.spec.ts
+  s_5b054b517a26b6::t_7a695b81659393 64-68,88,90-93,252-253,260-263
+apps/web/src/lib/api/generated/fixtures/api-event-data.valid.json
+  s_5b054b517a26b6::t_90f1b658691629 1
+apps/web/src/application/workspace/board-session-registry.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 1-24,26-28,30-34,36,38-40,42,45-48,50-62,66-152,154-155,159-164,168-170,172-173,175-187
+apps/web/docs/query-subscriptions.md
+  s_5b054b517a26b6::t_820039d670f69c 7
+  s_5b054b517a26b6::t_7a695b81659393 1-6,8-46
+apps/web/src/adapters/host/generated-contracts.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 18,66-68,129-135,138-145
+crates/kanban-protocol/tests/rpc.rs
+  s_5b054b517a26b6::t_66ac323b872b19 472-525
+crates/kanban-server/src/suite.rs
+  s_5b054b517a26b6::t_b27a7086c70bed 184
+  s_5b054b517a26b6::t_9c81332c14c3fa 154-156,161,165-174,176-178,180-183,185-189,191-193,322-324,333,337,340,342-343,345,350,352,360-364,368,373-376,381-382,386,389-397,401-403,406,409-417,421-423,428-432,436-437,442-450,455-456,461-469,474-475,480-488,493-494,499-507,512-513,518-521,526-527,530,537-545,550-551,555,561-569,574-575,596,602,614-615,621-622,735,745,756,767
+apps/web/src/lib/api/generated/contracts/api-event-data.ts
+  s_5b054b517a26b6::t_90f1b658691629 1-17
+apps/web/src/lib/api/generated/fixtures/runtime-web-config-output.valid.json
+  s_5b054b517a26b6::t_80b8e23a703204 7
+apps/web/src/adapters/host/health-read-model.ts
+  s_5b054b517a26b6::t_7a695b81659393 5,13,19,24
+docs/architecture.md
+  s_5b054b517a26b6::t_3f697ce6e87353 55
+apps/web/src/features/tasks/ExplorerPage.tsx
+  s_5b054b517a26b6::t_7a695b81659393 16,18
+apps/web/src/lib/rpc/transport.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 14
+apps/web/src/app/shell/app-shell.test.tsx
+  s_5b054b517a26b6::t_7a695b81659393 17
+apps/web/src/application/data/board-read-model.ts
+  s_5b054b517a26b6::t_7a695b81659393 2,146-148,150
+apps/web/src/features/health/HealthPage.tsx
+  s_5b054b517a26b6::t_7a695b81659393 34
+xtask/src/lib.rs
+  s_5b054b517a26b6::t_66ac323b872b19 835
+  s_5b054b517a26b6::t_9aba5289e58e06 33-35,520,524-528,551-552,555-556,559-561
+  s_5b054b517a26b6::t_0158db86dd9425 562
+crates/kanban-protocol/src/endpoint.rs
+  s_5b054b517a26b6::t_20d78a9f858d68 1-5
+  s_5b054b517a26b6::t_66ac323b872b19 254,256,321,334,374-376,755
+apps/web/src/application/data/rpc-transport.ts
+  s_5b054b517a26b6::t_7a695b81659393 25
+schemas/fixtures/runtime/web-config.v1.valid.json
+  s_5b054b517a26b6::t_826789597b2e85 7
+apps/desktop/src-tauri/src/host_lifecycle.rs
+  s_5b054b517a26b6::t_392aef5ad7b703 2259
+  s_5b054b517a26b6::t_90e09b24299274 2117-2128,2141,2150,2160,2170,2178-2179,2189,2199,2218,2256-2258,2260-2263,2633,2736
+docs/adr/0007_local_grpc.md
+  s_5b054b517a26b6::t_20d78a9f858d68 9-12
+crates/kanban-protocol/src/lib.rs
+  s_5b054b517a26b6::t_b27a7086c70bed 36,152-154
+  s_5b054b517a26b6::t_7d9c4c81b4eb24 155
+apps/web/src/adapters/host/data-source.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 10
+apps/web/src/features/maintenance/MaintenancePage.test.tsx
+  s_5b054b517a26b6::t_7a695b81659393 15
+Cargo.toml
+  s_5b054b517a26b6::t_4790137a3a92e9 73
+crates/kanban-protocol/src/contract_catalog.rs
+  s_5b054b517a26b6::t_66ac323b872b19 159,240,244,247,249-250
+crates/kanban-protocol/docs/schema.md
+  s_5b054b517a26b6::t_3f697ce6e87353 3,12,21-25,31-33
+apps/web/src/lib/api/generated/generated.sha256
+  s_5b054b517a26b6::t_90f1b658691629 1,65,346-347,656,658-659,724,879
+  s_5b054b517a26b6::t_80b8e23a703204 654-655,657
+apps/web/src/bootstrap.test.tsx
+  s_5b054b517a26b6::t_7a695b81659393 12
+apps/web/src/features/tasks/TaskRunsView.tsx
+  s_5b054b517a26b6::t_7a695b81659393 188-189,192,195,197
+apps/web/src/lib/api/generated/operations.json
+  s_5b054b517a26b6::t_90f1b658691629 4,24-28,33,54-58,63,84-88,93,114-118,123,145-149,156,178-182,189,211-215,220,242-246,251,272-276,281,303-307,312,334-338,343,365-369,374,396-400,405,426-430,437,459-463,470,492-496,501,523-527,532,554-558,563,585-589,594,615-619,624,645-649,656,678-682,687,709-713,718,740-744,749,771-775,780,802-806,811,833-837,842,864-868,873,895-899,904,926-930,935,956-960,965,987-991,996,1017-1021,1026,1047-1051,1056,1078-1082,1087,1109-1113,1118,1139-1143,1148,1170-1174,1179,1201-1205,1210,1232-1236,1241,1263-1267,1272,1293-1297,1304,1325-1329,1334,1355-1359,1366,1388-1392,1399,1420-1424,1429,1451-1455,1460,1481-1485,1490,1511-1515,1520,1541-1545,1550,1571-1575,1580,1601-1605,1607,1612,1632-1636,1641,1661-1665,1670,1691-1695,1700,1721-1725,1730,1751-1755,1760,1780-1784,1789,1809-1813,1818,1839-1843,1848,1869-1873,1878,1899-1903,1908,1929-1933
+AGENTS.md
+  s_5b054b517a26b6::t_3f697ce6e87353 9,28,30,71
+crates/kanban-protocol/src/rpc/catalog.rs
+  s_5b054b517a26b6::t_66ac323b872b19 39-40
+  s_5b054b517a26b6::t_82c530931a21e1 1-38,41-66
+apps/web/src/application/workspace/board-session-registry.ts
+  s_5b054b517a26b6::t_7a695b81659393 2,4,22-25,68-86,114,144-145,157-159,175,200-204,218,220-237,245,250,252-253,261,264,268
+crates/kanban-protocol/src/admin_catalog.rs
+  s_5b054b517a26b6::t_66ac323b872b19 25-27
+xtask/src/release.rs
+  s_5b054b517a26b6::t_a5a57d561f8b53 1103-1110,1113,1115,1610-1625,1643,1651,1765-1786,2480-2593
+  s_5b054b517a26b6::t_694e79d67cdfe6 2594
+crates/kanban-protocol/src/runtime.rs
+  s_5b054b517a26b6::t_826789597b2e85 3
+crates/kanban-server/src/knowledge_adoption.rs
+  s_5b054b517a26b6::t_b27a7086c70bed 23-33,35,116-120,124-125,148-152,156-157,179-183,187-188,200-204,207-208,218-226,230-231,248-251,256-257,269-272,277-278,296-304,309-310,323-326,331-332,337-340,345-346,366-368,373-375,423-430,435-437,447-449,455,468-475,480-482,507-515,519-521,525-532,538-539,547,553-560,566,585-593,598-599,610-614,619-620,642-650,655-656,661-678,688-691,696-697,713-721,726-727,738-746,751-752,768-772,777-778,816-824,829-830,849-857,862-863,878-886,891
+  s_5b054b517a26b6::t_d051e1436f91ec 1,5,9-11,892,907-910,915-916,930-938,943-944,962-966,971-972,996-1004,1009,1019-1022,1027-1029,1051-1054,1059,1072-1075,1081-1082,1101-1105,1109,1120-1123,1128,1136-1139,1144,1180-1188,1192-1194,1200-1204,1208,1223-1227,1231-1232,1250-1253,1258-1259,1274-1277,1282-1283,1296-1299,1304-1305,1318-1321,1326-1327,1340-1343,1348-1349,1362-1365,1369-1370,1380-1383,1387-1388,1430-1433,1438,1448-1451,1456-1457,1468-1471,1476-1477,1487-1490,1495-1496,1506-1509,1514-1515,1536-1540,1545-1546,1565-1573,1578-1579,1597-1600,1605
+apps/web/src/lib/rpc/endpoint.ts
+  s_5b054b517a26b6::t_7a695b81659393 89
+apps/web/src/application/workspace/use-board-directory.ts
+  s_5b054b517a26b6::t_7a695b81659393 3-4,7-8
+apps/web/src/lib/api/generated/operations.ts
+  s_5b054b517a26b6::t_90f1b658691629 5-10,34-39,64-69,94-99,124-129,157-162,190-195,221-226,252-257,282-287,313-318,344-349,375-380,406-411,438-443,471-476,502-507,533-538,564-569,595-600,625-630,657-662,688-693,719-724,750-755,781-786,812-817,843-848,874-879,905-910,936-941,966-971,997-1002,1027-1032,1057-1062,1088-1093,1119-1124,1149-1154,1180-1185,1211-1216,1242-1247,1273-1278,1305-1310,1335-1340,1367-1372,1400-1405,1430-1435,1461-1466,1491-1496,1521-1526,1551-1556,1581-1586,1608,1613-1618,1642-1647,1671-1676,1701-1706,1731-1736,1761-1766,1790-1795,1819-1824,1849-1854,1879-1884,1909-1914,1995-2005
+apps/web/src/lib/api/generated/contracts.json
+  s_5b054b517a26b6::t_90f1b658691629 1334-1337,1339-1340
+apps/web/AGENTS.md
+  s_5b054b517a26b6::t_7a695b81659393 7,16-17,24-26
+apps/web/build/host-proxy.ts
+  s_5b054b517a26b6::t_7a695b81659393 62
+apps/web/src/app/shell/route-content.tsx
+  s_5b054b517a26b6::t_7a695b81659393 46,51
+apps/web/src/features/health/HealthPage.test.tsx
+  s_5b054b517a26b6::t_7a695b81659393 16
+crates/kanban-protocol/src/history_catalog.rs
+  s_5b054b517a26b6::t_4790137a3a92e9 1,573-574,576,582-586,589,707
+crates/kanban-web-artifact/tests/verifier.rs
+  s_5b054b517a26b6::t_90e09b24299274 85
+crates/kanban-protocol/src/inventory.rs
+  s_5b054b517a26b6::t_20d78a9f858d68 1-2
+crates/kanban-protocol/src/surface.rs
+  s_5b054b517a26b6::t_66ac323b872b19 18
+apps/web/src/adapters/host/explorer-read-model.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 1-2,4,9,20,143,207,422-428,430,432-435,437-438,441-443,445-449,452-454,458-464,466-468,472-479,481-484
+apps/web/src/features/tasks/task-runs-page.tsx
+  s_5b054b517a26b6::t_7a695b81659393 10
+crates/kanban-server/src/state.rs
+  s_5b054b517a26b6::t_7a695b81659393 73
+  s_5b054b517a26b6::t_2714f39f88f67d 16,51,74-75,79,82-83,167,173-174
+apps/web/src/adapters/host/attachment-download.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 7
+crates/kanban-protocol/tests/foundation.rs
+  s_5b054b517a26b6::t_4790137a3a92e9 336-339,344-345,911
+  s_5b054b517a26b6::t_66ac323b872b19 291,340,342-343,600,1081-1082,1087,1223,1278,1813,1994
+xtask/src/rpc_codegen/web.rs
+  s_5b054b517a26b6::t_66ac323b872b19 236
+crates/kanban-protocol/src/rpc.rs
+  s_5b054b517a26b6::t_82c530931a21e1 3,14
+crates/kanban-protocol/src/runtime_catalog.rs
+  s_5b054b517a26b6::t_826789597b2e85 5
+apps/web/src/adapters/host/board-read-model.ts
+  s_5b054b517a26b6::t_7a695b81659393 5,14
+justfile
+  s_5b054b517a26b6::t_9aba5289e58e06 287
+crates/kanban-live-core/README.md
+  s_5b054b517a26b6::t_3f697ce6e87353 3-4
+apps/web/src/adapters/host/query-registry.test.ts
+  s_5b054b517a26b6::t_7a695b81659393 273
+apps/web/tests/runtime-bootstrap.spec.ts
+  s_5b054b517a26b6::t_7a695b81659393 85-100
+xtask/tests/tooling.rs
+  s_5b054b517a26b6::t_90e09b24299274 126-130,423-424,426,439-440
+  s_5b054b517a26b6::t_392aef5ad7b703 200,210
+crates/kanban-protocol/src/board_catalog.rs
+  s_5b054b517a26b6::t_826789597b2e85 608
+xtask/src/rpc_codegen/emit.rs
+  s_5b054b517a26b6::t_66ac323b872b19 390
+apps/web/tests/settings.spec.ts
+  s_5b054b517a26b6::t_7a695b81659393 98
+migration/README.md
+  s_5b054b517a26b6::t_3f697ce6e87353 1-13
+apps/web/src/lib/api/generated/test-only.ts
+  s_5b054b517a26b6::t_90f1b658691629 137,359,580,811
+apps/web/README.md
+  s_5b054b517a26b6::t_7a695b81659393 36,73,87,90-92
+crates/kanban-protocol/src/operation_catalog.rs
+  s_5b054b517a26b6::t_20d78a9f858d68 3-5
+  s_5b054b517a26b6::t_66ac323b872b19 22,26
+  s_5b054b517a26b6::t_4790137a3a92e9 261
+Cargo.lock
+  s_5b054b517a26b6::t_cae7ec7b69b20f 417,426,2925,2939-2940,2942,2950
+apps/web/src/generated/rpc/kanban/v1/dto_pb.ts
+  s_5b054b517a26b6::t_186ddba60b7cfb 6174
+crates/kanban-protocol/proto/kanban/v1/dto.proto
+  s_5b054b517a26b6::t_46a55f54dfdf8f 1638
+crates/kanban-server/src/connections.rs
+  s_5b054b517a26b6::t_bbdec8bbdc8b75 48,74-84
+crates/kanban-server/src/grpc.rs
+  s_5b054b517a26b6::t_fbc4e3902994d0 3,7-9,12-17,19,41-42,55,57-58,61,64,66-67
+crates/kanban-server/src/grpc/business.rs
+  s_5b054b517a26b6::t_313067bd96170e 22-23
+crates/kanban-server/src/grpc/deadline.rs
+  s_5b054b517a26b6::t_f88ef6b2b16807 10,122-290
+crates/kanban-server/src/grpc/probe.rs
+  s_5b054b517a26b6::t_db2a5f31269fe6 4-7,12,18-24
+crates/kanban-server/src/grpc/tests.rs
+  s_5b054b517a26b6::t_46bad08769fc3c 2,4,6,8,63-64,67-73,94-103,107-108,110-112,117,120-122,125
+crates/kanban-server/src/grpc/tests/boundaries.rs
+  s_5b054b517a26b6::t_d56f3b728d4f7d 1-3,6-19,21-23,28-33,35-41,44-54,57-69,72-102,105,109,111-112,114,118-120,122-127,133-136,140-167,170-188,190-269,271,274-276
+crates/kanban-server/src/grpc/tests/business.rs
+  s_5b054b517a26b6::t_eba1778b45fd2e 2-3
+crates/kanban-server/src/grpc/tests/business/invariants.rs
+  s_5b054b517a26b6::t_fe17345ca415b0 1-2,4-31,34-53,55-57,60-62,64-93,95-139,141-143,145-151,153,156-180,182-184,186-282,284-286,288-292,294-305,307-309,311-342,344-409
+crates/kanban-server/src/grpc/tests/mutations.rs
+  s_5b054b517a26b6::t_ca967e352a3d59 1,4-5,7-8,15,63-70,72,77-118,175-178,198-211,214-222,246,282-290,316-317,331-332,351-486
+crates/kanban-server/src/grpc/tests/mutations/lifecycle.rs
+  s_5b054b517a26b6::t_9439f9f1d6ab35 72,110-111
+crates/kanban-server/src/grpc/tests/queries.rs
+  s_5b054b517a26b6::t_5050ccd40b66ec 1
+crates/kanban-server/src/grpc/tests/queries/common.rs
+  s_5b054b517a26b6::t_8c5afd3886cff3 11,13,25,45,61,77,84,90,114-117,131,137,176,185,214,221,225-228,297,306
+crates/kanban-server/src/grpc/tests/queries/lifecycle.rs
+  s_5b054b517a26b6::t_ca9282fe4f19cd 83
+crates/kanban-server/src/http.rs
+  s_5b054b517a26b6::t_a31c683bcf74b6 1-16
+crates/kanban-server/src/lib.rs
+  s_5b054b517a26b6::t_8258aeb134dbc4 25-27
+crates/kanban-server/src/router.rs
+  s_5b054b517a26b6::t_df5a7cd486dfea 9,16,22-24,28,31,79,110,176,182,186,199,232
+crates/kanban-server/src/router/contract_catalog_tests.rs
+  s_5b054b517a26b6::t_bf5fba5205229c 1-2,4-5,7-10,12,14-32,34-60,65-69,74,76-81,83-90,93-96,102-111,114-260
+crates/kanban-server/src/suite/legacy_adoption.rs
+  s_5b054b517a26b6::t_2e13dedc30e7e2 4-6,8,14,16-17,19,21,26,40-51,55-61,80-88,92-98
+crates/kanban-server/src/web.rs
+  s_5b054b517a26b6::t_a5c5c5cce95dae 744-747,865,868-869,881
+schemas/json-schema/draft-2020-12/api/event-data.v1.schema.json
+  s_5b054b517a26b6::t_9c1466b71a1537 592,3162
+schemas/json-schema/draft-2020-12/dto-bindings.json
+  s_5b054b517a26b6::t_cc58c335e6129c 1123-1124
+schemas/json-schema/draft-2020-12/dto-contracts.json
+  s_5b054b517a26b6::t_1468b02b8da8e1 3888,3890-3893,3895,3898
+schemas/json-schema/draft-2020-12/manifest.json
+  s_5b054b517a26b6::t_cea15b85be763b 2-8,1662,1664-1668,5812-5816
+schemas/json-schema/draft-2020-12/rpc-catalog.json
+  s_5b054b517a26b6::t_d4d95a04f99396 1-962
+xtask/src/check/dependencies.rs
+  s_5b054b517a26b6::t_1c6803cbac0cfa 29-34,108,1232-1234,1248-1251,1292-1294,1666,2001-2005,2047,2162-2172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "36f09efbe66f224a91804d203fc9d75ba5fa63c2",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

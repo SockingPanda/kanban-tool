@@ -1,0 +1,4 @@
+interface:
+  display_name: "分支与本地合并"
+  short_description: "按版本与开发分支层级创建、切换分支，并执行已获授权的本地合并"
+  default_prompt: "使用 $branch 核对分支层级，并完成当前已获授权的分支创建或本地合并。"

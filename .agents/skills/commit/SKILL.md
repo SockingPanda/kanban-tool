@@ -1,6 +1,6 @@
 ---
 name: commit
-description: 为 kanban-tool 起草或创建本地 Conventional Commit；只有当前用户明确授权 commit 时才执行写入，先检查 staged diff 和匹配验证，保持单一意图与中文/Unicode 字面量正确；不执行 push、PR、merge、rebase、release 或其他远程操作。
+description: 为 kanban-tool 起草或创建本地 Conventional Commit；只有当前用户明确授权 commit 时才执行写入，检查 staged diff 和匹配验证，保持单一意图与中文/Unicode 字面量正确。分支操作与本地合并使用 branch skill；不执行远端操作。
 ---
 
 # 本地提交
@@ -17,7 +17,7 @@ description: 为 kanban-tool 起草或创建本地 Conventional Commit；只有�
 不触发：
 
 - “完成”“收尾”“准备好”或普通实现请求没有 commit 授权，不触发 `git commit`。
-- push、开 PR、merge、rebase、release、tag、远端同步属于本 skill 的 non-goal；仓库没有 PR skill。
+- 分支创建、切换、merge 和相关 rebase 使用 [branch](../branch/SKILL.md)；push、开 PR、release、tag 和远端同步属于本 skill 的 non-goal。
 - 只选择验证，使用 `$check`；只写正文，使用 `$prose`；只改 Rust 结构，使用 `$style`。
 
 成功标准：
@@ -29,7 +29,7 @@ description: 为 kanban-tool 起草或创建本地 Conventional Commit；只有�
 硬约束：
 
 - 没有当前用户对 commit 的明确授权，绝不执行 `git commit`；README 的“本地 commit”说明不是本轮授权，不能从“完成/收尾”推断。
-- 永不 push、开 PR、merge、rebase、release 或改写远端历史；不创建 PR skill 来绕过该边界。
+- 本 skill 只负责普通本地提交，不执行 push、PR、merge、rebase、release 或远端历史改写；明确授权的本地合并及其 merge commit 由 `$branch` 负责。
 - 只 stage 当前任务文件；保护既有 dirty work，不使用破坏性 `reset --hard` 或 `checkout` 清理冲突。
 - 提交前必须有与改动影响面匹配的 `$check` 结果，或明确报告未运行/失败；不得把未运行的 gate 写成通过。
 - 标题格式为 `<type>(<scope>): <subject>`，header 必须单行、subject 使用祈使现在时、首字母按仓库约定、无尾句号；scope 可省略但应对应稳定子系统。
@@ -62,8 +62,8 @@ description: 为 kanban-tool 起草或创建本地 Conventional Commit；只有�
 
 - 典型触发：用户明确要求“只提交当前 AGENTS 和 skills 改动”，检查 staged diff 与 `just diff-check` 后创建一个本地 `docs(...)` 或 `chore(...)` commit，并 read back。
 - 边界：用户只要求“给我 Conventional Commit message”，不写 index 或 history。
-- 失败回归：用户说“完成后记得提交”但当前请求未明确授权时保持未提交并说明原因。
-- 近似误触发：用户要求开 PR、push 或 merge 时拒绝远程操作，最多给出本地 commit 建议。
+- 授权延续：用户明确说“完成后记得提交”是同一任务的 commit 授权，验证完成后执行，不因后续消息未重复授权而再次询问。
+- 近似误触发：用户要求本地 merge 时使用 `$branch`；push 或 PR 请求按其实际授权与相应工具处理，不将其当作普通 commit 请求。
 - 对抗：dirty worktree 有无关文件时只 stage 当前范围，不 reset 或覆盖它。
 - 自由度：同一意图可用中文 subject 或英文 subject，只要格式、范围、验证和字面量契约相同。
 

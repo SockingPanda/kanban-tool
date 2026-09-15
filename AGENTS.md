@@ -54,6 +54,7 @@
 - `$domain-modeling`：维护领域术语、`CONTEXT.md` 和需要记录的长期决策。
 - `$check`：根据当前 `justfile` 选择并报告最小充分验证。
 - `$commit`：仅在用户明确授权后创建本地 Conventional Commit。
+- `$branch`：识别和创建分支，按层级执行已获授权的本地合并与必要的快进整理。
 
 ## 6. 文档地图
 
@@ -83,7 +84,9 @@
 - 项目自有文档、skill、代码注释与 rustdoc 以简体中文为主；命令、路径、crate、API/JSON 字段、枚举和库名保留 literal。
 - 中文和 Unicode 可用于 prose；代码、shell、TOML、JSON、schema 等机器语法遵循 parser，不做全局 ASCII 化。
 - 保护既有 dirty work；diff 聚焦当前任务，不覆盖无关改动，不使用破坏性 reset/checkout。
-- 不 push、开 PR、merge、rebase 或发布；创建本地 commit 必须得到当前用户明确授权。
+- `main` 是稳定版，`vx`（如 `v4`）承载当前版本开发，开发分支基于对应版本，派生子分支基于直接父分支。合入规则由 [branch skill](.agents/skills/branch/SKILL.md) 持有。
+- 创建、切换分支在已授权目标内执行；本地 merge 必须得到用户明确授权，并包含必要的 merge commit。子分支快进合并授权包含对确认未共享子分支的必要 rebase；已共享或共享状态不明时由用户决定历史整理方式。
+- 普通本地 commit 必须得到当前用户明确授权；不自动 push、开 PR、发布或改写远端历史，这些操作需要另行授权。
 
 ## 9. 维护
 

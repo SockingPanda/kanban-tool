@@ -33,6 +33,9 @@ use tonic::{Request, Response, Status};
 
 const MAX_CONNECTIONS: usize = 16;
 const MAX_HUBS: usize = 256;
+// WebKit 2.52 的 Fetch pull 缺少 stash drain（WebKit #322545）；后续网络帧才能唤醒滞留字节。
+// 连接级心跳不读取 application、不推进 cursor；每 Host 最多 16 流，保持原有下游背压。
+const IDLE_HEARTBEAT: Duration = Duration::from_millis(250);
 
 struct Subscription {
     id: String,
@@ -221,7 +224,7 @@ impl Multiplex {
                 _ = wait_stop(&mut self.stop) => return None,
                 _ = wait_deadline(deadline) => {},
                 _ = futures_util::future::select_all(changed) => {},
-                _ = tokio::time::sleep(Duration::from_secs(15)) => {
+                _ = tokio::time::sleep(IDLE_HEARTBEAT) => {
                     return Some(Ok(pb::QueryFrame { client_query_id: String::new(), body: Some(Body::Heartbeat(pb::QueryHeartbeat {})) }));
                 }
             }

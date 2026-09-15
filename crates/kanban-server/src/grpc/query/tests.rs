@@ -205,6 +205,69 @@ async fn canonical_defaults_share_one_read_and_unmount_releases_every_hub() {
 }
 
 #[tokio::test]
+async fn idle_heartbeats_leave_query_unchanged_and_cancel_reclaims_resources() {
+    let (_directory, state, runtime) = fixture().await;
+    let query = list("default");
+    let mut stream = watch(&runtime, vec![definition("list", query.clone())]).await;
+    let mut rebuilt = Rebuild::default();
+    let cursor = rebuilt.ready(&mut stream, "list").await;
+    assert_eq!(rebuilt.cursors["list"], cursor);
+    let lease = runtime
+        .attach(source::normalize(&state, query).await.unwrap())
+        .unwrap();
+    let shared = lease.shared.clone();
+    drop(lease);
+    let resume = from_cursor(cursor.clone());
+    let reads = shared.reads.load(Ordering::Relaxed);
+    let application_reads = state.grpc_probe.queries();
+    let resources = runtime.counts();
+    assert_eq!(reads, 1);
+    assert_eq!(resources.0, 1);
+    assert!(resources.2 > 0);
+    assert_eq!(
+        runtime.0.connections.available_permits(),
+        MAX_CONNECTIONS - 1
+    );
+
+    let started = Instant::now();
+    for _ in 0..3 {
+        let waiting = Instant::now();
+        let frame = tokio::time::timeout(Duration::from_secs(2), stream.next())
+            .await
+            .expect("静默查询必须及时发送周期心跳")
+            .unwrap()
+            .unwrap();
+        assert!(waiting.elapsed() >= Duration::from_millis(100));
+        assert!(frame.client_query_id.is_empty());
+        assert!(matches!(frame.body, Some(Body::Heartbeat(_))));
+        assert!(matches!(
+            shared.hub.next(Some(&resume)),
+            Ok(QueryNext::Idle)
+        ));
+        assert_eq!(shared.reads.load(Ordering::Relaxed), reads);
+        assert_eq!(state.grpc_probe.queries(), application_reads);
+        assert_eq!(runtime.counts(), resources);
+    }
+    let elapsed = started.elapsed();
+
+    // 在下一次 idle 等待已经开始后取消，确认计时器没有成为投影资源的独立 owner。
+    assert!(futures_util::poll!(stream.next()).is_pending());
+    drop(stream);
+    assert_eq!(runtime.counts().0, 0);
+    assert_eq!(runtime.counts().2, 0);
+    assert_eq!(runtime.0.connections.available_permits(), MAX_CONNECTIONS);
+    runtime.stop().await;
+    assert_eq!(runtime.counts(), (0, 0, 0));
+    assert_eq!(shared.reads.load(Ordering::Relaxed), reads);
+    assert_eq!(state.grpc_probe.queries(), application_reads);
+    eprintln!(
+        "G08_QUERY_IDLE_HEARTBEAT count=3 elapsed_ms={:.3} application_reads={reads} revision={} hubs_after_cancel=0 available_permits={MAX_CONNECTIONS} retained_bytes=0",
+        elapsed.as_secs_f64() * 1000.0,
+        cursor.revision
+    );
+}
+
+#[tokio::test]
 async fn full_details_comments_and_page_boundary_rebuild_authoritative_query() {
     let (_directory, state, runtime) = fixture().await;
     let task = create(&state, "beta").await;

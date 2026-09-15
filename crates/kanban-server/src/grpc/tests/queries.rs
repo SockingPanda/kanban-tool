@@ -1,4 +1,7 @@
+mod common;
 mod disconnect;
+mod lifecycle;
+mod recovery;
 
 use super::Host;
 use kanban_protocol::rpc::v1::{self as pb, query_definition::Query, query_frame::Body};

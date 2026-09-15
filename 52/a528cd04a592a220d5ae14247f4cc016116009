@@ -1,0 +1,24 @@
+xtask/README.md
+  s_5b054b517a26b6::t_223cd91530cd47 7-8,10-12
+  s_5b054b517a26b6::t_5477344257ff37 9
+scripts/cargo-build-lock.sh
+  s_5b054b517a26b6::t_b34b158c352f68 4,43
+scripts/test-cargo-target-tools.sh
+  s_5b054b517a26b6::t_9022be058da0f2 378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52a528cd04a592a220d5ae14247f4cc016116009",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

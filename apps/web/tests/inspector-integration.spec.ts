@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test"
 
+import { Code } from "@connectrpc/connect"
+import { DtoApiErrorCode } from "../src/generated/rpc/kanban/v1/dto_pb"
+import { rpcFailure, unavailable } from "./rpc-fixture"
+
 import { installExplorerFixture } from "./explorer-fixture"
 
 const boardPath = "/app/boards/default"
@@ -9,11 +13,11 @@ test.describe("Inspector integration seam", () => {
   test("keeps the draft after a version conflict has refreshed canonical data", async ({ page }) => {
     const fixture = await installExplorerFixture(page)
     let conflict = true
-    await page.route(`**/api/v1/tasks/${taskId}`, async route => {
-      if (route.request().method() === "PATCH" && conflict) {
+    fixture.rpc.handle("UpdateTask", () => {
+      if (conflict) {
         conflict = false
-        await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: { code: "claim_conflict", message: "lock_version 不匹配" } }) })
-      } else await route.fallback()
+        throw rpcFailure(Code.Aborted, DtoApiErrorCode.CLAIM_CONFLICT, "lock_version 不匹配")
+      }
     })
     await page.goto(`${boardPath}/list?task=${taskId}`)
     const title = page.getByRole("textbox", { name: "任务标题", exact: true })
@@ -28,32 +32,29 @@ test.describe("Inspector integration seam", () => {
     await expect.poll(() => fixture.readyTask().title).toBe("冲突后仍保留的标题")
   })
 
-  test("an SSE refresh carries the write reload forward before the next field can save", async ({ page }) => {
+  test("a QueryService delta carries the write reload forward before the next field can save", async ({ page }) => {
     const fixture = await installExplorerFixture(page)
     await page.goto(`${boardPath}/list?task=${taskId}`)
-    await fixture.waitForSseConnection(0)
+    await fixture.waitForQueryConnection(0)
     await expect(page.getByTestId("task-inspector")).toBeVisible()
     let heldReads = 0
     let release!: () => void
     const held = new Promise<void>(resolve => { release = resolve })
     const versions: number[] = []
-    await page.route(`**/api/v1/tasks/${taskId}`, async route => {
-      if (route.request().method() === "PATCH") versions.push(route.request().postDataJSON().expected_lock_version)
-      else if (versions.length === 1) {
-        heldReads += 1
-        await held
-      }
-      try { await route.fallback() } catch { /* 同一项目的更新会中止被替换的读取。 */ }
+    fixture.rpc.handle("UpdateTask", call => { versions.push(Number(call.input.expected_lock_version)) })
+    fixture.rpc.handle("GetTask", async () => {
+      if (versions.length === 1) { heldReads += 1; await held }
     })
     const title = page.getByRole("textbox", { name: "任务标题", exact: true })
     const description = page.getByRole("textbox", { name: "编辑任务说明" })
     await title.fill("标题先保存")
     await title.press("Tab")
     await expect.poll(() => heldReads).toBeGreaterThan(0)
-    await fixture.emitTaskUpdated()
+    const externalUpdate = fixture.emitTaskUpdated()
     await expect.poll(() => heldReads).toBeGreaterThan(1)
     await expect(description).toBeDisabled()
     release()
+    await externalUpdate
     await expect(description).toBeEnabled()
     await description.fill("使用回读后的版本继续保存说明")
     await description.press("Tab")
@@ -69,23 +70,20 @@ test.describe("Inspector integration seam", () => {
     let release!: () => void
     const held = new Promise<void>(resolve => { release = resolve })
     const versions: number[] = []
-    await page.route(`**/api/v1/boards/default/columns`, async route => {
-      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "internal_error", message: "metadata refresh unavailable" } }) })
-    })
-    await page.route(`**/api/v1/tasks/${taskId}`, async route => {
-      if (route.request().method() === "PATCH") versions.push(route.request().postDataJSON().expected_lock_version)
-      else if (versions.length === 1) await held
-      try { await route.fallback() } catch { /* 卸载或同项目刷新可能中止旧请求。 */ }
-    })
+    let metadataFailures = 0
+    fixture.rpc.handle("ListBoardColumns", () => { metadataFailures += 1; throw unavailable("metadata refresh unavailable") })
+    fixture.rpc.handle("UpdateTask", call => { versions.push(Number(call.input.expected_lock_version)) })
+    fixture.rpc.handle("GetTask", async () => { if (versions.length === 1) await held })
     const title = page.getByRole("textbox", { name: "任务标题", exact: true })
     const description = page.getByRole("textbox", { name: "编辑任务说明" })
-    const metadataFailure = page.waitForResponse(response => response.url().endsWith("/boards/default/columns") && response.status() === 503)
     await title.fill("元数据失败仍等待任务")
     await title.press("Tab")
-    await (await metadataFailure).finished()
+    const externalUpdate = fixture.rpc.publish()
+    await expect.poll(() => metadataFailures).toBeGreaterThan(0)
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
     await expect(description).toBeDisabled()
     release()
+    await externalUpdate
     await expect(description).toBeEnabled()
     await description.fill("继续使用最新任务版本")
     await description.press("Tab")
@@ -101,8 +99,8 @@ test.describe("Inspector integration seam", () => {
     await page.getByText("标签与附件", { exact: true }).first().click()
     await expect(page.getByTestId("inspector-assets")).toBeVisible()
 
-    const suggestionRequests = () => fixture.apiRequests.filter((request) => request.includes("/labels/suggestions"))
-    const downloadRequests = () => fixture.apiRequests.filter((request) => request.endsWith("/attachments/a_fixture"))
+    const suggestionRequests = () => fixture.apiRequests.filter((request) => request === "SuggestTaskLabels")
+    const downloadRequests = () => fixture.apiRequests.filter((request) => request === "DownloadAttachment")
     expect(suggestionRequests()).toHaveLength(0)
     expect(downloadRequests()).toHaveLength(0)
 
@@ -110,7 +108,7 @@ test.describe("Inspector integration seam", () => {
     await page.getByRole("textbox", { name: "任务标题", exact: true }).press("Tab")
     await expect(page).toHaveURL(new RegExp(`/list\\?task=${taskId}$`))
     await expect(page.getByRole("textbox", { name: "任务标题", exact: true })).toHaveValue("Renamed in Inspector")
-    expect(fixture.apiRequests.some((request) => request === `/api/v1/tasks/${taskId}`)).toBeTruthy()
+    expect(fixture.apiRequests.some((request) => request === "GetTask")).toBeTruthy()
 
     await page.getByTestId("label-suggestion-request").click()
     await expect.poll(() => suggestionRequests().length).toBe(1)
@@ -132,7 +130,7 @@ test.describe("Inspector integration seam", () => {
     await page.getByTestId("task-mutation-dialog").getByRole("button", { name: "创建任务", exact: true }).click()
     await expect(page).toHaveURL(/\/app\/boards\/default\/list\?task=t_[^&]+$/)
     await expect(page.getByRole("button", { name: "Created with first step" })).toBeVisible()
-    expect(fixture.apiRequests.some((request) => request.match(/\/api\/v1\/tasks\/t_[^/]+\/steps$/))).toBeTruthy()
+    expect(fixture.apiRequests.some((request) => request === "CreateStep")).toBeTruthy()
   })
 
   test("keeps a failed label draft editable and scopes successful attachment actions", async ({ page }) => {
@@ -153,9 +151,9 @@ test.describe("Inspector integration seam", () => {
     await page.getByTestId("label-add").click()
     await expect(page.getByTestId("inspector-labels")).toContainText("fresh-label")
     await expect(page.getByTestId("inspector-labels")).not.toContainText("first-label")
-    expect(fixture.writeRequests.filter((request) => request === `/api/v1/tasks/${taskId}/labels`)).toHaveLength(2)
+    expect(fixture.writeRequests.filter((request) => request === "AddTaskLabel")).toHaveLength(2)
 
-    const downloadRequests = () => fixture.apiRequests.filter((request) => request.endsWith("/attachments/a_fixture"))
+    const downloadRequests = () => fixture.apiRequests.filter((request) => request === "DownloadAttachment")
     await page.getByTestId("attachment-download").click()
     await expect.poll(() => downloadRequests().length).toBe(1)
     await page.getByTestId("attachment-delete").click()

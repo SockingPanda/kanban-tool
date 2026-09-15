@@ -13,6 +13,34 @@ function dependency<T>(key: string, initial: T) {
 }
 
 describe('按 query 依赖映射复合读模型', () => {
+  test('前置查询暂时失败保留后续依赖，恢复沿用订阅，卸载仍释放全部', async () => {
+    const board = dependency('board', 'A')
+    const comments = dependency('comments', '已提交评论')
+    let unavailable = false
+    const guardedBoard: ReadDependency<string> = { ...board.dependency, read: async () => {
+      if (unavailable) throw new Error('连接中断')
+      return board.dependency.read()
+    } }
+    const controller = new AbortController()
+    const next = vi.fn(), failed = vi.fn()
+    observeRead(async signal => {
+      await readObservedDependency(signal, guardedBoard)
+      return readObservedDependency(signal, comments.dependency)
+    }, controller.signal, next, failed)
+    await vi.waitFor(() => expect(next).toHaveBeenLastCalledWith('已提交评论'))
+    unavailable = true
+    board.commit('A')
+    await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce())
+    expect(comments.listeners.size).toBe(1)
+    comments.commit('恢复后可见的完整评论')
+    unavailable = false
+    board.commit('A')
+    await vi.waitFor(() => expect(next).toHaveBeenLastCalledWith('恢复后可见的完整评论'))
+    expect(comments.listeners.size).toBe(1)
+    controller.abort()
+    expect(board.listeners.size + comments.listeners.size).toBe(0)
+  })
+
   test('保留活跃依赖、仅相关变更重算，分支切换释放旧 log，卸载完全释放', async () => {
     const selected = dependency('runs', 'log1')
     const one = dependency('log1', '第一份日志')

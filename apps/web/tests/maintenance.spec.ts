@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs"
 
 import { expect, test } from "@playwright/test"
 
+import { installRpcFixture, rpcFailure } from "./rpc-fixture"
+import { Code } from "@connectrpc/connect"
+import { DtoApiErrorCode } from "../src/generated/rpc/kanban/v1/dto_pb"
+
 import { installRuntimeFixture } from "./runtime-fixture"
 
 const statusFixture = JSON.parse(
@@ -27,20 +31,22 @@ test.describe("Maintenance operator workflow", () => {
     statsRequests = 0
     searchRequests = 0
     await installRuntimeFixture(page)
-    await page.route("http://127.0.0.1:4173/api/v1/maintenance/status", async (route) => {
+    ;(await installRpcFixture(page)).handle("MaintenanceStatus", async () => {
       statusRequests += 1
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(statusFixture) })
+      return statusFixture
     })
-    await page.route("http://127.0.0.1:4173/api/v1/stats?board=default", async (route) => {
+    ;(await installRpcFixture(page)).handle("GetStats", async (call) => {
+      if (call.query.board !== "default") return undefined
       statsRequests += 1
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(statsFixture) })
+      return statsFixture
     })
-    await page.route("http://127.0.0.1:4173/api/v1/search/status?board=default", async (route) => {
+    ;(await installRpcFixture(page)).handle("SearchStatus", async (call) => {
+      if (call.query.board !== "default") return undefined
       searchRequests += 1
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(searchFixture) })
+      return searchFixture
     })
-    await page.route("http://127.0.0.1:4173/api/v1/maintenance/doctor", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(doctorFixture) })
+    ;(await installRpcFixture(page)).handle("Doctor", async () => {
+      return doctorFixture
     })
   })
 
@@ -55,12 +61,8 @@ test.describe("Maintenance operator workflow", () => {
   })
 
   test("confirms backup with keyboard and renders server path plus checksum", async ({ page }) => {
-    await page.route("http://127.0.0.1:4173/api/v1/maintenance/backup", async (route) => {
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ data: { out_path: "/server/backup.sqlite", checksum_sha256: "sha256:backup", bytes: 12, source_fingerprint: "sha256:source" } }),
-      })
+    ;(await installRpcFixture(page)).handle("MaintenanceBackup", async () => {
+      return { data: { out_path: "/server/backup.sqlite", checksum_sha256: "sha256:backup", bytes: 12, source_fingerprint: "sha256:source" } }
     })
     await page.goto("/app/boards/default/maintenance", { waitUntil: "domcontentloaded" })
 
@@ -91,14 +93,10 @@ test.describe("Maintenance operator workflow", () => {
   test("freezes the confirmed maintenance owner before the request is sent", async ({ page }) => {
     let runBody: unknown = null
     let runHeaders: Record<string, string> | null = null
-    await page.route("http://127.0.0.1:4173/api/v1/maintenance/run", async (route) => {
-      runBody = route.request().postDataJSON()
-      runHeaders = route.request().headers()
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ data: { database_instance_id: "db_fixture", protocol_version: 2, owner: "owner-a", mode: "once", action: "run", processed: 0, phase: "completed", degraded: false, errors: [], stores: [] } }),
-      })
+    ;(await installRpcFixture(page)).handle("MaintenanceRun", async (call) => {
+      runBody = call.input
+      runHeaders = call.headers
+      return { data: { database_instance_id: "db_fixture", protocol_version: 2, owner: "owner-a", mode: "once", action: "run", processed: 0, phase: "completed", degraded: false, errors: [], stores: [] } }
     })
     await page.goto("/app/boards/default/maintenance", { waitUntil: "domcontentloaded" })
     const ownerInput = page.getByTestId("maintenance-owner")
@@ -116,7 +114,7 @@ test.describe("Maintenance operator workflow", () => {
     })
     await dialog.getByRole("button", { name: "继续" }).click()
     await expect.poll(() => runBody).toEqual({ owner: "owner-a", action: "run" })
-    expect(runHeaders?.["content-type"]).toBe("application/json")
+    expect(runHeaders?.["content-type"]).toBe("application/grpc-web+proto")
     expect(runHeaders?.["x-kb-actor"]).toBeUndefined()
   })
 
@@ -125,31 +123,34 @@ test.describe("Maintenance operator workflow", () => {
     let releaseAlphaSearch!: () => void
     const alphaStats = new Promise<void>((resolve) => { releaseAlphaStats = resolve })
     const alphaSearch = new Promise<void>((resolve) => { releaseAlphaSearch = resolve })
-    await page.route("http://127.0.0.1:4173/api/v1/stats?board=alpha", async (route) => {
+    ;(await installRpcFixture(page)).handle("GetStats", async (call) => {
+      if (call.query.board !== "alpha") return undefined
       await alphaStats
       try {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...statsFixture, data: { ...statsFixture.data, board_id: "alpha" } }) })
+        return { ...statsFixture, data: { ...statsFixture.data, board_id: "alpha" } }
       } catch {
         // The board switch is expected to abort this stale request.
       }
     })
-    await page.route("http://127.0.0.1:4173/api/v1/search/status?board=alpha", async (route) => {
+    ;(await installRpcFixture(page)).handle("SearchStatus", async (call) => {
+      if (call.query.board !== "alpha") return undefined
       await alphaSearch
       try {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...searchFixture, data: { ...searchFixture.data, generation: "alpha-generation" } }) })
+        return { ...searchFixture, data: { ...searchFixture.data, generation: "alpha-generation" } }
       } catch {
         // The board switch is expected to abort this stale request.
       }
     })
-    await page.route("http://127.0.0.1:4173/api/v1/stats?board=beta", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...statsFixture, data: { ...statsFixture.data, board_id: "beta" } }) })
+    ;(await installRpcFixture(page)).handle("GetStats", async (call) => {
+      if (call.query.board !== "beta") return undefined
+      return { ...statsFixture, data: { ...statsFixture.data, board_id: "beta" } }
     })
-    await page.route("**/api/v1/search/status**", async (route) => {
-      const board = new URL(route.request().url()).searchParams.get("board")
+    ;(await installRpcFixture(page)).handle("SearchStatus", async (call) => {
+      const board = call.query.board
       if (board === "beta") {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...searchFixture, data: { ...searchFixture.data, generation: "beta-generation" } }) })
+        return { ...searchFixture, data: { ...searchFixture.data, generation: "beta-generation" } }
       } else {
-        await route.continue()
+        return undefined
       }
     })
 
@@ -178,18 +179,18 @@ test.describe("Maintenance operator workflow", () => {
         derived_stores: [{ ...doctorFixture.data.derived_stores[0], store_name: storeName }],
       },
     })
-    await page.route("http://127.0.0.1:4173/api/v1/maintenance/doctor", async (route) => {
+    ;(await installRpcFixture(page)).handle("Doctor", async () => {
       doctorRequests += 1
       if (doctorRequests === 1) {
         await oldDoctor
         try {
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(doctorPayload("alpha_store", 11)) })
+          return doctorPayload("alpha_store", 11)
         } catch {
           // The board switch is expected to abort this stale request.
         }
         return
       }
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(doctorPayload("beta_store", 22)) })
+      return doctorPayload("beta_store", 22)
     })
 
     await page.goto("/app/boards/alpha/maintenance", { waitUntil: "domcontentloaded" })
@@ -210,14 +211,10 @@ test.describe("Maintenance operator workflow", () => {
     let releaseBackup!: () => void
     const backupResponse = new Promise<void>((resolve) => { releaseBackup = resolve })
     let backupRequests = 0
-    await page.route("http://127.0.0.1:4173/api/v1/maintenance/backup", async (route) => {
+    ;(await installRpcFixture(page)).handle("MaintenanceBackup", async () => {
       backupRequests += 1
       await backupResponse
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ data: { out_path: "/server/backup.sqlite", checksum_sha256: "sha256:backup", bytes: 12, source_fingerprint: "sha256:source" } }),
-      })
+      return { data: { out_path: "/server/backup.sqlite", checksum_sha256: "sha256:backup", bytes: 12, source_fingerprint: "sha256:source" } }
     })
     await page.goto("/app/boards/default/maintenance", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("maintenance-stats")).toContainText("b_fixture")
@@ -235,12 +232,12 @@ test.describe("Maintenance operator workflow", () => {
 
   test("clears stale evidence and presents a stable safe error on a retry", async ({ page }) => {
     let backupRequests = 0
-    await page.route("http://127.0.0.1:4173/api/v1/maintenance/backup", async (route) => {
+    ;(await installRpcFixture(page)).handle("MaintenanceBackup", async () => {
       backupRequests += 1
       if (backupRequests === 1) {
-        await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ data: { out_path: "/server/backup.sqlite", checksum_sha256: "sha256:backup", bytes: 12, source_fingerprint: "sha256:source" } }) })
+        return { data: { out_path: "/server/backup.sqlite", checksum_sha256: "sha256:backup", bytes: 12, source_fingerprint: "sha256:source" } }
       } else {
-        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: { code: "internal", message: "SECRET_BACKEND_ERROR" } }) })
+        throw rpcFailure(Code.Internal, DtoApiErrorCode.INTERNAL, "SECRET_BACKEND_ERROR")
       }
     })
     await page.goto("/app/boards/default/maintenance", { waitUntil: "domcontentloaded" })

@@ -438,6 +438,7 @@ export function useTaskWorkspace({ runtime, route, onNavigate, online, invalidat
   const restoreFocus = useCallback(() => {
     if (typeof document === "undefined") return
     const snapshot = openerRef.current
+    if (!snapshot) return
     openerRef.current = null
     restoreExplorerFocus(snapshot, {
       querySelector: (selector) => document.querySelector(selector) as ExplorerFocusElement | null,
@@ -446,9 +447,10 @@ export function useTaskWorkspace({ runtime, route, onNavigate, online, invalidat
 
   useEffect(() => {
     const previousTaskId = previousTaskIdRef.current
-    if (previousTaskId !== null && taskId === null) restoreFocus()
+    // Events 关闭 task 筛选会重新挂载事件列表，由该查询完成后恢复 opener。
+    if (previousTaskId !== null && taskId === null && view !== "events") restoreFocus()
     previousTaskIdRef.current = taskId
-  }, [restoreFocus, taskId])
+  }, [restoreFocus, taskId, view])
   const updateEventKindFilter = (nextKind: string) => {
     const nextParams = new URLSearchParams(params)
     const normalizedKind = normalizeEventKindFilter(nextKind)
@@ -499,6 +501,7 @@ export function useTaskWorkspace({ runtime, route, onNavigate, online, invalidat
 
   return {
     rememberTaskOpener,
+    restoreFocus,
     route,
     copy,
     taskId,

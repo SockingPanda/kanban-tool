@@ -35,6 +35,7 @@ export interface EventsPresentationProps {
 }
 
 export interface EventsViewProps {
+  readonly onReadSettled?: () => void
   readonly runtime: WebRuntimeConfig
   readonly boardSelector: string
   /** Explorer 已有的 task query；同时作为可选的看板事件筛选。 */
@@ -263,6 +264,7 @@ function useBoardEventsRead(
 }
 
 export function EventsView({
+  onReadSettled,
   runtime,
   boardSelector,
   taskId = null,
@@ -277,6 +279,9 @@ export function EventsView({
   const [localKindFilter, setLocalKindFilter] = useState(kindFilterProp)
   const kindFilter = onKindFilterChange ? kindFilterProp : localKindFilter
   const state = useBoardEventsRead(runtime, boardSelector, taskId, eventsRefreshRevision, online)
+  useEffect(() => {
+    if (taskId === null && !state.loading) onReadSettled?.()
+  }, [onReadSettled, state.loading, taskId])
   const setKindFilter = (value: string) => {
     setLocalKindFilter(value)
     onKindFilterChange?.(value)

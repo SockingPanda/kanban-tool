@@ -1,3 +1,7 @@
+import { fromBinary } from "@bufbuild/protobuf"
+import { WatchQueriesRequestSchema, type QueryCursor } from "../src/generated/rpc/kanban/v1/query_pb"
+import { installQueryProbe } from "./release-query-probe"
+import { rpcRequest } from "./release-rpc"
 import { constants } from "node:fs"
 import { lstat, mkdir, open, rename, rm } from "node:fs/promises"
 import { join } from "node:path"
@@ -23,18 +27,21 @@ type MetricSample = {
   readonly cls_entry_count: number
   readonly observer_supported: boolean
 }
-type SseSample = {
+type QuerySample = {
   readonly sample: number
   readonly task_id: string
   readonly mutation_to_event_ms: number
   readonly disconnected_catch_up: boolean
 }
 
-type SseStreamRequest = {
+type CursorEvidence = { readonly epoch: string; readonly scope: string; readonly revision: string }
+function cursorEvidence(cursor: QueryCursor | undefined): CursorEvidence | null { return cursor ? { epoch: cursor.epoch, scope: cursor.scope, revision: String(cursor.revision) } : null }
+
+type QueryStreamRequest = {
+  readonly client_query_id: string
   readonly url: string
   readonly at_ms: number
-  readonly last_event_id: string | null
-  readonly after: string | null
+  readonly resume: CursorEvidence | null
 }
 
 type ConfirmedTaskCursor = {
@@ -141,10 +148,10 @@ type UiMutation = {
 
 const browserErrors: BrowserError[] = []
 const metricSamples: MetricSample[] = []
-const sseSamples: SseSample[] = []
+const querySamples: QuerySample[] = []
 const taskCounts: Array<{ readonly target: number; readonly total: number }> = []
 const fixtureSeedRecords: FixtureSeedRecord[] = []
-const sseStreamRequests: SseStreamRequest[] = []
+const queryStreamRequests: QueryStreamRequest[] = []
 let mapEvidence: {
   readonly node_count: number
   readonly edge_count: number
@@ -162,24 +169,25 @@ const uiEvidence: { functional_2k: FunctionalUiEvidence | null; stress_5k: Stres
 }
 let fixtureSeedResponseErrors = 0
 let firstFailure: string | null = null
-let sseKeyPathPassed = false
-let sseReconnectPassed = false
-let sseStaleCleared = false
-let sseReconnectEvidence: {
+let queryKeyPathPassed = false
+let queryReconnectPassed = false
+let queryStaleCleared = false
+let queryReconnectEvidence: {
   readonly before_count: number
   readonly request_count_after_disconnect: number
   readonly request_at_ms: number | null
   readonly event_seen_at_ms: number | null
-  readonly last_event_id: string | null
-  readonly after: string | null
-  readonly confirmed_cursor: string | null
+  readonly resume: CursorEvidence | null
+  readonly confirmed_cursor: CursorEvidence | null
+  readonly recovery_cursor: CursorEvidence | null
+  readonly recovery_mode: "resume" | "snapshot" | null
   readonly confirmed_task_id: string | null
   readonly confirmed_event_id: string | null
 } | null = null
 
 const phaseTarget = phase.includes("5k") ? 5_000 : phase.includes("2k") ? 2_000 : null
-const SSE_P95_BUDGET_MS = 1_000
-const SSE_CATCH_UP_P95_BUDGET_MS = 3_000
+const QUERY_P95_BUDGET_MS = 1_000
+const QUERY_CATCH_UP_P95_BUDGET_MS = 3_000
 const FIXTURE_CONCURRENCY = 16
 const FIXTURE_TEST_TIMEOUT_MS = 30 * 60_000
 const BOARD_READY_BUDGET_MS = 120_000
@@ -285,7 +293,8 @@ function attachBrowserErrors(page: Page, errors: BrowserError[]): void {
 }
 
 async function listTaskTotal(request: APIRequestContext): Promise<number> {
-  const response = await request.get(`${baseURL}/api/v1/boards/default/tasks?limit=1&offset=0&sort=seq`)
+  void request
+  const response = await rpcRequest("ListTasks", { path: { board: "default" }, query: { limit: 1, offset: 0, sort: "seq" } })
   expect(response.ok()).toBe(true)
   const body = await response.json() as { meta?: { total?: unknown } }
   const total = body.meta?.total
@@ -299,7 +308,7 @@ async function confirmedTaskCursor(request: APIRequestContext, taskId: string): 
   let after = 0
   let selected: { id: number; event_id: string } | null = null
   for (let page = 0; page < 100; page += 1) {
-    const response = await request.get(`${baseURL}/api/v1/events?board=default&after=${after}&limit=100`)
+    const response = await rpcRequest("ListEvents", { query: { board: "default", after: after, limit: 100 } })
     expect(response.ok()).toBe(true)
     const body = await response.json() as {
       data?: Array<{ id?: unknown; event_id?: unknown; task_id?: unknown }>
@@ -476,8 +485,7 @@ async function createTaskBatch(request: APIRequestContext, ids: readonly string[
     const batch = ids.slice(offset, offset + FIXTURE_CONCURRENCY)
     await Promise.all(batch.map(async (taskId) => {
       try {
-        const response = await request.post(`${baseURL}/api/v1/boards/default/tasks`, {
-          data: {
+        const response = await rpcRequest("CreateTask", { path: { board: "default" }, input: {
             task_id: taskId,
             idempotency_key: `release-09d:create:${taskId}`,
             title: `Stage09 09D load task ${taskId.slice(-4)}`,
@@ -488,8 +496,7 @@ async function createTaskBatch(request: APIRequestContext, ids: readonly string[
             labels: [],
             depends_on: [],
             actor: "release-09d",
-          },
-        })
+          } })
         if (![200, 201].includes(response.status())) {
           fixtureSeedResponseErrors += 1
           throw new Error(`fixture task ${taskId} response status ${response.status()}`)
@@ -693,7 +700,7 @@ async function createTaskFromUi(page: Page, title: string): Promise<UiMutation> 
       }
     }, { capture: true, once: true })
   })
-  await dialog.getByRole("button", { name: "创建", exact: true }).click()
+  await dialog.getByRole("button", { name: "创建任务", exact: true }).click()
   const mutationStarted = await page.evaluate(() => {
     type MutationClockWindow = Window & { __release09dSubmitClock?: number | null }
     const value = (window as MutationClockWindow).__release09dSubmitClock
@@ -741,17 +748,17 @@ test.afterAll(async ({ request }, testInfo) => {
     cls: summarize(metricSamples.map((sample) => sample.cls)),
     samples: metricSamples,
   }
-  const normalSseLatencies = sseSamples
+  const normalQueryLatencies = querySamples
     .filter((sample) => !sample.disconnected_catch_up)
     .map((sample) => sample.mutation_to_event_ms)
-  const catchUpSseLatencies = sseSamples
+  const catchUpQueryLatencies = querySamples
     .filter((sample) => sample.disconnected_catch_up)
     .map((sample) => sample.mutation_to_event_ms)
-  const sseSummary = sseSamples.length === 0 ? null : {
-    latency_ms: summarize(sseSamples.map((sample) => sample.mutation_to_event_ms)),
-    mutation_to_event_ms: summarize(normalSseLatencies),
-    disconnected_catch_up_ms: summarize(catchUpSseLatencies),
-    samples: sseSamples,
+  const querySummary = querySamples.length === 0 ? null : {
+    latency_ms: summarize(querySamples.map((sample) => sample.mutation_to_event_ms)),
+    mutation_to_event_ms: summarize(normalQueryLatencies),
+    disconnected_catch_up_ms: summarize(catchUpQueryLatencies),
+    samples: querySamples,
   }
   const initialBrotliBytes = Number(process.env.KANBAN_RELEASE_09D_INITIAL_BROTLI_BYTES)
   const initialBrotliWithinBudget = Number.isSafeInteger(initialBrotliBytes)
@@ -766,19 +773,19 @@ test.afterAll(async ({ request }, testInfo) => {
     && initialBrotliWithinBudget
     && noBrowserErrors
     && firstFailure === null
-  const sseLatencyBudgetStatus = sseSummary === null
+  const queryLatencyBudgetStatus = querySummary === null
     ? "not_run"
     : testInfo.project.name !== "chromium"
       ? "not_applicable"
-      : (sseSummary.mutation_to_event_ms?.p95 ?? Number.POSITIVE_INFINITY) <= SSE_P95_BUDGET_MS
-        && (sseSummary.disconnected_catch_up_ms?.p95 ?? Number.POSITIVE_INFINITY) <= SSE_CATCH_UP_P95_BUDGET_MS
+      : (querySummary.mutation_to_event_ms?.p95 ?? Number.POSITIVE_INFINITY) <= QUERY_P95_BUDGET_MS
+        && (querySummary.disconnected_catch_up_ms?.p95 ?? Number.POSITIVE_INFINITY) <= QUERY_CATCH_UP_P95_BUDGET_MS
         && noBrowserErrors
         && firstFailure === null
         ? "passed"
         : "failed"
-  const sseKeyPathStatus = sseSummary === null
+  const queryKeyPathStatus = querySummary === null
     ? "not_run"
-    : sseKeyPathPassed && sseReconnectPassed && sseStaleCleared && noBrowserErrors && firstFailure === null
+    : queryKeyPathPassed && queryReconnectPassed && queryStaleCleared && noBrowserErrors && firstFailure === null
       ? "passed"
       : "failed"
   await writeEvidence(`release-09d-${phase}-${testInfo.project.name}.json`, {
@@ -788,11 +795,11 @@ test.afterAll(async ({ request }, testInfo) => {
     browser: testInfo.project.name,
     ...hostEvidence(),
     gates: {
-      performance: phase === "small-perf-sse"
+      performance: phase === "small-perf-query"
         ? testInfo.project.name !== "chromium" ? "not-applicable" : performanceThresholdsPassed ? "passed" : "failed"
         : "not-run",
-      sse: sseSummary === null ? "not-run" : sseKeyPathStatus === "passed"
-        && (sseLatencyBudgetStatus === "passed" || sseLatencyBudgetStatus === "not_applicable")
+      query: querySummary === null ? "not-run" : queryKeyPathStatus === "passed"
+        && (queryLatencyBudgetStatus === "passed" || queryLatencyBudgetStatus === "not_applicable")
           ? "passed"
           : "failed",
       functional_2k: phaseTarget === 2_000 && finalTotal === 2_000 && uiEvidence.functional_2k !== null && noBrowserErrors && firstFailure === null ? "passed" : phaseTarget === 2_000 ? "failed" : "not-run",
@@ -804,13 +811,13 @@ test.afterAll(async ({ request }, testInfo) => {
       files: initialBrotliFiles,
     } : null,
     performance: metricSummary,
-    sse: sseSummary,
-    sse_contract: {
-      latency_budget_status: sseLatencyBudgetStatus,
-      key_path_status: sseKeyPathStatus,
+    query: querySummary,
+    query_contract: {
+      latency_budget_status: queryLatencyBudgetStatus,
+      key_path_status: queryKeyPathStatus,
       budgets_ms: {
-        mutation_to_event_p95: SSE_P95_BUDGET_MS,
-        disconnected_catch_up_p95: SSE_CATCH_UP_P95_BUDGET_MS,
+        mutation_to_event_p95: QUERY_P95_BUDGET_MS,
+        disconnected_catch_up_p95: QUERY_CATCH_UP_P95_BUDGET_MS,
       },
     },
     fixture_seed: {
@@ -819,18 +826,19 @@ test.afterAll(async ({ request }, testInfo) => {
     },
     ui: uiEvidence.functional_2k === null && uiEvidence.stress_5k === null ? null : uiEvidence,
     map: mapEvidence,
-    sse_stream_requests: sseStreamRequests,
-    sse_reconnect: {
-      new_request_after_disconnect: sseReconnectPassed,
-      stale_notice_cleared: sseStaleCleared,
-      ...(sseReconnectEvidence ?? {
+    query_stream_requests: queryStreamRequests,
+    query_reconnect: {
+      new_request_after_disconnect: queryReconnectPassed,
+      stale_notice_cleared: queryStaleCleared,
+      ...(queryReconnectEvidence ?? {
         before_count: 0,
         request_count_after_disconnect: 0,
         request_at_ms: null,
         event_seen_at_ms: null,
-        last_event_id: null,
-        after: null,
+        resume: null,
         confirmed_cursor: null,
+        recovery_cursor: null,
+        recovery_mode: null,
         confirmed_task_id: null,
         confirmed_event_id: null,
       }),
@@ -875,7 +883,7 @@ test("09D performance real browser Web Vitals and initial Brotli budget", async 
         throw new Error("real browser did not expose buffered LCP/CLS entries")
       }
       await installInteractionObserver(samplePage)
-      await samplePage.getByRole("link", { name: "列表", exact: true }).click()
+      await samplePage.getByRole("button", { name: "列表", exact: true }).click()
       await expect(samplePage.getByTestId("task-list")).toBeVisible()
       const inp = await readInteractionDuration(samplePage)
       if (inp === null) throw new Error("real browser did not expose EventTiming for the real UI click")
@@ -906,7 +914,7 @@ test("09D performance real browser Web Vitals and initial Brotli budget", async 
   expect(brotliBytes).toBeLessThanOrEqual(750 * 1024)
 })
 
-test("09D persistent SSE UI mutation latency and disconnect catch-up", async ({ browser, request }, testInfo) => {
+test("09D persistent QueryService UI mutation latency and disconnect catch-up", async ({ browser, request }, testInfo) => {
   const sampleCount = testInfo.project.name === "chromium" ? 20 : 1
   const contextB = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } })
   const pageB = await contextB.newPage()
@@ -915,18 +923,21 @@ test("09D persistent SSE UI mutation latency and disconnect catch-up", async ({ 
   const errors: BrowserError[] = []
   attachBrowserErrors(pageB, errors)
   attachBrowserErrors(pageA, errors)
-  const streamRequests: SseStreamRequest[] = []
+  const probe = await installQueryProbe(pageB)
+  const streamRequests: QueryStreamRequest[] = []
   pageB.on("request", (request) => {
-    if (request.url().includes("/api/v1/stream/events")) {
-      const url = new URL(request.url())
+    if (request.url().endsWith("/kanban.v1.QueryService/WatchQueries")) {
+      const queries = fromBinary(WatchQueriesRequestSchema, request.postDataBuffer()!.subarray(5)).queries
+      const subscription = queries.find(query => query.query.case === "recentEvents")
+      if (!subscription) return
       const entry = {
+        client_query_id: subscription.clientQueryId,
         url: request.url(),
         at_ms: Date.now(),
-        last_event_id: request.headers()["last-event-id"] ?? null,
-        after: url.searchParams.get("after"),
+        resume: cursorEvidence(subscription.resume),
       }
       streamRequests.push(entry)
-      sseStreamRequests.push(entry)
+      queryStreamRequests.push(entry)
     }
   })
   try {
@@ -938,66 +949,69 @@ test("09D persistent SSE UI mutation latency and disconnect catch-up", async ({ 
     for (let sample = 1; sample <= sampleCount; sample += 1) {
       await pageA.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
       await assertBoardReady(pageA)
-      const title = `Stage09 09D SSE ${testInfo.project.name} ${sample}`
+      const title = `Stage09 09D QUERY ${testInfo.project.name} ${sample}`
       const mutation = await createTaskFromUi(pageA, title)
       const eventSeenAt = await eventVisibleAt(pageB, mutation.taskId)
-      sseSamples.push({ sample, task_id: mutation.taskId, mutation_to_event_ms: eventSeenAt - mutation.mutationStarted, disconnected_catch_up: false })
+      querySamples.push({ sample, task_id: mutation.taskId, mutation_to_event_ms: eventSeenAt - mutation.mutationStarted, disconnected_catch_up: false })
     }
 
-    const lastNormalTaskId = sseSamples.at(-1)?.task_id
-    if (!lastNormalTaskId) throw new Error("normal SSE samples did not produce a confirmed task")
+    const lastNormalTaskId = querySamples.at(-1)?.task_id
+    if (!lastNormalTaskId) throw new Error("normal QUERY samples did not produce a confirmed task")
     const confirmed = await confirmedTaskCursor(request, lastNormalTaskId)
+    const confirmedProjection = cursorEvidence(probe.committed("recentEvents"))
+    expect(confirmedProjection).not.toBeNull()
     const streamRequestsBeforeDisconnect = streamRequests.length
     await contextB.setOffline(true)
     await waitForOfflineNotice(pageB)
     await pageA.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await assertBoardReady(pageA)
-    const catchUpMutation = await createTaskFromUi(pageA, `Stage09 09D SSE catch-up ${testInfo.project.name}`)
+    const catchUpMutation = await createTaskFromUi(pageA, `Stage09 09D QUERY catch-up ${testInfo.project.name}`)
     await expect(pageB.getByTestId("event-row").filter({ hasText: catchUpMutation.taskId })).toHaveCount(0)
     await contextB.setOffline(false)
     await expect.poll(async () => streamRequests.length, { timeout: 120_000 }).toBeGreaterThan(streamRequestsBeforeDisconnect)
     const reconnectRequest = streamRequests.at(-1)
-    if (!reconnectRequest) throw new Error("SSE reconnect request was not captured")
-    expect(reconnectRequest.last_event_id).not.toBeNull()
-    expect(reconnectRequest.after).not.toBeNull()
-    expect(reconnectRequest.last_event_id).toBe(confirmed.cursor)
-    expect(reconnectRequest.after).toBe(confirmed.cursor)
+    if (!reconnectRequest) throw new Error("QUERY reconnect request was not captured")
+    if (reconnectRequest.resume) expect(reconnectRequest.resume).toEqual(confirmedProjection)
     const catchUpEventSeenAt = await eventVisibleAt(pageB, catchUpMutation.taskId)
-    sseSamples.push({ sample: sampleCount + 1, task_id: catchUpMutation.taskId, mutation_to_event_ms: catchUpEventSeenAt - catchUpMutation.mutationStarted, disconnected_catch_up: true })
+    querySamples.push({ sample: sampleCount + 1, task_id: catchUpMutation.taskId, mutation_to_event_ms: catchUpEventSeenAt - catchUpMutation.mutationStarted, disconnected_catch_up: true })
     expect(reconnectRequest.at_ms).toBeLessThanOrEqual(catchUpEventSeenAt)
     await expect(pageB.getByTestId("events-ready")).toBeVisible({ timeout: 120_000 })
     await expect(pageB.getByTestId("events-stale-notice")).toHaveCount(0)
     await expect(pageB.getByTestId("events-offline")).toHaveCount(0)
-    sseReconnectPassed = streamRequests.length > streamRequestsBeforeDisconnect
-      && reconnectRequest.last_event_id === confirmed.cursor
-      && reconnectRequest.after === confirmed.cursor
-    sseStaleCleared = true
-    sseReconnectEvidence = {
+    // 离线 UI 可释放最后一个查询消费者；新 owner 必须接收完整 snapshot。
+    if (!reconnectRequest.resume) {
+      const connection = probe.requests.at(-1)!.connection
+      expect(probe.frames.some(item => item.connection === connection && item.definition?.query.case === 'recentEvents' && item.frame.body.case === 'begin' && item.frame.body.value.snapshot)).toBe(true)
+    }
+    queryReconnectPassed = streamRequests.length > streamRequestsBeforeDisconnect
+    queryStaleCleared = true
+    queryReconnectEvidence = {
       before_count: streamRequestsBeforeDisconnect,
       request_count_after_disconnect: streamRequests.length,
       request_at_ms: reconnectRequest.at_ms,
       event_seen_at_ms: catchUpEventSeenAt,
-      last_event_id: reconnectRequest.last_event_id,
-      after: reconnectRequest.after,
-      confirmed_cursor: confirmed.cursor,
+      resume: reconnectRequest.resume,
+      confirmed_cursor: confirmedProjection,
+      recovery_cursor: cursorEvidence(probe.committed("recentEvents")),
+      recovery_mode: reconnectRequest.resume ? "resume" : "snapshot",
       confirmed_task_id: lastNormalTaskId,
       confirmed_event_id: confirmed.event_id,
     }
-    const normalLatencies = sseSamples
+    const normalLatencies = querySamples
       .filter((sample) => !sample.disconnected_catch_up)
       .map((sample) => sample.mutation_to_event_ms)
-    const catchUpLatencies = sseSamples
+    const catchUpLatencies = querySamples
       .filter((sample) => sample.disconnected_catch_up)
       .map((sample) => sample.mutation_to_event_ms)
     expect(normalLatencies).toHaveLength(sampleCount)
     expect(catchUpLatencies).toHaveLength(1)
     if (testInfo.project.name === "chromium") {
-      expect(percentile(normalLatencies, 0.95)).toBeLessThanOrEqual(SSE_P95_BUDGET_MS)
-      expect(percentile(catchUpLatencies, 0.95)).toBeLessThanOrEqual(SSE_CATCH_UP_P95_BUDGET_MS)
+      expect(percentile(normalLatencies, 0.95)).toBeLessThanOrEqual(QUERY_P95_BUDGET_MS)
+      expect(percentile(catchUpLatencies, 0.95)).toBeLessThanOrEqual(QUERY_CATCH_UP_P95_BUDGET_MS)
     }
     expect(streamRequests.length).toBeGreaterThan(0)
     expect(errors).toEqual([])
-    sseKeyPathPassed = true
+    queryKeyPathPassed = true
   } finally {
     await contextA.close()
     await contextB.close()
@@ -1086,7 +1100,7 @@ test("09D stress_5k real board list map no-crash bounded interaction", async ({ 
   const mapTruncated = await page.getByTestId("task-map-truncated").count() === 1
   expect(mapNodeCount).toBeGreaterThan(0)
   expect(mapNodeCount).toBeLessThanOrEqual(240)
-  const mapResponse = await request.get(`${baseURL}/api/v1/boards/default/task-map?active_only=true&context_depth=1&include_done_context=false&include_archived_context=false&hide_isolated=false&limit_nodes=240`)
+  const mapResponse = await rpcRequest("BoardTaskMap", { path: { board: "default" }, query: { active_only: true, context_depth: 1, include_done_context: false, include_archived_context: false, hide_isolated: false, limit_nodes: 240 } })
   expect(mapResponse.ok()).toBe(true)
   const mapBody = await mapResponse.json() as {
     data?: { nodes?: unknown[]; edges?: unknown[]; meta?: { node_count?: unknown; edge_count?: unknown; truncated?: unknown; limit_nodes?: unknown } }

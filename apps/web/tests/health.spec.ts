@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test"
 
-import type { ApiErrorResponseContract } from "../src/lib/api/generated/contracts/api-error-response"
 import type { ApiHealthResponseContract } from "../src/lib/api/generated/contracts/api-health-response"
 import healthFixturePayload from "../src/lib/api/generated/fixtures/api-health-response.valid.json" with { type: "json" }
-import malformedHealthFixture from "../src/lib/api/generated/fixtures/api-health-response.invalid.json" with { type: "json" }
+import { installRpcFixture, unavailable, InvalidQueryResult } from "./rpc-fixture"
+
 import { installRuntimeFixture } from "./runtime-fixture"
 
 // Playwright's Node loader cannot resolve Vite's `virtual:` validator module;
@@ -17,9 +17,6 @@ const healthFixture = {
     db_fingerprint: `turso:${validatedHealthFixture.data.db_fingerprint}`,
   },
 } satisfies ApiHealthResponseContract
-const serverUnavailableFixture = {
-  error: { code: "server_unavailable", message: "kanban serve unavailable" },
-} satisfies ApiErrorResponseContract
 
 test.describe("Health operator workflow", () => {
   test.beforeEach(async ({ page }) => {
@@ -27,17 +24,9 @@ test.describe("Health operator workflow", () => {
   })
 
   test("loads typed health metrics and runtime identity", async ({ page }) => {
-    const boardRequests: string[] = []
-    page.on("request", (request) => {
-      const pathname = new URL(request.url()).pathname
-      if (pathname === "/api/v1/boards" || pathname.startsWith("/api/v1/boards/")) boardRequests.push(pathname)
-    })
-    await page.route("http://127.0.0.1:4173/health", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(healthFixture),
-      })
+    const rpc = await installRpcFixture(page)
+    ;(await installRpcFixture(page)).handle("GetHealth", async () => {
+      return healthFixture
     })
 
     await page.goto("/app/boards/default/health", { waitUntil: "networkidle" })
@@ -48,19 +37,19 @@ test.describe("Health operator workflow", () => {
     await expect(page.getByTestId("health-metric-db-fingerprint")).toContainText(healthFixture.data.db_fingerprint)
     await expect(page.getByTestId("health-runtime")).toContainText("local")
     await expect(page.getByTestId("nav-settings")).toHaveAttribute("aria-current", "page")
-    expect(boardRequests).toEqual([])
+    expect(rpc.calls.filter(call => ["ListBoards", "ListBoardColumns", "ListTasks"].includes(call.method))).toEqual([])
   })
 
   test("keeps an actionable local error when health request fails", async ({ page }) => {
     let requestCount = 0
-    let releaseRetry: (() => void) | null = null
+    let releaseRetry!: () => void
     const retryResponse = new Promise<void>((resolve) => {
       releaseRetry = resolve
     })
-    await page.route("http://127.0.0.1:4173/health", async (route) => {
+    ;(await installRpcFixture(page)).handle("GetHealth", async () => {
       requestCount += 1
       if (requestCount > 1) await retryResponse
-      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify(serverUnavailableFixture) })
+      throw unavailable("kanban serve unavailable")
     })
 
     await page.goto("/app/boards/default/health", { waitUntil: "networkidle" })
@@ -71,13 +60,13 @@ test.describe("Health operator workflow", () => {
     await page.getByTestId("health-error-retry").click()
     await expect(page.getByTestId("health-error-retry")).toBeDisabled()
     await expect(page.getByTestId("health-error-retry")).toHaveText("加载中…")
-    releaseRetry?.()
+    releaseRetry()
     await expect(page.getByTestId("health-error-retry")).toBeEnabled()
   })
 
   test("uses a safe fallback for a malformed health response", async ({ page }) => {
-    await page.route("http://127.0.0.1:4173/health", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(malformedHealthFixture) })
+    ;(await installRpcFixture(page)).handle("GetHealth", async () => {
+      return new InvalidQueryResult()
     })
 
     await page.goto("/app/boards/default/health", { waitUntil: "networkidle" })
@@ -89,12 +78,12 @@ test.describe("Health operator workflow", () => {
 
   test("keeps the last report visible when refresh becomes stale", async ({ page }) => {
     let requestCount = 0
-    await page.route("http://127.0.0.1:4173/health", async (route) => {
+    ;(await installRpcFixture(page)).handle("GetHealth", async () => {
       requestCount += 1
       if (requestCount === 1) {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(healthFixture) })
+        return healthFixture
       } else {
-        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify(serverUnavailableFixture) })
+        throw unavailable("kanban serve unavailable")
       }
     })
 
@@ -109,17 +98,9 @@ test.describe("Health operator workflow", () => {
   })
 
   test("loads settings health diagnostics without a board query", async ({ page }) => {
-    const boardRequests: string[] = []
-    page.on("request", (request) => {
-      const pathname = new URL(request.url()).pathname
-      if (pathname === "/api/v1/boards" || pathname.startsWith("/api/v1/boards/")) boardRequests.push(pathname)
-    })
-    await page.route("http://127.0.0.1:4173/health", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(healthFixture),
-      })
+    const rpc = await installRpcFixture(page)
+    ;(await installRpcFixture(page)).handle("GetHealth", async () => {
+      return healthFixture
     })
 
     await page.goto("/app/settings", { waitUntil: "networkidle" })
@@ -127,12 +108,12 @@ test.describe("Health operator workflow", () => {
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
     await expect(page.getByTestId("settings-health")).toContainText(healthFixture.data.db_fingerprint)
-    expect(boardRequests).toEqual([])
+    expect(rpc.calls.filter(call => ["ListBoards", "ListBoardColumns", "ListTasks"].includes(call.method))).toEqual([])
   })
 
   test("offers a safe retry and next step when settings health is unavailable", async ({ page }) => {
-    await page.route("http://127.0.0.1:4173/health", async (route) => {
-      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify(serverUnavailableFixture) })
+    ;(await installRpcFixture(page)).handle("GetHealth", async () => {
+      throw unavailable("kanban serve unavailable")
     })
 
     await page.goto("/app/settings", { waitUntil: "networkidle" })

@@ -33,7 +33,7 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
   const { locale } = usePreferences()
   const t = createTranslator(locale)
   const result = useAsyncRead(true, runtime.apiBaseUrl + '|' + runtime.webBuildId,
-    signal => read ? read(signal) : readHealth({ runtime, signal }));
+    signal => read ? read(signal) : readHealth({ runtime, signal }), 0, true, true);
   const report = result.data ?? initialReport;
   const state: HealthState = report ? { kind: 'ready', report, staleError: result.error }
     : result.error ? { kind: 'error', error: result.error } : { kind: 'loading' };

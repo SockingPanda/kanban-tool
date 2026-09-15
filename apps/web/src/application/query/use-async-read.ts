@@ -8,6 +8,7 @@ export function useAsyncRead<T>(
   load: (signal: AbortSignal) => Promise<T>,
   refreshRevision = 0,
   online = true,
+  keepErrorWhileLoading = false,
 ): AsyncReadState<T> & { readonly retry: () => void; readonly reload: () => Promise<T> } {
   const loadRef = useRef(load)
   useLayoutEffect(() => { loadRef.current = load });
@@ -60,7 +61,7 @@ export function useAsyncRead<T>(
     let active = true
     setState((current) => ({
       data: current.identityKey === identityKey ? current.data : null,
-      error: null,
+      error: keepErrorWhileLoading && current.identityKey === identityKey ? current.error : null,
       loading: true,
       identityKey,
       requestKey,
@@ -88,9 +89,9 @@ export function useAsyncRead<T>(
     return () => {
       active = false
       controller.abort()
-      // SSE 或显式刷新替换同项目请求时，等待者继续等待新请求；切换项目与卸载另行终结。
+      // 显式刷新替换同项目请求时，等待者继续等待新请求；切换项目与卸载另行终结。
     }
-  }, [enabled, generation, identityKey, key, online, requestKey])
+  }, [enabled, generation, identityKey, key, keepErrorWhileLoading, online, requestKey])
 
   useEffect(() => () => {
     const pending = reloadWaitersRef.current.splice(0)
@@ -104,7 +105,7 @@ export function useAsyncRead<T>(
   const retry = useCallback(() => setGeneration(current => current + 1), [])
 
   return {
-    ...visibleAsyncReadState(state, { identityKey, requestKey }, enabled),
+    ...visibleAsyncReadState(state, { identityKey, requestKey }, enabled, keepErrorWhileLoading),
     retry,
     reload,
   }

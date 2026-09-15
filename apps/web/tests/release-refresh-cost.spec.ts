@@ -98,7 +98,11 @@ test('实际刷新成本：跨板、同查询多消费者、非卡片突发、�
   const burstStart = Date.now()
   const written = await Promise.all(Array.from({ length: 20 }, (_, index) => rpc.business.createComment({ taskId: a.taskId, body: `burst-${index}`, author: '突发作者' })))
   // 并发请求的提交次序由服务决定；按返回的真实时间和 ID 找到最新的已提交评论。
-  const newest = written.map(result => result.data!).sort((left, right) =>
+  const newest = written.map(result => {
+    const comment = result.data
+    if (!comment?.id || comment.createdAt === undefined || comment.body === undefined) throw new Error('评论写入响应缺少排序字段。')
+    return { id: comment.id, createdAt: comment.createdAt, body: comment.body }
+  }).sort((left, right) =>
     left.createdAt === right.createdAt ? right.id.localeCompare(left.id) : left.createdAt > right.createdAt ? -1 : 1)[0]!
   await Promise.all([page, duplicate].map(async view => {
     await expect(view.getByTestId('task-discussion').locator('article').first()).toContainText(newest.body)
@@ -116,7 +120,7 @@ test('实际刷新成本：跨板、同查询多消费者、非卡片突发、�
   await settle()
   const failureOffsets = trackers.map(observer => observer.calls.length)
   await expect(rpc.business.updateTask({ taskId: a.taskId, title: '失败不得出现', expectedLockVersion: stale })).rejects.toThrow()
-  // 失败提示允许冗余读取，必须仍显示已提交的事实。
+  // 失败事务没有新的提交，订阅保留已提交事实且不触发 unary 跟读。
   await page.waitForTimeout(300)
   await settle()
   await expect(page.getByRole('textbox', { name: '任务标题', exact: true })).toHaveValue('保持提交事实')
@@ -147,12 +151,15 @@ test('实际刷新成本：跨板、同查询多消费者、非卡片突发、�
     churn.push({ cycle, memory: await rss() })
   }
   const evidence = {
-    scenario: '两个相同 board/query 页面，加一个无关 board 页面；全局提示迁移期',
+    scenario: '两个相同 board/query 页面，加一个无关 board 页面；QueryService 完整查询订阅',
     boards: [a, b], samples,
     latencyMs: { p50: percentile(samples.map(sample => sample.latencyMs), 0.5), p95: percentile(samples.map(sample => sample.latencyMs), 0.95), max: Math.max(...samples.map(sample => sample.latencyMs)) },
     burstWrites: 20, burstVisibleMs, burst, failedWrite, readOnly,
     memory: { before, subscribed, afterBurst, unmounted, churn },
   }
+  for (const sample of samples) expect(sample.reads).toEqual([{}, {}, {}])
+  expect(burst).toEqual([{}, {}, {}])
+  expect(failedWrite).toEqual([{}, {}, {}])
   const path = info.outputPath('refresh-cost.json')
   await writeFile(path, JSON.stringify(evidence, null, 2) + '\n')
   await info.attach('refresh-cost', { path, contentType: 'application/json' })

@@ -93,7 +93,10 @@ export function observeRead<T>(
     if (signal.aborted) { running = false; return }
     let current = true
     for (const [key, use] of dependencies) {
-      if (use.used !== iteration) { use.release(); dependencies.delete(key) }
+      if (use.used !== iteration) {
+        // 失败回合可能尚未读取到后续依赖；保留其已提交快照和恢复 cursor。
+        if (succeeded) { use.release(); dependencies.delete(key) }
+      }
       else if (use.version !== use.dependency.version()) current = false
     }
     running = false

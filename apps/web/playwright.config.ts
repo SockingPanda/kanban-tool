@@ -12,7 +12,7 @@ export default defineConfig({
   testDir: "./tests",
   outputDir: "../../output/playwright",
   fullyParallel: !releaseProof,
-  workers: releaseProof ? 1 : undefined,
+  workers: releaseProof ? 1 : 4,
   forbidOnly: Boolean(process.env.CI),
   retries: releaseProof ? 0 : (process.env.CI ? 2 : 0),
   reporter: process.env.CI ? "github" : "list",

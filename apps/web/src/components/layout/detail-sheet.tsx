@@ -82,7 +82,6 @@ export function DetailSheet({ open, title, description, onClose, children, foote
         </small>}
       </div>
       <div className="detail-sheet-actions">
-        <span className="detail-overlay-label">浮层</span>
         {actions}
         <IconButton icon="panel" label={wide ? "收窄详情" : "展开详情宽度"} onClick={() => setWide(v => !v)} />
         <IconButton icon="close" label={closeLabel} disabled={dismissDisabled} onClick={onClose} />

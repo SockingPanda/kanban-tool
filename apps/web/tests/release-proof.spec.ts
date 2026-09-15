@@ -332,8 +332,8 @@ test("#health.view #maintenance.view #settings.view real operator and feature re
 
   await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("settings-page")).toBeVisible()
-  await page.getByText("连接与诊断", { exact: true }).click()
-  await expect(page.getByTestId("settings-connection")).toBeVisible()
+  await page.getByRole("tab", { name: "连接与诊断" }).click()
+  await expect(page.getByRole("tabpanel", { name: "连接与诊断" })).toBeVisible()
   markFlows(["health.view", "maintenance.view", "settings.view"])
 })
 

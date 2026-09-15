@@ -80,7 +80,7 @@ function useSelect({ children, options: explicit, value, defaultValue = '', onVa
   }, []);
   const show = (initial = '') => {
     if (disabled)
-      return; setHost(trigger.current?.closest('dialog[open]') as HTMLElement ?? document.body); setQuery(initial); onSearchChange?.(initial); const index = options.findIndex(o => o.value === selected && !o.disabled); setActive(Math.max(0, index)); updatePosition(); setOpen(true);
+      return; setHost(trigger.current?.closest('dialog[open]') as HTMLElement ?? document.body); setQuery(initial); onSearchChange?.(initial); const index = options.findIndex(o => o.value === selected && !o.disabled); setActive(initial ? 0 : Math.max(0, index)); updatePosition(); setOpen(true);
   };
   useLayoutEffect(() => {
     if (!open || !host)
@@ -126,6 +126,7 @@ function useSelect({ children, options: explicit, value, defaultValue = '', onVa
       popup.current?.querySelector(`[data-option-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [active, open]);
   const handleKey = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
@@ -142,7 +143,7 @@ function useSelect({ children, options: explicit, value, defaultValue = '', onVa
     }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
       e.preventDefault();
-      const dir = e.key === 'ArrowUp' ? -1 : 1;
+      const dir = e.key === 'ArrowUp' || e.key === 'End' ? -1 : 1;
       let index = e.key === 'Home' ? 0 : e.key === 'End' ? filtered.length - 1 : (active + dir + filtered.length) % filtered.length;
       for (let attempts = 0;attempts < filtered.length && filtered[index]?.disabled;attempts++)
         index = (index + dir + filtered.length) % filtered.length;
@@ -204,10 +205,10 @@ function ChoicePopup({state,onSearchChange}:{state:ReturnType<typeof useSelect>;
         </div>)}
         {!filtered.length && <div className="choice-empty" role="status">没有匹配的选项</div>}
       </div>
-      <div className="choice-footer">
+      {canSearch && <div className="choice-footer">
         <span>{filtered.length} 个选项</span>
         <span>↑ ↓ 选择 <kbd>↵</kbd> 确认</span>
-      </div>
+      </div>}
     </div>);
 }
 export const Combobox = (props: SelectProps) => <Select {...props} searchable />;

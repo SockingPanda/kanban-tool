@@ -18,7 +18,7 @@ describe('TaskTable',()=>{
   });
   test('空查询展示明确的空状态',()=>{
     const markup=renderToStaticMarkup(<TaskTable rows={[]} onSelectTask={vi.fn()} />);
-    expect(markup).toContain('这里还没有任务');
+    expect(markup).toContain('没有匹配的任务');
     expect(markup).not.toContain('data-task-id');
   });
 });

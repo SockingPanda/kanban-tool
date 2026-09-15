@@ -23,7 +23,7 @@ export function ProductShell(props: ProductShellProps) {
   const page = route.kind === 'board' ? route.view ?? 'board' : route.kind;
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
-      if (!board || event.defaultPrevented || document.querySelector('dialog:modal')) return;
+      if (!board || event.defaultPrevented || document.querySelector('dialog:modal, [data-choice-popup]')) return;
       const editing = event.target instanceof HTMLElement && (event.target.matches('input, textarea, select') || event.target.isContentEditable);
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();

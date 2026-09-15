@@ -126,13 +126,23 @@ test.describe("Health operator workflow", () => {
     await page.getByText("连接与诊断", { exact: true }).click()
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
-    await expect(page.getByTestId("settings-health")).toContainText(healthFixture.data.db_fingerprint)
+    await page.getByText("技术详情", { exact: true }).click()
+    await expect(page.getByText(healthFixture.data.db_fingerprint, { exact: true })).toBeVisible()
     expect(boardRequests).toEqual([])
   })
 
-  test("offers a safe retry and next step when settings health is unavailable", async ({ page }) => {
+  test("无项目设置页可独立重试健康检查，等待时防重复并恢复状态", async ({ page }) => {
+    let requestCount = 0
+    let releaseRetry: (() => void) | undefined
+    const retryResponse = new Promise<void>(resolve => { releaseRetry = resolve })
     await page.route("http://127.0.0.1:4173/health", async (route) => {
-      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify(serverUnavailableFixture) })
+      requestCount += 1
+      if (requestCount === 1) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify(serverUnavailableFixture) })
+      } else {
+        await retryResponse
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(healthFixture) })
+      }
     })
 
     await page.goto("/app/settings", { waitUntil: "networkidle" })
@@ -140,6 +150,23 @@ test.describe("Health operator workflow", () => {
 
     await expect(page.getByTestId("settings-health-error")).toBeVisible()
     await expect(page.getByTestId("settings-health-error")).toContainText("kanban serve")
+    await expect(page.getByTestId("settings-health-error")).toContainText("然后重试")
+    await expect(page.getByTestId("connection-reconnect")).toBeDisabled()
+    await expect(page.getByTestId("diagnostics-health-link")).toBeDisabled()
     await expect(page.getByTestId("settings-health-retry")).toBeEnabled()
+    try {
+      await page.getByTestId("settings-health-retry").click()
+      await expect(page.getByTestId("settings-health-retry")).toBeDisabled()
+      await expect(page.getByTestId("settings-health-status")).toHaveText("正在检查")
+      await expect.poll(() => requestCount).toBe(2)
+    } finally {
+      releaseRetry?.()
+    }
+    await expect(page.getByTestId("settings-health-error")).toHaveCount(0)
+    await expect(page.getByTestId("settings-health-status")).toHaveText("服务可用")
+    expect(requestCount).toBe(2)
+    await page.reload()
+    await page.getByRole("tab", { name: "连接与诊断" }).click()
+    await expect(page.getByTestId("settings-health-status")).toHaveText("服务可用")
   })
 })

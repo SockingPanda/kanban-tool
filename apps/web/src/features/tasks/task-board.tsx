@@ -1,3 +1,4 @@
+import { STATUS_LABELS } from '../../domain/tasks/presentation';
 import type { BoardViewModel, BoardTaskViewModel, BoardTaskStatus } from '../../domain/tasks/board';
 import { boardMessagesForLocale } from '../../domain/tasks/board';
 import type { BoardTaskMutationSurface } from '../../application/tasks/task-mutation-state';
@@ -22,7 +23,7 @@ function TaskCard({ task, controller, openTask }: { task: BoardTaskViewModel; co
     onDragStart={event => controller?.onDragStart(task.id, event)} onDragEnd={() => controller?.onDragEnd(task.id)} onKeyDown={event => { if (event.key === "Enter" && !controller?.grabbedTaskId) return; controller?.onTaskKeyDown(task, event); }} onClick={event => { if (!event.defaultPrevented && !controller?.grabbedTaskId) openTask(task.id); }}>
     <div className="task-card-top"><span className="task-id">{task.ref}</span><PriorityBadge priority={task.priority} compact /></div><h3>{task.title}</h3>
     {task.status === 'blocked' && <span className="blocked-hint"><Icon name="warning" size={12} />需要处理阻塞</span>}
-    <div className="task-card-footer"><span><span className="module-dot color-slate" />未分组</span><span>{task.readiness.requiredStepCount > 0 && <><Icon name="task" size={12} />{task.readiness.completedRequiredStepCount}/{task.readiness.requiredStepCount}</>}<span className="point-pill" title="估点尚未接入">—</span></span></div>
+    <div className="task-card-footer"><span><StatusIcon status={task.status} />{STATUS_LABELS[task.status]}</span><span>{task.readiness.requiredStepCount > 0 && <><Icon name="task" size={12} />{task.readiness.completedRequiredStepCount}/{task.readiness.requiredStepCount}</>}</span></div>
   </button>;
 }
 export function TaskBoard({ model, mutations, onSelectTask, visibleIds }: { visibleIds: readonly string[]; model: BoardViewModel; mutations?: BoardTaskMutationSurface; onSelectTask: (id: string) => void }) {

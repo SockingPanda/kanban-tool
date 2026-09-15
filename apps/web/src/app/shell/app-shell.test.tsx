@@ -117,7 +117,7 @@ describe("ProductShell route offline boundary", () => {
         <ProductShell runtime={runtime} canonicalBoardSlug={assertCanonicalBoardSlug("default")} route={parseAppRoute("http://kanban.test/app/boards/default/board")} />
       </PreferencesContext.Provider>,
     )
-    const positions = ["nav-map-pending", "nav-board", "nav-cycles", "nav-modules", "nav-provenance", "nav-events", "nav-runs", "nav-settings"].map((testId) => markup.indexOf(`data-testid="${testId}"`))
+    const positions = ["nav-board", "nav-events", "nav-runs", "nav-settings"].map((testId) => markup.indexOf(`data-testid="${testId}"`))
     expect(positions.every((position) => position >= 0)).toBe(true)
     expect(positions).toEqual([...positions].sort((left, right) => left - right))
   })

@@ -86,7 +86,7 @@ fn bounded(value: &mut Option<String>, name: &str, maximum: usize) -> Result<(),
 }
 macro_rules! validate_query {
     ($name:ident, $ty:ty) => {
-        pub(super) fn $name(query: &mut $ty) -> Result<(), ApiError> {
+        pub(crate) fn $name(query: &mut $ty) -> Result<(), ApiError> {
             repeated(&mut query.status, "status", MAX_TASK_READ_STATUSES)?;
             repeated(&mut query.priority, "priority", MAX_TASK_READ_PRIORITIES)?;
             repeated(&mut query.label, "label", MAX_TASK_READ_LABELS)?;

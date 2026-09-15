@@ -3,13 +3,14 @@
 mod codec;
 pub mod dto;
 mod generated;
+pub mod query;
 
 /// Protobuf 生成的消息与 tonic client/server 类型。
 pub mod v1 {
     tonic::include_proto!("kanban.v1");
 }
 
-/// 正式 RPC descriptor；包含所有具名业务操作和 WorkspaceService。
+/// 正式 RPC descriptor；包含具名业务操作、完整查询流与过渡刷新流。
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("kanban_v1");
 
 /// 256 MiB 附件及 1 MiB envelope 预算；service 仍执行附件内容的 256 MiB 上限。

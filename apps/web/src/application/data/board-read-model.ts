@@ -143,6 +143,8 @@ export interface BoardReadModelOptions {
 }
 
 export interface BoardReadQuery {
+  observe?(signal: AbortSignal, next: (model: BoardReadModel) => void, failed: (error: unknown) => void): void
+  subscribeConnection?(listener: (state: 'connecting' | 'live' | 'offline') => void): () => void
   /** Load the cached snapshot or the current generation once. */
   load(signal?: AbortSignal): Promise<BoardReadModel>
   /** Abort the current generation, invalidate it, and load a fresh snapshot. */

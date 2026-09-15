@@ -1,3 +1,4 @@
+import { observeRead } from '../../application/query/observe-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 import { AlertDialog } from "../../components/ui/alert-dialog"
 import { Button } from "../../components/ui/button"
@@ -63,9 +64,7 @@ type ConfirmAction =
 
 const emptyState = <T,>(): LoadState<T> => ({ kind: "loading" })
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError"
-}
+
 
 function errorCode(error: unknown): string {
   if (error instanceof MaintenanceApiError) return error.code ?? error.kind
@@ -160,54 +159,46 @@ function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial
   const isCurrent = useCallback((generation: number) => mountedRef.current && generationRef.current === generation, [])
 
   const loadStatus = useCallback((options: QueryLoadOptions): Promise<boolean> => {
-    const current = statusRequestRef.current
-    if (!options.fresh && current?.generation === options.generation) return current.promise
-    current?.controller.abort()
-    const controller = new AbortController()
-    const promise = (async () => {
-      if (!options.silent && isCurrent(options.generation)) setStatus((state) => state.kind === "ready" ? state : { kind: "loading" })
-      try {
-        const value = await api.status(controller.signal)
-        if (isCurrent(options.generation)) {
-          setStatus({ kind: "ready", value })
-          setSyncNotice((notice) => notice === "stale" ? null : notice)
-          return true
+    const current = statusRequestRef.current;
+    if (!options.fresh && current?.generation === options.generation) return current.promise;
+    current?.controller.abort();
+    const controller = new AbortController();
+    const promise = new Promise<boolean>(resolve => {
+      observeRead(signal => api.status(signal), controller.signal, value => {
+        if (isCurrent(options.generation)) { setStatus({ kind: 'ready', value }); setSyncNotice(null); resolve(true); }
+        else resolve(false);
+      }, error => {
+        if (isCurrent(options.generation) && !controller.signal.aborted) {
+          setStatus(state => state.kind === 'ready' ? state : { kind: 'error', error });
+          setSyncNotice('stale');
         }
-        return false
-      } catch (error) {
-        if (controller.signal.aborted || isAbortError(error) || !isCurrent(options.generation)) return false
-        setStatus((state) => options.silent && state.kind === "ready" ? state : { kind: "error", error })
-        if (options.silent) setSyncNotice((notice) => notice === "mutation" ? notice : "stale")
-        return false
-      } finally {
-        if (statusRequestRef.current?.controller === controller) statusRequestRef.current = null
-      }
-    })()
-    statusRequestRef.current = { generation: options.generation, controller, promise }
-    return promise
-  }, [api, isCurrent])
+        resolve(false);
+      }, options.fresh === true);
+      controller.signal.addEventListener('abort', () => resolve(false), { once: true });
+    });
+    statusRequestRef.current = { generation: options.generation, controller, promise };
+    return promise;
+  }, [api, isCurrent]);
 
   const loadBoardDiagnostics = useCallback((options: QueryLoadOptions): Promise<boolean> => {
-    const current = diagnosticsRequestRef.current
-    if (!options.fresh && current?.generation === options.generation) return current.promise
-    current?.controller.abort()
-    const controller = new AbortController()
-    const promise = (async () => {
-      try {
-        const [statsResult, searchResult] = await Promise.allSettled([api.stats(boardSlug, controller.signal), api.searchStatus(boardSlug, controller.signal)])
-        if (!isCurrent(options.generation) || controller.signal.aborted) return false
-        if (statsResult.status === "fulfilled") setStats({ kind: "ready", value: statsResult.value })
-        else if (!isAbortError(statsResult.reason)) setStats({ kind: "error", error: statsResult.reason })
-        if (searchResult.status === "fulfilled") setSearchStatus({ kind: "ready", value: searchResult.value })
-        else if (!isAbortError(searchResult.reason)) setSearchStatus({ kind: "error", error: searchResult.reason })
-        return statsResult.status === "fulfilled" && searchResult.status === "fulfilled"
-      } finally {
-        if (diagnosticsRequestRef.current?.controller === controller) diagnosticsRequestRef.current = null
-      }
-    })()
-    diagnosticsRequestRef.current = { generation: options.generation, controller, promise }
-    return promise
-  }, [api, boardSlug, isCurrent])
+    const current = diagnosticsRequestRef.current;
+    if (!options.fresh && current?.generation === options.generation) return current.promise;
+    current?.controller.abort();
+    const controller = new AbortController();
+    const promise = new Promise<boolean>(resolve => {
+      observeRead(signal => Promise.allSettled([api.stats(boardSlug, signal), api.searchStatus(boardSlug, signal)]), controller.signal, ([statsResult, searchResult]) => {
+        if (!isCurrent(options.generation) || controller.signal.aborted) { resolve(false); return; }
+        if (statsResult.status === 'fulfilled') setStats({ kind: 'ready', value: statsResult.value });
+        else setStats({ kind: 'error', error: statsResult.reason });
+        if (searchResult.status === 'fulfilled') setSearchStatus({ kind: 'ready', value: searchResult.value });
+        else setSearchStatus({ kind: 'error', error: searchResult.reason });
+        resolve(statsResult.status === 'fulfilled' && searchResult.status === 'fulfilled');
+      }, () => resolve(false), options.fresh === true);
+      controller.signal.addEventListener('abort', () => resolve(false), { once: true });
+    });
+    diagnosticsRequestRef.current = { generation: options.generation, controller, promise };
+    return promise;
+  }, [api, boardSlug, isCurrent]);
 
   useEffect(() => {
     mountedRef.current = true
@@ -234,8 +225,8 @@ function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial
     setPendingAction(null)
     pendingActionRef.current = null
     setSyncNotice(null)
-    void loadStatus({ generation, fresh: true })
-    void loadBoardDiagnostics({ generation, fresh: true })
+    void loadStatus({ generation })
+    void loadBoardDiagnostics({ generation })
     return () => {
       if (generationRef.current === generation) {
         pendingActionRef.current = null
@@ -244,20 +235,6 @@ function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial
     }
   }, [abortRequests, api, boardSlug, initial, loadBoardDiagnostics, loadStatus])
 
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState !== "hidden") void loadStatus({ generation: generationRef.current, silent: true })
-    }
-    const onVisibility = () => refresh()
-    window.addEventListener("focus", refresh)
-    document.addEventListener("visibilitychange", onVisibility)
-    const interval = window.setInterval(refresh, 5_000)
-    return () => {
-      window.removeEventListener("focus", refresh)
-      document.removeEventListener("visibilitychange", onVisibility)
-      window.clearInterval(interval)
-    }
-  }, [loadStatus])
 
   const refreshAll = useCallback(async () => {
     const generation = generationRef.current

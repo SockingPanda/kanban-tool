@@ -33,6 +33,26 @@ label proposal 有 task-scoped 与 board-wide 两种独立的 typed contract；b
 `ListBoardLabelProposalsQuery` 的可选 `status` query，响应为 `ListBoardLabelProposalsResponse`。两者都经
 `kanban-service`，不能在 adapter 中拼接第二套查询或直接读取 Turso row。
 
+## 完整查询流
+
+`proto/kanban/v1/query.proto` 的 `QueryDefinition` 与 `QueryResult` 用对应的具名 oneof 复用完整
+业务请求和响应。查询身份包含 Host runtime、canonical board、规范化过滤/排序/分页与投影版本；
+订阅 ID、恢复 cursor 和显式 `refresh` 不进入身份。一个 `WatchQueries` 连接复用多个活跃查询。
+
+`QueryBegin`、`QueryChunk`、`QueryEnd` 传送完整 snapshot 或基于旧编码的精确 splice delta。
+delta 描述偏移、删除字节数和插入字节；最终仍还原成完整 typed `QueryResult`，包含 total、窗口
+成员顺序和所有业务字段。客户端检查基线、分块顺序、编码大小、SHA-256、结果类型及作用域后，
+一次发布投影与 cursor。中断快照不推进 cursor；历史淘汰或无法匹配基线时恢复完整快照。
+Rust 的版本、单帧、单投影和查询数量预算由 `rpc::query` 持有。
+
+显式重试或写后确认可设置 `refresh`。Host 在收到该请求后重新执行受 service read fence 保护的
+权威查询，先传送有变化的完整投影，再发送 `QueryReady`；结果相同时只确认，不推进 revision。
+Ready 证明这次读取完成，不代替命令结果、审计事件或事务提交证明。
+
+统计与图查询的 `generated_at` 保留最近一次发布样本的真实生成时间。仅采样时钟前进、业务内容
+未变化时不发布新投影；发生业务变化后，发布那次读取的完整结果及时间字段。需要随时间变化的
+统计、运行日志只在有活跃订阅时重新检查，不对所有查询增加轮询。
+
 ## 变更流程
 
 新增或修改 contract 时，在 protocol 中更新 DTO/root/catalog，维护 valid/invalid fixture，并贯通真实

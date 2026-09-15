@@ -1,5 +1,6 @@
 //! 同一个真实 Host 的原生 HTTP/2、gRPC-Web、写入提示和退出验证。
 mod business;
+mod queries;
 mod refresh;
 use std::{net::SocketAddr, time::Duration};
 

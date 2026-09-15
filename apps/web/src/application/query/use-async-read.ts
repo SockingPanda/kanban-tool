@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ExplorerReadError } from '../data/explorer-read-model';
 import { asyncReadToken, visibleAsyncReadState, type AsyncReadInternalState, type AsyncReadState } from './read-state';
+import { observeRead } from './observe-read';
 export function useAsyncRead<T>(
   enabled: boolean,
   key: string,
@@ -64,7 +65,7 @@ export function useAsyncRead<T>(
       identityKey,
       requestKey,
     }))
-    void loadRef.current(controller.signal).then(
+    observeRead((signal) => loadRef.current(signal), controller.signal,
       (data) => {
         if (active) {
           settledRef.current = { data, identityKey, requestKey, generation }
@@ -82,6 +83,7 @@ export function useAsyncRead<T>(
           }))
         }
       },
+      generation > 0,
     )
     return () => {
       active = false
@@ -99,10 +101,11 @@ export function useAsyncRead<T>(
     reloadWaitersRef.current.push({ identityKey, minimumGeneration: generation + 1, resolve, reject })
     setGeneration((current) => current + 1)
   }), [generation, identityKey])
+  const retry = useCallback(() => setGeneration(current => current + 1), [])
 
   return {
     ...visibleAsyncReadState(state, { identityKey, requestKey }, enabled),
-    retry: () => setGeneration((current) => current + 1),
+    retry,
     reload,
   }
 }

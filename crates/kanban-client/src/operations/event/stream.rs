@@ -1,12 +1,21 @@
 use std::collections::VecDeque;
 
 use kanban_protocol::{
-    ListEventsQuery, MAX_SAFE_EVENT_CURSOR, SseHeartbeatData, StreamEventData, StreamEventsQuery,
-    rpc::v1::{self, workspace_change_frame::Body},
+    ListEventsQuery, SseHeartbeatData, StreamEventData, StreamEventsQuery,
+    rpc::{
+        query,
+        v1::{self, query_frame::Body},
+    },
 };
 use tonic::Streaming;
 
 use crate::{ClientError, KanbanClient, transport::UNARY_TIMEOUT};
+
+mod projection;
+mod validation;
+use projection::Projection;
+
+const QUERY_ID: &str = "events";
 
 /// 领域事件与不推进业务 cursor 的连接保活项目。
 #[derive(Debug)]
@@ -16,120 +25,106 @@ pub enum EventStreamItem {
     Heartbeat(SseHeartbeatData),
 }
 
-/// 持有原生 RPC 订阅和一页事件的异步流；丢弃时释放订阅，没有后台读取任务。
-///
-/// `WatchChanges` 提供写入提示，`ListEvents` 提供持久 cursor 与领域事件。
-/// 先完成订阅再读取事件页，覆盖初始化期间的并发写入。
+/// 在 QueryService 中跟随一页完整事件投影；消费满页后移动查询窗口。
+/// 丢弃订阅即取消 RPC；没有后台读取任务，也没有写提示后的 unary 回读。
 pub struct EventStream {
     client: KanbanClient,
-    stream: Streaming<v1::WorkspaceChangeFrame>,
+    stream: Option<Streaming<v1::QueryFrame>>,
     query: ListEventsQuery,
+    projection: Projection,
     pending: VecDeque<StreamEventData>,
-    read_more: bool,
-    epoch: String,
-    sequence: u64,
+    delivered_after: i64,
+    window_end: Option<i64>,
     closed: bool,
 }
 
 impl EventStream {
-    /// 读取下一项。取消当前读取不会丢失已缓冲的事件；连接结束返回 `StreamClosed`。
+    /// 取消等待保留完整已提交投影和未交付事件；中途快照不会推进 durable cursor。
     pub async fn next_item(&mut self) -> Result<EventStreamItem, ClientError> {
         loop {
             if let Some(event) = self.pending.pop_front() {
+                self.delivered_after = event.id;
                 return Ok(EventStreamItem::Business(event));
             }
             if self.closed {
                 return Err(ClientError::StreamClosed);
             }
-            if self.read_more {
-                self.read_page().await?;
-                continue;
+            if let Some(after) = self.window_end.take() {
+                self.query.after = after;
+                // 先释放原窗口占用的订阅槽；取消建流时下一次仍会从这个窗口继续。
+                self.stream = None;
+                self.projection = Projection::default();
             }
-            let frame = match self.stream.message().await {
-                Ok(Some(frame)) => frame,
-                Ok(None) => {
-                    self.closed = true;
-                    return Err(ClientError::StreamClosed);
-                }
-                Err(error) => {
-                    self.closed = true;
-                    return Err(ClientError::status(error));
-                }
-            };
-            match self.accept_frame(frame)? {
-                Body::Invalidated(_) => self.read_more = true,
-                Body::Heartbeat(_) => {
-                    return Ok(EventStreamItem::Heartbeat(SseHeartbeatData::default()));
-                }
+            if self.stream.is_none() {
+                self.stream = Some(open_window(&self.client, &self.query, true).await?);
+            }
+            if let Some(heartbeat) = self.read_frame().await? {
+                return Ok(heartbeat);
             }
         }
     }
 
-    async fn read_page(&mut self) -> Result<(), ClientError> {
-        let response = self.client.list_events(&self.query).await?;
-        let mut previous = self.query.after;
-        for event in &response.data {
-            if event.id <= previous
-                || event.id > MAX_SAFE_EVENT_CURSOR
-                || event.board_id != self.query.board
-                || self
-                    .query
-                    .task_id
-                    .as_ref()
-                    .is_some_and(|task| event.task_id.as_ref() != Some(task))
-            {
-                return Err(ClientError::InvalidResponse(
-                    "事件页的 cursor 或作用域无效".to_owned(),
-                ));
+    async fn read_frame(&mut self) -> Result<Option<EventStreamItem>, ClientError> {
+        let stream = self.stream.as_mut().ok_or(ClientError::StreamClosed)?;
+        let frame = match stream.message().await {
+            Ok(Some(frame)) => frame,
+            Ok(None) => {
+                self.closed = true;
+                self.stream = None;
+                return Err(ClientError::StreamClosed);
             }
-            previous = event.id;
+            Err(error) => {
+                self.closed = true;
+                self.stream = None;
+                return Err(ClientError::status(error));
+            }
+        };
+        if let Err(error) = validation::validate_frame_scope(&frame, QUERY_ID) {
+            self.closed = true;
+            self.stream = None;
+            return Err(error);
         }
-        if response.meta.next_after != previous || response.data.len() > self.query.limit {
-            return Err(ClientError::InvalidResponse(
-                "事件页的 next_after 或大小无效".to_owned(),
-            ));
+        let result = self.accept_frame(frame.body);
+        if result.is_err() {
+            self.closed = true;
+            self.stream = None;
         }
-        self.read_more = response.data.len() == self.query.limit;
-        self.query.after = response.meta.next_after;
-        self.pending.extend(response.data);
-        Ok(())
+        result
     }
 
-    fn accept_frame(&mut self, frame: v1::WorkspaceChangeFrame) -> Result<Body, ClientError> {
-        if frame.board_id != self.query.board || frame.epoch.is_empty() {
-            return Err(ClientError::InvalidResponse(
-                "订阅 frame 的作用域或 epoch 无效".to_owned(),
-            ));
-        }
-        let body = frame
-            .body
-            .ok_or_else(|| ClientError::InvalidResponse("订阅 frame 缺少 body".to_owned()))?;
-        let expected = match &body {
-            Body::Invalidated(value) => {
-                let reason = if self.sequence == 0 {
-                    v1::RefreshReason::Attached
-                } else {
-                    v1::RefreshReason::WriteHint
-                };
-                if value.reason != reason as i32 {
-                    return Err(ClientError::InvalidResponse(
-                        "订阅 frame 的 reason 无效".to_owned(),
+    fn accept_frame(&mut self, body: Option<Body>) -> Result<Option<EventStreamItem>, ClientError> {
+        match body.ok_or_else(|| invalid("查询 frame 缺少 body"))? {
+            Body::Begin(begin) => self.projection.begin(begin)?,
+            Body::Chunk(chunk) => self.projection.chunk(chunk)?,
+            Body::End(end) => {
+                let page = self.projection.end(end, &self.query)?;
+                let buffered_after = self
+                    .pending
+                    .back()
+                    .map_or(self.delivered_after, |event| event.id);
+                self.window_end =
+                    (page.data.len() == self.query.limit).then_some(page.meta.next_after);
+                self.pending.extend(
+                    page.data
+                        .into_iter()
+                        .filter(|event| event.id > buffered_after),
+                );
+            }
+            Body::Ready(ready) => {
+                if self.projection.cursor() != ready.cursor.as_ref() || ready.cursor.is_none() {
+                    return Err(invalid("查询 Ready 与完整投影不一致"));
+                }
+            }
+            Body::Heartbeat(_) => {
+                if self.projection.cursor().is_some() {
+                    return Ok(Some(
+                        EventStreamItem::Heartbeat(SseHeartbeatData::default()),
                     ));
                 }
-                self.sequence.checked_add(1)
             }
-            Body::Heartbeat(_) if self.sequence > 0 => Some(self.sequence),
-            Body::Heartbeat(_) => None,
-        };
-        if expected != Some(frame.sequence) || (!self.epoch.is_empty() && self.epoch != frame.epoch)
-        {
-            return Err(ClientError::InvalidResponse(
-                "订阅 frame 的 sequence 或 epoch 不连续".to_owned(),
-            ));
+            Body::Failure(failure) => return Err(query_failure(failure)),
         }
-        self.sequence = frame.sequence;
-        self.epoch = frame.epoch;
-        Ok(body)
+        Ok(None)
     }
 }
 
@@ -138,7 +133,7 @@ impl std::fmt::Debug for EventStream {
         formatter
             .debug_struct("EventStream")
             .field("board", &self.query.board)
-            .field("after", &self.query.after)
+            .field("after", &self.delivered_after)
             .field("buffered", &self.pending.len())
             .field("closed", &self.closed)
             .finish_non_exhaustive()
@@ -146,129 +141,96 @@ impl std::fmt::Debug for EventStream {
 }
 
 impl KanbanClient {
-    /// 打开事件订阅；两个 cursor 取较新者，重连仍由调用者持有最后交付的事件 ID。
+    /// 两个 durable event cursor 取较新者；重连从调用者最后交付的事件 ID 继续。
     pub async fn open_event_stream(
         &self,
         query: &StreamEventsQuery,
-        last_event_id: Option<i64>,
+        resume_after: Option<i64>,
     ) -> Result<EventStream, ClientError> {
-        validate_query(query, last_event_id)?;
+        validation::validate_query(query, resume_after)?;
         let board = self.get_board(query.board.trim()).await?.id;
-        let mut client =
-            v1::workspace_service_client::WorkspaceServiceClient::new(self.channel().await?)
-                .max_decoding_message_size(4096)
-                .max_encoding_message_size(4096);
-        // 只给建流握手设置本地预算，不将 unary deadline 附到长期订阅上。
-        let stream = tokio::time::timeout(
-            UNARY_TIMEOUT,
-            client.watch_changes(self.request(v1::WatchChangesRequest {
-                board_id: board.clone(),
-                protocol_version: 1,
-            })),
-        )
-        .await
-        .map_err(|_| ClientError::unary_timeout())?
-        .map_err(ClientError::status)?
-        .into_inner();
+        let query = ListEventsQuery {
+            board,
+            task_id: query.task_id.as_deref().map(|id| id.trim().to_owned()),
+            after: query.after.max(resume_after.unwrap_or(0)),
+            limit: query.limit.min(1000),
+        };
         let mut output = EventStream {
+            stream: Some(open_window(self, &query, false).await?),
+            delivered_after: query.after,
+            query,
             client: self.clone(),
-            stream,
-            query: ListEventsQuery {
-                board,
-                task_id: query.task_id.as_deref().map(|id| id.trim().to_owned()),
-                after: query.after.max(last_event_id.unwrap_or(0)),
-                limit: query.limit.min(1000),
-            },
+            projection: Projection::default(),
             pending: VecDeque::new(),
-            read_more: true,
-            epoch: String::new(),
-            sequence: 0,
+            window_end: None,
             closed: false,
         };
-        let attached = tokio::time::timeout(UNARY_TIMEOUT, output.stream.message())
-            .await
-            .map_err(|_| ClientError::unary_timeout())?
-            .map_err(ClientError::status)?
-            .ok_or(ClientError::StreamClosed)?;
-        output.accept_frame(attached)?;
-        output.read_page().await?;
+        tokio::time::timeout(UNARY_TIMEOUT, async {
+            while output.projection.cursor().is_none() {
+                output.read_frame().await?;
+            }
+            Ok::<_, ClientError>(())
+        })
+        .await
+        .map_err(|_| ClientError::unary_timeout())??;
         Ok(output)
     }
 }
 
-fn validate_query(
-    query: &StreamEventsQuery,
-    last_event_id: Option<i64>,
-) -> Result<(), ClientError> {
-    if query.board.trim().is_empty() {
-        return Err(ClientError::InvalidInput("board 不能为空".to_owned()));
-    }
-    if !(0..=MAX_SAFE_EVENT_CURSOR).contains(&query.after)
-        || last_event_id.is_some_and(|cursor| !(0..=MAX_SAFE_EVENT_CURSOR).contains(&cursor))
-    {
-        return Err(ClientError::InvalidInput(
-            "事件 cursor 必须是非负 JavaScript 安全整数".to_owned(),
-        ));
-    }
-    if query.limit == 0 {
-        return Err(ClientError::InvalidInput("limit 必须大于 0".to_owned()));
-    }
-    let task_id = query.task_id.as_deref().map(str::trim);
-    if task_id.is_some_and(|id| !id.starts_with("t_") || id.len() <= 2) {
-        return Err(ClientError::InvalidInput(
-            "task_id 必须是全局 t_... ID".to_owned(),
-        ));
-    }
-    Ok(())
+async fn open_window(
+    client: &KanbanClient,
+    window: &ListEventsQuery,
+    replacing: bool,
+) -> Result<Streaming<v1::QueryFrame>, ClientError> {
+    let request = v1::ListEventsRequest::from_parts((), window.clone(), ())
+        .map_err(ClientError::request_codec)?;
+    let request = v1::WatchQueriesRequest {
+        protocol_version: query::PROTOCOL_VERSION,
+        queries: vec![v1::QueryDefinition {
+            client_query_id: QUERY_ID.into(),
+            projection_version: query::PROJECTION_VERSION,
+            resume: None,
+            refresh: false,
+            query: Some(v1::query_definition::Query::ListEvents(request)),
+        }],
+    };
+    tokio::time::timeout(UNARY_TIMEOUT, async {
+        let mut rpc = v1::query_service_client::QueryServiceClient::new(client.channel().await?)
+            .max_decoding_message_size(query::MAX_QUERY_FRAME_BYTES)
+            .max_encoding_message_size(query::MAX_QUERY_FRAME_BYTES);
+        loop {
+            match rpc.watch_queries(client.request(request.clone())).await {
+                Ok(response) => return Ok(response.into_inner()),
+                // 原满页连接的 RST_STREAM 可能尚在传输；短暂等待释放相同额度。
+                Err(status) if replacing && status.code() == tonic::Code::ResourceExhausted => {
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+                Err(status) => return Err(ClientError::status(status)),
+            }
+        }
+    })
+    .await
+    .map_err(|_| ClientError::unary_timeout())?
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn query_failure(failure: v1::QueryFailure) -> ClientError {
+    let Some(detail) = failure.error else {
+        return invalid("查询错误缺少业务 detail");
+    };
+    let Ok(code) = v1::DtoApiErrorCode::try_from(detail.code) else {
+        return invalid("查询错误 code 无效");
+    };
+    let Ok(code) = code.try_into() else {
+        return invalid("查询错误 code 未指定");
+    };
+    ClientError::status(kanban_protocol::rpc::encode_status(
+        kanban_protocol::ErrorBody {
+            code,
+            message: detail.message,
+        },
+    ))
+}
 
-    #[tokio::test]
-    async fn malformed_cursors_and_scope_are_rejected_before_connecting() {
-        let client = KanbanClient::new(crate::DEFAULT_SERVER_URL, "test").unwrap();
-        let query = StreamEventsQuery {
-            board: "default".to_owned(),
-            task_id: None,
-            after: 0,
-            limit: 10,
-        };
-        for cursor in [-1, MAX_SAFE_EVENT_CURSOR + 1] {
-            assert_eq!(
-                client
-                    .open_event_stream(&query, Some(cursor))
-                    .await
-                    .unwrap_err()
-                    .code(),
-                "invalid_input"
-            );
-        }
-        for query in [
-            StreamEventsQuery {
-                board: " ".into(),
-                ..query.clone()
-            },
-            StreamEventsQuery {
-                task_id: Some("default#1".into()),
-                ..query.clone()
-            },
-            StreamEventsQuery {
-                limit: 0,
-                ..query.clone()
-            },
-            StreamEventsQuery { after: -1, ..query },
-        ] {
-            assert_eq!(
-                client
-                    .open_event_stream(&query, None)
-                    .await
-                    .unwrap_err()
-                    .code(),
-                "invalid_input"
-            );
-        }
-        assert!(client.channel.get().is_none());
-    }
+fn invalid(message: impl Into<String>) -> ClientError {
+    ClientError::InvalidResponse(message.into())
 }

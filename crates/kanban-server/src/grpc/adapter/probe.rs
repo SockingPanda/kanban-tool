@@ -9,10 +9,37 @@ use tokio::sync::Semaphore;
 pub(crate) struct SourceProbe {
     checks: Mutex<BTreeMap<String, usize>>,
     loads: Mutex<BTreeMap<String, usize>>,
+    queries: Mutex<BTreeMap<String, usize>>,
+    query_runtime: Mutex<Option<crate::grpc::query::QueryProbe>>,
     pause: Mutex<Option<Arc<CheckPause>>>,
 }
 
 impl SourceProbe {
+    pub(crate) fn attach_query_runtime(&self, runtime: crate::grpc::query::QueryProbe) {
+        *self.query_runtime.lock().unwrap() = Some(runtime);
+    }
+
+    pub(crate) fn query_resources(&self) -> Option<(usize, usize, usize)> {
+        self.query_runtime
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|runtime| runtime.resources())
+    }
+
+    pub(crate) fn query(&self, scope: &str) {
+        *self
+            .queries
+            .lock()
+            .unwrap()
+            .entry(scope.into())
+            .or_default() += 1;
+    }
+
+    pub(crate) fn queries(&self) -> BTreeMap<String, usize> {
+        self.queries.lock().unwrap().clone()
+    }
+
     pub(crate) async fn check(&self, board: &str) {
         *self.checks.lock().unwrap().entry(board.into()).or_default() += 1;
         let pause = self.pause.lock().unwrap().take();

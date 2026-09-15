@@ -1,4 +1,5 @@
 import type { RpcCall } from "../../application/data/rpc-transport";
+import { inheritReadScope } from '../../application/query/observe-read';
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
 import { asCanonicalBoardId, type CanonicalBoardId } from "../../application/sync/contracts";
@@ -17,6 +18,7 @@ export function linkAbortSignals(signals: readonly (AbortSignal | undefined)[]):
   const activeSignals = signals.filter((signal): signal is AbortSignal => signal !== undefined)
   const abort = () => controller.abort()
   for (const signal of activeSignals) {
+    inheritReadScope(signal, controller.signal)
     if (signal.aborted) controller.abort()
     else signal.addEventListener("abort", abort, { once: true })
   }

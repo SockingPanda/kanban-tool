@@ -3,6 +3,7 @@ import type { ApiHealthResponseContract } from "../../lib/api/generated/contract
 import type { ApiErrorResponseContract } from "../../lib/api/generated/contracts/api-error-response";
 
 import { HttpTransportError, type HttpTransport, type HttpTransportOptions } from "./http-transport";
+import { RpcTransportError } from './rpc-transport';
 
 export type HealthReport = ApiHealthResponseContract["data"]
 
@@ -52,7 +53,7 @@ export function isAbortError(error: unknown): boolean {
 export function wrapError(error: unknown): never {
   if (isAbortError(error)) throw error
   if (error instanceof HealthReadError) throw error
-  if (error instanceof HttpTransportError) {
+  if (error instanceof HttpTransportError || error instanceof RpcTransportError) {
     throw new HealthReadError(error.kind, "Web health request failed.", {
       status: error.status ?? undefined,
       apiErrorCode: error.apiError?.code,

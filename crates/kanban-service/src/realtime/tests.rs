@@ -22,6 +22,45 @@ use crate::{
 
 mod measurement;
 
+#[tokio::test]
+async fn complete_query_fence_blocks_writes_and_cancelling_it_is_silent() {
+    let (_directory, service) = service("complete-query-fence").await;
+    let changes = service.subscribe_realtime_changes();
+    let reader_service = service.clone();
+    let (entered, reading) = oneshot::channel();
+    let reader = tokio::spawn(async move {
+        reader_service
+            .with_realtime_read(async {
+                let before = reader_service.get_task(TASK).await.unwrap();
+                entered.send(before).unwrap();
+                std::future::pending::<()>().await;
+            })
+            .await;
+    });
+    let task = reading.await.unwrap();
+    let mut writer = Box::pin(service.update_task(update_command(&task, "等待完整读取")));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(30), &mut writer)
+            .await
+            .is_err()
+    );
+    assert!(!changes.has_changed().unwrap());
+    reader.abort();
+    assert!(reader.await.unwrap_err().is_cancelled());
+    assert!(!changes.has_changed().unwrap());
+    writer.await.unwrap();
+    assert!(changes.has_changed().unwrap());
+    let mut changes = changes;
+    changes.borrow_and_update();
+    service
+        .with_realtime_read(async {
+            assert_eq!(service.get_task(TASK).await.unwrap().title, "等待完整读取");
+            assert!(service.list_comments(TASK).await.unwrap().is_empty());
+        })
+        .await;
+    assert!(!changes.has_changed().unwrap());
+}
+
 const TASK: &str = "t_realtime_fixture";
 
 async fn service(name: &str) -> (tempfile::TempDir, KanbanService) {

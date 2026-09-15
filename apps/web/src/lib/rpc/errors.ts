@@ -1,7 +1,7 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import { RpcTransportError } from "../../application/data/rpc-transport"
 import { DtoApiErrorCode } from "../../generated/rpc/kanban/v1/dto_pb"
-import { ErrorDetailSchema } from "../../generated/rpc/kanban/v1/kanban_pb"
+import { ErrorDetailSchema, type ErrorDetail } from "../../generated/rpc/kanban/v1/kanban_pb"
 import { RpcCodecError } from "./value-codec"
 
 type ApiError = NonNullable<RpcTransportError["apiError"]>
@@ -20,6 +20,12 @@ const businessErrors: Partial<Record<DtoApiErrorCode, readonly [ApiError["code"]
   [DtoApiErrorCode.CLAIM_CONFLICT]: ["claim_conflict", Code.Aborted, 409],
   [DtoApiErrorCode.INVALID_TRANSITION]: ["invalid_transition", Code.FailedPrecondition, 409],
   [DtoApiErrorCode.INTERNAL]: ["internal", Code.Internal, 500],
+}
+
+export function queryFailureError(detail: ErrorDetail | undefined): RpcTransportError {
+  const mapping = detail && businessErrors[detail.code]
+  if (!detail || !mapping) return new RpcTransportError('invalid_bytes', '查询失败帧缺少正式业务错误。')
+  return new RpcTransportError('http', detail.message, { status: mapping[2], apiError: { code: mapping[0], message: detail.message } })
 }
 
 /** 标准 google.rpc.Status/Any 由 Connect 解包，本层只消费正式 ErrorDetail。 */

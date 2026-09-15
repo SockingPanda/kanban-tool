@@ -17,6 +17,7 @@ import type { BoardRealtimeSource } from "../realtime/source";
 
 /** 按 Board 和查询条件读取数据；提交返回 canonical service 的确认结果。 */
 export interface WorkspaceDataSource {
+  readonly querySubscriptions?: boolean;
   readBoardDirectory(signal?: AbortSignal): Promise<readonly BoardOption[]>;
   readonly transport: RpcTransport;
   /** 配置 RPC source 后不再创建 SSE controller；禁止自动协议回退。 */

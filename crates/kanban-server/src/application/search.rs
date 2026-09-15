@@ -99,7 +99,7 @@ pub(crate) async fn sync_search(
         state.application().sync_search_index(&query.board).await?,
     )))
 }
-fn to_search_query(query: &SearchTasksQuery, statuses: Vec<TaskStatus>) -> SearchQuery {
+pub(crate) fn to_search_query(query: &SearchTasksQuery, statuses: Vec<TaskStatus>) -> SearchQuery {
     SearchQuery {
         board: query.board.clone(),
         q: query.q.clone(),

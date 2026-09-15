@@ -30,6 +30,11 @@ Host 直接持有 HTTP/1 与 HTTP/2 连接任务。正常退出先通知持续�
 
 ## 取舍
 
+完整查询在单个 gRPC-Web 连接中复用，避免浏览器 HTTP/1 同源连接额度限制。服务端共享相同规范化
+查询的读取和有界历史。delta 采用完整 typed Protobuf 投影的字节 splice：排序、过滤、分页补位和
+跨任务依赖继续由 application query 决定，adapter 不复制第二套成员更新规则。接收端必须在完整
+编码与摘要验证后提交，不能将单个 chunk 映射为 UI 业务状态。
+
 浏览器无法直接使用原生 HTTP/2 gRPC，gRPC-Web 提供相同 Protobuf 契约及服务端流。浏览器上传
 使用其支持的请求形式，保持 service 的附件大小上限。生成和互通检查增加构建步骤，由根
 `justfile` 与 `xtask` 统一管理。该决定不引入远程访问、多租户或额外数据库。

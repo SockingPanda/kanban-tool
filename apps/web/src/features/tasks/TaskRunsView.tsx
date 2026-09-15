@@ -1,6 +1,5 @@
-import { useLayoutEffect } from "react";
+import { useAsyncRead } from '../../application/query/use-async-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
-import { useEffect, useRef, useState } from "react"
 
 import { ExplorerReadError, type TaskRunsReadModel } from "../../application/data/explorer-read-model";
 import type { Locale } from "../../platform/preferences/preferences"
@@ -188,46 +187,10 @@ function ReadyRuns({locale,taskId,state,onRetry}: TaskRunsPresentationProps & {s
 }
 
 function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, invalidationRevision: number, online: boolean): TaskRunsReadState & { readonly retry: () => void } {
-  const { loadTaskRuns } = useWorkspaceOperations();
-
-  const loadRef = useRef<((signal: AbortSignal) => Promise<TaskRunsReadModel>) | null>(null)
-  useLayoutEffect(() => { loadRef.current = taskId ? (signal) => loadTaskRuns(runtime, taskId, { signal }) : null });
-  const [generation, setGeneration] = useState(0)
-  const [state, setState] = useState<TaskRunsReadState>({ data: null, loading: false, error: null })
-
-  useEffect(() => {
-    if (!taskId) {
-      setState({ data: null, loading: false, error: null })
-      return
-    }
-    if (!online) {
-      setState((current) => ({
-        data: current.data?.taskId === taskId ? current.data : null,
-        loading: false,
-        error: new ExplorerReadError("offline", "当前离线，无法加载运行记录。"),
-      }))
-      return
-    }
-    const controller = new AbortController()
-    let active = true
-    setState((current) => ({ data: current.data?.taskId === taskId ? current.data : null, loading: true, error: null }))
-    void loadRef.current?.(controller.signal).then(
-      (data) => {
-        if (active) setState({ data, loading: false, error: null })
-      },
-      (error: unknown) => {
-        if (active && !(error instanceof Error && error.name === "AbortError")) {
-          setState((current) => ({ data: current.data?.taskId === taskId ? current.data : null, loading: false, error: error instanceof Error ? error : new Error(String(error)) }))
-        }
-      },
-    )
-    return () => {
-      active = false
-      controller.abort()
-    }
-  }, [generation, invalidationRevision, online, taskId])
-
-  return { ...state, retry: () => setGeneration((current) => current + 1) }
+  const { loadTaskRuns, querySubscriptions } = useWorkspaceOperations();
+  return useAsyncRead(Boolean(taskId), runtime.webBuildId + '|' + taskId,
+    signal => taskId ? loadTaskRuns(runtime, taskId, { signal }) : Promise.reject(new Error('尚未选择任务。')),
+    querySubscriptions ? 0 : invalidationRevision, online);
 }
 
 export function TaskRunsView({ runtime, taskId, invalidationRevision = 0, online = typeof navigator === "undefined" || navigator.onLine }: TaskRunsViewProps) {

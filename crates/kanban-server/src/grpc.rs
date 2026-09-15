@@ -5,6 +5,7 @@ use tower::Layer;
 mod adapter;
 mod business;
 mod context;
+mod query;
 mod workspace;
 use adapter::KanbanAdapter;
 #[cfg(test)]
@@ -16,7 +17,26 @@ use std::sync::Arc;
 pub struct WorkspaceRpcMount {
     pub router: Router,
     /// 跟随唯一 host 的关闭流程调用 stop；不能交给 detached task 永久持有。
-    pub runtime: RpcApp,
+    pub runtime: HostRpcRuntime,
+}
+
+#[derive(Clone)]
+pub struct HostRpcRuntime {
+    legacy: RpcApp,
+    query: query::QueryRuntime,
+}
+
+impl HostRpcRuntime {
+    pub fn begin_shutdown(&self) {
+        self.legacy.begin_shutdown();
+        self.query.begin_shutdown();
+    }
+
+    pub async fn stop(&self) {
+        self.begin_shutdown();
+        self.query.stop().await;
+        self.legacy.stop().await;
+    }
 }
 
 /// 在唯一 Host 装配正式的具名业务 RPC 与 WorkspaceService。
@@ -50,6 +70,11 @@ pub fn workspace_rpc_mount(
         )
         .max_decoding_message_size(4096)
         .max_encoding_message_size(4096);
+    let queries = query::QueryRuntime::new(state.clone());
+    let query_service =
+        kanban_protocol::rpc::v1::query_service_server::QueryServiceServer::new(queries.clone())
+            .max_decoding_message_size(256 * 1024)
+            .max_encoding_message_size(kanban_protocol::rpc::query::MAX_QUERY_FRAME_BYTES);
     let router = router
         .route_service(
             "/kanban.v1.KanbanService/*method",
@@ -58,12 +83,22 @@ pub fn workspace_rpc_mount(
         .route_service(
             "/kanban.v1.WorkspaceService/WatchChanges",
             tonic_web::GrpcWebLayer::new().layer(kanban_rpc_host::Deadline::new(workspace)),
+        )
+        .route_service(
+            "/kanban.v1.QueryService/WatchQueries",
+            tonic_web::GrpcWebLayer::new().layer(query_service),
         );
-    Ok(WorkspaceRpcMount { router, runtime })
+    Ok(WorkspaceRpcMount {
+        router,
+        runtime: HostRpcRuntime {
+            legacy: runtime,
+            query: queries,
+        },
+    })
 }
 
 /// 即使 HTTP future 提前返回或被取消，也同步关闭所有订阅；正常退出再等待 Hub 收尾。
-pub(crate) struct RpcLifetime(pub RpcApp);
+pub(crate) struct RpcLifetime(pub HostRpcRuntime);
 
 impl RpcLifetime {
     pub(crate) async fn stop(&self) {

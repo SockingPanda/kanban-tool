@@ -72,6 +72,24 @@ where
             next_after: page.next_after,
         })
     }
+
+    /// 最新有界事件窗口，按 ID 正序返回，避免客户端扫描所有历史页。
+    pub async fn recent_events(
+        &self,
+        board: &str,
+        task_id: Option<&str>,
+        limit: usize,
+    ) -> Result<EventListPage> {
+        let page = self
+            .store
+            .recent_events(board, task_id, limit.min(MAX_EVENT_LIST_LIMIT))
+            .await
+            .map_err(crate::error::store_error)?;
+        Ok(EventListPage {
+            events: page.events.into_iter().map(application_event).collect(),
+            next_after: page.next_after,
+        })
+    }
 }
 
 fn application_event(event: crate::domain::TaskEventRecord) -> EventRecord {

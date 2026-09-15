@@ -7,6 +7,12 @@ import { createHttpTransport } from "./http-transport";
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
 import { type HealthReadDependencies, type HealthReport, HealthReadError, wrapError } from "../../application/data/health-read-model";
+import type { RpcTransport } from '../../application/data/rpc-transport';
+
+export async function readQueryHealth(transport: RpcTransport, signal?: AbortSignal): Promise<HealthReport> {
+  try { return parseApiHealthResponse((await transport.call({ method: 'GetHealth', signal })).payload).data }
+  catch (error) { return wrapError(error) }
+}
 
 export async function readHealth(
   options: HealthReadDependencies & { readonly runtime?: WebRuntimeConfig; readonly signal?: AbortSignal } = {},

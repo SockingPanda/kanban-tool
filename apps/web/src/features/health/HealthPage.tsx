@@ -1,5 +1,6 @@
+import { useAsyncRead } from '../../application/query/use-async-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { type HealthReadError, type HealthReport } from "../../application/data/health-read-model";
@@ -8,7 +9,6 @@ import { HEALTH_REFRESH_EVENT } from "../../application/workspace/health-refresh
 import { usePreferences } from "../../platform/preferences/use-preferences"
 import { presentHealthError } from "../../application/health/health-error"
 import { healthMetricTone } from "./health-metrics"
-import { isCurrentHealthRequest } from "../../application/health/health-request"
 import { apiOriginForRuntime } from "../../application/diagnostics"
 import styles from "./health-page.module.css"
 
@@ -32,53 +32,20 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
   const { readHealth } = useWorkspaceOperations();
   const { locale } = usePreferences()
   const t = createTranslator(locale)
-  const [state, setState] = useState<HealthState>(() => initialReport ? { kind: "ready", report: initialReport } : { kind: "loading" })
-  const [pending, setPending] = useState(!initialReport)
-  const requestControllerRef = useRef<AbortController | null>(null)
-
-  const load = useCallback(async () => {
-    if (requestControllerRef.current) return
-    const reader = read ?? ((nextSignal?: AbortSignal) => readHealth({ runtime, signal: nextSignal }))
-    const controller = new AbortController()
-    requestControllerRef.current = controller
-    setPending(true)
-    try {
-      const report = await reader(controller.signal)
-      if (!isCurrentHealthRequest(controller, requestControllerRef.current)) return
-      setState({ kind: "ready", report })
-    } catch (error: unknown) {
-      if (!isCurrentHealthRequest(controller, requestControllerRef.current) || (error instanceof Error && error.name === "AbortError")) return
-      setState((previous) => previous.kind === "ready"
-        ? { kind: "ready", report: previous.report, staleError: error }
-        : { kind: "error", error })
-    } finally {
-      if (requestControllerRef.current === controller) {
-        requestControllerRef.current = null
-// 该语句位于 finally，身份判断防止旧请求清除新请求的 pending；最小复现见 build/react-doctor-regressions.test.ts。
-// react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
-        setPending(false)
-      }
-    }
-  }, [read, readHealth, runtime])
-
+  const result = useAsyncRead(true, runtime.apiBaseUrl + '|' + runtime.webBuildId,
+    signal => read ? read(signal) : readHealth({ runtime, signal }));
+  const report = result.data ?? initialReport;
+  const state: HealthState = report ? { kind: 'ready', report, staleError: result.error }
+    : result.error ? { kind: 'error', error: result.error } : { kind: 'loading' };
+  const pending = result.loading;
+  const refresh = result.retry;
+  const refreshRef = useRef(refresh);
+  useLayoutEffect(() => { refreshRef.current = refresh });
   useEffect(() => {
-    if (!initialReport) void load()
-    return () => {
-      const controller = requestControllerRef.current
-      controller?.abort()
-      if (requestControllerRef.current === controller) requestControllerRef.current = null
-    }
-  }, [initialReport, load])
-
-  const refresh = useCallback(() => {
-    if (requestControllerRef.current) return
-    void load()
-  }, [load])
-
-  useEffect(() => {
-    window.addEventListener(HEALTH_REFRESH_EVENT, refresh)
-    return () => window.removeEventListener(HEALTH_REFRESH_EVENT, refresh)
-  }, [refresh])
+    const listener = () => refreshRef.current();
+    window.addEventListener(HEALTH_REFRESH_EVENT, listener);
+    return () => window.removeEventListener(HEALTH_REFRESH_EVENT, listener);
+  }, []);
 
   return (
     <section className={styles.page} aria-labelledby="health-heading" data-testid="health-page">

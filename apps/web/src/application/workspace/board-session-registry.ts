@@ -242,7 +242,7 @@ export function acquireBoardSession(
     if (sessions.get(key) === session) sessions.delete(key)
     session = undefined
   }
-  const realtimeKey = resource.boardRealtime ? `source:${resource.boardRealtime.key}` : "legacy-sse"
+  const realtimeKey = resource.query.observe ? 'query-subscriptions' : resource.boardRealtime ? `source:${resource.boardRealtime.key}` : "legacy-sse"
   if (session && session.realtimeKey !== realtimeKey) throw new Error("同一看板仍有其他实时数据源的会话，请先释放旧会话")
   if (session === undefined) {
     const listeners = new Set<(nextModel: BoardReadModel) => void>()
@@ -260,7 +260,27 @@ export function acquireBoardSession(
       }
     }
     let controller: BoardSessionController
-    if (resource.boardRealtime) {
+    if (resource.query.observe) {
+      let abort: AbortController | null = null
+      let releaseState: (() => void) | undefined
+      let state: 'live' | 'connecting' = 'connecting'
+      controller = {
+        start: () => {
+          if (abort) return
+          abort = new AbortController()
+          resource.query.observe!(abort.signal,
+            nextModel => { for (const listener of listeners) listener(nextModel) },
+            () => record({ type: 'recovery-failure', boardId, cursor: 0 }))
+          releaseState = resource.query.subscribeConnection?.(next => {
+            state = next === 'live' ? 'live' : 'connecting'
+            record({ type: next === 'live' ? 'connection-live' : next === 'connecting' ? 'rpc-connecting' : 'transport-failure', boardId, cursor: 0 })
+          })
+        },
+        stop: () => { abort?.abort(); abort = null; releaseState?.(); releaseState = undefined },
+        retry: () => { if (session) void refreshSession(session).catch(() => record({ type: 'recovery-failure', boardId, cursor: 0 })) },
+        snapshot: () => ({ state }),
+      }
+    } else if (resource.boardRealtime) {
       controller = bindBoardRealtime(resource.boardRealtime, {
         boardId, boardSelector: model.board.slug, record,
       })

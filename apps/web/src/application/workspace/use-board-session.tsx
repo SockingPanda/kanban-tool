@@ -409,7 +409,9 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
           ) return
           const nextStatus = boardSyncStatusForTelemetry(entry.type)
           if (nextStatus !== null) setSyncStatus(nextStatus)
-          onSessionTelemetry?.(entry)
+          if (source.querySubscriptions) {
+            if (nextStatus !== null) onSyncStatusChange?.(nextStatus)
+          } else onSessionTelemetry?.(entry)
         },
       )
     } catch {
@@ -425,7 +427,7 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
         sessionRetryRef.current = null
       }
     }
-  }, [canonicalBoardId, contextKey, onSessionTelemetry, route.kind, routeBoardSlug, runtime, selector, setSyncStatus, visibleStateKind])
+  }, [canonicalBoardId, contextKey, onSessionTelemetry, onSyncStatusChange, route.kind, routeBoardSlug, runtime, selector, setSyncStatus, visibleStateKind, source.querySubscriptions])
 
   useEffect(() => {
     const onOffline = () => reportSyncStatus("offline")

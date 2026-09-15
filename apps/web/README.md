@@ -68,20 +68,24 @@ React Doctor 固定为 `0.9.13`，完整扫描与增量扫描都以 warning 阻�
 | --- | --- |
 | `src/app` | 启动后的应用组合、路由呈现、侧栏和全局浮层 |
 | `src/features` | 任务、运行记录、动态、健康、维护与设置的领域组件 |
-| `src/application` | 数据源接口、查询状态、异步操作、通知、导航和查询失效编排 |
+| `src/application` | 数据源接口、订阅读取与展示映射、异步操作、通知和导航 |
 | `src/domain` | 展示模型、纯查询与操作意图 |
-| `src/adapters/host` | named RPC、正式刷新流、健康探测和生成契约的实际接入 |
+| `src/adapters/host` | named RPC、共享查询流与 cursor、健康探测和生成契约的实际接入 |
 | `src/components` | 基础控件、布局和浮层 |
 | `src/styles`、`src/platform` | 静态主题、浏览器能力和本机偏好 |
 
 功能之间通过显式公开出口组合，功能内部使用直接导入。组件经 application 操作数据，不直接读写
 网络或存储。查询按项目和条件隔离；切换项目时清理订阅并拒绝旧请求的迟到结果。
 
-生产数据源使用正式 `KanbanService` 读取和提交业务数据；`WorkspaceService.WatchChanges`
-通知当前项目的查询失效。首次连接与每次重新连接都会刷新数据，心跳只维护连接状态。
-目录、任务分页、详情、依赖图、运行记录和项目动态沿现有查询状态刷新，保留当前 URL 与表单草稿。
-连接失败时重试 RPC，不切换到 HTTP 或 SSE；`/health` 继续用于启动和健康探测。
-旧 SSE 实现的过渡语义见 [`docs/sse-invalidation.md`](docs/sse-invalidation.md)。
+生产数据源通过 `QueryService.WatchQueries` 订阅已挂载的完整业务查询。同一数据源将目录、任务
+分页、详情及其展开区、依赖图、运行记录、项目动态和诊断查询复用到一条 binary gRPC-Web 连接。
+相同查询共享结果；查询集合随页面与折叠区的生命周期调整，无消费者后释放。项目动态订阅最近
+的有界事件窗口，日志追加也通过查询结果进入页面。
+
+完整快照与 byte splice delta 在结束帧通过大小、SHA-256 和具名类型校验后，才同时提交数据和
+cursor。组件从自己依赖的已提交结果映射展示模型；流更新保留当前 URL、表单草稿、焦点与滚动。
+断流丢弃未完成的暂存数据，重连携带已提交 cursor；明确的重试和写后同步等待服务端 `Ready`。
+业务写入与一次性用户操作使用 `KanbanService`，`/health` 保留为启动探测。
 
 `src/lib/api/generated` 由 `kanban-protocol` 生成，类型和运行时 validator 保持同源；手写 adapter
 在 `unknown` 边界完成验证。正式 Protobuf client 位于 `src/generated/rpc`，由根 `proto` 生成，

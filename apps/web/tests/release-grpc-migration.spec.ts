@@ -44,7 +44,7 @@ async function evidence(info: TestInfo, name: string, value: unknown) {
   await info.attach(name, { path, contentType: 'application/json' })
 }
 
-test('实际 Host：查询 URL、外部评论和标签写入可见，所有业务请求为 binary gRPC-Web', async ({ page }, info) => {
+test('实际 Host：完整查询订阅保留 URL，外部评论和标签写入可见，所有业务请求为 binary gRPC-Web', async ({ page }, info) => {
   const { rpc, board, taskId } = await seed()
   const seen = requests(page)
   await page.goto(`/app/boards/${board}/list?status=todo&q=needle&task=${taskId}`)
@@ -52,7 +52,7 @@ test('实际 Host：查询 URL、外部评论和标签写入可见，所有业�
   await expect(page.getByTestId('list-search')).toHaveValue('needle')
   const title = page.getByRole('textbox', { name: '任务标题', exact: true })
   await expect(title).toHaveValue('needle 初始任务')
-  await expect.poll(() => seen.some(request => request.url.endsWith('/WorkspaceService/WatchChanges') || request.url.includes('WorkspaceService/WatchChanges'))).toBe(true)
+  await expect.poll(() => seen.some(request => new URL(request.url).pathname === '/kanban.v1.QueryService/WatchQueries')).toBe(true)
   const current = await rpc.business.getTask({ taskId })
   await rpc.business.updateTask({ taskId, title: 'needle 外部更新', expectedLockVersion: current.data!.lockVersion })
   await expect(title).toHaveValue('needle 外部更新')
@@ -103,11 +103,11 @@ test('实际 Host：失败后保留创建草稿和幂等键，重试仅调用原
   await evidence(info, 'retry-requests', seen)
 })
 
-test('实际 Host：WatchChanges 失败后仍只重连 RPC，退出页面后停止旧连接', async ({ page }, info) => {
+test('实际 Host：WatchQueries 失败后仍只重连查询 RPC，退出页面后停止旧连接', async ({ page }, info) => {
   const { rpc, board, taskId } = await seed()
   const seen = requests(page)
   let subscriptions = 0
-  await page.route('**/kanban.v1.WorkspaceService/WatchChanges', async route => {
+  await page.route('**/kanban.v1.QueryService/WatchQueries', async route => {
     subscriptions += 1
     if (subscriptions === 1) await route.fulfill(unavailable())
     else await route.fallback()

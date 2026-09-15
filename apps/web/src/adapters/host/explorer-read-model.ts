@@ -1,4 +1,5 @@
 import type { RpcCall } from "../../application/data/rpc-transport";
+import { inheritReadScope } from '../../application/query/observe-read';
 import { mergeBoardEvents } from "../../application/data/explorer-read-model";
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
@@ -103,6 +104,13 @@ export async function loadBoardEvents(
   }
   try {
     const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
+    if (transport.recentEvents) {
+      const response = parseContract('api.list-events.response', parseApiListEventsResponse,
+        (await transport.recentEvents({ board: board.id, ...(taskId ? { task_id: taskId } : {}), limit: 150 }, options.signal)).payload)
+      validateEventBatch(response.data, board, taskId, 0, response.meta.next_after, 150)
+      return Object.freeze({ board, taskId, events: response.data,
+        meta: Object.freeze({ count: response.data.length, nextAfter: response.meta.next_after, limit: 150 }) })
+    }
     const afterOption = options.after ?? 0
     if (!Number.isSafeInteger(afterOption) || afterOption < 0) throw new ExplorerReadError("anomaly", "事件读取 after 必须是非负安全整数。")
     let after = afterOption
@@ -252,6 +260,7 @@ export async function loadTaskRuns(
 
 export function linkedAbortSignal(signal: AbortSignal | undefined): { signal: AbortSignal; cleanup: () => void; abort: () => void } {
   const controller = new AbortController()
+  inheritReadScope(signal, controller.signal)
   if (signal?.aborted) controller.abort()
   const abort = () => controller.abort()
   signal?.addEventListener("abort", abort, { once: true })
@@ -411,7 +420,9 @@ export async function loadTaskInspectorEvents(
     const response = parseContract(
       "api.list-events.response",
       parseApiListEventsResponse,
-      await getPayload(transport, requests.events, options.signal, budget),
+      transport.recentEvents
+        ? (await transport.recentEvents({ board: board.id, task_id: taskId, limit: 50 }, options.signal)).payload
+        : await getPayload(transport, requests.events, options.signal, budget),
     )
     validateEventBatch(response.data, board, taskId, 0, response.meta.next_after, 50)
     return response.data

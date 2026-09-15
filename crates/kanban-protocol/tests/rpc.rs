@@ -10,6 +10,9 @@ use serde_json::json;
 #[path = "rpc/fixtures.rs"]
 mod fixtures;
 
+#[path = "rpc/query.rs"]
+mod queries;
+
 #[test]
 fn every_business_operation_has_a_named_rpc() {
     let manifest: Vec<serde_json::Value> = serde_json::from_str(rpc::METHOD_MANIFEST).unwrap();

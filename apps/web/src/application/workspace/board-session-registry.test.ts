@@ -77,7 +77,9 @@ describe("Board canonical session registry", () => {
 
   test("production source 仅配置正式 RPC，runtime prefix 进入同一个 endpoint", () => {
     const source = createHostDataSource({ ...runtime, apiBaseUrl: "/gateway" }, { documentBaseURI: "http://127.0.0.1:1421/app/" })
-    expect(source.boardRealtime?.key).toBe("grpc-web:http://127.0.0.1:1421/gateway/:kanban.v1.WorkspaceService:1")
+    expect(source.querySubscriptions).toBe(true)
+    expect(source.boardRealtime).toBeUndefined()
+    expect(source.createBoardReadQuery(runtime, 'default')).toHaveProperty('observe')
     expect(source.transport).toHaveProperty("call")
     expect(source.streamTransport).toBeUndefined()
     expect(source.streamUrl).toBeUndefined()

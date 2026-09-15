@@ -5,5 +5,5 @@ import { boardSessionRevision, subscribeBoardSessions } from './board-session-re
 export function useBoardDirectory() {
   const source = useWorkspaceOperations();
   const revision = useSyncExternalStore(subscribeBoardSessions, boardSessionRevision, boardSessionRevision);
-  return useAsyncRead(true, (source.boardRealtime?.key ?? source.streamUrl ?? '') + '|boards', signal => source.readBoardDirectory(signal), revision);
+  return useAsyncRead(true, (source.boardRealtime?.key ?? source.streamUrl ?? '') + '|boards', signal => source.readBoardDirectory(signal), source.querySubscriptions ? 0 : revision);
 }

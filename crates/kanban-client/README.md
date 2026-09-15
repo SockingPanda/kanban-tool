@@ -32,9 +32,10 @@ label proposal 查询区分 task scope 与 board scope：调用 `list_task_label
 
 ## 事件订阅
 
-`open_event_stream(...).await` 先建立正式 `WatchChanges` 订阅，再通过 `ListEvents` 读取有界事件页。
-`next_item().await` 返回领域事件或不推进业务 cursor 的 heartbeat；两个输入 cursor 取较新者，
-board 和可选 task 过滤保持一致。断线重连由调用者保存最后交付的领域事件 ID 后重新打开流。
+`open_event_stream(...).await` 在正式 `QueryService` 中订阅完整 `ListEvents` 查询窗口。
+完整 snapshot/delta 通过大小、摘要、投影类型及 board/task/cursor 校验后才提交；消费满页后
+移动查询窗口，持续变化直接由流交付。`next_item().await` 返回领域事件或不推进业务 cursor 的
+heartbeat；两个输入 cursor 取较新者。断线重连由调用者保存最后交付的领域事件 ID 后重新打开流。
 
 订阅直接由 `EventStream` 持有，丢弃即可释放服务端订阅。client 不创建后台读取任务；取消一次
 `next_item` 等待后，可以继续读取同一个流。连接关闭返回 `ClientError::StreamClosed`。

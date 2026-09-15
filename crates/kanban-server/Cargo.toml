@@ -13,6 +13,7 @@ legacy-sqlite-import = ["kanban-service/legacy-sqlite-import"]
 grpc-framework = []
 
 [dependencies]
+sha2.workspace = true
 kanban-rpc-proto.workspace = true
 prost.workspace = true
 tonic = { workspace = true, features = ["transport", "codegen"] }

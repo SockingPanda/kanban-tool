@@ -27,4 +27,8 @@ mutation 使用 service-owned immediate transaction。状态快照、run、event
 foreign key 和 projection enqueue 必须整体提交或整体回滚。claim/lease 使用 token、owner、expiry 和
 版本检查保护并发调用。
 
+完整实时查询通过 `with_realtime_read` 在同一个写入 gate 内完成多个 application 读取，避免分页总量、
+详情与依赖片段来自不同写入时刻。调用者先订阅写提示；silent read fence 的正常退出、错误或取消均不发写提示。
+传入 future 只能使用普通只读入口，不能嵌套 mutation 或再次取得 fence。数据库句柄仍只由本 crate 持有。
+
 ID、时间和 JSON 的具体编码由 Rust DTO、schema 与数据库约束共同校验，文档只解释语义，不维护字段数量。

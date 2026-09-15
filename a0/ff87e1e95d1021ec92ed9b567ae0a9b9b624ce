@@ -1,0 +1,1400 @@
+crates/kanban-cli/src/commands/task/archive.rs
+  s_5b054b517a26b6::t_0480364ac8b276 18-27
+  s_5b054b517a26b6::t_deb9c19a7721c5 13
+crates/kanban-client/src/operations/entities.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,5,8,14-25,29-39,43-54
+apps/web/src/application/sync/events-api.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 5,8,28,37
+crates/kanban-cli/src/commands/task/step/done.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 15
+  s_5b054b517a26b6::t_0480364ac8b276 20-30
+migration/grpc-framework/validation/offline-results.json
+  s_5b054b517a26b6::t_4cede23553268d 1-69
+crates/kanban-mcp/src/tools/runs/show.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 27-28
+migration/grpc-framework/integration/service-src/realtime.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-69
+apps/web/build/boundaries.test.ts
+  s_5b054b517a26b6::t_372a3f00efd130 35-47
+migration/grpc-framework/integration/atlas-web/source.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-20
+crates/kanban-cli/src/commands/attachment/list.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 11,13-14
+pnpm-workspace.yaml
+  s_5b054b517a26b6::t_e0a5eab8b2083e 3
+  s_5b054b517a26b6::t_89daba55121461 7-9
+crates/kanban-mcp/src/tools/graph/query.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 37,39
+xtask/src/rpc_contracts.rs
+  s_5b054b517a26b6::t_ea7aa9050c31a1 1-12,14-19,33,36,38-66,75-82,84-92,94-127,129-136,138-154
+  s_5b054b517a26b6::t_b29d26bc79509f 67-73
+  s_5b054b517a26b6::t_0857e39e633ac7 13,20-32,34-35,37,74,83,93,128,137
+crates/kanban-mcp/src/tools/lifecycle/unblock.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 23-28
+crates/kanban-cli/src/commands/task/list.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 48,54
+crates/kanban-client/src/operations/task/promote.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-19,24,30-31
+migration/grpc-framework/docs/06-tasks.md
+  s_5b054b517a26b6::t_4cede23553268d 1-228
+crates/kanban-live-core/src/tests.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 1-9,11-135,137-183,185-192
+  s_5b054b517a26b6::t_e7e8246a798e0d 10,136,184
+crates/kanban-cli/src/commands/context.rs
+  s_5b054b517a26b6::t_0480364ac8b276 57-73
+  s_5b054b517a26b6::t_deb9c19a7721c5 36
+crates/kanban-mcp/src/tools/labels.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 116-117,130-137,153-154,168-169,183,191,206,208,222,235-237
+crates/kanban-server/src/application/signals/list.rs
+  s_5b054b517a26b6::t_58cc6e547bc0d2 30
+  s_5b054b517a26b6::t_f514a0d5e37f57 1-29,31-71
+crates/kanban-rpc-host/examples/demo.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 1-8,10-59,61-64,66-80,82-94
+  s_5b054b517a26b6::t_4b8ce50409b448 9,60,65,81
+apps/web/src/adapters/host/task-mutations.test.ts
+  s_5b054b517a26b6::t_aa726cd5298fed 3,5-7,10-11,13-18,20-23,26-30,32-35,37-41,43-48,50-66,68-69,71,73-86,92-95,97-106,108-113,115-116,118-121,123-139
+  s_5b054b517a26b6::t_60f13da9105fa0 1-2,4,90
+  s_5b054b517a26b6::t_751f3625010743 88-89,91
+crates/kanban-service/src/service.rs
+  s_5b054b517a26b6::t_4cede23553268d 6,21
+crates/kanban-rpc-host/src/service.rs
+  s_5b054b517a26b6::t_15995ebbb347be 79-80,84-86
+  s_5b054b517a26b6::t_a0925d04bd012b 177-188
+  s_5b054b517a26b6::t_8dbb2b7c98a42f 55-60,62-64
+  s_5b054b517a26b6::t_cf47849193ccd3 2-4,10-23,25-43,45-54,61,65-78,81-83,87-94,96-102,104-106,108-112,115,118-140,142-176,189-200,202-224,226-230,232-234
+  s_5b054b517a26b6::t_20b6674f4fc8f8 1
+  s_5b054b517a26b6::t_323bf66dfb2463 5-9
+  s_5b054b517a26b6::t_f886479426edd1 24
+  s_5b054b517a26b6::t_b4f96833b6cbb3 44
+  s_5b054b517a26b6::t_20e5d303556c1d 95
+  s_5b054b517a26b6::t_832b4989f9abb0 103
+  s_5b054b517a26b6::t_b2f4e8abf29657 107
+  s_5b054b517a26b6::t_9b08cf0501140f 113-114
+  s_5b054b517a26b6::t_325ddab713b667 116-117
+  s_5b054b517a26b6::t_bfd13ca7db8a81 141
+  s_5b054b517a26b6::t_b828e81b7d6c53 201
+  s_5b054b517a26b6::t_bd97437c8b0f2e 225
+  s_5b054b517a26b6::t_166b97d4350826 231
+crates/kanban-rpc-host/src/deadline.rs
+  s_5b054b517a26b6::t_961afeaa77e199 1-121
+crates/kanban-cli/src/commands/board/columns.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 11,14
+apps/web/src/application/tasks/attachment-intents.ts
+  s_5b054b517a26b6::t_58b7645227fcec 27-28,30,35,47,74
+apps/web/src/adapters/host/board-read-model.test.ts
+  s_5b054b517a26b6::t_750fe6eac5c452 6,20-21,103-105,107-108,116-120,122,127,129,145-147,151-155,158,170-174,180,187-190,198,205-206,209,216-220,224,227,231,235-239,243,246,263,265,268,277-278,286,288,291,295-296,319-320,334,345-348,370-374,377-378,382-384,386-387,392,394-395,402,404,412,414,420
+migration/grpc-framework/crates/kanban-rpc-host/src/lib.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-67
+crates/kanban-client/src/operations/board/list.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-3,8-16
+crates/kanban-cli/src/commands/task/specify.rs
+  s_5b054b517a26b6::t_0480364ac8b276 20-30
+  s_5b054b517a26b6::t_deb9c19a7721c5 15
+crates/kanban-server/src/application/tasks/heartbeat.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_c8a64e9007e38d 1-2,11-25
+apps/web/src/application/errors/safe-error.test.ts
+  s_5b054b517a26b6::t_6c8b30803ddcf2 3,12
+crates/kanban-client/src/operations/event/list.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 3,6-9,25-38,48-49,58,63-64,73,78-79,88
+crates/kanban-client/src/operations/board/health.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-3,8-10
+migration/grpc-framework/web/tsconfig.core.json
+  s_5b054b517a26b6::t_4cede23553268d 1-15
+crates/kanban-client/src/operations/ontology.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 6,27-41,46-62,65-74,76-80,87-165,172-188,190-192,198-211,218-220,224,230,236-252,257-274,280-287,289-307,313-315,317-339,345-354,356-360,365-371,373-403,405-410,415-422,424-428,433-440,442-458,460-476,478-482,487-497,508-509
+  s_5b054b517a26b6::t_0f15f10a5a1c19 64,75,278,343
+  s_5b054b517a26b6::t_9a987d60c0ef7c 4,8-13,189,288,316,355,372,404,423,441,459,477
+  s_5b054b517a26b6::t_db34eb8613df33 7,63
+crates/kanban-client/src/operations/run/log.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6-17,22,29,40-41,44
+migration/grpc-framework/docs/08-references.md
+  s_5b054b517a26b6::t_4cede23553268d 1-27
+apps/web/src/adapters/host/board-read-model.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 1,10-11,33,38-40,49,210
+migration/grpc-framework/CHECKSUMS.sha256
+  s_5b054b517a26b6::t_4cede23553268d 1-81
+crates/kanban-server/src/application/labels.rs
+  s_5b054b517a26b6::t_79018074f45be9 50-85,112-130
+  s_5b054b517a26b6::t_c8848eea8620cd 26,28,34-45,87-107,132-163
+  s_5b054b517a26b6::t_3595d6d79dd70f 1-25,27,29-33,46-49,86,108-111,131,164-208
+crates/kanban-server/src/application/maintenance.rs
+  s_5b054b517a26b6::t_c8848eea8620cd 40,50-51,56,62-63,68,74-75,89-169,190
+  s_5b054b517a26b6::t_860885ea29b8f0 1-39,41-49,52-55,57-61,64-67,69-73,76-88,170-189,191-283
+crates/kanban-server/src/application/tasks/block.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_67b7801d2ca722 1-2,11-25
+crates/kanban-server/src/application/tasks/specify.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_445aa79a00e776 1-2,11-24
+crates/kanban-cli/src/commands/board/show.rs
+  s_5b054b517a26b6::t_0480364ac8b276 13-15
+  s_5b054b517a26b6::t_deb9c19a7721c5 11
+crates/kanban-cli/src/commands/signal.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 93,96-99,112,145,158,184,190,204-205,215,231-234
+  s_5b054b517a26b6::t_0480364ac8b276 100-110,113-134,139-143,159-170
+crates/kanban-cli/tests/cli_history_adoption.rs
+  s_5b054b517a26b6::t_77e1a7a7096c28 93-95,105,120-121,141
+crates/kanban-mcp/src/tools/events/list.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 46-56
+xtask/src/rpc_codegen/web.rs
+  s_5b054b517a26b6::t_008bc1da8d1a1b 1-496
+crates/kanban-mcp/src/tools/graph/neighbors.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 41-42
+xtask/src/rpc_codegen.rs
+  s_5b054b517a26b6::t_008bc1da8d1a1b 6-214,217,236
+  s_5b054b517a26b6::t_5039b852647638 1-5,215-216,218-235,237-238
+crates/kanban-mcp/src/tools/context.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 81-82
+crates/kanban-cli/src/commands/task/show.rs
+  s_5b054b517a26b6::t_0480364ac8b276 21-23,42-44
+  s_5b054b517a26b6::t_deb9c19a7721c5 15
+migration/grpc-framework/integration/service-src/mutation_gate.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-156
+crates/kanban-mcp/src/tools/ontology.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 3-4,31,46,48,59,62,73,77,88,102,110,112,120,123,134,136,147,149,160,162-167,176,180,188,192,203,205,213,215,223,226,234,237,245,248,259,261,272,275,286,289,297,300,311,314,322,325,336,338,349,353
+migration/grpc-framework/crates/kanban-live-core/src/model.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-93
+apps/web/src/application/realtime/source.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-20
+apps/web/src/adapters/host/rpc-transport.ts
+  s_5b054b517a26b6::t_9f7bb4d5702195 1-29
+crates/kanban-mcp/src/tools/steps/update.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 43,53-55
+apps/web/eslint.config.js
+  s_5b054b517a26b6::t_5579a685385298 7
+crates/kanban-mcp/src/tools/tasks/show.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 34,37,43
+crates/kanban-service/src/realtime/tests.rs
+  s_5b054b517a26b6::t_6c03222cde7d29 1-641
+crates/kanban-cli/src/commands/task/step/list.rs
+  s_5b054b517a26b6::t_0480364ac8b276 17-19
+  s_5b054b517a26b6::t_deb9c19a7721c5 12
+crates/kanban-mcp/src/tools/attachments/list.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 30-32
+crates/kanban-server/src/http/operations/health.rs
+  s_5b054b517a26b6::t_0480364ac8b276 8,10
+  s_5b054b517a26b6::t_7dcbb2714d8ad7 3
+crates/kanban-server/src/application/boards/columns.rs
+  s_5b054b517a26b6::t_fa7c3ed5d0aa84 2-5
+  s_5b054b517a26b6::t_0764c6893c9400 1,6-35
+apps/web/src/adapters/host/board-directory.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 3,6-7
+migration/grpc-framework/crates/kanban-rpc-host/src/frames.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-38
+crates/kanban-cli/src/commands/board/list.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 12,14
+crates/kanban-cli/src/commands/task/review.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 16
+  s_5b054b517a26b6::t_0480364ac8b276 21-32
+crates/kanban-cli/tests/support.rs
+  s_5b054b517a26b6::t_e21b62f9c4cd87 120-123
+apps/web/src/lib/rpc/client.ts
+  s_5b054b517a26b6::t_d7a640c0fd15eb 1-4,6-7,9-11,13-18
+  s_5b054b517a26b6::t_9f7bb4d5702195 5,8,12
+crates/kanban-mcp/src/tools/lifecycle/reopen.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 24-32
+crates/kanban-mcp/src/tools/vector/query_label_atoms.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 37-38
+crates/kanban-server/src/grpc/tests/business.rs
+  s_5b054b517a26b6::t_d7a640c0fd15eb 26-36,38,64-65
+  s_5b054b517a26b6::t_02b5dea3fb358a 37,39-51,53-54,56-57,63
+  s_5b054b517a26b6::t_b524cf764b04f6 52,55,58-62
+  s_5b054b517a26b6::t_5579a685385298 207-210
+  s_5b054b517a26b6::t_35a30ca03816a6 434-446,448-460
+  s_5b054b517a26b6::t_33e73b650200a0 173
+  s_5b054b517a26b6::t_12aff969732a0b 99-102
+  s_5b054b517a26b6::t_dfd5583ee93496 1-4,6-25,66-98,103-115,117-120,122-142,144-156,158-161,163-169,171-172,174,176-182,184-187,189-206,211-222,224-227,229-235,237-240,242-248,250-253,255-265,267-270,272-282,284-286,288-289,291-297,299-302,304-320,322-323,325-348,350-351,353-372,374-377,379-390,392-395,397-411,413-416,418-433
+  s_5b054b517a26b6::t_35fe3d56de5865 5
+  s_5b054b517a26b6::t_7b6b71abc62db5 116
+  s_5b054b517a26b6::t_d0ff8f8496bb53 121
+  s_5b054b517a26b6::t_096366df8fc37d 143
+  s_5b054b517a26b6::t_8be7a144aafe92 157
+  s_5b054b517a26b6::t_49035db2dce2e2 162
+  s_5b054b517a26b6::t_4901aa021ccda8 170
+  s_5b054b517a26b6::t_9823f10ff8fd27 175
+  s_5b054b517a26b6::t_6625ad910ad2e2 183
+  s_5b054b517a26b6::t_a63bb9534271a9 188
+  s_5b054b517a26b6::t_320b8b90888817 223
+  s_5b054b517a26b6::t_00b50433f12f26 228
+  s_5b054b517a26b6::t_77cce432048f7b 236
+  s_5b054b517a26b6::t_94bbebf44cedd2 241
+  s_5b054b517a26b6::t_4425a2b1e64f34 249
+  s_5b054b517a26b6::t_1843d41b6dd1a7 254
+  s_5b054b517a26b6::t_3c159658003530 266
+  s_5b054b517a26b6::t_8c9cccda125c6b 271
+  s_5b054b517a26b6::t_ce68d42d51d9c6 283
+  s_5b054b517a26b6::t_763c499ffceb81 287
+  s_5b054b517a26b6::t_ac1f6ccf6cd8cb 290
+  s_5b054b517a26b6::t_baa02fcf79cc85 298
+  s_5b054b517a26b6::t_436606c13c7263 303
+  s_5b054b517a26b6::t_50c0b57ff86ef1 321
+  s_5b054b517a26b6::t_7f84d5dbfc436e 324
+  s_5b054b517a26b6::t_76ee00eda9d00a 349
+  s_5b054b517a26b6::t_eaa12d7de1d24d 352
+  s_5b054b517a26b6::t_4de1164eb66e3a 373
+  s_5b054b517a26b6::t_f3abcb0ef8d67d 378
+  s_5b054b517a26b6::t_156f07871b9f97 391
+  s_5b054b517a26b6::t_f5f8304ad4a54c 396
+  s_5b054b517a26b6::t_903620f5b3af14 412
+  s_5b054b517a26b6::t_38a6451ef8b147 417
+  s_5b054b517a26b6::t_6e88aabeea8276 447
+crates/kanban-service/src/store_operations/ontology.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 17-22,987,1011-1023,1025-1029
+crates/kanban-mcp/src/tools/lifecycle/archive.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 25-33
+crates/kanban-cli/src/commands/run/show.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 12,17
+crates/kanban-cli/src/commands/dependency.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 20,22-24
+crates/kanban-server/src/application/comments/create.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-14
+  s_5b054b517a26b6::t_c8848eea8620cd 16-54
+  s_5b054b517a26b6::t_b2e1ace27063ba 1-2,15,55
+crates/kanban-client/src/operations/step/remove.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6-10,23-33,37,43-45
+crates/kanban-server/src/application/tasks/release.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_17addca17c856d 1-2,11-23
+crates/kanban-server/src/application/tasks/reclaim.rs
+  s_5b054b517a26b6::t_79018074f45be9 3,13
+  s_5b054b517a26b6::t_d5220417d69c13 1-2,4-12,14-32
+crates/kanban-client/README.md
+  s_b5fffbcb67075b::t_7e81ca2c49e42b 3-4,6-27,30-44
+AGENTS.md
+  s_5b054b517a26b6::t_57119f5cc156db 31
+  s_5b054b517a26b6::t_174743556cafc2 32-33
+crates/kanban-mcp/src/tools/steps/reopen.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 33-34,39-41
+apps/web/src/adapters/host/attachment-download.test.ts
+  s_5b054b517a26b6::t_da560133a78e83 1-23,26-30,32-44
+crates/kanban-mcp/src/tools/lifecycle/done.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 40-51
+migration/grpc-framework/crates/kanban-rpc-host/tests/refresh.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-94
+apps/web/src/application/data/board-read-model.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 1,26,129,131,164,173-174,220,231,233,236,238,241,243,280-281
+crates/kanban-client/src/operations/task/show.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6-16,20,25-26,29-42,46,51-52
+apps/web/src/application/workspace/data-source.ts
+  s_5b054b517a26b6::t_4cede23553268d 16,22-26
+  s_5b054b517a26b6::t_20c7d71a7608ce 14,21
+crates/kanban-server/src/web.rs
+  s_5b054b517a26b6::t_7371e9ab0404c3 101-105,107-111,163-164,166-167,430,435-459,466-467,473-477,494-502,529
+  s_5b054b517a26b6::t_79018074f45be9 493
+  s_5b054b517a26b6::t_72a140c6892730 622-624,673,688-689,703-705
+  s_5b054b517a26b6::t_6b42c4e7de418e 113-115,123-125
+  s_5b054b517a26b6::t_961afeaa77e199 625-672,674-687,690-702
+  s_5b054b517a26b6::t_52a6f22a556331 106,531,621
+apps/web/src/adapters/host/explorer-read-model.test.ts
+  s_5b054b517a26b6::t_750fe6eac5c452 10-11,120,129-130,142,144-152,157,161-169,182,187-194,215,217-218,233,238-239,247,259,261-263,271,274,283-285,303,314,322,325,333-334,342,358,360-361,376,380,393,424-427,432,434-437,442,447-448,460,467,487,489-492,506,511,530,537-539,551-552,580-581,585,587-591,600,604,606-607,613,618
+migration/grpc-framework/scripts/check-package.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-120
+migration/grpc-framework/web/tests/changes.test.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-57
+crates/kanban-server/src/application/signals/review.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-42
+  s_5b054b517a26b6::t_f0d9788667bef1 1-2,43-62
+crates/kanban-cli/src/commands/entities/list.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 13
+  s_5b054b517a26b6::t_0480364ac8b276 14-17
+crates/kanban-mcp/src/tools/lifecycle/release.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 33-41
+apps/web/src/adapters/host/data-source.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 4-6,14-40
+migration/grpc-framework/crates/kanban-rpc-host/Cargo.toml
+  s_5b054b517a26b6::t_4cede23553268d 1-21
+migration/grpc-framework/docs/09-migration-map.md
+  s_5b054b517a26b6::t_4cede23553268d 1-19
+crates/kanban-cli/src/commands/vector/rebuild.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 14
+  s_5b054b517a26b6::t_0480364ac8b276 9-13
+crates/kanban-cli/src/commands/graph/map.rs
+  s_5b054b517a26b6::t_0480364ac8b276 23-36
+  s_5b054b517a26b6::t_deb9c19a7721c5 22
+apps/web/src/application/errors/safe-error.ts
+  s_5b054b517a26b6::t_6c8b30803ddcf2 2,35,39,59
+crates/kanban-client/src/operations/event/stream.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,4-5,7,9,11,19-22,24-30,35-36,38-39,44-62,68-87,89,92-94,98-99,101,104-114,116,119,121-128,130-132,134,136-144,148-195,197,199-204,206-210,213-214,216-219,222,229-231,233-236,238-246,250-251,254-255,259,261,265-266,272
+crates/kanban-server/src/application/tasks/claim.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_ab4f750a8cb0cb 1-2,11-30
+crates/kanban-mcp/src/tools/search.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 60-61,74-75,97-98,111-112,125-126
+migration/grpc-framework/docs/04-decisions.md
+  s_5b054b517a26b6::t_4cede23553268d 1-33
+crates/kanban-mcp/src/tools/dependencies/remove.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 35-40
+crates/kanban-cli/src/commands/index.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 19,22-23,27
+  s_5b054b517a26b6::t_0480364ac8b276 24-26
+crates/kanban-client/src/operations/task/review.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-19,24,30-31
+crates/kanban-protocol/proto/rpc-operations.json
+  s_5b054b517a26b6::t_4d6c702d517b56 2-10,13,15,17-18,21-22,25-26,30-31,33-34,38,41-42,46-47,49-50,55,57-58,63,65-66,70,73-74,79,81-82,86,89-90,94,97-98,102,105-106,110,113-114,118,121-122,126,129-130,134,137-138,142,145-146,150,153-154,158,161-162,166,169-170,174,177-178,182,185-186,190-191,193-194,198,201-202,206,209-210,214-215,217-218,222,225-226,230,233-234,238,241-242,246,249-250,254-255,257-258,262,265-266,270-271,273-274,278-279,281-282,286-287,289-290,294-295,297-298,302-303,305-306,310,313-314,318-319,321-322,326,329-330,334-335,337-338,342-343,345-346,349,351,353-354,358-359,361-362,366,369-370,374,377-378,382-383,385-386,390-391,393-394,399,401-402,406,409-410,415,417-418,422-423,425-426,430-431,433-434,438,441-442,447,449-450,454-455,457-458,462-463,465-466,470-471,473-474,478-479,481-482,487,489-490,495,497-498,503,505-506,510-511,513-514,518,521-522,526,529-530,534,537-538,542,545-546,550,553-554,559,561-562,567,569-570,577-578,585-586,591,593-594,599,601-602,606,609-610,614,617-618,622,625-626,630,633-634,638-639,641-642,646-647,649-650,654,657-658,662,665-666,671,673-674,679,681-682,685,687,689-690,693,695,697-698,701,703,705-706,709,711,713-714,717,719,721-722,727,729-730,733,735,737-738,741,743,745-746,749,751,753-754,757,759,761-762,765,767,769-770,773,775,777-778,781-782,785-786,790-791,793-794,797,799,801-802,805-806,809-810,813-814,817-818,821-822,825-826,829,831,833-834,837,839,841-842,845,847,849-850,853-855,857-858,861-863,865-866,869-870,873-874,877-878,881-882,885-886,889-890,893-895,897-898,901-903,905-906,909-910,913-914,917-918,921-922,925-926,929-930,933-934,937-938,942-943,945-946,951
+  s_5b054b517a26b6::t_16f210db7d232e 1,11-12,14,16,19-20,23-24,27-29,32,35-37,39-40,43-45,48,51-54,56,59-62,64,67-69,71-72,75-78,80,83-85,87-88,91-93,95-96,99-101,103-104,107-109,111-112,115-117,119-120,123-125,127-128,131-133,135-136,139-141,143-144,147-149,151-152,155-157,159-160,163-165,167-168,171-173,175-176,179-181,183-184,187-189,192,195-197,199-200,203-205,207-208,211-213,216,219-221,223-224,227-229,231-232,235-237,239-240,243-245,247-248,251-253,256,259-261,263-264,267-269,272,275-277,280,283-285,288,291-293,296,299-301,304,307-309,311-312,315-317,320,323-325,327-328,331-333,336,339-341,344,347-348,350,352,355-357,360,363-365,367-368,371-373,375-376,379-381,384,387-389,392,395-398,400,403-405,407-408,411-414,416,419-421,424,427-429,432,435-437,439-440,443-446,448,451-453,456,459-461,464,467-469,472,475-477,480,483-486,488,491-494,496,499-502,504,507-509,512,515-517,519-520,523-525,527-528,531-533,535-536,539-541,543-544,547-549,551-552,555-558,560,563-566,568,571-576,579-584,587-590,592,595-598,600,603-605,607-608,611-613,615-616,619-621,623-624,627-629,631-632,635-637,640,643-645,648,651-653,655-656,659-661,663-664,667-670,672,675-678,680,683-684,686,688,691-692,694,696,699-700,702,704,707-708,710,712,715-716,718,720,723-726,728,731-732,734,736,739-740,742,744,747-748,750,752,755-756,758,760,763-764,766,768,771-772,774,776,779-780,783-784,787-789,792,795-796,798,800,803-804,807-808,811-812,815-816,819-820,823-824,827-828,830,832,835-836,838,840,843-844,846,848,851-852,856,859-860,864,867-868,871-872,875-876,879-880,883-884,887-888,891-892,896,899-900,904,907-908,911-912,915-916,919-920,923-924,927-928,931-932,935-936,939-941,944,947-950,952-954
+crates/kanban-live-core/src/source.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 2-25,27-62
+  s_5b054b517a26b6::t_f6935e66e6d73b 1,26
+migration/grpc-framework/web/src/watch.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-82
+migration/grpc-framework/web/tests/reducer.test.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-68
+crates/kanban-server/src/grpc/tests.rs
+  s_5b054b517a26b6::t_673aa0fb1861bf 127,132,154,160,172,179,224,238,244,311,416,422,488-489,524-529
+  s_5b054b517a26b6::t_961afeaa77e199 56-57,64,78-79,94-97,104,107-108,114-118,121-124,130,141,157-158,162-164,169,173-177,196-198,201-202,209-211,221,232,246-249,251-255,271-273,277,299,312-321,345,348-349,351,354-357,361-362,366,369-370,372,377-378,386-387,411-412,414,419-420,424-427,429-481
+  s_5b054b517a26b6::t_a2416cd22d607f 2
+  s_5b054b517a26b6::t_c06f93e06a854a 20,59,65,72,81-82,90,98,100,102,167,180-181,183,185,226-227,229,231,286-288,290,292,303,339-340,342,344,365,380,382,428,482-487,490-523,530-532
+  s_5b054b517a26b6::t_9af4ae2e6b3ea0 1,3-19,21-55,58,60-63,66-71,73-77,80,83-89,91-93,99,101,103,105-106,109-113,119-120,125-126,128-129,131,133-140,142-153,155-156,159,161,165-166,168,170-171,178,182,184,186-195,199-200,203-208,212-220,222-223,225,228,230,233-237,239-243,245,250,256-270,274-276,278-285,289,291,293-298,300-302,304-310,322-338,341,343,346-347,350,352-353,358-360,363-364,367-368,371,373-376,379,381,383-385,388-410,413,415,417-418,421,423
+apps/web/src/adapters/host/task-mutations.ts
+  s_5b054b517a26b6::t_58b7645227fcec 248,256-262
+  s_5b054b517a26b6::t_54e162c6827c08 1,5-6,10-15,22,25-27,46,51,56,61,97,129,144,149,157,164
+  s_5b054b517a26b6::t_ac396c850fff02 23-24,167-169,171,174,183,185-213,215,217-225,229-234,236-240,243-247,249-250,253
+  s_5b054b517a26b6::t_7fe2c3ed32aa2f 263
+apps/web/build/boundaries.ts
+  s_5b054b517a26b6::t_372a3f00efd130 28-29,55-57
+migration/grpc-framework/web/src/client.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-43
+crates/kanban-mcp/README.md
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 3-8
+xtask/src/rpc_codegen/model.rs
+  s_5b054b517a26b6::t_008bc1da8d1a1b 19,35-37,43,50,60,73,86,88,90,99,105,107,120,129,138,146,152,174,191,196-211,223,226,228,230,239,245,251,257-258,263,266,270,273,276,283,287,294,303-304,307,309,313,318,321,325,331,346,350,354,363,365,378,380,385,389,440,442,447,451,459,480,482,486-635
+  s_5b054b517a26b6::t_34c0df468684b9 179-190,305-306
+  s_5b054b517a26b6::t_8b82c6cb4ca5f1 1-18,20-34,38-42,44-49,51-59,61-72,74-85,87,89,91-98,100-104,106,108-119,121-128,130-137,139-145,147-151,153-173,175-178,192-195,212-222,224-225,227,229,231-238,240-244,246-250,252-256,259-262,264-265,267-269,271-272,274-275,277-282,284-286,288-293,295-302,308,310-312,314-317,319-320,322-324,326-330,332-345,347-349,351-353,355-362,364,366-377,379,381-384,386-388,390-439,441,443-446,448-450,452-458,460-479,481,483-485
+crates/kanban-server/src/application/dependencies/create.rs
+  s_5b054b517a26b6::t_58cc6e547bc0d2 22-24
+  s_5b054b517a26b6::t_c8848eea8620cd 12
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_852e5eaa4cb3c2 1-2,11,13-21,25
+crates/kanban-service/src/operations/ontology/records.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 1-347
+crates/kanban-cli/src/commands/board/archive.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 11
+  s_5b054b517a26b6::t_0480364ac8b276 13-18
+crates/kanban-rpc-host/tests/interop.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 2-12,14,24-29,31-36,38-60,62-71,73-82,95-107,109-163
+  s_5b054b517a26b6::t_f47f151f87b221 1
+  s_5b054b517a26b6::t_11a1f82849b9af 83-87
+  s_5b054b517a26b6::t_081fdeb9cbeac9 88-94
+  s_5b054b517a26b6::t_81328f8c4747c4 13,15-23,30,37,61,72,108
+apps/web/src/adapters/host/explorer-read-model.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 1,33-34,39-40,45-47,71,73,98,100,156,158,181,183,218,221,271,273,352,355
+crates/kanban-protocol/docs/schema.md
+  s_5b054b517a26b6::t_473420afad64cf 16-24
+crates/kanban-client/src/operations/vector.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 2,5,8,13-22,26,30-37,41-50,55-64,69,73-80,84,88-95,209-210,213
+crates/kanban-server/src/application/steps/create.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_c8848eea8620cd 12-29
+  s_5b054b517a26b6::t_ff80ae810fddb3 1-2,11,30
+crates/kanban-mcp/src/tools/dependencies/create.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 35-40
+crates/kanban-cli/src/commands/label/list.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 8,10
+crates/kanban-mcp/src/tools/stats.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 26-27
+patches/@bufbuild__protobuf@2.15.0.patch
+  s_5b054b517a26b6::t_b21f5075a5dc22 1-84
+crates/kanban-server/src/grpc.rs
+  s_5b054b517a26b6::t_8dbb2b7c98a42f 1,10,34-35,64-81
+  s_5b054b517a26b6::t_4cede23553268d 3,12-13,15-21,23-25,27,32-33,36-39,62-63
+  s_5b054b517a26b6::t_9974ec282b3ae5 6-8,22,40-41,44-48,50-55,57-59,61
+  s_5b054b517a26b6::t_465d21ad3e224f 2,4-5,9,11,14,26,28-31,42-43,49,56,60
+migration/grpc-framework/crates/kanban-rpc-host/src/service.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-146
+migration/grpc-framework/web/tests/watch.test.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-51
+crates/kanban-server/src/application/steps/remove.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_c8848eea8620cd 11-23
+  s_5b054b517a26b6::t_868d144f8740d6 1-2,24
+crates/kanban-mcp/src/tools/boards/columns.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 29-30
+migration/grpc-framework/validation/toolchain.json
+  s_5b054b517a26b6::t_4cede23553268d 1-28
+docs/adr/0007_local_grpc.md
+  s_5b054b517a26b6::t_dd4f768cb768d3 27-30
+  s_5b054b517a26b6::t_1fb25f0af19e3f 1-26,31-35
+crates/kanban-rpc-host/README.md
+  s_5b054b517a26b6::t_5e0b2e10ada06c 1-5
+apps/web/tests/release-refresh-cost.spec.ts
+  s_5b054b517a26b6::t_d639d8c8bbc6a8 137-148,154
+  s_5b054b517a26b6::t_03b2d0f11e9788 92-96,99-106
+  s_5b054b517a26b6::t_cf9e4a90e6b504 1-91,97-98,107-136,149-153,155-161
+crates/kanban-cli/src/commands/comment/add.rs
+  s_5b054b517a26b6::t_0480364ac8b276 43-58
+  s_5b054b517a26b6::t_deb9c19a7721c5 40
+apps/web/src/application/realtime/changes.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 1-162
+crates/kanban-cli/src/commands/graph/neighbors.rs
+  s_5b054b517a26b6::t_0480364ac8b276 17-25
+  s_5b054b517a26b6::t_deb9c19a7721c5 16
+migration/grpc-framework/validation/atlas-tests.tap
+  s_5b054b517a26b6::t_4cede23553268d 1-94
+crates/kanban-cli/src/commands/event/list.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 16
+  s_5b054b517a26b6::t_26d4dca3457580 21-24
+  s_5b054b517a26b6::t_0480364ac8b276 25-32
+crates/kanban-live-core/src/refresh.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 1-9
+crates/kanban-protocol/README.md
+  s_5b054b517a26b6::t_473420afad64cf 6-14
+migration/grpc-framework/docs/05-integration.md
+  s_5b054b517a26b6::t_4cede23553268d 1-48
+migration/grpc-framework/crates/kanban-live-core/src/lib.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-11
+crates/kanban-cli/src/commands/entities.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 19,21-23
+migration/grpc-framework/integration/atlas-web/bind.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-40
+migration/grpc-framework/proto/kanban/framework/v1/board.proto
+  s_5b054b517a26b6::t_4cede23553268d 1-114
+docs/architecture.md
+  s_5b054b517a26b6::t_f99f5c3039135c 6-8,11,24-25,29-31
+  s_5b054b517a26b6::t_57119f5cc156db 32-34
+  s_5b054b517a26b6::t_bcadc19685cbb6 35
+crates/kanban-client/Cargo.toml
+  s_5b054b517a26b6::t_5fa4452d0df754 21
+  s_5b054b517a26b6::t_e297966937040d 14-15,19-20
+migration/grpc-framework/scripts/check-offline.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-29
+crates/kanban-cli/src/commands/dependency/add.rs
+  s_5b054b517a26b6::t_0480364ac8b276 15-16,18-20
+  s_5b054b517a26b6::t_deb9c19a7721c5 12
+migration/grpc-framework/validation/installer-tests.tap
+  s_5b054b517a26b6::t_4cede23553268d 1-88
+crates/kanban-rpc-host/tests/refresh.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 2-3,5-16,18-39,41-44,46-48,50-53,55-70,72-204,206,210-211,213,215,219-220,226-227,231,233-236,238,242-243,245
+  s_5b054b517a26b6::t_f47f151f87b221 1
+  s_5b054b517a26b6::t_a431de8703b3b7 4,17,40,45,49,54,71,205,207-209,212,214,216-218,221-225,228-230,232,237,239-241,244
+crates/kanban-cli/src/commands/graph/rebuild.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 3-4
+crates/kanban-cli/src/commands/run/log.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 13,18
+crates/kanban-client/src/operations/comment/list.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,13-22,26,31-32,40-41,45
+crates/kanban-client/src/operations/run/list.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,13-22,26,31-32,40-41,46
+crates/kanban-client/src/operations/search.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 5,8,12-20,23,27-35,38-49,52-66,69-83
+apps/web/src/adapters/host/realtime.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 1-27
+migration/grpc-framework/docs/03-stream-protocol.md
+  s_5b054b517a26b6::t_4cede23553268d 1-76
+crates/kanban-cli/src/commands/task/step/remove.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 13
+  s_5b054b517a26b6::t_0480364ac8b276 18-20,32-34
+crates/kanban-cli/src/commands/label/add.rs
+  s_5b054b517a26b6::t_0480364ac8b276 17-28
+  s_5b054b517a26b6::t_deb9c19a7721c5 15
+crates/kanban-server/src/application/tasks/update.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_919ac6eb921a6b 1-2,11-31
+crates/kanban-server/src/application/tasks/list_support.rs
+  s_5b054b517a26b6::t_3a23a5eca6324f 23,31-32,56,65-80,83-84,118
+  s_5b054b517a26b6::t_6d2c0cbc7913dc 62
+  s_5b054b517a26b6::t_da91cd19bec59a 1-22,24-30,33-55,57-61,63-64,81-82,85-117,119-122
+crates/kanban-server/src/application/health.rs
+  s_5b054b517a26b6::t_4d6c702d517b56 1-27
+migration/grpc-framework/Cargo.toml
+  s_5b054b517a26b6::t_4cede23553268d 1-27
+migration/grpc-framework/crates/kanban-rpc-proto/src/lib.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-6
+crates/kanban-live-core/src/lib.rs
+  s_5b054b517a26b6::t_5e0b2e10ada06c 1
+  s_5b054b517a26b6::t_cf47849193ccd3 2-11
+crates/kanban-rpc-proto/README.md
+  s_5b054b517a26b6::t_5e0b2e10ada06c 1-5
+migration/grpc-framework/crates/kanban-rpc-host/tests/interop.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-76
+apps/web/tests/release-grpc-migration.spec.ts
+  s_5b054b517a26b6::t_1cf1ef3300c342 129-151,153
+  s_5b054b517a26b6::t_8de7868ccfc0c7 106,121
+  s_5b054b517a26b6::t_248d1affeb9193 1,3,5-40,46-72,74-102,104-105,107-120,122-126,128
+  s_5b054b517a26b6::t_4d912e75c069a2 2,4,41-45,73,103,127,152
+apps/web/build/host-proxy.ts
+  s_5b054b517a26b6::t_c06f93e06a854a 1-67
+crates/kanban-client/src/operations/task/heartbeat.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-19,24,30-31
+crates/kanban-cli/src/commands/task/heartbeat.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 18
+  s_5b054b517a26b6::t_0480364ac8b276 23-34
+migration/grpc-framework/web/tsconfig.json
+  s_5b054b517a26b6::t_4cede23553268d 1
+crates/kanban-client/src/operations/task/update.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-2,5,10-18,22,28-29
+migration/grpc-framework/web/generate.mjs
+  s_5b054b517a26b6::t_4cede23553268d 21-22
+  s_5b054b517a26b6::t_15566f2b538cbe 1-20
+crates/kanban-service/src/domain.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 417-438
+crates/kanban-client/src/operations/task/block.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-19,24,30-31
+crates/kanban-cli/tests/cli_queue_adoption.rs
+  s_5b054b517a26b6::t_c841d89860caa6 140-143
+  s_5b054b517a26b6::t_e21b62f9c4cd87 13-14,16-29,40-42,45-59
+  s_5b054b517a26b6::t_6651a16341db8c 15
+  s_5b054b517a26b6::t_31af7eba3903ad 30-39,43-44
+  s_5b054b517a26b6::t_77e1a7a7096c28 126-129,137-139
+  s_5b054b517a26b6::t_091127cefae38e 12
+crates/kanban-service/src/operations/ontology.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 3-12,20-22,43,45,201-202,387-389
+crates/kanban-client/src/operations/task/list.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 5,8,13-23,26,31-41
+crates/kanban-service/src/operations/ontology/commands.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 1-400
+crates/kanban-cli/src/commands/attachment/remove.rs
+  s_5b054b517a26b6::t_0480364ac8b276 15-17
+  s_5b054b517a26b6::t_deb9c19a7721c5 12,14
+crates/kanban-cli/src/commands/task/reclaim.rs
+  s_5b054b517a26b6::t_0480364ac8b276 31-42
+  s_5b054b517a26b6::t_deb9c19a7721c5 22
+patches/README.md
+  s_5b054b517a26b6::t_5de26aecf56ec3 1-10
+crates/kanban-mcp/src/tools/steps/remove.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 32,34
+crates/kanban-client/tests/native.rs
+  s_5b054b517a26b6::t_9a987d60c0ef7c 1-10
+apps/web/src/app/app.tsx
+  s_5b054b517a26b6::t_a8ca9a6d49e8a7 11,222-223,226-227
+crates/kanban-server/src/grpc/business.rs
+  s_5b054b517a26b6::t_13ee50de3722d7 141,143,173,175,177,183,185,187,189,195,197
+  s_5b054b517a26b6::t_1cfc12b5c26d1f 15-16
+  s_5b054b517a26b6::t_fa7c3ed5d0aa84 163,165,167,169
+  s_5b054b517a26b6::t_deb3664900e12c 227,249,251,253,259,261,263
+  s_5b054b517a26b6::t_dfddb3f288a9fd 1-2,4-8,10-14,17-31,34-140,142,144-160,162,164,166,168,170-172,174,176,178-182,184,186,188,190-194,196,198-226,228-248,250,252,254-258,260,262,264,266-270
+  s_5b054b517a26b6::t_4d6c702d517b56 32-33
+  s_5b054b517a26b6::t_ad77c2258af0bb 3,9,161,265
+apps/web/src/lib/rpc/codec.test.ts
+  s_5b054b517a26b6::t_008bc1da8d1a1b 2-97,99-136
+  s_5b054b517a26b6::t_97ec05bb9d1f89 1,98
+apps/web/src/adapters/host/maintenance-api.ts
+  s_5b054b517a26b6::t_6c8b30803ddcf2 43,45,47-54,56-67
+migration/grpc-framework/.gitignore
+  s_5b054b517a26b6::t_4cede23553268d 1-4
+crates/kanban-mcp/src/tools/tasks/update.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 97-113
+crates/kanban-client/src/transport.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 2-32,34,37-45,48-51,54-60,63-66
+migration/grpc-framework/validation/web-tests.tap
+  s_5b054b517a26b6::t_4cede23553268d 1-418
+crates/kanban-client/src/operations/dependency/create.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,23-28,30-34,39,45-47,55-56,60
+migration/grpc-framework/validation/branch-provenance.json
+  s_5b054b517a26b6::t_4cede23553268d 1-63
+migration/grpc-framework/integration/kanban-adapter/src/lib.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-65
+crates/kanban-mcp/src/tools/boards/create.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 32-38
+migration/grpc-framework/docs/02-architecture.md
+  s_5b054b517a26b6::t_4cede23553268d 1-33
+crates/kanban-mcp/src/tools/steps/list.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 32-33
+migration/grpc-framework/delivery-manifest.json
+  s_5b054b517a26b6::t_4cede23553268d 1-446
+crates/kanban-service/src/realtime.rs
+  s_5b054b517a26b6::t_6c03222cde7d29 109-111
+  s_5b054b517a26b6::t_4cede23553268d 1-23,25-30,32-58,60-63,65-91,93-108
+  s_5b054b517a26b6::t_aca54c16b7cda5 24,31,59,64,92
+apps/web/src/application/realtime/changes.test.ts
+  s_5b054b517a26b6::t_750fe6eac5c452 1-128
+migration/grpc-framework/crates/kanban-rpc-proto/Cargo.toml
+  s_5b054b517a26b6::t_4cede23553268d 1-11
+crates/kanban-mcp/src/tools/vector/status.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 27-28
+migration/grpc-framework/web/src/model.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-41
+crates/kanban-cli/src/commands/vector/status.rs
+  s_5b054b517a26b6::t_0480364ac8b276 9-13
+  s_5b054b517a26b6::t_deb9c19a7721c5 14
+crates/kanban-mcp/src/tools/attachments/download.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 40-42
+crates/kanban-service/src/store_operations/tasks/show.rs
+  s_5b054b517a26b6::t_12aff969732a0b 10-13,15,27-35
+Cargo.toml
+  s_5b054b517a26b6::t_d00568f60bb40b 48
+  s_5b054b517a26b6::t_7074f2dd89869c 12-14,74-82,94-96
+  s_5b054b517a26b6::t_c8848eea8620cd 56-58
+  s_5b054b517a26b6::t_b78c8ba0655ccb 47
+apps/web/src/features/tasks/TaskInspectorAssetsPanel.test.tsx
+  s_5b054b517a26b6::t_58b7645227fcec 219,222,225
+crates/kanban-cli/src/commands/graph/neighborhood.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 17
+  s_5b054b517a26b6::t_0480364ac8b276 18-28
+apps/web/tests/release-native-clients.spec.ts
+  s_5b054b517a26b6::t_0d6749b6d05fb7 1-84
+migration/grpc-framework/integration/atlas-server/grpc.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-27
+crates/kanban-service/src/operations/ontology/convert.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 1-463
+crates/kanban-client/src/operations/labels.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 3,6,9-19,23,28-36,41,49-59,63,65-74,78,83-84,87,96-106,109,114,117,123-124,127,134,137-141,147-157,161,167-168,171,177-187,190,196-197,233-234,239,246-247,252,260
+crates/kanban-mcp/src/tools/tasks/promote.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 31-36
+apps/web/src/lib/rpc/value-codec.ts
+  s_5b054b517a26b6::t_78e2ef8b1cf6e7 15-18
+  s_5b054b517a26b6::t_008bc1da8d1a1b 62-76
+  s_5b054b517a26b6::t_9f7bb4d5702195 1-14,19-61,77-131
+crates/kanban-live-core/src/hub.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 1-27,31-58,61-72,74-78,80-190,192-203
+  s_5b054b517a26b6::t_6cf98337a4ade0 28-30,59-60,73,79,191
+crates/kanban-service/src/lib.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 74-89,104-107
+  s_5b054b517a26b6::t_4cede23553268d 13-14
+crates/kanban-client/src/operations/step/create.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,4,8,20-28,33,39,42,45
+crates/kanban-mcp/src/tools/vector/query_chunks.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 36-37
+crates/kanban-mcp/src/tools/steps/done.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 33-34,39-41
+crates/kanban-live-core/Cargo.toml
+  s_5b054b517a26b6::t_cf47849193ccd3 1-11
+apps/web/src/application/data/maintenance-api.ts
+  s_5b054b517a26b6::t_6c8b30803ddcf2 23,77,79,90,101
+crates/kanban-mcp/src/tools/lifecycle/specify.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 25-34
+crates/kanban-client/tests/native/transport.rs
+  s_5b054b517a26b6::t_9a987d60c0ef7c 1-59
+crates/kanban-cli/src/commands/maintenance.rs
+  s_5b054b517a26b6::t_0480364ac8b276 79-82,86-87,98-99,104-107,116-118,123-125,130-132
+  s_5b054b517a26b6::t_deb9c19a7721c5 60-61,63-64,66-67,69-70,72,75,91-92,94,111
+crates/kanban-client/src/error.rs
+  s_5b054b517a26b6::t_0f15f10a5a1c19 111-112,121-161
+  s_5b054b517a26b6::t_537fc32b4e05a5 20,22,27-54,67-83,162
+  s_5b054b517a26b6::t_29bafe0ad88b99 84-85
+crates/kanban-cli/src/commands/task/create.rs
+  s_5b054b517a26b6::t_0480364ac8b276 57-77
+  s_5b054b517a26b6::t_deb9c19a7721c5 51
+crates/kanban-mcp/src/tools/attachments/create.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 35-48
+crates/kanban-mcp/src/tools/lifecycle/claim.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 42-52
+crates/kanban-client/src/operations/maintenance.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 2-4,7-8,12-15,17-20,22-33,35-44,46-55,57,62-73,75,80-91,93-102,104-113,115,120-128,130,134-145,147,151-162
+crates/kanban-cli/src/commands/dependency/remove.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 14,22-23
+  s_5b054b517a26b6::t_0480364ac8b276 16-21
+crates/kanban-client/src/operations/dependency/remove.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,23-33,37,43-44,46,54-55,59
+migration/grpc-framework/web/src/changes.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-150
+apps/web/src/application/workspace/board-session-registry.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 4,17,38,91-99,102-114,140,251,254-260,302,351-352
+  s_5b054b517a26b6::t_78e2ef8b1cf6e7 100-101
+  s_5b054b517a26b6::t_4cede23553268d 2-3,14,29,171,246,250,252-253,261-276,278-289,293
+  s_5b054b517a26b6::t_1054704d627468 245
+crates/kanban-client/src/operations/dependency/list.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,13-22,26,31-32,40-41,45
+apps/web/src/application/data/attachment-download.ts
+  s_5b054b517a26b6::t_8b9432b29c9da5 1,14-15
+crates/kanban-client/src/operations/context.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,7,15-25
+crates/kanban-client/src/operations/graph.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 3-4,7,10-20,24-33,38-47,52,56-64,67,73-85,88,93-102,106,111-120
+apps/web/src/application/realtime/bind.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-40
+crates/kanban-service/src/db.rs
+  s_5b054b517a26b6::t_4cede23553268d 11,54,73,79
+crates/kanban-mcp/tests/stdio_native/support.rs
+  s_5b054b517a26b6::t_d9f4b532c9860e 1-201
+proto/kanban/framework/v1/board.proto
+  s_5b054b517a26b6::t_cf47849193ccd3 1-114
+apps/web/src/lib/rpc/transport.test.ts
+  s_5b054b517a26b6::t_008bc1da8d1a1b 2-134,139
+  s_5b054b517a26b6::t_3881cd11795670 1,135-138
+crates/kanban-cli/src/commands/task/unblock.rs
+  s_5b054b517a26b6::t_0480364ac8b276 16-22
+  s_5b054b517a26b6::t_deb9c19a7721c5 11
+crates/kanban-cli/src/commands/search.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 38,50
+crates/kanban-cli/src/commands/run.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 19,21,24,27-28
+crates/kanban-cli/src/commands/task/release.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 14
+  s_5b054b517a26b6::t_0480364ac8b276 19-28
+crates/kanban-server/src/application/ontology/convert.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 1-515
+crates/kanban-service/src/realtime/tests/measurement.rs
+  s_5b054b517a26b6::t_6c03222cde7d29 1-256
+crates/kanban-mcp/src/tools/runs/list.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 32-33
+apps/web/src/application/workspace/use-board-session.tsx
+  s_5b054b517a26b6::t_4cede23553268d 64-66
+crates/kanban-cli/src/commands/label.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 61,63-75
+crates/kanban-cli/src/server.rs
+  s_5b054b517a26b6::t_f99f5c3039135c 19
+crates/kanban-client/src/operations/task/specify.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-2,5,10-18,22,28-29
+crates/kanban-mcp/Cargo.toml
+  s_5b054b517a26b6::t_4d6c702d517b56 23-27
+crates/kanban-server/README.md
+  s_5b054b517a26b6::t_1fb25f0af19e3f 4-5,14-22
+  s_5b054b517a26b6::t_dd4f768cb768d3 23-26
+crates/kanban-cli/README.md
+  s_5b054b517a26b6::t_02b5dea3fb358a 4-5
+crates/kanban-mcp/src/tools/boards/list.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 28-29
+crates/kanban-mcp/src/tools/lifecycle/reclaim.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 30-40
+crates/kanban-server/src/application/attachments.rs
+  s_5b054b517a26b6::t_79018074f45be9 2-26,66
+  s_5b054b517a26b6::t_c8848eea8620cd 28-45,79
+  s_5b054b517a26b6::t_d3d3e72c1fe49f 1,27,46-65,67-78,80-94
+crates/kanban-client/src/operations/task/plan_not_required.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-19,24,30,32
+migration/grpc-framework/docs/10-debugging.md
+  s_5b054b517a26b6::t_4cede23553268d 1-33
+crates/kanban-cli/src/commands/task/promote.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 12
+  s_5b054b517a26b6::t_0480364ac8b276 17-23
+crates/kanban-cli/src/commands/task/step/add.rs
+  s_5b054b517a26b6::t_0480364ac8b276 30-44
+  s_5b054b517a26b6::t_deb9c19a7721c5 25
+justfile
+  s_5b054b517a26b6::t_0e3559aee9a6e6 29-32
+  s_5b054b517a26b6::t_bea92c7604d70a 21-27
+  s_5b054b517a26b6::t_35a30ca03816a6 33-36
+  s_5b054b517a26b6::t_ea7aa9050c31a1 139-144,180
+  s_5b054b517a26b6::t_e18a92d7f23323 28
+crates/kanban-mcp/src/tools/steps/skip.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 33-34,39-41
+crates/kanban-server/src/error.rs
+  s_5b054b517a26b6::t_79018074f45be9 20-21,66-77
+crates/kanban-client/src/operations/attachment.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,14,16-25,29,35-43,48,55-64,67-75,79,86-96,130-131,134-138,142-146,152
+crates/kanban-mcp/src/shared.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 1,8,20,32-33,35,42-43,45
+crates/kanban-cli/src/commands/task/step/skip.rs
+  s_5b054b517a26b6::t_0480364ac8b276 20-30
+  s_5b054b517a26b6::t_deb9c19a7721c5 15
+crates/kanban-cli/src/commands/vector.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 28,31-36
+migration/grpc-framework/integration/patch-plan.json
+  s_5b054b517a26b6::t_4cede23553268d 1-195
+migration/grpc-framework/web/src/realtime-port.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-20
+crates/kanban-cli/src/commands/comment/list.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 9
+  s_5b054b517a26b6::t_0480364ac8b276 11-13
+crates/kanban-mcp/src/tools/boards/show.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 25,27
+crates/kanban-cli/src/commands/task/done.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 16
+  s_5b054b517a26b6::t_0480364ac8b276 21-33
+crates/kanban-server/src/application/tasks/review.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_82d87dcad4186d 1-2,11-25
+crates/kanban-service/src/operations/ontology/typed.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 1-359
+crates/kanban-rpc-host/Cargo.toml
+  s_5b054b517a26b6::t_a0925d04bd012b 11
+  s_5b054b517a26b6::t_b78c8ba0655ccb 17-18
+  s_5b054b517a26b6::t_cf47849193ccd3 1-10,12-16,19-22
+  s_5b054b517a26b6::t_56a56370d5f1a5 23
+xtask/Cargo.toml
+  s_5b054b517a26b6::t_c8848eea8620cd 27-29
+crates/kanban-cli/src/commands/task/reopen.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 13
+  s_5b054b517a26b6::t_0480364ac8b276 18-27
+migration/grpc-framework/.github/workflows/framework.yml
+  s_5b054b517a26b6::t_4cede23553268d 1-27
+crates/kanban-client/src/operations/task/reclaim.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-2,5,10-18,22,28-29
+apps/web/src/application/workspace/board-live-state.ts
+  s_5b054b517a26b6::t_4cede23553268d 25-26
+xtask/src/repository.rs
+  s_5b054b517a26b6::t_d43dc902ba4dd2 247-257,265-271,276-278
+  s_5b054b517a26b6::t_10645989c02646 182-184,258-264,272-275
+  s_5b054b517a26b6::t_2b484597f7aa22 110-112,115,118-127,133-181,185-203
+  s_5b054b517a26b6::t_f597198d042d2e 204
+apps/web/src/application/data/explorer-read-model.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 1,68,197,224-226,229,235-236,306,325,335,337,451,454,460,472,474,489,555,558,567,641,644-645,655,658-659,705-716,719,726,729-736
+crates/kanban-mcp/src/tools/signals.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 102,123,136,144,156-157,170,178,191,193,203,205,218,220,233,241
+crates/kanban-cli/src/main.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 216-240
+crates/kanban-cli/src/commands/vector/configure.rs
+  s_5b054b517a26b6::t_0480364ac8b276 21-33
+crates/kanban-mcp/tests/stdio_native.rs
+  s_5b054b517a26b6::t_d9f4b532c9860e 1-345
+migration/grpc-framework/AGENTS.md
+  s_5b054b517a26b6::t_4cede23553268d 1-20
+crates/kanban-mcp/src/tools/graph/map.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 61-62
+crates/kanban-client/src/operations/board/archive.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-20
+crates/kanban-server/Cargo.toml
+  s_5b054b517a26b6::t_9974ec282b3ae5 16
+  s_5b054b517a26b6::t_79018074f45be9 17-19
+  s_5b054b517a26b6::t_8dbb2b7c98a42f 12-13,21-23
+  s_5b054b517a26b6::t_d00568f60bb40b 25
+  s_5b054b517a26b6::t_14139f4d0c52f6 46
+  s_5b054b517a26b6::t_d719239ab7a48b 20
+crates/kanban-cli/src/commands/vector/query_label_atoms.rs
+  s_5b054b517a26b6::t_0480364ac8b276 23-37
+crates/kanban-live-core/src/model.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 1-30,32-65,67-100,102-123
+  s_5b054b517a26b6::t_a65341cd5889ed 31,66,101
+crates/kanban-server/src/application/ontology.rs
+  s_5b054b517a26b6::t_5facf088dace08 28,38,59,368
+  s_5b054b517a26b6::t_b5b24ca0323100 1-27,29-37,39-58,60-367,369-650
+crates/kanban-client/src/operations/board/get.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6-16
+crates/kanban-server/src/application/boards/archive.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_677901769943dd 1-2,11-21
+crates/kanban-client/src/operations/step/update.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,26-35,40,47-48,51,54
+crates/kanban-service/src/operations.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 49-64
+apps/web/src/application/workspace/session-events.ts
+  s_5b054b517a26b6::t_4cede23553268d 9-10
+  s_5b054b517a26b6::t_a8ca9a6d49e8a7 27-34
+apps/web/src/application/workspace/board-session-registry.test.ts
+  s_5b054b517a26b6::t_750fe6eac5c452 63-64,78-226,494
+  s_5b054b517a26b6::t_16378826191aec 8
+crates/kanban-mcp/src/main.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 7-11,17-35
+crates/kanban-client/src/operations/board/create.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-3,8-16
+crates/kanban-client/src/operations/task/claim.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-19,24,30-31
+migration/grpc-framework/integration/kanban-adapter/Cargo.toml
+  s_5b054b517a26b6::t_4cede23553268d 1-12
+crates/kanban-cli/src/commands/label/bootstrap.rs
+  s_5b054b517a26b6::t_0480364ac8b276 47-64
+  s_5b054b517a26b6::t_deb9c19a7721c5 32
+apps/web/src/adapters/host/realtime.test.ts
+  s_5b054b517a26b6::t_750fe6eac5c452 1-129
+crates/kanban-cli/src/commands/run/list.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 13
+  s_5b054b517a26b6::t_0480364ac8b276 18-20
+crates/kanban-client/src/operations/ontology/compat.rs
+  s_5b054b517a26b6::t_9a987d60c0ef7c 1-305
+crates/kanban-mcp/src/tools/runs/log.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 28-29
+crates/kanban-client/tests/native/business.rs
+  s_5b054b517a26b6::t_9a987d60c0ef7c 1-250
+migration/grpc-framework/crates/kanban-live-core/src/source.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-52
+migration/grpc-framework/docs/11-atlas-refresh-protocol.md
+  s_5b054b517a26b6::t_4cede23553268d 1-37
+crates/kanban-rpc-proto/Cargo.toml
+  s_5b054b517a26b6::t_d5e2151dd93a5b 8
+  s_5b054b517a26b6::t_cf47849193ccd3 1-7,9-11
+crates/kanban-mcp/src/tools/lifecycle/heartbeat.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 42-52
+apps/web/src/application/realtime/bind.test.ts
+  s_5b054b517a26b6::t_750fe6eac5c452 2,79-82
+  s_5b054b517a26b6::t_a8ca9a6d49e8a7 5-46
+  s_5b054b517a26b6::t_bd2c023b769f80 1,3-4,47-78,83-93
+crates/kanban-cli/src/commands/entities/upsert.rs
+  s_5b054b517a26b6::t_0480364ac8b276 26-40
+  s_5b054b517a26b6::t_deb9c19a7721c5 25
+crates/kanban-cli/src/commands/vector/query_chunks.rs
+  s_5b054b517a26b6::t_0480364ac8b276 16-30
+crates/kanban-client/tests/native/common.rs
+  s_5b054b517a26b6::t_9a987d60c0ef7c 1-225
+migration/grpc-framework/web/src/atlas-client.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-31
+crates/kanban-cli/src/commands/task/step.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 36,42-49
+crates/kanban-client/src/operations/task/archive.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-2,5,10-18,22,28-29
+migration/grpc-framework/crates/kanban-rpc-host/examples/native_client.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-18
+migration/grpc-framework/scripts/seal-package.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-80
+crates/kanban-cli/src/commands/graph/query.rs
+  s_5b054b517a26b6::t_0480364ac8b276 15-16
+  s_5b054b517a26b6::t_deb9c19a7721c5 12
+crates/kanban-cli/src/commands/task/step/reopen.rs
+  s_5b054b517a26b6::t_0480364ac8b276 20-30
+  s_5b054b517a26b6::t_deb9c19a7721c5 15
+crates/kanban-server/src/application/tasks/reopen.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_3d98dca960156e 1-2,11-23
+crates/kanban-client/src/operations/task/complete.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-19,24,30-31
+apps/web/src/adapters/host/attachment-download.ts
+  s_5b054b517a26b6::t_3e63b4c6851df7 2-6,8-9,13-22,24
+  s_5b054b517a26b6::t_60f13da9105fa0 1
+crates/kanban-mcp/src/tools/tasks/list.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 97-98,143-144
+crates/kanban-client/src/operations/task/unblock.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-2,5,10-18,22,28-29
+crates/kanban-cli/src/commands/label/remove.rs
+  s_5b054b517a26b6::t_0480364ac8b276 13-15
+  s_5b054b517a26b6::t_deb9c19a7721c5 11
+xtask/src/check/dependencies.rs
+  s_5b054b517a26b6::t_756f5b211c176f 813-825,830-845,849,853-866,2105-2108,2111-2122,2124,2126,2128-2129,2131-2132,2141-2142
+  s_5b054b517a26b6::t_8e520cecc83502 826-829,846-848,850-852,1201,1229-1231,1800-1805,2109-2110,2136-2137
+  s_5b054b517a26b6::t_8dbb2b7c98a42f 56
+  s_5b054b517a26b6::t_269d7d07aaa35d 1616,1892
+  s_5b054b517a26b6::t_1fb25f0af19e3f 1824,1953
+  s_5b054b517a26b6::t_c0d3f4030ad9cb 92-94,97-106,1198-1200,1202-1208,1226-1228,1232-1236,1239-1251,1284-1299,1653-1657,1972-2043,2123,2125,2127,2130,2133-2135,2138-2140,2143
+crates/kanban-client/tests/native/coverage.rs
+  s_5b054b517a26b6::t_9a987d60c0ef7c 1-36
+crates/kanban-mcp/src/tools/graph/neighborhood.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 47,49
+migration/grpc-framework/validation/protobuf-tests.tap
+  s_5b054b517a26b6::t_4cede23553268d 1-70
+crates/kanban-client/src/lib.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 3-8,28-29
+crates/kanban-rpc-host/src/lib.rs
+  s_5b054b517a26b6::t_961afeaa77e199 4
+  s_5b054b517a26b6::t_b78c8ba0655ccb 3,5,132,138
+  s_5b054b517a26b6::t_5e0b2e10ada06c 1
+  s_5b054b517a26b6::t_cf47849193ccd3 6,8-44,46-52,54-63,65-68,70-86,88-90,92-93,95-98,100-102,104-106,108-109,111-114,116-117,125-129,131,134-137,139
+  s_5b054b517a26b6::t_d62ae5c792fe6d 2,7,45,53,64,69,87,91,94,99,103,107,110,115,118-124,130,133
+crates/kanban-client/src/operations/task/create.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,12-21
+crates/kanban-cli/src/commands/entities/show.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 10-11
+crates/kanban-server/src/application/tasks/create.rs
+  s_5b054b517a26b6::t_79018074f45be9 3,19
+  s_5b054b517a26b6::t_58cc6e547bc0d2 7
+  s_5b054b517a26b6::t_c8848eea8620cd 21-45
+  s_5b054b517a26b6::t_1a92b3f4fd9e31 1-2,4-6,8-18,20,46
+crates/kanban-server/src/application/support.rs
+  s_5b054b517a26b6::t_79018074f45be9 30-33,35-39,41-48,50
+  s_5b054b517a26b6::t_68feea62a0513e 1-29,34,40,49
+crates/kanban-service/src/maintenance.rs
+  s_5b054b517a26b6::t_6c03222cde7d29 1702-1703,1705,3434-3475
+  s_5b054b517a26b6::t_e92209d1808705 3476-3477
+migration/grpc-framework/web/package.json
+  s_5b054b517a26b6::t_4cede23553268d 1-14,16-17,21-22,24-26
+  s_5b054b517a26b6::t_91b87af06dfec9 15,18-20,23
+migration/grpc-framework/crates/kanban-rpc-host/src/refresh.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-70
+crates/kanban-mcp/src/tools/graph/status.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 28-29
+crates/kanban-cli/src/commands/vector/sync.rs
+  s_5b054b517a26b6::t_0480364ac8b276 9-13
+  s_5b054b517a26b6::t_deb9c19a7721c5 14
+apps/web/vite.config.ts
+  s_5b054b517a26b6::t_c06f93e06a854a 5,9,17,22-36,38-55,57-58,60
+apps/web/src/lib/rpc/endpoint.ts
+  s_5b054b517a26b6::t_9f7bb4d5702195 1-8,10-12,14-138
+  s_5b054b517a26b6::t_008bc1da8d1a1b 9,13
+crates/kanban-cli/src/commands/attachment/download.rs
+  s_5b054b517a26b6::t_0480364ac8b276 17-19
+  s_5b054b517a26b6::t_deb9c19a7721c5 14,16
+migration/grpc-framework/docs/00-atlas-branch-audit.md
+  s_5b054b517a26b6::t_4cede23553268d 1-29
+crates/kanban-mcp/src/tools/tasks/create.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 50,52-70
+migration/grpc-framework/crates/kanban-live-core/src/hub.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-122
+crates/kanban-service/src/mutation_gate.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-10,13-20,23-31,38-40,43,46-48,73-193
+  s_5b054b517a26b6::t_6c03222cde7d29 11-12,21-22,32-37,41-42,44-45,49-72
+crates/kanban-cli/src/commands/comment.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 16,18-19
+crates/kanban-client/src/shared.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1
+crates/kanban-mcp/src/tools/dependencies/list.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 32,34
+migration/grpc-framework/crates/kanban-live-core/src/refresh.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-9
+crates/kanban-client/src/operations/board/columns.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6-19
+docs/adr/README.md
+  s_5b054b517a26b6::t_1fb25f0af19e3f 13
+migration/grpc-framework/tests/proto.test.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-31
+crates/kanban-server/src/application/steps/update.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_9c55c0685e97c8 1-2,11-31
+crates/kanban-server/src/grpc/workspace.rs
+  s_5b054b517a26b6::t_aa48ea4be30dad 1-18,20-41,43-47
+  s_5b054b517a26b6::t_6b17c9e34bb6c4 19,42
+crates/kanban-cli/src/commands/task/step/update.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 27
+  s_5b054b517a26b6::t_0480364ac8b276 32-50,52-53
+crates/kanban-rpc-host/examples/native_client.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 1-10,12-18,20-34,37-46
+  s_5b054b517a26b6::t_58c72169566660 11,19,35-36
+crates/kanban-server/src/grpc/context.rs
+  s_5b054b517a26b6::t_eff0c5fadb7978 1-39,41-46,48-72,74-95,97-102
+  s_5b054b517a26b6::t_ce5e381bbe33cd 40,47,73,96
+crates/kanban-client/src/operations/step/resolve.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 2,5,8,19-28,33,40-42,46,57-66,71,78-80,84,95-104,109,116-118
+crates/kanban-cli/src/commands/graph/sync.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 3-4
+crates/kanban-rpc-proto/src/lib.rs
+  s_5b054b517a26b6::t_11a1f82849b9af 1
+  s_5b054b517a26b6::t_cf47849193ccd3 2-6
+crates/kanban-cli/src/commands/task/update.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 30
+  s_5b054b517a26b6::t_0480364ac8b276 45-62
+apps/web/src/application/sync/events-api.test.ts
+  s_5b054b517a26b6::t_750fe6eac5c452 3,8-9,19,23-24,34,37-38,42,46-47
+crates/kanban-mcp/src/tools/attachments/remove.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 32-34
+crates/kanban-client/tests/native/ontology.rs
+  s_5b054b517a26b6::t_9a987d60c0ef7c 1-128
+apps/web/README.md
+  s_5b054b517a26b6::t_750fe6eac5c452 4,71,73,78-84,87-88
+  s_5b054b517a26b6::t_c06f93e06a854a 36-50
+crates/kanban-client/src/operations/task/reopen.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1-2,5,10-18,22,28-29
+crates/kanban-cli/src/commands/graph/status.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 3-4
+crates/kanban-server/src/state.rs
+  s_5b054b517a26b6::t_8dbb2b7c98a42f 77-80
+  s_5b054b517a26b6::t_c2eddce3ae2ffa 17-18,52-53
+apps/web/src/application/workspace/use-board-directory.ts
+  s_5b054b517a26b6::t_20c7d71a7608ce 1,4,7-8
+xtask/src/cli.rs
+  s_5b054b517a26b6::t_a260b3211b08fa 164
+  s_5b054b517a26b6::t_ea7aa9050c31a1 55,62
+crates/kanban-client/src/operations/comment/create.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,4,8,20-28,33,39-40
+crates/kanban-server/src/application/tasks/plan_not_required.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-13
+  s_5b054b517a26b6::t_7bfa3bae97776e 1-2,14-28
+crates/kanban-server/src/application/ontology/enums.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 1-182
+crates/kanban-mcp/src/tools/lifecycle/review.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 38-48
+crates/kanban-cli/src/commands/label/ontology.rs
+  s_5b054b517a26b6::t_0480364ac8b276 179-202,212-216,230-239,247-259,270-272,277-280,283-287,289-306,320-323,326-338,340-351,353-355,358-360,363-373,376-378,382-384,388-390,393-404
+  s_5b054b517a26b6::t_deb9c19a7721c5 172,178,208,211,222,228-229,245,264,288,339
+crates/kanban-rpc-host/src/refresh.rs
+  s_5b054b517a26b6::t_a0925d04bd012b 8-13,58,60-72,75-80,84
+  s_5b054b517a26b6::t_cf47849193ccd3 1-5,7,14-20,22-57,59,73-74,81-83,85-97,99-105,109-110
+  s_5b054b517a26b6::t_23a0d59aa02cbc 6,21,98,106-108
+crates/kanban-cli/src/commands/label/create.rs
+  s_5b054b517a26b6::t_0480364ac8b276 15-23
+  s_5b054b517a26b6::t_deb9c19a7721c5 13
+apps/web/build/rpc-fetch-smoke.mjs
+  s_5b054b517a26b6::t_5579a685385298 2-3,23,26,42,57
+  s_5b054b517a26b6::t_35a30ca03816a6 1,4-15,21-22,24-25,27-41,43-56,58-60
+  s_5b054b517a26b6::t_78e2ef8b1cf6e7 16-20
+migration/grpc-framework/tasks/tasks.json
+  s_5b054b517a26b6::t_4cede23553268d 1-341
+apps/web/src/lib/rpc/event-shape.ts
+  s_5b054b517a26b6::t_9f7bb4d5702195 1,3-52,61
+  s_5b054b517a26b6::t_008bc1da8d1a1b 2,53-60
+migration/grpc-framework/validation/package-check.json
+  s_5b054b517a26b6::t_4cede23553268d 1-52
+crates/kanban-rpc-host/src/frames.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 1-27,29-34,36-40,42-46,48-68,70,73-75
+  s_5b054b517a26b6::t_4d8c5ba773d151 28,35,41,47,69,71-72
+crates/kanban-cli/src/commands/attachment.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 22,24-27
+migration/grpc-framework/integration/apply-atlas.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-77
+migration/grpc-framework/crates/kanban-live-core/src/tests.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-118
+migration/grpc-framework/scripts/write-task-docs.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-12
+crates/kanban-mcp/src/tools/comments/list.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 32-33
+crates/kanban-server/src/application/tasks/unblock.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_1965e35a17f622 1-2,11-19
+crates/kanban-cli/src/commands/attachment/add.rs
+  s_5b054b517a26b6::t_0480364ac8b276 40-53
+  s_5b054b517a26b6::t_deb9c19a7721c5 20
+crates/kanban-cli/src/commands/task/block.rs
+  s_5b054b517a26b6::t_0480364ac8b276 38-49
+  s_5b054b517a26b6::t_deb9c19a7721c5 32
+migration/grpc-framework/docs/07-validation.md
+  s_5b054b517a26b6::t_4cede23553268d 1-31
+crates/kanban-cli/src/commands/board/create.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 15
+  s_5b054b517a26b6::t_0480364ac8b276 17-24
+crates/kanban-server/src/router.rs
+  s_5b054b517a26b6::t_b319ec5a12d57c 3,5,9,16-19,23-32,34-45,47-51,57,79-81,83-90,110-112,114-121,159-160,163,183,196
+  s_5b054b517a26b6::t_2858e5b72f6c62 1,33,46,162,164-168
+migration/grpc-framework/web/src/reducer.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-118
+crates/kanban-client/src/operations/signal.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 4,7,11,19-29,32,38-48,51,57-67,70,72-82,85,90-103,106,111-124,127,132-145,148,156-166,192-193,196,211
+crates/kanban-server/src/application/steps/resolve.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-53
+  s_5b054b517a26b6::t_f35a711cb67175 1-2,54-69
+crates/kanban-cli/src/commands/task/claim.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 14
+  s_5b054b517a26b6::t_0480364ac8b276 19-30
+crates/kanban-service/src/operations/ontology/tests.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 1-741
+crates/kanban-cli/src/commands/label/delete.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 15
+  s_5b054b517a26b6::t_0480364ac8b276 17-19
+apps/web/src/adapters/host/maintenance-read-model.test.ts
+  s_5b054b517a26b6::t_60f13da9105fa0 1-4,6-15,18-27,29-43,45-65
+crates/kanban-mcp/src/tools/vector/maintenance.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 28-29,42-43,56-57
+crates/kanban-server/src/grpc/tests/refresh/resources.rs
+  s_5b054b517a26b6::t_9cc4e235493a2e 90
+  s_5b054b517a26b6::t_e549371311f8d4 87-89
+  s_5b054b517a26b6::t_ee47c4610aaa9a 91-93
+  s_5b054b517a26b6::t_41b6d128ae32e9 1-86,94-249
+apps/web/src/application/tasks/task-mutation-state.ts
+  s_5b054b517a26b6::t_6c8b30803ddcf2 1,343,354
+crates/kanban-client/src/operations/task/release.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,11-19,24,30-31
+crates/kanban-mcp/src/tools/boards/archive.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 28,31
+xtask/src/rpc_codegen/artifacts.rs
+  s_5b054b517a26b6::t_34c0df468684b9 26,35-72
+  s_5b054b517a26b6::t_6f512e0ad01063 1-25,27-34,73-177
+crates/kanban-cli/src/commands/graph.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 31,33-39
+crates/kanban-protocol/tests/rpc.rs
+  s_5b054b517a26b6::t_4d6c702d517b56 22-27
+  s_5b054b517a26b6::t_dfe1c36c78dfb6 1-21,28-468
+apps/web/src/application/data/task-mutations.ts
+  s_5b054b517a26b6::t_54e162c6827c08 1,7
+  s_5b054b517a26b6::t_125750534b389e 112-113
+  s_5b054b517a26b6::t_ac396c850fff02 148-149
+crates/kanban-cli/src/commands/dependency/list.rs
+  s_5b054b517a26b6::t_0480364ac8b276 13-15
+  s_5b054b517a26b6::t_deb9c19a7721c5 11
+migration/grpc-framework/crates/kanban-live-core/Cargo.toml
+  s_5b054b517a26b6::t_4cede23553268d 1-11
+crates/kanban-server/src/application/boards/create.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-9
+  s_5b054b517a26b6::t_c8848eea8620cd 11-24
+  s_5b054b517a26b6::t_c159b812219b8f 1-2,10,25
+crates/kanban-client/src/operations/run/show.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6-17,22,29,40-41,44
+crates/kanban-client/src/selectors.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 6-10,20-30,44,61
+crates/kanban-rpc-proto/build.rs
+  s_5b054b517a26b6::t_cf47849193ccd3 1-6,8-11
+  s_5b054b517a26b6::t_9fb89a98d00318 7
+apps/web/src/application/data/rpc-transport.ts
+  s_5b054b517a26b6::t_54e162c6827c08 1,3,5-67
+  s_5b054b517a26b6::t_9f7bb4d5702195 2,4
+crates/kanban-server/src/application/ontology/tests.rs
+  s_5b054b517a26b6::t_b5b24ca0323100 1-158,165-166,168-392,467-702
+  s_5b054b517a26b6::t_5facf088dace08 159-164,167,393-466
+crates/kanban-cli/src/commands/board.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 32,34-38
+crates/kanban-live-core/README.md
+  s_5b054b517a26b6::t_5e0b2e10ada06c 1-5
+crates/kanban-server/src/grpc/adapter.rs
+  s_5b054b517a26b6::t_5cc11f6e0ea04c 1-13,17-140
+  s_5b054b517a26b6::t_348bbc713af83d 14-16
+migration/grpc-framework/crates/kanban-rpc-host/examples/demo.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-57
+migration/grpc-framework/tests/apply.test.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-30
+crates/kanban-client/tests/native/streams.rs
+  s_5b054b517a26b6::t_9a987d60c0ef7c 1-157
+migration/grpc-framework/docs/01-scope.md
+  s_5b054b517a26b6::t_4cede23553268d 1-11
+crates/kanban-server/src/application.rs
+  s_5b054b517a26b6::t_4d6c702d517b56 10
+  s_5b054b517a26b6::t_dff310b1a0b17e 1-9,11-21
+crates/kanban-mcp/src/tools/entities.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 73,75,84-85,97,99
+crates/kanban-mcp/src/tools/graph/maintenance.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 29-30,43-44
+migration/grpc-framework/LICENSE
+  s_5b054b517a26b6::t_4cede23553268d 1-202
+crates/kanban-server/src/application/tasks/archive.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_fc69c2e99e96aa 1-2,11-23
+crates/kanban-cli/src/commands/event.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 7,9
+crates/kanban-client/src/client.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3-10,25-33,36-38,73-78
+apps/web/build/host-proxy.test.ts
+  s_5b054b517a26b6::t_c06f93e06a854a 1-243
+apps/web/src/lib/rpc/errors.ts
+  s_5b054b517a26b6::t_9f7bb4d5702195 1-58
+crates/kanban-server/src/lib.rs
+  s_5b054b517a26b6::t_4cede23553268d 7
+  s_5b054b517a26b6::t_49a7c09acf024d 3-4
+.agents/skills/style/SKILL.md
+  s_5b054b517a26b6::t_6651a16341db8c 15,43
+crates/kanban-mcp/src/tools/comments/create.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 43,56
+apps/web/src/adapters/host/data-source.test.ts
+  s_5b054b517a26b6::t_750fe6eac5c452 1-77
+crates/kanban-server/src/application/tasks/done.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_82a7ee7220d859 1-2,11-26
+crates/kanban-mcp/src/tools/lifecycle/block.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 38-48
+migration/grpc-framework/crates/kanban-rpc-proto/build.rs
+  s_5b054b517a26b6::t_4cede23553268d 1-9
+migration/grpc-framework/web/src/endpoint.ts
+  s_5b054b517a26b6::t_4cede23553268d 1-13
+crates/kanban-cli/src/commands/task.rs
+  s_5b054b517a26b6::t_deb9c19a7721c5 66,69-85
+migration/grpc-framework/tests/atlas.test.mjs
+  s_5b054b517a26b6::t_4cede23553268d 1-43
+crates/kanban-server/src/application/signals/record.rs
+  s_5b054b517a26b6::t_c8848eea8620cd 13-40
+  s_5b054b517a26b6::t_7b30b89944feb7 1-12,41
+migration/grpc-framework/README.md
+  s_5b054b517a26b6::t_4cede23553268d 1-64
+crates/kanban-cli/src/commands/task/plan_not_required.rs
+  s_5b054b517a26b6::t_0480364ac8b276 19-28
+  s_5b054b517a26b6::t_deb9c19a7721c5 14
+crates/kanban-mcp/src/tools/tasks/plan_not_required.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 32-40
+crates/kanban-client/src/operations/step/list.rs
+  s_5b054b517a26b6::t_537fc32b4e05a5 1,3,6,13-22,26,31-32
+crates/kanban-server/src/application/dependencies/remove.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-13
+  s_5b054b517a26b6::t_f504c6c03c2bba 1-2,14-27
+crates/kanban-server/src/application/tasks/promote.rs
+  s_5b054b517a26b6::t_79018074f45be9 3-10
+  s_5b054b517a26b6::t_9297b3cb4fd0f9 1-2,11-19
+crates/kanban-mcp/src/tools/steps/create.rs
+  s_5b054b517a26b6::t_6bbacd3e7f35b2 43,54
+apps/web/package.json
+  s_5b054b517a26b6::t_6cf3d5a2577190 19,23-26,43-44
+apps/web/src/application/workspace/session-events.test.ts
+  s_5b054b517a26b6::t_005d2a6b85b162 20-27
+apps/web/src/lib/rpc/codec.generated.ts
+  s_5b054b517a26b6::t_e3f53d3a76d4f0 1-6840
+apps/web/src/lib/rpc/fixtures.generated.test.ts
+  s_5b054b517a26b6::t_2663afb69b196c 1-238
+apps/web/src/lib/rpc/methods.generated.ts
+  s_5b054b517a26b6::t_c330e080fdf376 1-121
+crates/kanban-protocol/Cargo.toml
+  s_5b054b517a26b6::t_033608ceec8b5d 12,39-48
+crates/kanban-protocol/build.rs
+  s_5b054b517a26b6::t_66d377d8ae5d77 1-21
+crates/kanban-protocol/proto/kanban/v1/common.proto
+  s_5b054b517a26b6::t_099026c3c18b4c 1-20
+crates/kanban-protocol/proto/kanban/v1/dto.proto
+  s_5b054b517a26b6::t_dfd7bf97d6c4a4 1-2484
+crates/kanban-protocol/proto/kanban/v1/kanban.proto
+  s_5b054b517a26b6::t_7818fb82e131d6 1-992
+crates/kanban-protocol/proto/kanban/v1/workspace.proto
+  s_5b054b517a26b6::t_26533af768eb65 1-28
+crates/kanban-protocol/proto/rpc-field-numbers.json
+  s_5b054b517a26b6::t_b84ef6d53010c1 1-2632
+crates/kanban-protocol/proto/rpc-methods.json
+  s_5b054b517a26b6::t_5d445ad9bfe4c2 1-5611
+crates/kanban-protocol/src/lib.rs
+  s_5b054b517a26b6::t_ef31a7d7bfe7d2 55
+crates/kanban-protocol/src/rpc.rs
+  s_5b054b517a26b6::t_438c9bdb2f5b70 1-21
+crates/kanban-protocol/src/rpc/codec.rs
+  s_5b054b517a26b6::t_e0a058f460649c 1-311
+crates/kanban-protocol/src/rpc/dto.rs
+  s_5b054b517a26b6::t_ebd72832cbe90b 1-124
+crates/kanban-protocol/src/rpc/generated.rs
+  s_5b054b517a26b6::t_d2c61d02793014 1-13505
+crates/kanban-protocol/tests/rpc/fixtures.rs
+  s_5b054b517a26b6::t_c33a6608ba6b23 1-3555
+crates/kanban-rpc-host/src/connections.rs
+  s_5b054b517a26b6::t_e7648f7be669dd 1-146
+crates/kanban-rpc-host/tests/resources.rs
+  s_5b054b517a26b6::t_c8503eb29f0470 1-409
+crates/kanban-server/src/application/boards.rs
+  s_5b054b517a26b6::t_f7c545d5aef07d 1-18
+crates/kanban-server/src/application/boards/get.rs
+  s_5b054b517a26b6::t_9adb4f12062bec 1-12
+crates/kanban-server/src/application/boards/list.rs
+  s_5b054b517a26b6::t_70641daa32c683 1-16
+crates/kanban-server/src/application/comments.rs
+  s_5b054b517a26b6::t_c48282be532297 1-3
+crates/kanban-server/src/application/comments/list.rs
+  s_5b054b517a26b6::t_53b6082f31da64 1-16
+crates/kanban-server/src/application/comments/support.rs
+  s_5b054b517a26b6::t_3cccf8d2d1ad76 1-30
+crates/kanban-server/src/application/context.rs
+  s_5b054b517a26b6::t_abc7154acbd16d 1-93
+crates/kanban-server/src/application/dependencies.rs
+  s_5b054b517a26b6::t_08c860310e2f40 1-4
+crates/kanban-server/src/application/dependencies/list.rs
+  s_5b054b517a26b6::t_6367f6a34d89c5 1-12
+crates/kanban-server/src/application/dependencies/support.rs
+  s_5b054b517a26b6::t_430aca66fd4d6c 1-39
+crates/kanban-server/src/application/entities.rs
+  s_5b054b517a26b6::t_478a1af738105c 1-68
+crates/kanban-server/src/application/events.rs
+  s_5b054b517a26b6::t_4de16de6d840a1 1
+crates/kanban-server/src/application/events/list.rs
+  s_5b054b517a26b6::t_717d0c79090668 1-61
+crates/kanban-server/src/application/graph.rs
+  s_5b054b517a26b6::t_1a3712e8b8862e 1-265
+crates/kanban-server/src/application/runs.rs
+  s_5b054b517a26b6::t_05093e473be463 1-3
+crates/kanban-server/src/application/runs/list.rs
+  s_5b054b517a26b6::t_ce45d4196861e9 1-14
+crates/kanban-server/src/application/runs/log.rs
+  s_5b054b517a26b6::t_5373224fdeb48b 1-15
+crates/kanban-server/src/application/runs/show.rs
+  s_5b054b517a26b6::t_2de24bf6f18e8d 1-12
+crates/kanban-server/src/application/search.rs
+  s_5b054b517a26b6::t_581fe5b1a3baa3 1-160
+crates/kanban-server/src/application/signals.rs
+  s_5b054b517a26b6::t_1de5ea0a7b4bd3 1-5
+crates/kanban-server/src/application/signals/show.rs
+  s_5b054b517a26b6::t_64827368c524b8 1-12
+crates/kanban-server/src/application/signals/support.rs
+  s_5b054b517a26b6::t_dd5344b5295656 1-61
+crates/kanban-server/src/application/stats.rs
+  s_5b054b517a26b6::t_70e8d2fe1131f8 1-60
+crates/kanban-server/src/application/steps.rs
+  s_5b054b517a26b6::t_6018eb4cc38d5d 1-6
+crates/kanban-server/src/application/steps/list.rs
+  s_5b054b517a26b6::t_2fb0c167827c6b 1-12
+crates/kanban-server/src/application/steps/support.rs
+  s_5b054b517a26b6::t_4f9e8bac23691a 1-16
+crates/kanban-server/src/application/tasks.rs
+  s_5b054b517a26b6::t_f05dee4bba40f5 1-19
+crates/kanban-server/src/application/tasks/list.rs
+  s_5b054b517a26b6::t_c1deb961bb42b0 1-120
+crates/kanban-server/src/application/tasks/show.rs
+  s_5b054b517a26b6::t_830087313945ed 1-140
+crates/kanban-server/src/application/tasks/support.rs
+  s_5b054b517a26b6::t_cf2421faa58465 1-130
+crates/kanban-server/src/application/vector.rs
+  s_5b054b517a26b6::t_e6de7a1ec2deea 1-122
+crates/kanban-server/src/connections.rs
+  s_5b054b517a26b6::t_c536b3055ac6f7 1-73
+crates/kanban-server/src/grpc/adapter/probe.rs
+  s_5b054b517a26b6::t_417c1ab0e784ec 1-50
+crates/kanban-server/src/grpc/tests/refresh.rs
+  s_5b054b517a26b6::t_9c282f66748935 1-517
+crates/kanban-server/src/grpc/tests/refresh/lifecycle.rs
+  s_5b054b517a26b6::t_a56ba74c7f6574 1-136
+migration/grpc-framework/web/tests/generated/client.test.mjs
+  s_5b054b517a26b6::t_c2f786aa5093b5 1-215
+pnpm-lock.yaml
+  s_5b054b517a26b6::t_7c9cb3962efa06 7-9,22-33,50-52,96-114,196-222,1025-1029,1811-1820,2078-2104,2700-2706,3491-3494
+xtask/src/lib.rs
+  s_5b054b517a26b6::t_bffe5113778a23 24,874-875
+xtask/src/rpc_codegen/emit.rs
+  s_5b054b517a26b6::t_9a8e1a8529fd9a 1-604
+Cargo.lock
+  s_5b054b517a26b6::t_dfc3ed77bfdf60 336-357,417,426,444-468,490-507,1637-1642,2180-2198,2358,2370-2397,2901,2904,2906-2907,2937-2945,2953,2957,2965,2970-3003,3010,3013-3014,3016-3017,3020-3021,3027-3028,3299-3304,3420-3425,3927-3937,3991-4010,4228-4248,4262-4290,4536-4572,4603,4607-4620,4747-4779,5649,6004-6024,6158-6243,6252,6254,6257,6711-6716,6758-6759,6761,7011-7023,7367-7375,7829-7830,7834,7963-7968
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a0ff87e1e95d1021ec92ed9b567ae0a9b9b624ce",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    },
+    "s_b5fffbcb67075b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a571-035f-70f3-b512-f89f69c17fea",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

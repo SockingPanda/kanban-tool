@@ -1,8 +1,8 @@
-import { renderToStaticMarkup } from "react-dom/server"
+import { renderToStaticMarkup } from "../../../tests/support/render"
 import { describe, expect, test } from "vitest"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
-import { PreferencesProvider } from "../../lib/preferences-provider"
+import { PreferencesProvider } from "../../platform/preferences/preferences-provider"
 import { MaintenancePage } from "./MaintenancePage"
 import { maintenanceOwnerForAction } from "./maintenance-intents"
 

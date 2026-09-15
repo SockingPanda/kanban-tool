@@ -1,8 +1,10 @@
+import { createHostDataSource } from './adapters/host/data-source';
+import { WorkspaceDataSourceProvider } from './application/workspace/data-source-provider';
 import { StrictMode, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 
-import App from "./App"
-import styles from "./shell.module.css"
+import App from "./app/app"
+import styles from "./app/shell/boundary.module.css"
 import { WebRuntimeProvider } from "./lib/runtime-provider"
 import {
   loadWebRuntimeConfig,
@@ -16,10 +18,11 @@ export type BootstrapDependencies = {
 }
 
 function renderApp(runtime: WebRuntimeConfig): ReactNode {
+  const source = createHostDataSource(runtime)
   return (
     <StrictMode>
       <WebRuntimeProvider runtime={runtime}>
-        <App />
+        <WorkspaceDataSourceProvider source={source}><App /></WorkspaceDataSourceProvider>
       </WebRuntimeProvider>
     </StrictMode>
   )

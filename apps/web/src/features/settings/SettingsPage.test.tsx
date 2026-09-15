@@ -1,12 +1,12 @@
-import { renderToStaticMarkup } from "react-dom/server"
+import { renderToStaticMarkup } from "../../../tests/support/render"
 import { describe, expect, test, vi } from "vitest"
 
-import type { HealthReport } from "../../lib/api/health-read-model"
-import { PreferencesProvider } from "../../lib/preferences-provider"
+import type { HealthReport } from "../../application/data/health-read-model";
+import { PreferencesProvider } from "../../platform/preferences/preferences-provider"
 import type { WebRuntimeConfig } from "../../lib/runtime"
-import { assertCanonicalBoardSlug } from "../../lib/board-slug"
+import { assertCanonicalBoardSlug } from "../../domain/board-slug"
 import { SettingsPage } from "./SettingsPage"
-import { apiOriginForRuntime, diagnosticsText } from "./settings-diagnostics"
+import { apiOriginForRuntime, diagnosticsText } from "../../application/diagnostics"
 
 const runtime = {
   apiBaseUrl: "",

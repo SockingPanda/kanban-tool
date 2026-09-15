@@ -1,27 +1,14 @@
-import { AlertDialog } from "@astryxdesign/core/AlertDialog"
-import { Button } from "@astryxdesign/core/Button"
+import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
+import { AlertDialog } from "../../components/ui/alert-dialog"
+import { Button } from "../../components/ui/button"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
-import type { Locale } from "../../lib/preferences"
-import { createTranslator } from "../../lib/i18n"
-import { requestHealthRefresh } from "../../lib/health-refresh"
-import { usePreferences } from "../../lib/use-preferences"
-import {
-  createMaintenanceApi,
-  MaintenanceApiError,
-  type BackupReport,
-  type CheckpointReport,
-  type DoctorReport,
-  type ExportReport,
-  type ImportReport,
-  type MaintenanceApi,
-  type MaintenanceRunReport,
-  type MaintenanceStatus,
-  type QueueStats,
-  type SearchStatus,
-  type VacuumReport,
-} from "../../lib/api/maintenance-api"
+import type { Locale } from "../../platform/preferences/preferences"
+import { createTranslator } from "../../application/i18n"
+import { requestHealthRefresh } from "../../application/workspace/health-refresh"
+import { usePreferences } from "../../platform/preferences/use-preferences"
+import { MaintenanceApiError, type BackupReport, type CheckpointReport, type DoctorReport, type ExportReport, type ImportReport, type MaintenanceApi, type MaintenanceRunReport, type MaintenanceStatus, type QueueStats, type SearchStatus, type VacuumReport } from "../../application/data/maintenance-api";
 import { maintenanceOwnerForAction } from "./maintenance-intents"
 import styles from "./maintenance-page.module.css"
 
@@ -138,10 +125,11 @@ function statusTone(status: { dirty: boolean; degraded: boolean; failed: number;
     : styles.ready
 }
 
-export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial, onHealthRefresh }: MaintenancePageProps) {
+function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial, onHealthRefresh }: MaintenancePageProps) {
+  const { createMaintenanceApi } = useWorkspaceOperations();
   const { locale, actor } = usePreferences()
   const t = createTranslator(locale)
-  const api = useMemo(() => providedApi ?? createMaintenanceApi({}, runtime), [providedApi, runtime])
+  const api = useMemo(() => providedApi ?? createMaintenanceApi({}, runtime), [createMaintenanceApi, providedApi, runtime])
   const [status, setStatus] = useState<LoadState<MaintenanceStatus>>(() => initial?.status ? { kind: "ready", value: initial.status } : emptyState())
   const [stats, setStats] = useState<LoadState<QueueStats>>(() => initial?.stats ? { kind: "ready", value: initial.stats } : emptyState())
   const [searchStatus, setSearchStatus] = useState<LoadState<SearchStatus>>(() => initial?.searchStatus ? { kind: "ready", value: initial.searchStatus } : emptyState())
@@ -406,6 +394,77 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
     if (opener) queueMicrotask(() => opener.focus())
   }
 
+  return {
+    t,
+    isBusy,
+    status,
+    refreshAll,
+    stats,
+    searchStatus,
+    locale,
+    pendingAction,
+    runDoctor,
+    doctor,
+    actionError,
+    syncNotice,
+    setSyncNotice,
+    boardSlug,
+    backupPath,
+    setBackupPath,
+    openConfirm,
+    exportPath,
+    setExportPath,
+    importPath,
+    setImportPath,
+    replaceImport,
+    setReplaceImport,
+    results,
+    maintenanceOwner,
+    setMaintenanceOwner,
+    actor,
+    runtime,
+    confirm,
+    setConfirm,
+    restoreConfirmFocus,
+    confirmAction
+  };
+}
+
+export function MaintenancePage(props: Parameters<typeof useMaintenancePageState>[0]) {
+  const {
+    t,
+    isBusy,
+    status,
+    refreshAll,
+    stats,
+    searchStatus,
+    locale,
+    pendingAction,
+    runDoctor,
+    doctor,
+    actionError,
+    syncNotice,
+    setSyncNotice,
+    boardSlug,
+    backupPath,
+    setBackupPath,
+    openConfirm,
+    exportPath,
+    setExportPath,
+    importPath,
+    setImportPath,
+    replaceImport,
+    setReplaceImport,
+    results,
+    maintenanceOwner,
+    setMaintenanceOwner,
+    actor,
+    runtime,
+    confirm,
+    setConfirm,
+    restoreConfirmFocus,
+    confirmAction
+  } = useMaintenancePageState(props);
   return (
     <section className={styles.page} aria-labelledby="maintenance-heading" data-testid="maintenance-page">
       <div className={styles.headingRow}>
@@ -517,6 +576,7 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
     </section>
   )
 }
+
 
 function Panel({ title, testId, children }: { title: string; testId: string; children: ReactNode }) {
   return <section className={styles.panel} aria-labelledby={`${testId}-heading`} data-testid={testId}><h2 id={`${testId}-heading`}>{title}</h2>{children}</section>

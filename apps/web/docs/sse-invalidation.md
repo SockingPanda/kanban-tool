@@ -14,7 +14,7 @@
   [`crates/kanban-protocol/docs/schema.md`](../../../crates/kanban-protocol/docs/schema.md) 及
   [`history_catalog.rs`](../../../crates/kanban-protocol/src/history_catalog.rs)。
 - browser-first 与持久 SSE 的架构决定见
-  [`ADR 0006`](../../../docs/adr/0006_browser_first_astryx_web_ui.md)。
+  [`ADR 0006`](../../../docs/adr/0006_browser_first_web_ui.md)。
 - 下文的 `invalidate` 是把 query 标为 stale 并让活跃 observer 重新读取；`refetch` 是立即读取。
   “全 board refetch”指同一 active board 的所有相关 query 一起 refetch，而不是读另一个 board。
 

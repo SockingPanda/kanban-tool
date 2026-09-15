@@ -1,24 +1,25 @@
+import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 
-import type { AppNavigationTarget } from "../../lib/router"
-import { routePath } from "../../lib/router"
-import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "../../lib/board-slug"
-import { readHealth, type HealthReport } from "../../lib/api/health-read-model"
-import { presentHealthError } from "../health/health-error"
-import { isCurrentHealthRequest } from "../health/health-request"
+import type { AppNavigationTarget } from "../../application/navigation/router"
+import { routePath } from "../../application/navigation/router"
+import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "../../domain/board-slug"
+import { type HealthReport } from "../../application/data/health-read-model";
+import { presentHealthError } from "../../application/health/health-error"
+import { isCurrentHealthRequest } from "../../application/health/health-request"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import {
   parseActorPreference,
   parseDensityPreference,
   parseLocalePreference,
   parseThemePreference,
-} from "../../lib/preferences"
-import { createTranslator } from "../../lib/i18n"
-import { usePreferences } from "../../lib/use-preferences"
+} from "../../platform/preferences/preferences"
+import { createTranslator } from "../../application/i18n"
+import { usePreferences } from "../../platform/preferences/use-preferences"
 import { callSettingsAction } from "./settings-async-actions"
-import { apiOriginForRuntime, diagnosticsText } from "./settings-diagnostics"
-import type { BoardReconnectResult } from "../board/board-session-registry"
-import styles from "../../shell.module.css"
+import { apiOriginForRuntime, diagnosticsText } from "../../application/diagnostics"
+import type { BoardReconnectResult } from "../../application/workspace/board-session-registry"
+import styles from "../../app/shell/boundary.module.css"
 
 export type SettingsPageProps = {
   readonly runtime: WebRuntimeConfig
@@ -51,7 +52,7 @@ function browserClipboardWrite(text: string): Promise<void> {
   return clipboard.writeText(text)
 }
 
-export function SettingsPage({
+function useSettingsPageState({
   runtime,
   boardSlug: boardSlugInput,
   initialHealth,
@@ -60,6 +61,7 @@ export function SettingsPage({
   onReconnect,
   clipboardWrite,
 }: SettingsPageProps) {
+  const { readHealth } = useWorkspaceOperations();
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const boardSlug = useMemo(
@@ -116,7 +118,7 @@ export function SettingsPage({
         setHealthPending(false)
       }
     }
-  }, [read, runtime])
+  }, [read, readHealth, runtime])
 
   useEffect(() => {
     if (!initialHealth) void loadHealth()
@@ -203,6 +205,65 @@ export function SettingsPage({
         ? t("connectionReconnectUnavailable")
         : null
 
+  return {
+    t,
+    preferences,
+    saveActor,
+    actorDraft,
+    actorError,
+    setActorTouched,
+    setActorSaved,
+    setActorDraft,
+    actorSaved,
+    resetActor,
+    boardSlug,
+    onReconnect,
+    reconnectState,
+    reconnect,
+    runtime,
+    reconnectFeedback,
+    healthURL,
+    navigateHealth,
+    healthLoading,
+    healthReport,
+    healthError,
+    healthPending,
+    loadHealth,
+    copyPending,
+    copyDiagnostics,
+    copyFeedback
+  };
+}
+
+export function SettingsPage(props: Parameters<typeof useSettingsPageState>[0]) {
+  const {
+    t,
+    preferences,
+    saveActor,
+    actorDraft,
+    actorError,
+    setActorTouched,
+    setActorSaved,
+    setActorDraft,
+    actorSaved,
+    resetActor,
+    boardSlug,
+    onReconnect,
+    reconnectState,
+    reconnect,
+    runtime,
+    reconnectFeedback,
+    healthURL,
+    navigateHealth,
+    healthLoading,
+    healthReport,
+    healthError,
+    healthPending,
+    loadHealth,
+    copyPending,
+    copyDiagnostics,
+    copyFeedback
+  } = useSettingsPageState(props);
   return (
     <section className={styles.page} aria-labelledby="settings-heading" data-testid="settings-page">
       <div className={styles.pageHeading}>

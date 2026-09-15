@@ -1,14 +1,15 @@
+import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
-import { readHealth, type HealthReadError, type HealthReport } from "../../lib/api/health-read-model"
-import { createTranslator } from "../../lib/i18n"
-import { HEALTH_REFRESH_EVENT } from "../../lib/health-refresh"
-import { usePreferences } from "../../lib/use-preferences"
-import { presentHealthError } from "./health-error"
+import { type HealthReadError, type HealthReport } from "../../application/data/health-read-model";
+import { createTranslator } from "../../application/i18n"
+import { HEALTH_REFRESH_EVENT } from "../../application/workspace/health-refresh"
+import { usePreferences } from "../../platform/preferences/use-preferences"
+import { presentHealthError } from "../../application/health/health-error"
 import { healthMetricTone } from "./health-metrics"
-import { isCurrentHealthRequest } from "./health-request"
-import { apiOriginForRuntime } from "../settings/settings-diagnostics"
+import { isCurrentHealthRequest } from "../../application/health/health-request"
+import { apiOriginForRuntime } from "../../application/diagnostics"
 import styles from "./health-page.module.css"
 
 export type HealthPageProps = {
@@ -28,6 +29,7 @@ function reported(value: string | null | undefined, fallback: string): string {
 }
 
 export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
+  const { readHealth } = useWorkspaceOperations();
   const { locale } = usePreferences()
   const t = createTranslator(locale)
   const [state, setState] = useState<HealthState>(() => initialReport ? { kind: "ready", report: initialReport } : { kind: "loading" })
@@ -55,7 +57,7 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
         setPending(false)
       }
     }
-  }, [read, runtime])
+  }, [read, readHealth, runtime])
 
   useEffect(() => {
     if (!initialReport) void load()

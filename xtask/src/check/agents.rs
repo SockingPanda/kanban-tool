@@ -33,7 +33,8 @@ const REQUIRED_AGENT_SECTIONS: &[&str] = &[
     "## 9. 维护",
 ];
 
-const REQUIRED_SKILL_ROUTES: &[&str] = &["$style", "$prose", "$docs", "$check", "$commit"];
+const REQUIRED_SKILL_ROUTES: &[&str] =
+    &["$style", "$prose", "$docs", "$check", "$commit", "$branch"];
 
 pub(crate) fn check_agents_document_contract(_root: &Path, text: &str) -> ToolResult<()> {
     for heading in REQUIRED_AGENT_SECTIONS {
@@ -77,7 +78,7 @@ pub(crate) fn check_workspace_map(root: &Path, agents_text: &str) -> ToolResult<
 fn check_skill_packages(root: &Path) -> ToolResult<()> {
     let agents_dir = required_directory(root.join(".agents"), ".agents")?;
     let skills_dir = required_directory(agents_dir.join("skills"), ".agents/skills")?;
-    let expected = ["prose", "docs", "check", "commit", "style"];
+    let expected = ["prose", "docs", "check", "commit", "style", "branch"];
     let mut actual = fs::read_dir(&skills_dir)?
         .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
         .collect::<Result<Vec<_>, _>>()?;
@@ -305,7 +306,7 @@ mod tests {
         let root = temp_root("agents");
         write_agents(&root);
 
-        for skill in ["prose", "docs", "check", "commit", "style"] {
+        for skill in ["prose", "docs", "check", "commit", "style", "branch"] {
             write_skill(&root, skill);
         }
         assert!(run(&root).is_ok());
@@ -343,13 +344,41 @@ mod tests {
         .expect("missing workspace map entry should be writable");
         assert!(run(&root).is_err());
 
+        fs::write(&agents_path, &canonical).expect("有效 AGENTS 应可恢复");
+        assert!(run(&root).is_ok());
         write_skill(&root, "extra");
         assert!(run(&root).is_err());
         fs::remove_dir_all(root.join(".agents/skills/extra"))
             .expect("extra skill should be removable");
+        assert!(run(&root).is_ok());
         fs::remove_file(root.join(".agents/skills/check/agents/openai.yaml"))
             .expect("openai contract should be removable");
         assert!(run(&root).is_err());
+
+        write_skill(&root, "check");
+        assert!(run(&root).is_ok());
+        fs::remove_dir_all(root.join(".agents/skills/branch")).expect("branch fixture 应可删除");
+        assert!(run(&root).unwrap_err().to_string().contains("必须精确包含"));
+
+        write_skill(&root, "branch");
+        assert!(run(&root).is_ok());
+        fs::write(&agents_path, canonical.replace("`$branch`", "`branch`"))
+            .expect("branch 路由应可移除");
+        assert!(
+            run(&root)
+                .unwrap_err()
+                .to_string()
+                .contains("缺少技能路由: $branch")
+        );
+
+        fs::write(&agents_path, &canonical).expect("有效 AGENTS 应可恢复");
+        assert!(run(&root).is_ok());
+        fs::remove_file(root.join(".agents/skills/branch/agents/openai.yaml"))
+            .expect("branch UI metadata 应可删除");
+        assert!(run(&root).is_err());
+
+        write_skill(&root, "branch");
+        assert!(run(&root).is_ok());
 
         fs::remove_dir_all(root).expect("temporary root should be removable");
     }

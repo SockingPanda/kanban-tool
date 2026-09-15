@@ -1,0 +1,30 @@
+AGENTS.md
+  s_6f2485c7548e58::t_5d077012a6e116 57,87-89
+.agents/skills/branch/agents/openai.yaml
+  s_6f2485c7548e58::t_5d077012a6e116 1-4
+xtask/src/check/agents.rs
+  s_6f2485c7548e58::t_5d077012a6e116 81,309,347-348,353,358-359,361-366,373-381
+  s_6f2485c7548e58::t_82b5d2aba9ec4e 36-37,360,367-372
+  s_6f2485c7548e58::t_2c69e04abd4181 382
+.agents/skills/branch/SKILL.md
+  s_6f2485c7548e58::t_5d077012a6e116 1-48
+.agents/skills/commit/SKILL.md
+  s_6f2485c7548e58::t_a6c35de7fcc370 3
+  s_6f2485c7548e58::t_5d077012a6e116 20,32,65-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae0ae6903504fd379be7bab8f9298a4f4d6977e2",
+  "prompts": {},
+  "sessions": {
+    "s_6f2485c7548e58": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a539-4763-70b1-b02c-b22710053cc0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

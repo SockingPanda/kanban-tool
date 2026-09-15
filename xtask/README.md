@@ -4,7 +4,12 @@
 package 和 provenance 证据，读取 workspace metadata、protocol catalog 和提交的 artifact；它不拥有
 产品运行时、canonical database 或第二条 mutation path。
 
-常规开发通过根 `justfile` 调用它，`justfile` 是稳定入口。当前命令组如下：
+常规开发通过根 `justfile` 调用它，`justfile` 是稳定入口。所有写入 Cargo target 的命令经
+`scripts/cargo-build-lock.sh` 共用一把构建锁。默认目录为
+`/media/zebra/T7_Linux_Work/projects/Personal/labs/.cache/kanban-tool/cargo-target`；其他主机或隔离工具测试可用
+`KANBAN_CARGO_TARGET_ROOT` 指定同一主机的共享目录。显式 `CARGO_TARGET_DIR` 必须与该目录一致。
+
+当前命令组如下：
 
 - `affected`：根据基线和工作树变更规划、输出并执行受影响的仓库 gate。
 - `docs check`：验证文档链接、`include_str!` 目标、crate map 和 ADR index。

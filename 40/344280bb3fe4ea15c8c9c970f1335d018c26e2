@@ -1,0 +1,142 @@
+apps/web/src/platform/localization/runtime.ts
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-5,8-14,16-22,24-25,27-29,31-49,51-64,66-73,75-80,82-85
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 15,23,26,30,50,65
+  s_2a59b02b8b2fff::t_ce9c57b9391843 6-7,74,81
+apps/web/src/platform/localization/use-i18n.ts
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 7
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-6,8-11
+apps/web/src/platform/localization/locales/en/tasks.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-13
+apps/web/src/application/i18n.ts
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 1
+  s_2a59b02b8b2fff::t_12439e3d09df14 2-9,11
+justfile
+  s_2a59b02b8b2fff::t_b23eaae337d171 127-151,188-189
+  s_2a59b02b8b2fff::t_410249a59310d2 152-155
+apps/web/src/platform/localization/locales/en/settings.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-14
+apps/web/src/features/settings/SettingsPage.tsx
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-2,271,276-277,279-280
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 274
+apps/web/src/platform/localization/locales/zh/shell.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-53
+apps/web/src/platform/localization/locales/en/legacy.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-275
+apps/web/src/platform/localization/locales/zh/tasks.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-12
+apps/web/build/i18n/tests/scan.node-test.mjs
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-19
+apps/web/src/platform/localization/metadata/en.json
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 16-22
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-15,23-2529
+apps/web/src/platform/localization/locales/zh/common.json
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 4
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-3,5-17
+apps/web/src/platform/localization/presentation.ts
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 9,17
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-8,10-16,18-20
+apps/web/playwright.config.ts
+  s_2a59b02b8b2fff::t_b23eaae337d171 26
+apps/web/build/i18n/tests/pure.node-test.mjs
+  s_2a59b02b8b2fff::t_ce9c57b9391843 31-39
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-5,7-30,40-46
+  s_2a59b02b8b2fff::t_7dffa0b4d1181c 6
+apps/web/src/platform/localization/bootstrap.ts
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-4,6-8
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 5
+apps/web/tests/i18n/language.spec.ts
+  s_2a59b02b8b2fff::t_4837056925070a 6,10,16,18,21,25,27,29,34-37,39,44-78,81,87-117
+  s_2a59b02b8b2fff::t_c1bb387525df28 19-20,22-24,30-32,38,43
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-5,7-9,11-15,17,26,28,33,40-42,79-80,82-86,118
+apps/web/src/app/shell/project-navigation.tsx
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-2,14-15,18,27-33,39,41
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 34
+apps/web/src/platform/localization/context.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-360,363
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 361-362
+apps/web/src/platform/localization/runtime.test.ts
+  s_2a59b02b8b2fff::t_abf5af5ea315ae 4-5,36-53
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 25
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-3,6-24,26-35,54-61
+apps/web/src/platform/localization/format.ts
+  s_2a59b02b8b2fff::t_ce9c57b9391843 39-58,63,66,69,72,75
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 8,22
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-7,9-21,23-38,59-62,64-65,67-68,70-71,73-74,76-78
+apps/web/build/i18n/cli.mjs
+  s_2a59b02b8b2fff::t_7dffa0b4d1181c 3-4
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-2,5-34,36-43
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 35
+apps/web/build/i18n/typescript.mjs
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-2,4-16
+  s_2a59b02b8b2fff::t_7dffa0b4d1181c 3
+apps/web/src/platform/localization/locales/zh/settings.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-14
+apps/web/src/platform/localization/locales/zh/legacy.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-275
+apps/web/src/platform/preferences/preferences.ts
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-2,4,48,129,135-136
+.github/workflows/web-i18n.yml
+  s_2a59b02b8b2fff::t_b23eaae337d171 1-35
+apps/web/README.md
+  s_2a59b02b8b2fff::t_9a5c7ce11bc78c 12
+  s_2a59b02b8b2fff::t_b23eaae337d171 13-14
+scripts/web-i18n-proof.sh
+  s_2a59b02b8b2fff::t_9a5c7ce11bc78c 75
+  s_2a59b02b8b2fff::t_410249a59310d2 1-16,19,21-28,30-31,33-48,50-74,76
+  s_2a59b02b8b2fff::t_c1bb387525df28 17-18,20,29,32,49
+apps/web/src/app/shell/app-shell.tsx
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 70
+  s_2a59b02b8b2fff::t_12439e3d09df14 8-9,15,43,50-52,54-57,60,67
+apps/web/src/platform/localization/locale.ts
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 1,9
+  s_2a59b02b8b2fff::t_12439e3d09df14 2-8,10-17
+apps/web/package.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 9,16-24,30-31
+apps/web/build/i18n/config.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-30
+apps/web/docs/i18n.md
+  s_2a59b02b8b2fff::t_b23eaae337d171 1-69,81-89
+  s_2a59b02b8b2fff::t_410249a59310d2 70-80
+apps/web/build/i18n/scan.mjs
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 11,26,43
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-10,12-25,27-42,44-115
+apps/web/playwright.i18n.config.ts
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-2,4-5,10,12
+  s_2a59b02b8b2fff::t_e4c82d79f8909b 3,6-9
+  s_2a59b02b8b2fff::t_1e2becd454569e 11
+apps/web/build/i18n/tests/catalog.node-test.mjs
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-39
+apps/web/src/platform/localization/locales/en/common.json
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 4
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-3,5-17
+apps/web/src/app/shell/project-picker.tsx
+  s_2a59b02b8b2fff::t_12439e3d09df14 1,7,11-12,16,18,20
+apps/web/build/i18n/catalog.mjs
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-13,15-147,153-154,156-168,170-186,188-206
+  s_2a59b02b8b2fff::t_cdf982c9593ff4 14,169,187
+  s_2a59b02b8b2fff::t_7dffa0b4d1181c 148-152,155
+apps/web/src/platform/localization/locales/en/shell.json
+  s_2a59b02b8b2fff::t_12439e3d09df14 1-53
+apps/web/src/platform/localization/contracts.generated.ts
+  s_2a59b02b8b2fff::t_ba821923ab444c 1-202
+apps/web/src/platform/localization/resources.generated.ts
+  s_2a59b02b8b2fff::t_7890530f5f74e4 1-16
+pnpm-lock.yaml
+  s_2a59b02b8b2fff::t_989e97d6fae087 22-24,1318-1325,2955-2960
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "40344280bb3fe4ea15c8c9c970f1335d018c26e2",
+  "prompts": {},
+  "sessions": {
+    "s_2a59b02b8b2fff": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a516-fb7f-70c3-896e-ab34eba660ec",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

@@ -22,19 +22,22 @@ pub(crate) struct UpsertArgs {
     pub(crate) summary: Option<String>,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &UpsertArgs) -> Result<(), CliFailure> {
-    let entity = ctx.client()?.upsert_entity(EntityUpsertRequest {
-        uri: args.uri.clone(),
-        kind: args.kind.clone(),
-        source_table: args.source_table.clone(),
-        source_id: args.source_id.clone(),
-        board: Some(ctx.board.clone()),
-        task_id: args.task_id.clone(),
-        title: args.title.clone(),
-        summary: args.summary.clone(),
-        content_hash: None,
-        archived_at: None,
-    })?;
+pub(crate) async fn run(ctx: &CliContext, args: &UpsertArgs) -> Result<(), CliFailure> {
+    let entity = ctx
+        .client()?
+        .upsert_entity(EntityUpsertRequest {
+            uri: args.uri.clone(),
+            kind: args.kind.clone(),
+            source_table: args.source_table.clone(),
+            source_id: args.source_id.clone(),
+            board: Some(ctx.board.clone()),
+            task_id: args.task_id.clone(),
+            title: args.title.clone(),
+            summary: args.summary.clone(),
+            content_hash: None,
+            archived_at: None,
+        })
+        .await?;
     if ctx.json {
         output::print_json(&kanban_protocol::CliEntityShowOutput { data: entity });
     } else {

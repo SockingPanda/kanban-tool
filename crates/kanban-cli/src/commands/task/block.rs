@@ -29,22 +29,24 @@ pub(crate) struct BlockArgs {
     pub(crate) force: bool,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &BlockArgs,
 ) -> Result<(), CliFailure> {
     let reason = block_reason(args)?;
-    let task = client.block_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &BlockTaskRequest {
-            actor: None,
-            reason,
-            claim_token: args.claim_token.clone(),
-            force: args.force,
-        },
-    )?;
+    let task = client
+        .block_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &BlockTaskRequest {
+                actor: None,
+                reason,
+                claim_token: args.claim_token.clone(),
+                force: args.force,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&BlockTaskResponse::new(task));
     } else {

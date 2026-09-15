@@ -1,3 +1,4 @@
+import type { RpcCall } from "../../application/data/rpc-transport";
 import { mergeBoardEvents } from "../../application/data/explorer-read-model";
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
@@ -29,19 +30,21 @@ import { parseApiListAttachmentsResponse, type ApiListAttachmentsResponseContrac
 
 import { parseApiListEventsResponse, type ApiListEventsResponseContract } from "../../lib/api/generated/contracts/api-list-events-response";
 
-import { createHttpTransport } from "./http-transport";
-import { type HttpReadTransport, type HttpTransportResponse } from "../../application/data/http-transport";
+import { createRpcTransport } from "./rpc-transport";
+import { type RpcTransport, type RpcTransportResponse } from "../../application/data/rpc-transport";
 
 import { type TaskListQueryState, ExplorerReadBudget, ExplorerReadError, wrapTransportError, type ExplorerReadOptions, type ExplorerBoardIdentity, parseContract, boardListPath, resolveBoard, type ExplorerEvent, BOARD_EVENTS_PAGE_LIMIT, type BoardEventsReadModel, validateCanonicalTaskSelector, throwIfAborted, MAX_BOARD_EVENTS_PAGES, buildBoardEventsRequest, validateEventBatch, type ExplorerTaskListPage, buildTaskListRequest, validateTaskBoard, type TaskMapQueryOptions, type ExplorerTaskMapReadModel, defaultTaskMapQuery, validateTaskMapOptions, validateProvidedBoardIdentity, buildTaskMapRequest, validateMapBoard, type TaskRunsReadModel, buildTaskRunsRequest, validateRunScope, buildRunLogRequest, type TaskInspectorReadOptions, type TaskInspectorReadModel, buildTaskInspectorRequests, validateInspectorTask, validateInspectorScope, validateNeighborhoodScope } from "../../application/data/explorer-read-model";
 
 export async function getPayload(
-  transport: Pick<HttpReadTransport, "get">,
-  path: string,
+  transport: RpcTransport,
+  request: RpcCall,
   signal: AbortSignal | undefined,
   budget = new ExplorerReadBudget(),
 ): Promise<unknown> {
   try {
-    const response: HttpTransportResponse = await transport.get(path, signal)
+    throwIfAborted(signal)
+    const response: RpcTransportResponse = await transport.call({ ...request, signal })
+    throwIfAborted(signal)
     if (
       response === null
       || typeof response !== "object"
@@ -65,9 +68,9 @@ export async function loadExplorerBoardIdentity(
   options: ExplorerReadOptions = {},
 ): Promise<ExplorerBoardIdentity> {
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -92,9 +95,9 @@ export async function loadBoardEvents(
   const taskId = options.taskId?.trim() || null
   if (taskId !== null) validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -150,9 +153,9 @@ export async function loadTaskListPage(
 ): Promise<ExplorerTaskListPage> {
   const budget = options.budget ?? new ExplorerReadBudget()
   const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, budget })
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -175,9 +178,9 @@ export async function loadTaskMap(
   options: ExplorerReadOptions & Partial<TaskMapQueryOptions> & { readonly boardIdentity?: ExplorerBoardIdentity } = {},
 ): Promise<ExplorerTaskMapReadModel> {
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -212,10 +215,10 @@ export async function loadTaskRuns(
   options: ExplorerReadOptions = {},
 ): Promise<TaskRunsReadModel> {
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
     validateCanonicalTaskSelector(taskId)
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -265,9 +268,9 @@ export async function loadTaskInspector(
   // constructing a transport request. Invalid selectors are local errors.
   validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -346,10 +349,10 @@ export async function loadInspectorSectionContext(
   selector: string,
   taskId: string,
   options: ExplorerReadOptions,
-): Promise<{ readonly board: ExplorerBoardIdentity; readonly transport: Pick<HttpReadTransport, "get">; readonly budget: ExplorerReadBudget }> {
+): Promise<{ readonly board: ExplorerBoardIdentity; readonly transport: RpcTransport; readonly budget: ExplorerReadBudget }> {
   validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
-  const transport = options.transport ?? createHttpTransport(runtime, options)
+  const transport = options.transport ?? createRpcTransport(runtime, options)
   const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
   return { board, transport, budget }
 }

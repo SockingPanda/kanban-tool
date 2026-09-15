@@ -12,20 +12,22 @@ pub(crate) struct SpecifyArgs {
     #[arg(long, help = "设置计划开始时间（毫秒时间戳）")]
     pub(crate) scheduled_at: Option<i64>,
 }
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &SpecifyArgs,
 ) -> Result<(), CliFailure> {
-    let task = client.specify_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &SpecifyTaskRequest {
-            actor: None,
-            description: args.description.clone(),
-            scheduled_at: args.scheduled_at,
-        },
-    )?;
+    let task = client
+        .specify_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &SpecifyTaskRequest {
+                actor: None,
+                description: args.description.clone(),
+                scheduled_at: args.scheduled_at,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&SpecifyTaskResponse::new(task));
     } else {

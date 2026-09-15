@@ -33,7 +33,7 @@ pub(crate) struct BuildArgs {
     pub(crate) budget: Option<usize>,
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &ContextCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &ContextCommand) -> Result<(), CliFailure> {
     let ContextCommand::Build(args) = command;
     let client = ctx.client()?;
     let mut task = args.task.clone();
@@ -54,21 +54,23 @@ pub(crate) fn run(ctx: &CliContext, command: &ContextCommand) -> Result<(), CliF
             exit_code: 2,
         });
     }
-    let response = client.build_context(
-        path_subject,
-        &BuildContextQuery {
-            board: ctx.board.clone(),
-            lexical_limit: args.lexical_limit,
-            graph_limit: args.graph_limit,
-            vector_limit: args.vector_limit,
-            max_items: args.max_items,
-            task,
-            reference,
-            query,
-            depth: args.depth,
-            budget: args.budget,
-        },
-    )?;
+    let response = client
+        .build_context(
+            path_subject,
+            &BuildContextQuery {
+                board: ctx.board.clone(),
+                lexical_limit: args.lexical_limit,
+                graph_limit: args.graph_limit,
+                vector_limit: args.vector_limit,
+                max_items: args.max_items,
+                task,
+                reference,
+                query,
+                depth: args.depth,
+                budget: args.budget,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CliContextBuildOutput::new(response.data));
     } else {

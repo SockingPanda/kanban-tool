@@ -1,28 +1,31 @@
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_protocol::{ApiTask, UnblockTaskRequest, UnblockTaskResponse};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
+use kanban_protocol::{ApiTask, UnblockTaskRequest};
 
 impl KanbanClient {
-    pub fn unblock_task(
+    pub async fn unblock_task(
         &self,
         task_id: &str,
         request: &UnblockTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let response: UnblockTaskResponse = self.post(
-            &format!(
-                "/api/v1/tasks/{}/transitions/unblock",
-                encode_path_segment(task_id.trim())
-            ),
-            request,
+        let response: kanban_protocol::UnblockTaskResponse = rpc!(
+            self,
+            unblock_task,
+            UnblockTaskRequest,
+            kanban_protocol::UnblockTaskPath {
+                task_id: task_id.trim().to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
-    pub fn unblock_task_by_selector(
+    pub async fn unblock_task_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &UnblockTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.unblock_task(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.unblock_task(&task_id, request).await
     }
 }

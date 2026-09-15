@@ -52,6 +52,7 @@ mod portable;
 #[cfg(all(test, feature = "schema"))]
 mod protocol_tests;
 mod protocols;
+pub mod rpc;
 mod runs;
 mod runtime;
 pub mod runtime_catalog;

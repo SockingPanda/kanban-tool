@@ -9,9 +9,9 @@ pub(crate) struct ListArgs {
     pub(crate) include_archived: bool,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let boards = client.list_boards(args.include_archived)?;
+    let boards = client.list_boards(args.include_archived).await?;
     if ctx.json {
         output::print_json(&ListBoardsResponse { data: boards });
     } else {

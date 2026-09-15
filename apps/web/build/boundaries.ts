@@ -25,7 +25,8 @@ const allowed: Record<string, readonly string[]> = {
   domain: ['domain', 'lib'],
   components: ['components', 'platform', 'domain'],
   platform: ['platform', 'domain', 'lib'],
-  adapters: ['adapters', 'application', 'domain', 'platform', 'lib'],
+  adapters: ['adapters', 'application', 'domain', 'platform', 'lib', 'generated'],
+  generated: ['generated'],
 };
 
 export function checkBoundaries(sources: ReadonlyMap<string, string>): string[] {
@@ -51,6 +52,9 @@ export function checkBoundaries(sources: ReadonlyMap<string, string>): string[] 
         if (moduleReference) {
           const target = resolve(file, node.text);
           if (target) dependencies.add(target);
+          if (layer === 'application' && /^(?:@bufbuild\/protobuf|@connectrpc\/)/.test(node.text)) {
+            violations.push(`${file}: application 不能依赖 Protobuf 或 Connect 实现`);
+          }
         }
       }
       if (['features', 'domain', 'components'].includes(layer)) {

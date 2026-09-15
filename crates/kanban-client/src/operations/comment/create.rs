@@ -1,12 +1,11 @@
-use kanban_protocol::{ApiComment, CreateCommentRequest, CreateCommentResponse};
+use kanban_protocol::{ApiComment, CreateCommentRequest};
 
 use crate::{
-    KanbanClient, error::ClientError, shared::prepare_create_comment_request,
-    transport::encode_path_segment,
+    KanbanClient, error::ClientError, shared::prepare_create_comment_request, transport::rpc,
 };
 
 impl KanbanClient {
-    pub fn create_comment(
+    pub async fn create_comment(
         &self,
         task_id: &str,
         request: &CreateCommentRequest,
@@ -18,20 +17,26 @@ impl KanbanClient {
             ));
         }
         let request = prepare_create_comment_request(request.clone(), task_id);
-        let response: CreateCommentResponse = self.post(
-            &format!("/api/v1/tasks/{}/comments", encode_path_segment(task_id)),
-            &request,
+        let response: kanban_protocol::CreateCommentResponse = rpc!(
+            self,
+            create_comment,
+            CreateCommentRequest,
+            kanban_protocol::CreateCommentPath {
+                task_id: task_id.to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
 
-    pub fn create_comment_by_selector(
+    pub async fn create_comment_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &CreateCommentRequest,
     ) -> Result<ApiComment, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.create_comment(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.create_comment(&task_id, request).await
     }
 }

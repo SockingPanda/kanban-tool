@@ -5,6 +5,7 @@ import type { BoardReadModel, BoardReadQuery } from "../data/board-read-model";
 import { asCanonicalBoardId, type StreamContractAdapter, type SyncTelemetryEntry } from "../sync/contracts";
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import type { BoardViewModel } from "../../domain/tasks/board"
+import type { BoardRealtimeContext, BoardRealtimeSource, RealtimeState } from "../realtime/source"
 import {
   acquireBoardSession,
   activeBoardSessionCount,
@@ -59,8 +60,8 @@ function resource(
   } satisfies StreamContractAdapter
   return {
     selector,
-    streamUrl: createHostDataSource(resourceRuntime).streamUrl,
-    transport: { get: vi.fn(), request: vi.fn(), requestBytes: vi.fn() },
+    streamUrl: `${resourceRuntime.apiBaseUrl}/api/v1/stream/events`,
+    transport: { call: vi.fn() },
     query,
     adapter,
     runtimeKey: runtimeIdentityKey(resourceRuntime),
@@ -73,6 +74,155 @@ function resource(
 
 describe("Board canonical session registry", () => {
   afterEach(() => resetBoardSessionsForTests())
+
+  test("production source 仅配置正式 RPC，runtime prefix 进入同一个 endpoint", () => {
+    const source = createHostDataSource({ ...runtime, apiBaseUrl: "/gateway" }, { documentBaseURI: "http://127.0.0.1:1421/app/" })
+    expect(source.boardRealtime?.key).toBe("grpc-web:http://127.0.0.1:1421/gateway/:kanban.v1.WorkspaceService:1")
+    expect(source.transport).toHaveProperty("call")
+    expect(source.streamTransport).toBeUndefined()
+    expect(source.streamUrl).toBeUndefined()
+  })
+
+  test("读取中的多次 RPC 失效合并为后续重读，旧快照不发布", async () => {
+    const resolvers: Array<(value: BoardReadModel) => void> = []
+    const query = { load: vi.fn(async () => readModel), reload: vi.fn(() => new Promise<BoardReadModel>(resolve => resolvers.push(resolve))), invalidate: vi.fn() }
+    let context: BoardRealtimeContext | undefined
+    const source: BoardRealtimeSource = { key: "rpc", create: value => {
+      context = value
+      return { start: vi.fn(), stop: vi.fn(), retry: vi.fn(), snapshot: () => ({ state: "live" }) }
+    } }
+    const publish = vi.fn()
+    const handle = acquireBoardSession(runtime, model, { ...resource(query), boardRealtime: source }, publish, vi.fn())
+    context?.onRefresh()
+    context?.onRefresh()
+    context?.onRefresh()
+    expect(query.reload).toHaveBeenCalledOnce()
+    resolvers[0]?.(readModel)
+    await vi.waitFor(() => expect(query.reload).toHaveBeenCalledTimes(2))
+    expect(publish).not.toHaveBeenCalled()
+    const fresh = { ...readModel, identity: { ...readModel.identity, name: "更新后" } }
+    const pending = handle.refresh()
+    resolvers[1]?.(fresh)
+    await pending
+    expect(publish).toHaveBeenCalledExactlyOnceWith(fresh)
+    handle.release()
+  })
+
+  test("RPC 失效读取释放后不触碰重新获取的会话或另一看板", async () => {
+    const contexts: BoardRealtimeContext[] = []
+    const source: BoardRealtimeSource = { key: "rpc", create: value => {
+      contexts.push(value)
+      return { start: vi.fn(), stop: vi.fn(), retry: vi.fn(), snapshot: () => ({ state: "live" }) }
+    } }
+    let resolveFirst: ((value: BoardReadModel) => void) | undefined
+    const firstQuery = { load: vi.fn(async () => readModel), reload: vi.fn(() => new Promise<BoardReadModel>(resolve => { resolveFirst = resolve })), invalidate: vi.fn() }
+    const freshQuery = { load: vi.fn(async () => readModel), reload: vi.fn(async () => readModel), invalidate: vi.fn() }
+    const firstPublish = vi.fn(), freshPublish = vi.fn(), otherPublish = vi.fn()
+    const first = acquireBoardSession(runtime, model, { ...resource(firstQuery), boardRealtime: source }, firstPublish, vi.fn())
+    contexts[0]?.onRefresh()
+    first.release()
+    const fresh = acquireBoardSession(runtime, model, { ...resource(freshQuery), boardRealtime: source }, freshPublish, vi.fn())
+    const otherModel = { ...model, board: { id: "b_other", slug: "other", name: "Other" } }
+    const other = acquireBoardSession(runtime, otherModel, { ...resource(freshQuery, runtime, "other", asCanonicalBoardId("b_other")), resolvedSlug: "other", boardRealtime: source }, otherPublish, vi.fn())
+    contexts[0]?.onRefresh()
+    resolveFirst?.(readModel)
+    await new Promise(resolve => setImmediate(resolve))
+    expect(firstPublish).not.toHaveBeenCalled()
+    expect(freshPublish).not.toHaveBeenCalled()
+    expect(otherPublish).not.toHaveBeenCalled()
+    expect(freshQuery.reload).not.toHaveBeenCalled()
+    contexts[1]?.onRefresh()
+    await vi.waitFor(() => expect(freshPublish).toHaveBeenCalledOnce())
+    expect(otherPublish).not.toHaveBeenCalled()
+    fresh.release(); other.release()
+  })
+
+  test("显式 RPC source 共享一个 canonical 会话，并在最后一个引用释放时停止", () => {
+    const query = {
+      load: vi.fn(async () => readModel), reload: vi.fn(async () => readModel), invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    let context: BoardRealtimeContext | undefined
+    let state: RealtimeState = "stopped"
+    const start = vi.fn(() => { state = "connecting" })
+    const stop = vi.fn(() => { state = "stopped" })
+    const retry = vi.fn(() => { state = "connecting" })
+    const create = vi.fn((value: BoardRealtimeContext) => {
+      context = value
+      return { start, stop, retry, snapshot: () => ({ state }) }
+    })
+    const source = { key: "grpc-generated", create } satisfies BoardRealtimeSource
+    const legacy = vi.fn(() => { throw new Error("不应创建 SSE controller") })
+    const firstTelemetry = vi.fn()
+    const secondTelemetry = vi.fn()
+    const first = acquireBoardSession(runtime, model, { ...resource(query), boardRealtime: source }, vi.fn(), firstTelemetry, { createController: legacy })
+    const second = acquireBoardSession(runtime, model, { ...resource(query, runtime, "b_default"), boardRealtime: source }, vi.fn(), secondTelemetry, { createController: legacy })
+
+    expect(create).toHaveBeenCalledOnce()
+    expect(context?.boardId).toBe("b_default")
+    expect(context?.boardSelector).toBe("default")
+    expect(legacy).not.toHaveBeenCalled()
+    context?.onRefresh()
+    expect(firstTelemetry).toHaveBeenCalledWith(expect.objectContaining({ type: "rpc-refresh-required", cursor: 0 }))
+    expect(secondTelemetry).toHaveBeenCalledOnce()
+    expect(query.load).not.toHaveBeenCalled()
+    expect(query.reload).toHaveBeenCalledOnce()
+    first.release()
+    context?.onRefresh()
+    expect(firstTelemetry).toHaveBeenCalledOnce()
+    expect(secondTelemetry).toHaveBeenCalledTimes(2)
+    expect(stop).not.toHaveBeenCalled()
+    second.release()
+    context?.onRefresh()
+    expect(secondTelemetry).toHaveBeenCalledTimes(2)
+    expect(stop).toHaveBeenCalledOnce()
+    expect(query.invalidate).toHaveBeenCalledOnce()
+    expect(activeBoardSessionCount()).toBe(0)
+  })
+
+  test("显式 source 不能借用旧 SSE 会话，即使 source key 恰好叫 legacy-sse", () => {
+    const query = {
+      load: vi.fn(async () => readModel), reload: vi.fn(async () => readModel), invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
+    const first = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
+    const source: BoardRealtimeSource = { key: "legacy-sse", create: vi.fn(() => { throw new Error("不得复用") }) }
+    expect(() => acquireBoardSession(runtime, model, { ...resource(query), boardRealtime: source }, vi.fn(), vi.fn()))
+      .toThrow(/其他实时数据源/)
+    expect(source.create).not.toHaveBeenCalled()
+    expect(activeBoardSessionCount()).toBe(1)
+    first.release()
+  })
+
+  test("RPC source 构造失败不回退 SSE，也不泄漏 canonical 会话", () => {
+    const query = {
+      load: vi.fn(async () => readModel), reload: vi.fn(async () => readModel), invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const source: BoardRealtimeSource = { key: "grpc-invalid", create: () => { throw new Error("RPC 配置无效") } }
+    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
+    expect(() => acquireBoardSession(runtime, model, { ...resource(query), boardRealtime: source }, vi.fn(), vi.fn(), { createController }))
+      .toThrow("RPC 配置无效")
+    expect(createController).not.toHaveBeenCalled()
+    expect(activeBoardSessionCount()).toBe(0)
+  })
+
+  test("RPC 非 live 状态允许显式重连，live 状态保持原连接", () => {
+    const query = {
+      load: vi.fn(async () => readModel), reload: vi.fn(async () => readModel), invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    let state: RealtimeState = "connecting"
+    const retry = vi.fn()
+    const source: BoardRealtimeSource = { key: "grpc-reconnect", create: () => ({
+      start: vi.fn(), stop: vi.fn(), retry, snapshot: () => ({ state }),
+    }) }
+    const handle = acquireBoardSession(runtime, model, { ...resource(query), boardRealtime: source }, vi.fn(), vi.fn())
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("reconnecting")
+    state = "live"
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("already-live")
+    state = "failed"
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("reconnecting")
+    expect(retry).toHaveBeenCalledTimes(2)
+    handle.release()
+  })
 
   test("shares one controller per runtime and canonical board, then stops on last release", () => {
     const query = {
@@ -341,7 +491,7 @@ describe("Board canonical session registry", () => {
     expect(secondStop).toHaveBeenCalledTimes(1)
   })
 
-  test("builds a same-origin stream URL with the runtime API prefix", () => {
+  test("retains the explicitly injected legacy stream URL until its owner migrates", () => {
     const query = {
       load: vi.fn(async () => readModel),
       reload: vi.fn(async () => readModel),

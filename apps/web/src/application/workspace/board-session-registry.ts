@@ -1,5 +1,7 @@
 import type { BoardReadModel, BoardReadQuery } from "../data/board-read-model";
-import { type HttpTransport } from "../data/http-transport";
+import type { BoardRealtimeSource } from "../realtime/source";
+import { bindBoardRealtime } from "../realtime/bind";
+import { type RpcTransport } from "../data/rpc-transport";
 import { createBoardSyncSink } from "../sync/board-sync-sink";
 import { createEventsApiClient } from "../sync/events-api";
 import { WebSyncController, type WebSyncSnapshot } from "../sync/web-sync-controller";
@@ -9,9 +11,10 @@ import type { BoardViewModel } from "../../domain/tasks/board"
 
 export interface BoardReadResource {
   readonly selector: string
+  readonly boardRealtime?: BoardRealtimeSource
   readonly streamTransport?: SseTransport
   readonly streamUrl?: string
-  readonly transport: HttpTransport
+  readonly transport: RpcTransport
   readonly query: BoardReadQuery
   readonly adapter: StreamContractAdapter
   readonly runtimeKey: string
@@ -23,6 +26,7 @@ export interface BoardReadResource {
 
 interface BoardSession {
   readonly key: string
+  readonly realtimeKey: string
   readonly generation: number
   readonly query: BoardReadQuery
   readonly controller: BoardSessionController
@@ -31,6 +35,7 @@ interface BoardSession {
   readonly listeners: Set<(model: BoardReadModel) => void>
   readonly telemetryListeners: Set<(entry: SyncTelemetryEntry) => void>
   refreshPromise: Promise<void> | null
+  refreshRevision: number
   refs: number
   disposed: boolean
 }
@@ -83,6 +88,30 @@ function sessionKey(runtime: WebRuntimeConfig, canonicalBoardId: CanonicalBoardI
   return `${runtimeIdentityKey(runtime)}\u0000${canonicalBoardId}`
 }
 
+/** 读取期间收到新失效提示时再次读取，避免发布失效提示之前的快照。 */
+function refreshSession(session: BoardSession): Promise<void> {
+  if (session.disposed || sessions.get(session.key) !== session) return Promise.resolve()
+  session.refreshRevision += 1
+  if (session.refreshPromise !== null) return session.refreshPromise
+  const current = (): boolean => !session.disposed && sessions.get(session.key) === session
+  const promise = (async () => {
+    while (current()) {
+      const revision = session.refreshRevision
+      // 下一轮取决于本轮等待期间的失效 revision，不能并发；registry 回归覆盖迟到快照。
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+      const nextModel = await session.query.reload()
+      if (!current()) return
+      if (revision !== session.refreshRevision) continue
+      for (const listener of session.listeners) listener(nextModel)
+      return
+    }
+  })()
+  session.refreshPromise = promise
+  const clear = (): void => { if (session.refreshPromise === promise) session.refreshPromise = null }
+  void promise.then(clear, clear)
+  return promise
+}
+
 export function routeResourceContextKey(runtime: WebRuntimeConfig, selector: string, routeKind: string, boardSlug = ""): string {
   return `${resourceIdentityKey(runtime, selector, null)}\u0000${routeKind}\u0000${boardSlug}`
 }
@@ -108,7 +137,7 @@ export function activeBoardSessionCount(): number {
   return sessions.size
 }
 
-/** Subscribe to canonical-session ownership changes so Settings reconnect controls stay truthful. */
+/** 会话归属或正式 RPC 失效改变时通知订阅者，目录与重连控件使用同一个会话事实。 */
 export function subscribeBoardSessions(listener: () => void): () => void {
   sessionListeners.add(listener)
   return () => sessionListeners.delete(listener)
@@ -139,7 +168,7 @@ export function reconnectActiveBoardSession(runtime: WebRuntimeConfig, boardSlug
       && (boardSlug === undefined || [...session.resources].some((resource) => resource.resolvedSlug === boardSlug))
     ) {
       const snapshot = session.controller.snapshot?.()
-      if (snapshot !== undefined && snapshot.state !== "circuit-open") return "already-live"
+      if (snapshot?.state === "live") return "already-live"
       session.controller.retry()
       return "reconnecting"
     }
@@ -213,37 +242,55 @@ export function acquireBoardSession(
     if (sessions.get(key) === session) sessions.delete(key)
     session = undefined
   }
+  const realtimeKey = resource.boardRealtime ? `source:${resource.boardRealtime.key}` : "legacy-sse"
+  if (session && session.realtimeKey !== realtimeKey) throw new Error("同一看板仍有其他实时数据源的会话，请先释放旧会话")
   if (session === undefined) {
     const listeners = new Set<(nextModel: BoardReadModel) => void>()
     const telemetryListeners = new Set<(entry: SyncTelemetryEntry) => void>()
-    const eventsApi = createEventsApiClient({ transport: resource.transport })
-    const sink = createBoardSyncSink({
-      identity: { canonicalBoardId: boardId, selector: model.board.slug },
-      query: resource.query,
-      eventsApi,
-      adapter: resource.adapter,
-      publish: (nextModel) => {
-        for (const listener of listeners) listener(nextModel)
-      },
-    })
-    const controllerOptions = {
-      boardSelector: model.board.slug,
-      canonicalBoardId: boardId,
-      streamUrl: resource.streamUrl ?? "/api/v1/stream/events",
-      transport: dependencies.streamTransport ?? resource.streamTransport ?? (() => { throw new Error("Host stream transport 未提供") }),
-      adapter: resource.adapter,
-      sink,
-      telemetry: {
-        record: (entry: SyncTelemetryEntry) => {
-          for (const listener of telemetryListeners) listener(entry)
-          for (const observer of sessionTelemetryObservers.get(key) ?? []) observer(entry)
+    const record = (entry: SyncTelemetryEntry): void => {
+      if (session?.disposed || sessions.get(key) !== session) return
+      for (const listener of telemetryListeners) listener(entry)
+      for (const observer of sessionTelemetryObservers.get(key) ?? []) observer(entry)
+      if (entry.type === "rpc-refresh-required" && session) {
+        notifySessionListeners()
+        void refreshSession(session).catch(() => record({
+          type: "recovery-failure", boardId, cursor: 0,
+          details: { controlOnly: true, realtimeSource: resource.boardRealtime?.key },
+        }))
+      }
+    }
+    let controller: BoardSessionController
+    if (resource.boardRealtime) {
+      controller = bindBoardRealtime(resource.boardRealtime, {
+        boardId, boardSelector: model.board.slug, record,
+      })
+    } else {
+      // 旧入口显式保留，RPC 失败不会进入这个分支。
+      const eventsApi = createEventsApiClient({ transport: resource.transport })
+      const sink = createBoardSyncSink({
+        identity: { canonicalBoardId: boardId, selector: model.board.slug },
+        query: resource.query,
+        eventsApi,
+        adapter: resource.adapter,
+        publish: (nextModel) => {
+          for (const listener of listeners) listener(nextModel)
         },
-      },
-    } satisfies ConstructorParameters<typeof WebSyncController>[0]
-    const controller = dependencies.createController?.(controllerOptions) ?? new WebSyncController(controllerOptions)
+      })
+      const controllerOptions = {
+        boardSelector: model.board.slug,
+        canonicalBoardId: boardId,
+        streamUrl: resource.streamUrl ?? "/api/v1/stream/events",
+        transport: dependencies.streamTransport ?? resource.streamTransport ?? (() => { throw new Error("Host stream transport 未提供") }),
+        adapter: resource.adapter,
+        sink,
+        telemetry: { record },
+      } satisfies ConstructorParameters<typeof WebSyncController>[0]
+      controller = dependencies.createController?.(controllerOptions) ?? new WebSyncController(controllerOptions)
+    }
     resource.sessionGeneration += 1
     session = {
       key,
+      realtimeKey,
       generation: resource.sessionGeneration,
       query: resource.query,
       resource,
@@ -252,6 +299,7 @@ export function acquireBoardSession(
       listeners,
       telemetryListeners,
       refreshPromise: null,
+      refreshRevision: 0,
       refs: 0,
       disposed: false,
     }
@@ -300,24 +348,8 @@ export function acquireBoardSession(
     },
     refresh: () => {
       if (released || session === undefined || session.disposed || sessions.get(key) !== session) return Promise.resolve()
-      if (session.refreshPromise !== null) return session.refreshPromise
-      const current = session
-      const generation = current.generation
-      const refreshPromise = (async () => {
-        const nextModel = await current.query.reload()
-        // The refresh belongs to the canonical session entry, not the handle
-        // that happened to start it. A released handle must not suppress a
-        // publish when another owner still retains the same session.
-        if (current.disposed || current.generation !== generation || sessions.get(key) !== current) return
-        for (const listener of current.listeners) listener(nextModel)
-      })()
-      current.refreshPromise = refreshPromise
-      void refreshPromise.then(() => {
-        if (current.refreshPromise === refreshPromise) current.refreshPromise = null
-      }, () => {
-        if (current.refreshPromise === refreshPromise) current.refreshPromise = null
-      })
-      return refreshPromise
+      // 多个显式刷新共用当前读取；新的流失效提示由 record 另行推进 revision。
+      return session.refreshPromise ?? refreshSession(session)
     },
     generation: session.generation,
   }

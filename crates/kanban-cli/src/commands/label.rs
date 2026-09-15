@@ -58,20 +58,20 @@ pub(crate) enum LabelCommand {
     },
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &LabelCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &LabelCommand) -> Result<(), CliFailure> {
     match command {
-        LabelCommand::List(args) => list::run(ctx, args),
-        LabelCommand::Create(args) => create::run(ctx, args),
-        LabelCommand::Delete(args) => delete::run(ctx, args),
-        LabelCommand::Add(args) => add::run(ctx, args),
-        LabelCommand::Bootstrap(args) => bootstrap::run(ctx, args),
-        LabelCommand::Remove(args) => remove::run(ctx, args),
-        LabelCommand::Semantics { command } => ontology::run_semantics(ctx, command),
-        LabelCommand::Atoms { command } => ontology::run_atoms(ctx, command),
-        LabelCommand::AtomIndex { command } => ontology::run_atom_index(ctx, command),
-        LabelCommand::Suggest(args) => ontology::run_suggest(ctx, args),
-        LabelCommand::Propose(args) => ontology::run_propose(ctx, args),
-        LabelCommand::Proposals { command } => ontology::run_proposals(ctx, command),
-        LabelCommand::Ontology { command } => ontology::run_ledger(ctx, command),
+        LabelCommand::List(args) => list::run(ctx, args).await,
+        LabelCommand::Create(args) => create::run(ctx, args).await,
+        LabelCommand::Delete(args) => delete::run(ctx, args).await,
+        LabelCommand::Add(args) => add::run(ctx, args).await,
+        LabelCommand::Bootstrap(args) => bootstrap::run(ctx, args).await,
+        LabelCommand::Remove(args) => remove::run(ctx, args).await,
+        LabelCommand::Semantics { command } => ontology::run_semantics(ctx, command).await,
+        LabelCommand::Atoms { command } => ontology::run_atoms(ctx, command).await,
+        LabelCommand::AtomIndex { command } => ontology::run_atom_index(ctx, command).await,
+        LabelCommand::Suggest(args) => ontology::run_suggest(ctx, args).await,
+        LabelCommand::Propose(args) => ontology::run_propose(ctx, args).await,
+        LabelCommand::Proposals { command } => ontology::run_proposals(ctx, command).await,
+        LabelCommand::Ontology { command } => ontology::run_ledger(ctx, command).await,
     }
 }

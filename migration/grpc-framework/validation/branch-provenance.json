@@ -1,0 +1,63 @@
+{
+  "repository": "SockingPanda/kanban-tool",
+  "branch": "codex/v4-atlas-paper",
+  "commit": "f53e7b884b440f782020587c6f08a7e451757484",
+  "method": "GitHub connector fixed-ref reads",
+  "wholeCheckoutAvailable": false,
+  "originalFiles": [
+    {
+      "path": "crates/kanban-service/src/lib.rs",
+      "blob": "f9065c9d1f07afb1786b341e4280b4c90c35b3aa",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/crates/kanban-service/src/lib.rs"
+    },
+    {
+      "path": "crates/kanban-service/src/service.rs",
+      "blob": "24736cce35b7d5f2bea3da2fb5ef154ed05bf7d8",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/crates/kanban-service/src/service.rs"
+    },
+    {
+      "path": "crates/kanban-service/src/db.rs",
+      "blob": "47ff6549951e7ce430c0418cec82bbc9b707fd89",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/crates/kanban-service/src/db.rs"
+    },
+    {
+      "path": "apps/web/src/application/workspace/data-source.ts",
+      "blob": "37ccbbbffedce7d3a4ea401e0f60dc95ea786d04",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/apps/web/src/application/workspace/data-source.ts"
+    },
+    {
+      "path": "apps/web/src/application/workspace/use-board-session.tsx",
+      "blob": "d9d70825885edc8c10b2e0ee5e1b2c8b34bddcaa",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/apps/web/src/application/workspace/use-board-session.tsx"
+    },
+    {
+      "path": "apps/web/src/application/workspace/board-session-registry.ts",
+      "blob": "26cb15fd1b089e35dfb1ac1754fb4363a395aa38",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/apps/web/src/application/workspace/board-session-registry.ts"
+    },
+    {
+      "path": "apps/web/src/application/workspace/session-events.ts",
+      "blob": "879beaafcd553387898f2e51eec12dae39058283",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/apps/web/src/application/workspace/session-events.ts"
+    },
+    {
+      "path": "apps/web/src/application/workspace/board-live-state.ts",
+      "blob": "444d0d72bc24e5b9dd63703bb49c211506f02702",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/apps/web/src/application/workspace/board-live-state.ts"
+    },
+    {
+      "path": "crates/kanban-server/Cargo.toml",
+      "blob": "1143167c5a41a53fecd4a1f2c5e72f73f1c9e497",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/crates/kanban-server/Cargo.toml"
+    },
+    {
+      "path": "crates/kanban-server/src/lib.rs",
+      "blob": "ff3a9562792aab64baa476a8d29c4c528615e248",
+      "url": "https://github.com/SockingPanda/kanban-tool/blob/f53e7b884b440f782020587c6f08a7e451757484/crates/kanban-server/src/lib.rs"
+    }
+  ],
+  "limitations": [
+    "部分原文件按行读取；Git blob 由连接器文件元数据核对。",
+    "未对完整本地分支执行变换；应用工具运行时会重新核对整个原文件 blob。"
+  ]
+}

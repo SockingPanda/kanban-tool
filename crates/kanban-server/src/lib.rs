@@ -1,7 +1,10 @@
 #![doc = include_str!("../README.md")]
 
+mod application;
+mod connections;
 mod dispatcher;
 mod error;
+pub mod grpc;
 mod http;
 mod router;
 mod state;

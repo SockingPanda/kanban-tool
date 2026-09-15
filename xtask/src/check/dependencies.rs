@@ -53,15 +53,7 @@ const OWNER_POLICIES: &[DependencyPolicy] = &[
         requirement: "^0.7",
         exact_version: None,
         uses_default_features: true,
-        features: &[],
-    },
-    DependencyPolicy {
-        name: "ureq",
-        owners: &["kanban-client"],
-        requirement: "^2.12",
-        exact_version: None,
-        uses_default_features: false,
-        features: &["json"],
+        features: &["http2"],
     },
     DependencyPolicy {
         name: "rmcp",
@@ -97,9 +89,21 @@ const TOOL_DEPENDENCIES: &[&str] = &[
     "serde",
     "serde_json",
     "sha2",
+    "syn",
+    "quote",
+    "prettyplease",
 ];
 
-const CONTRACT_DEPENDENCIES: &[&str] = &[SCHEMARS_PACKAGE, "serde", "serde_json", "sha2"];
+const CONTRACT_DEPENDENCIES: &[&str] = &[
+    SCHEMARS_PACKAGE,
+    "serde",
+    "serde_json",
+    "sha2",
+    "prost",
+    "tonic",
+    "tonic-prost",
+    "tonic-prost-build",
+];
 const WEB_ARTIFACT_DEPENDENCIES: &[&str] = &[CONTRACT_PACKAGE, "libc"];
 const WEB_ARTIFACT_DEV_DEPENDENCIES: &[&str] = &["serde_json", "tempfile"];
 
@@ -661,7 +665,6 @@ fn resolved_version_matches(version: &str, policy: &DependencyPolicy) -> bool {
     match policy.requirement {
         "^0.7" => version.starts_with("0.7."),
         "^0.2" => version.starts_with("0.2."),
-        "^2.12" => version.starts_with("2.12."),
         "^2" => version.starts_with("2."),
         _ => false,
     }
@@ -803,6 +806,60 @@ fn validate_owner_policies(
                 )));
             }
         }
+    }
+    Ok(())
+}
+
+// tonic 同时属于契约、Host 与 client；这里只约束原生 client 的传输声明。
+fn validate_native_client(
+    workspace: &HashMap<String, String>,
+    packages: &HashMap<String, &Map<String, Value>>,
+    nodes: &HashMap<String, &Map<String, Value>>,
+) -> PolicyResult<()> {
+    let client_id = workspace
+        .get("kanban-client")
+        .ok_or_else(|| error("缺少 kanban-client"))?;
+    let client = packages[client_id];
+    let dependencies = package_dependencies(client)?;
+    if dependencies.iter().any(|dependency| {
+        normal_kind(dependency.get("kind").and_then(Value::as_str))
+            && matches!(
+                dependency.get("name").and_then(Value::as_str),
+                Some("ureq" | "reqwest")
+            )
+    }) {
+        return Err(error("kanban-client 业务传输必须使用原生 gRPC"));
+    }
+    let tonic = dependencies
+        .iter()
+        .find(|dependency| dependency.get("name").and_then(Value::as_str) == Some("tonic"))
+        .ok_or_else(|| error("kanban-client 缺少 tonic channel"))?;
+    let context = "kanban-client -> tonic";
+    check_registry_declaration(tonic, "=0.14.6", false, &["codegen", "transport"], context)?;
+    if dependency_alias(tonic)? != "tonic"
+        || !normal_kind(tonic.get("kind").and_then(Value::as_str))
+        || tonic.get("optional") != Some(&Value::Bool(false))
+        || tonic.get("target").is_some_and(|value| !value.is_null())
+        || tonic.get("path").is_some()
+        || tonic.get("registry").is_some_and(|value| !value.is_null())
+    {
+        return Err(error(
+            "kanban-client tonic 必须是无 override 的 nonoptional normal dependency",
+        ));
+    }
+    let client_node = nodes
+        .get(client_id)
+        .ok_or_else(|| error("client resolve node 缺失"))?;
+    let edge = direct_edge(client_node, "tonic", context)?;
+    normal_edge(edge, context, true)?;
+    let resolved = packages
+        .get(string_field(edge, "pkg", context)?)
+        .ok_or_else(|| error("client tonic resolve package 缺失"))?;
+    if package_name(resolved)? != "tonic"
+        || string_field(resolved, "version", context)? != "0.14.6"
+        || optional_string_field(resolved, "source", context)? != Some(CRATES_IO_SOURCE)
+    {
+        return Err(error("client tonic resolve identity/version 漂移"));
     }
     Ok(())
 }
@@ -1138,6 +1195,17 @@ fn validate_tool_and_contract(
             "serde" => check_registry_declaration(dependency, "^1.0", true, &["derive"], &context)?,
             "serde_json" => check_registry_declaration(dependency, "^1.0", true, &[], &context)?,
             "sha2" => check_registry_declaration(dependency, "^0.10", true, &[], &context)?,
+            "syn" => check_registry_declaration(
+                dependency,
+                "^2.0.117",
+                false,
+                &["full", "parsing", "printing", "clone-impls", "extra-traits"],
+                &context,
+            )?,
+            "quote" => check_registry_declaration(dependency, "^1.0.45", true, &[], &context)?,
+            "prettyplease" => {
+                check_registry_declaration(dependency, "^0.2.37", true, &[], &context)?
+            }
             _ => unreachable!("exact direct dependency list already checked"),
         }
     }
@@ -1155,7 +1223,31 @@ fn validate_tool_and_contract(
             "serde" => check_registry_declaration(dependency, "^1.0", true, &["derive"], &context)?,
             "serde_json" => check_registry_declaration(dependency, "^1.0", true, &[], &context)?,
             "sha2" => check_registry_declaration(dependency, "^0.10", true, &[], &context)?,
+            "prost" => check_registry_declaration(dependency, "^0.14", true, &[], &context)?,
+            "tonic" => check_registry_declaration(
+                dependency,
+                "=0.14.6",
+                false,
+                &["codegen", "transport"],
+                &context,
+            )?,
+            "tonic-prost" | "tonic-prost-build" => {
+                check_registry_declaration(dependency, "=0.14.6", true, &[], &context)?
+            }
             _ => unreachable!("exact contract dependency list already checked"),
+        }
+        let actual_kind = optional_string_field(dependency, "kind", &context)?;
+        let expected_kind = if name == "tonic-prost-build" {
+            Some("build")
+        } else {
+            None
+        };
+        if (normal_kind(actual_kind) && expected_kind.is_some())
+            || (!normal_kind(actual_kind) && actual_kind != expected_kind)
+        {
+            return Err(error(format!(
+                "{context} dependency kind 必须为 {expected_kind:?}"
+            )));
         }
         if name == SCHEMARS_PACKAGE && dependency.get("optional") != Some(&Value::Bool(true)) {
             return Err(error(
@@ -1189,7 +1281,22 @@ fn validate_tool_and_contract(
             &dependency_name.replace('-', "_"),
             CONTRACT_PACKAGE,
         )?;
-        normal_edge(edge, &format!("kanban-protocol -> {dependency_name}"), true)?;
+        if *dependency_name == "tonic-prost-build" {
+            let kinds = edge
+                .get("dep_kinds")
+                .and_then(Value::as_array)
+                .ok_or_else(|| error("tonic-prost-build 缺少 dep_kinds"))?;
+            if kinds.len() != 1
+                || kinds[0].get("kind").and_then(Value::as_str) != Some("build")
+                || kinds[0].get("target") != Some(&Value::Null)
+            {
+                return Err(error(
+                    "kanban-protocol -> tonic-prost-build 必须是唯一 unconditional build edge",
+                ));
+            }
+        } else {
+            normal_edge(edge, &format!("kanban-protocol -> {dependency_name}"), true)?;
+        }
     }
     let jsonschema_id = string_field(
         direct_edge(tool_node, JSONSCHEMA_PACKAGE, TOOL_PACKAGE)?,
@@ -1506,6 +1613,7 @@ fn audit_metadata(metadata: &Value) -> PolicyResult<()> {
     let nodes = resolve_maps(metadata, &packages)?;
     let workspace = workspace_by_name(metadata, &packages)?;
     validate_owner_policies(&workspace, &packages, &nodes)?;
+    validate_native_client(&workspace, &packages, &nodes)?;
     validate_single_host(&workspace, &packages, &nodes)?;
     validate_runtime_isolation(metadata, &workspace, &default_members, &packages, &nodes)?;
     validate_legacy_graph(&workspace, &packages, &nodes)?;
@@ -1532,7 +1640,6 @@ mod tests {
         match name {
             "turso" => "0.7.2",
             "axum" => "0.7.9",
-            "ureq" => "2.12.1",
             "rmcp" => "3.1.0",
             "tauri" => "2.11.2",
             "jsonschema" => "0.47.0",
@@ -1543,6 +1650,11 @@ mod tests {
             "libc" => "0.2.186",
             "fs4" => "0.13.1",
             "tempfile" => "3.27.0",
+            "syn" => "2.0.117",
+            "quote" => "1.0.45",
+            "prettyplease" => "0.2.37",
+            "prost" => "0.14.4",
+            "tonic" | "tonic-prost" | "tonic-prost-build" => "0.14.6",
             _ => "1.0.0",
         }
     }
@@ -1685,7 +1797,12 @@ mod tests {
         ));
         packages.push(package(
             "kanban-client",
-            vec![registry_dependency("ureq", "^2.12", false, &["json"])],
+            vec![registry_dependency(
+                "tonic",
+                "=0.14.6",
+                false,
+                &["codegen", "transport"],
+            )],
         ));
         packages.push(package("kanban-cli", vec![]));
         packages.push(package(
@@ -1704,7 +1821,7 @@ mod tests {
             SERVER_PACKAGE,
             vec![
                 local_dependency(SERVICE_PACKAGE, &[]),
-                registry_dependency("axum", "^0.7", true, &[]),
+                registry_dependency("axum", "^0.7", true, &["http2"]),
             ],
         ));
         packages.push(package(
@@ -1730,7 +1847,6 @@ mod tests {
             FS4_PACKAGE,
             "turso",
             "axum",
-            "ureq",
             "rmcp",
             "tauri",
             "libc",
@@ -1773,7 +1889,7 @@ mod tests {
         ));
         nodes.push(node(
             &id("kanban-client"),
-            vec![edge("ureq", &registry_id("ureq", "2.12.1"))],
+            vec![edge("tonic", &registry_id("tonic", "0.14.6"))],
             &[],
         ));
         nodes.push(node(&id("kanban-cli"), vec![], &[]));
@@ -1821,7 +1937,6 @@ mod tests {
             FS4_PACKAGE,
             "turso",
             "axum",
-            "ureq",
             "rmcp",
             "tauri",
             "libc",
@@ -1833,10 +1948,9 @@ mod tests {
         ] {
             let features = match name {
                 "turso" => vec!["fts"],
-                "ureq" => vec!["json"],
                 "rmcp" => vec!["macros", "server", "transport-io"],
                 "tauri" => vec!["default", "tray-icon"],
-                "axum" => vec!["default"],
+                "axum" => vec!["default", "http2"],
                 "libc" => vec!["default"],
                 "fs4" => vec!["default"],
                 "tempfile" => vec!["default"],
@@ -1854,6 +1968,78 @@ mod tests {
             vec![],
             &["chrono04", "default", "derive", "schemars_derive", "std"],
         ));
+
+        // 生成工具依赖属于 xtask；protoc builder 只以 build edge 进入 protocol。
+        let additions = [
+            (
+                TOOL_PACKAGE,
+                vec![
+                    registry_dependency(
+                        "syn",
+                        "^2.0.117",
+                        false,
+                        &["full", "parsing", "printing", "clone-impls", "extra-traits"],
+                    ),
+                    registry_dependency("quote", "^1.0.45", true, &[]),
+                    registry_dependency("prettyplease", "^0.2.37", true, &[]),
+                ],
+            ),
+            (
+                CONTRACT_PACKAGE,
+                vec![
+                    registry_dependency("prost", "^0.14", true, &[]),
+                    registry_dependency("tonic", "=0.14.6", false, &["codegen", "transport"]),
+                    registry_dependency("tonic-prost", "=0.14.6", true, &[]),
+                    {
+                        let mut dep =
+                            registry_dependency("tonic-prost-build", "=0.14.6", true, &[]);
+                        dep["kind"] = json!("build");
+                        dep
+                    },
+                ],
+            ),
+        ];
+        for (owner, declarations) in additions {
+            for declaration in declarations {
+                let name = declaration["name"].as_str().unwrap();
+                let package_id = registry_id(name, registry_version(name));
+                let mut resolved = edge(name, &package_id);
+                resolved["dep_kinds"][0]["kind"] = declaration["kind"].clone();
+                let node = nodes
+                    .iter_mut()
+                    .find(|node| node["id"] == id(owner))
+                    .unwrap();
+                node["dependencies"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!(package_id));
+                node["deps"].as_array_mut().unwrap().push(resolved);
+                let package = packages
+                    .iter_mut()
+                    .find(|package| package["name"] == owner)
+                    .unwrap();
+                package["dependencies"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(declaration);
+            }
+        }
+        for name in [
+            "syn",
+            "quote",
+            "prettyplease",
+            "prost",
+            "tonic",
+            "tonic-prost",
+            "tonic-prost-build",
+        ] {
+            packages.push(registry_package(name));
+            nodes.push(node(
+                &registry_id(name, registry_version(name)),
+                vec![],
+                &[],
+            ));
+        }
 
         let workspace_members = workspace_names
             .iter()
@@ -1914,6 +2100,45 @@ mod tests {
     #[test]
     fn clean_fixture_passes() {
         audit_metadata(&fixture()).expect("clean dependency fixture should pass");
+    }
+
+    #[test]
+    fn native_client_channel_cannot_regress_to_http_or_lose_transport() {
+        assert_reject(fixture(), |metadata| {
+            package_record(metadata, "kanban-client")["dependencies"]
+                .as_array_mut()
+                .unwrap()
+                .push(registry_dependency("ureq", "^2.12", false, &["json"]));
+        });
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, "kanban-client", "tonic")["features"] = json!(["codegen"]);
+        });
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, "kanban-client", "tonic")["optional"] = json!(true);
+        });
+        assert_reject(fixture(), |metadata| {
+            node_record(metadata, "kanban-client")["deps"] = json!([]);
+        });
+    }
+
+    #[test]
+    fn rpc_codegen_dependency_features_and_build_kind_are_explicit() {
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, TOOL_PACKAGE, "syn")["features"] = json!(["full"]);
+        });
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, CONTRACT_PACKAGE, "tonic")["features"] = json!(["codegen"]);
+        });
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, CONTRACT_PACKAGE, "tonic-prost-build")["kind"] =
+                Value::Null;
+            node_record(metadata, CONTRACT_PACKAGE)["deps"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|edge| edge["name"] == "tonic_prost_build")
+                .unwrap()["dep_kinds"][0]["kind"] = Value::Null;
+        });
     }
 
     #[test]

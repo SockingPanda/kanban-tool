@@ -1,5 +1,5 @@
 import type { Locale } from "../../platform/preferences/preferences"
-import { HttpTransportError } from "../data/http-transport";
+import { RpcTransportError } from "../data/rpc-transport";
 
 type ErrorCopy = {
   readonly invalidIdentity: string
@@ -32,11 +32,11 @@ const copies: Record<Locale, ErrorCopy> = {
   },
 }
 
-function apiCode(error: HttpTransportError): string | null {
+function apiCode(error: RpcTransportError): string | null {
   return error.apiError?.code ?? null
 }
 
-function transportMessage(error: HttpTransportError, copy: ErrorCopy): string {
+function transportMessage(error: RpcTransportError, copy: ErrorCopy): string {
   switch (apiCode(error)) {
     case "not_found": return copy.notFound
     case "conflict":
@@ -56,6 +56,6 @@ function transportMessage(error: HttpTransportError, copy: ErrorCopy): string {
 /** Keep server internals and arbitrary Error messages out of rendered product copy. */
 export function localizedErrorMessage(error: unknown, fallback: string, locale: Locale): string {
   const copy = copies[locale]
-  if (error instanceof HttpTransportError) return transportMessage(error, copy)
+  if (error instanceof RpcTransportError) return transportMessage(error, copy)
   return fallback
 }

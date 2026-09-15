@@ -94,8 +94,8 @@ impl KanbanMcp {
             sort: args.sort,
         };
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let response = call_client(move || client.list_tasks(&board, &query)).await?;
+        let client = &self.client;
+        let response = call_client(client.list_tasks(&board, &query)).await?;
         Ok(Json(response))
     }
 
@@ -140,8 +140,8 @@ impl KanbanMcp {
             sort: args.sort,
         };
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let response = call_client(move || client.list_tasks_by_status(&board, &query)).await?;
+        let client = &self.client;
+        let response = call_client(client.list_tasks_by_status(&board, &query)).await?;
         Ok(Json(response))
     }
 }

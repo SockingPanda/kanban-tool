@@ -1,3 +1,4 @@
+import type { RpcCall } from "../../application/data/rpc-transport";
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
 import { asCanonicalBoardId, type CanonicalBoardId } from "../../application/sync/contracts";
@@ -6,8 +7,8 @@ import { parseApiListBoardsResponse } from "../../lib/api/generated/contracts/ap
 
 import { parseApiListTasksByStatusResponse } from "../../lib/api/generated/contracts/api-list-tasks-by-status-response";
 
-import { createHttpTransport } from "./http-transport";
-import { type HttpTransportResponse } from "../../application/data/http-transport";
+import { createRpcTransport } from "./rpc-transport";
+import { type RpcTransportResponse } from "../../application/data/rpc-transport";
 
 import { type LinkedAbortSignal, type BoardReadTransport, BoardReadBudget, BoardReadError, wrapTransportError, type ResolvedBoardIdentity, emptyError, parseContract, boardQuery, validateBoardList, type BoardTaskStatus, type WireBoardTask, type BoardReadModelOptions, type BoardTask, tasksPath, DEFAULT_TASK_OFFSET, MAX_TASK_PAGES, tasksQuery, appendTasksQuery, projectTask, type BoardReadModel, validateTaskPageSize, parseColumns, columnsPath, type BoardReadQuery, generationAbortError } from "../../application/data/board-read-model";
 
@@ -29,12 +30,14 @@ export function linkAbortSignals(signals: readonly (AbortSignal | undefined)[]):
 
 export async function get(
   transport: BoardReadTransport,
-  path: string,
+  request: RpcCall,
   signal: AbortSignal | undefined,
   budget: BoardReadBudget,
 ): Promise<unknown> {
   try {
-    const response: HttpTransportResponse = await transport.get(path, signal)
+    if (signal?.aborted) throw generationAbortError()
+    const response: RpcTransportResponse = await transport.call({ ...request, signal })
+    if (signal?.aborted) throw generationAbortError()
     if (
       response === null
       || typeof response !== "object"
@@ -43,7 +46,7 @@ export async function get(
       || !Number.isSafeInteger(response.bytes)
       || response.bytes < 0
     ) {
-      throw new BoardReadError("anomaly", "Web API transport 返回了无效 raw JSON 字节数。")
+      throw new BoardReadError("anomaly", "Web API transport 返回了无效 Protobuf 字节数。")
     }
     budget.consumeBytes(response.bytes)
     return response.payload
@@ -204,7 +207,7 @@ export async function loadBoardReadModel(
     let transport: BoardReadTransport
     try {
       transport = options.dependencies?.transport
-        ?? createHttpTransport(runtime, options.dependencies)
+        ?? createRpcTransport(runtime, options.dependencies)
     } catch (error) {
       return wrapTransportError(error)
     }

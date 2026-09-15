@@ -24,22 +24,15 @@ export type InspectorAssetsMutationHandlers = Pick<
   readonly suggestLabels: SuggestLabelsHandler
 }
 
-/**
- * JSON number[] upload budget for the localhost Axum route.
- *
- * The service can store much larger attachments, but the default 2 MiB Axum
- * JSON body limit is reached well before that when binary bytes are encoded as
- * JSON numbers. Keep this wire budget conservative so the client fails before
- * issuing a request that the host cannot accept.
- */
-export const MAX_ATTACHMENT_UPLOAD_BYTES = 384 * 1024
+/** gRPC-Web 直接传输 bytes，上传边界与 canonical service 保持一致。 */
+export const MAX_ATTACHMENT_UPLOAD_BYTES = 256 * 1024 * 1024
 
-const ATTACHMENT_UPLOAD_LIMIT_MESSAGE = "附件超过 384 KiB 上传上限（JSON 数组请求体预算）。"
+const ATTACHMENT_UPLOAD_LIMIT_MESSAGE = "附件超过 256 MiB 上传上限。"
 
 export async function createAttachmentUploadIntent(file: File): Promise<{
   readonly filename: string
   readonly content_type: string | null
-  readonly content: number[]
+  readonly content: Uint8Array
 }> {
   if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > MAX_ATTACHMENT_UPLOAD_BYTES) {
     throw new Error(ATTACHMENT_UPLOAD_LIMIT_MESSAGE)
@@ -51,7 +44,7 @@ export async function createAttachmentUploadIntent(file: File): Promise<{
   return {
     filename: file.name,
     content_type: file.type || null,
-    content: Array.from(bytes),
+    content: bytes,
   }
 }
 
@@ -78,7 +71,7 @@ export interface InspectorAssetsActions {
   readonly addLabel: (name: string) => Promise<InspectorMutationOutcome>
   readonly removeLabel: (labelId: string) => Promise<InspectorMutationOutcome>
   readonly applySuggestedLabel: (name: string) => Promise<InspectorMutationOutcome>
-  readonly uploadAttachment: (input: { readonly filename: string; readonly content_type: string | null; readonly content: number[] }) => Promise<InspectorMutationOutcome>
+  readonly uploadAttachment: (input: { readonly filename: string; readonly content_type: string | null; readonly content: Uint8Array | number[] }) => Promise<InspectorMutationOutcome>
   readonly downloadAttachment: (attachmentId: string) => ReturnType<InspectorAssetsMutationHandlers["downloadAttachment"]>
   readonly deleteAttachment: (attachmentId: string) => Promise<InspectorMutationOutcome>
 }

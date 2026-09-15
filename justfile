@@ -18,7 +18,22 @@ fmt:
 fmt-check: fmt
 
 fmt-full:
-    cargo fmt -p kanban-core -p kanban-service -p kanban-protocol -p kanban-web-artifact -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p xtask -- --check
+    cargo fmt --all -- --check
+
+# 迁移框架先通过真实 workspace 联编，产品路由切换由独立的 Host 验证覆盖。
+grpc-framework-check:
+    scripts/cargo-build-lock.sh -- cargo check --locked -p kanban-server --features grpc-framework --tests
+    scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-live-core -p kanban-rpc-proto -p kanban-rpc-host
+    scripts/cargo-build-lock.sh -- cargo clippy --locked -p kanban-live-core -p kanban-rpc-proto -p kanban-rpc-host --all-targets -- -D warnings
+
+# 独立临时数据库与 listener，使用真实生成客户端和 Node Fetch 验证 Host。
+grpc-fetch-check:
+    pnpm --filter @kanban-tool/grpc-framework build
+    scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server grpc::tests::generated_connect_client_uses_fetch_against_current_host -- --ignored --nocapture
+    scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server grpc::tests::business::generated_business_client_fetches_current_host -- --ignored --nocapture
+
+grpc-attachment-check:
+    scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server grpc::tests::business::attachment_exact_256_mib_boundary_roundtrip -- --ignored --nocapture
 
 fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
@@ -121,6 +136,12 @@ web-contracts-generate:
 web-contracts-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- web-contracts check
 
+grpc-contracts-generate:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- rpc-contracts generate
+
+grpc-contracts-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- rpc-contracts check
+
 web-test:
     pnpm --filter @kanban-tool/web test
 
@@ -156,6 +177,7 @@ release-proof-09a:
 web-check:
     just node-lock-check
     just web-contracts-check
+    just grpc-contracts-check
     just web-typecheck
     just web-lint
     just web-react-doctor

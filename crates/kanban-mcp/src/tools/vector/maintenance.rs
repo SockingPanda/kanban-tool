@@ -25,8 +25,8 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<VectorConfigureRequest>,
     ) -> Result<Json<VectorConfigureRequest>, McpError> {
-        let client = self.client.clone();
-        let config = call_client(move || client.configure_vector(args)).await?;
+        let client = &self.client;
+        let config = call_client(client.configure_vector(args)).await?;
         Ok(Json(config))
     }
 
@@ -39,8 +39,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<VectorMaintenanceArgs>,
     ) -> Result<Json<DataEnvelope<VectorStatus>>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let status = call_client(move || client.rebuild_vector(&board)).await?;
+        let client = &self.client;
+        let status = call_client(client.rebuild_vector(&board)).await?;
         Ok(Json(DataEnvelope::new(status)))
     }
 
@@ -53,8 +53,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<VectorMaintenanceArgs>,
     ) -> Result<Json<DataEnvelope<VectorStatus>>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let status = call_client(move || client.sync_vector(&board)).await?;
+        let client = &self.client;
+        let status = call_client(client.sync_vector(&board)).await?;
         Ok(Json(DataEnvelope::new(status)))
     }
 }

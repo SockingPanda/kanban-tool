@@ -29,15 +29,13 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<BoardCreateArgs>,
     ) -> Result<Json<CreateBoardResponse>, McpError> {
-        let client = self.client.clone();
-        let board = call_client(move || {
-            client.create_board(CreateBoardRequest {
-                slug: args.slug,
-                name: args.name,
-                description: args.description,
-                actor: None,
-            })
-        })
+        let client = &self.client;
+        let board = call_client(client.create_board(CreateBoardRequest {
+            slug: args.slug,
+            name: args.name,
+            description: args.description,
+            actor: None,
+        }))
         .await?;
         Ok(Json(CreateBoardResponse { data: board }))
     }

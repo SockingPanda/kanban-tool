@@ -12,14 +12,16 @@ pub(crate) struct CreateArgs {
     pub(crate) description: Option<String>,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &CreateArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &CreateArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let board = client.create_board(CreateBoardRequest {
-        slug: args.slug.clone(),
-        name: args.name.clone(),
-        description: args.description.clone(),
-        actor: None,
-    })?;
+    let board = client
+        .create_board(CreateBoardRequest {
+            slug: args.slug.clone(),
+            name: args.name.clone(),
+            description: args.description.clone(),
+            actor: None,
+        })
+        .await?;
     if ctx.json {
         output::print_json(&CreateBoardResponse { data: board });
     } else {

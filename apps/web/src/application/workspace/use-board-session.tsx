@@ -61,8 +61,9 @@ function makeResource(runtime: WebRuntimeConfig, selector: string, source: Works
   return {
     selector,
     transport,
-    streamTransport: source.streamTransport,
-    streamUrl: source.streamUrl,
+    ...(source.streamTransport ? { streamTransport: source.streamTransport } : {}),
+    ...(source.streamUrl ? { streamUrl: source.streamUrl } : {}),
+    ...(source.boardRealtime ? { boardRealtime: source.boardRealtime } : {}),
     query,
     adapter: createGeneratedStreamContractAdapter(),
     runtimeKey: runtimeIdentityKey(runtime),

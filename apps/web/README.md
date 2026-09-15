@@ -1,7 +1,7 @@
 # kanban Web
 
 `apps/web` 是 Browser 与 Linux Tauri Desktop 共用的产品前端。两者加载 `kanban serve` 在
-`/app/` 同源提供的同一份构建产物，通过 HTTP 和 SSE 操作现有 3.1.0 服务。
+`/app/` 同源提供的同一份构建产物，通过 binary gRPC-Web 查询和操作本地服务。
 
 ## 开始使用
 
@@ -33,6 +33,21 @@ pnpm install --frozen-lockfile
 pnpm --filter @kanban-tool/web dev
 ```
 
+Vite 开发与 preview 都将 RPC、现有 HTTP API、健康检查和 bootstrap metadata 代理到同一个
+`kanban serve`，默认地址为 `http://127.0.0.1:8721`。Host 使用其他端口时，在启动命令前设置
+`KANBAN_HOST_URL`，或写入 `apps/web/.env.local`：
+
+```bash
+KANBAN_HOST_URL=http://127.0.0.1:18721 pnpm --filter @kanban-tool/web dev
+KANBAN_HOST_URL=http://127.0.0.1:18721 pnpm --filter @kanban-tool/web preview
+```
+
+该变量只接受 `127.0.0.1`、`localhost` 或 `[::1]` 的 HTTP(S) origin，不接受凭据、路径、query
+或 fragment。页面继续使用 `/app/` 与同源请求；preview 保持 strict CSP。代理校验入站 Host 和
+Origin 后再使用上游 Host 的身份转发，流式响应随消费进度传递，取消请求会关闭上游连接。
+`runtime.json` 和 `manifest.json` 来自配置的 Host，本地页面代码与样式仍由 Vite 提供；开发
+代理中的 Host artifact 身份不能用来证明本地页面已经部署。
+
 开发 runtime 的连接规则由 [`vite.config.ts`](vite.config.ts) 持有。生产入口从
 `/app/runtime.json` 读取并校验配置，再显式注入 Host 数据源；测试夹具不会进入生产启动路径。
 
@@ -53,18 +68,24 @@ React Doctor 固定为 `0.9.13`，完整扫描与增量扫描都以 warning 阻�
 | --- | --- |
 | `src/app` | 启动后的应用组合、路由呈现、侧栏和全局浮层 |
 | `src/features` | 任务、运行记录、动态、健康、维护与设置的领域组件 |
-| `src/application` | 数据源接口、查询状态、异步操作、通知、导航和 SSE 同步编排 |
+| `src/application` | 数据源接口、查询状态、异步操作、通知、导航和查询失效编排 |
 | `src/domain` | 展示模型、纯查询与操作意图 |
-| `src/adapters/host` | typed HTTP、SSE 和生成契约的实际接入 |
+| `src/adapters/host` | named RPC、正式刷新流、健康探测和生成契约的实际接入 |
 | `src/components` | 基础控件、布局和浮层 |
 | `src/styles`、`src/platform` | 静态主题、浏览器能力和本机偏好 |
 
 功能之间通过显式公开出口组合，功能内部使用直接导入。组件经 application 操作数据，不直接读写
-网络或存储。查询按项目和条件隔离；切换项目时清理订阅并拒绝旧请求的迟到结果。SSE、断线补读和
-保守刷新规则见 [`docs/sse-invalidation.md`](docs/sse-invalidation.md)。
+网络或存储。查询按项目和条件隔离；切换项目时清理订阅并拒绝旧请求的迟到结果。
+
+生产数据源使用正式 `KanbanService` 读取和提交业务数据；`WorkspaceService.WatchChanges`
+通知当前项目的查询失效。首次连接与每次重新连接都会刷新数据，心跳只维护连接状态。
+目录、任务分页、详情、依赖图、运行记录和项目动态沿现有查询状态刷新，保留当前 URL 与表单草稿。
+连接失败时重试 RPC，不切换到 HTTP 或 SSE；`/health` 继续用于启动和健康探测。
+旧 SSE 实现的过渡语义见 [`docs/sse-invalidation.md`](docs/sse-invalidation.md)。
 
 `src/lib/api/generated` 由 `kanban-protocol` 生成，类型和运行时 validator 保持同源；手写 adapter
-在 `unknown` 边界完成验证。基础控件使用 React 和静态 CSS，浅色、深色与响应式布局共享主题
+在 `unknown` 边界完成验证。正式 Protobuf client 位于 `src/generated/rpc`，由根 `proto` 生成，
+通过 `src/lib/rpc` 转换为页面使用的 DTO。基础控件使用 React 和静态 CSS，浅色、深色与响应式布局共享主题
 token；不在运行时注入样式。依赖图按需加载。
 
 Web artifact manifest、runtime 身份与 strict CSP 是 Browser/Desktop 共用的启动边界，详见

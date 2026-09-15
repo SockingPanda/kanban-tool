@@ -29,12 +29,9 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
         let attachment_id = args.attachment_id;
-        let client = self.client.clone();
-        let deleted = call_client(move || {
-            let task_id = client.resolve_task_id(&board, &task_ref)?;
-            client.delete_attachment(&task_id, &attachment_id)
-        })
-        .await?;
+        let client = &self.client;
+        let task_id = call_client(client.resolve_task_id(&board, &task_ref)).await?;
+        let deleted = call_client(client.delete_attachment(&task_id, &attachment_id)).await?;
         Ok(Json(DeleteAttachmentResponse {
             data: DeleteResult { deleted },
         }))

@@ -29,10 +29,9 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
         let step_ref = args.step_ref;
-        let client = self.client.clone();
+        let client = &self.client;
         let steps =
-            call_client(move || client.remove_step_by_selector(&board, &task_ref, &step_ref))
-                .await?;
+            call_client(client.remove_step_by_selector(&board, &task_ref, &step_ref)).await?;
         Ok(Json(RemoveStepResponse { data: steps }))
     }
 }

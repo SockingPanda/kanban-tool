@@ -1,4 +1,4 @@
-import type { HttpTransportError } from "../data/http-transport";
+import type { RpcTransportError } from "../data/rpc-transport";
 import type { ArchiveTaskIntent, BlockTaskIntent, ClaimTaskIntent, HeartbeatTaskIntent, CompleteTaskIntent, PromoteTaskIntent, SpecifyTaskIntent, SubmitReviewTaskIntent, TaskMutationClient, TaskTransitionAction, UnblockTaskIntent } from "../data/task-mutations";
 import type { BoardTaskStatus, BoardTaskViewModel, BoardViewModel } from "../../domain/tasks/board"
 
@@ -340,7 +340,7 @@ export function rollbackTaskOptimistically(
 /** 409 and typed conflict codes require canonical reload before an explicit retry. */
 export function isMutationConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false
-  const candidate = error as Partial<Pick<HttpTransportError, "status" | "apiError">>
+  const candidate = error as Partial<Pick<RpcTransportError, "status" | "apiError">>
   const code = candidate.apiError?.code
   return candidate.status === 409
     || code === "conflict"
@@ -351,7 +351,7 @@ export function isMutationConflict(error: unknown): boolean {
 
 export function isClaimTokenConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false
-  const candidate = error as Partial<Pick<HttpTransportError, "status" | "apiError">>
+  const candidate = error as Partial<Pick<RpcTransportError, "status" | "apiError">>
   return candidate.apiError?.code === "claim_token_mismatch"
     || (candidate.status === 403 && candidate.apiError?.code === "claim_conflict")
 }

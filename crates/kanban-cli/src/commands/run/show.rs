@@ -9,12 +9,12 @@ pub(crate) struct ShowArgs {
     pub(crate) run_id: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ShowArgs,
 ) -> Result<(), CliFailure> {
-    let run = client.get_run(&args.run_id)?;
+    let run = client.get_run(&args.run_id).await?;
     if ctx.json {
         output::print_json(&CliRunShowOutput::new(run));
     } else {

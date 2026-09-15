@@ -27,12 +27,9 @@ impl KanbanMcp {
     ) -> Result<Json<ListAttachmentsResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
-        let attachments = call_client(move || {
-            let task_id = client.resolve_task_id(&board, &task_ref)?;
-            client.list_attachments(&task_id)
-        })
-        .await?;
+        let client = &self.client;
+        let task_id = call_client(client.resolve_task_id(&board, &task_ref)).await?;
+        let attachments = call_client(client.list_attachments(&task_id)).await?;
         Ok(Json(ListAttachmentsResponse { data: attachments }))
     }
 }

@@ -2,10 +2,10 @@ import type { ApiListEventsQueryContract } from "../../lib/api/generated/contrac
 import type { ApiListEventsResponseContract } from "../../lib/api/generated/contracts/api-list-events-response"
 import { parseApiListEventsQuery } from "../../lib/api/generated/contracts/api-list-events-query"
 import { parseApiListEventsResponse } from "../../lib/api/generated/contracts/api-list-events-response"
-import type { HttpTransport } from "../data/http-transport";
+import type { RpcTransport } from "../data/rpc-transport";
 
 export interface EventsApiClientOptions {
-  readonly transport: Pick<HttpTransport, "get">
+  readonly transport: RpcTransport
 }
 
 export interface EventsApiClient {
@@ -25,13 +25,7 @@ export function createEventsApiClient(options: EventsApiClientOptions): EventsAp
   return {
     async listEvents(query, signal) {
       const validatedQuery = parseApiListEventsQuery(query)
-      const params = new URLSearchParams()
-      if (validatedQuery.board !== undefined) params.set("board", validatedQuery.board)
-      if (validatedQuery.after !== undefined) params.set("after", String(validatedQuery.after))
-      if (validatedQuery.limit !== undefined) params.set("limit", String(validatedQuery.limit))
-      if (validatedQuery.task_id !== undefined && validatedQuery.task_id !== null) params.set("task_id", validatedQuery.task_id)
-      const path = `/api/v1/events?${params.toString()}`
-      const response = await options.transport.get(path, signal)
+      const response = await options.transport.call({ method: "ListEvents", query: validatedQuery, signal })
       if (
         response === null
         || typeof response !== "object"
@@ -40,7 +34,7 @@ export function createEventsApiClient(options: EventsApiClientOptions): EventsAp
         || !Number.isSafeInteger(response.bytes)
         || response.bytes < 0
       ) {
-        throw new EventsApiError("events API transport returned an invalid raw JSON byte count")
+        throw new EventsApiError("事件 RPC transport 返回了无效的 Protobuf 字节数")
       }
       return parseApiListEventsResponse(response.payload)
     },

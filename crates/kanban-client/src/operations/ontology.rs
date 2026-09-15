@@ -1,9 +1,16 @@
 //! 面向 label semantics 与 ontology surface 的 typed localhost 客户端。
 
 use kanban_protocol::{ListBoardLabelProposalsResponse, ListTaskLabelProposalsResponse};
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
+
+mod compat;
+
+use compat::{
+    actor_input, decision_input, from_value, input_without_selector, proposal_input, review_query,
+    signals_query, suggestion_query,
+};
 
 fn data<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, ClientError> {
     value
@@ -16,353 +23,478 @@ fn data<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, ClientError> 
         })
 }
 
-fn query_value(value: &str) -> String {
-    encode_path_segment(value)
-}
-
 impl KanbanClient {
-    pub fn list_label_semantics(&self, board: &str) -> Result<Value, ClientError> {
-        self.get(&format!(
-            "/api/v1/boards/{}/labels/semantics",
-            encode_path_segment(board)
-        ))
+    pub async fn list_label_semantics(&self, board: &str) -> Result<Value, ClientError> {
+        let response: kanban_protocol::ListLabelSemanticsResponse = rpc!(
+            self,
+            list_label_semantics,
+            ListLabelSemanticsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn get_label_semantics(&self, board: &str, label_ref: &str) -> Result<Value, ClientError> {
-        self.get(&format!(
-            "/api/v1/boards/{}/labels/{}/semantics",
-            encode_path_segment(board),
-            encode_path_segment(label_ref)
-        ))
-    }
-
-    pub fn upsert_label_semantics(
+    pub async fn get_label_semantics(
         &self,
         board: &str,
         label_ref: &str,
-        mut body: Value,
     ) -> Result<Value, ClientError> {
-        body["label_ref"] = Value::String(label_ref.to_owned());
-        self.put_json(
-            &format!(
-                "/api/v1/boards/{}/labels/{}/semantics",
-                encode_path_segment(board),
-                encode_path_segment(label_ref)
-            ),
-            &body,
-        )
+        let response: kanban_protocol::GetLabelSemanticsResponse = rpc!(
+            self,
+            get_label_semantics,
+            GetLabelSemanticsRequest,
+            kanban_protocol::LabelSemanticsPath {
+                board: board.to_owned(),
+                label_id: label_ref.to_owned()
+            },
+            (),
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn delete_label_semantics(
+    pub async fn upsert_label_semantics(
+        &self,
+        board: &str,
+        label_ref: &str,
+        body: Value,
+    ) -> Result<Value, ClientError> {
+        let response: kanban_protocol::UpsertLabelSemanticsResponse = rpc!(
+            self,
+            upsert_label_semantics,
+            UpsertLabelSemanticsRequest,
+            kanban_protocol::LabelSemanticsPath {
+                board: board.to_owned(),
+                label_id: label_ref.to_owned()
+            },
+            (),
+            input_without_selector(body, "label_ref")?
+        )?;
+        to_value(response)
+    }
+
+    pub async fn delete_label_semantics(
         &self,
         board: &str,
         label_ref: &str,
         expected_hash: &str,
         reason: &str,
     ) -> Result<Value, ClientError> {
-        self.delete(&format!(
-            "/api/v1/boards/{}/labels/{}/semantics?expected_semantics_hash={}&reason={}",
-            encode_path_segment(board),
-            encode_path_segment(label_ref),
-            query_value(expected_hash),
-            query_value(reason)
-        ))
+        let response: kanban_protocol::DeleteResponse = rpc!(
+            self,
+            delete_label_semantics,
+            DeleteLabelSemanticsRequest,
+            kanban_protocol::LabelSemanticsPath {
+                board: board.to_owned(),
+                label_id: label_ref.to_owned()
+            },
+            kanban_protocol::DeleteLabelSemanticsQuery {
+                expected_semantics_hash: expected_hash.to_owned(),
+                reason: reason.to_owned()
+            },
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn list_label_atoms(&self, board: &str) -> Result<Value, ClientError> {
-        self.get(&format!(
-            "/api/v1/boards/{}/labels/atoms",
-            encode_path_segment(board)
-        ))
+    pub async fn list_label_atoms(&self, board: &str) -> Result<Value, ClientError> {
+        let response: kanban_protocol::ListLabelAtomsResponse = rpc!(
+            self,
+            list_label_atoms,
+            ListLabelAtomsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn explain_label_atom(&self, board: &str, atom_ref: &str) -> Result<Value, ClientError> {
-        self.get(&format!(
-            "/api/v1/boards/{}/labels/atoms/{}/explain",
-            encode_path_segment(board),
-            encode_path_segment(atom_ref)
-        ))
+    pub async fn explain_label_atom(
+        &self,
+        board: &str,
+        atom_ref: &str,
+    ) -> Result<Value, ClientError> {
+        let response: kanban_protocol::ExplainLabelAtomResponse = rpc!(
+            self,
+            explain_label_atom,
+            ExplainLabelAtomRequest,
+            kanban_protocol::LabelAtomPath {
+                board: board.to_owned(),
+                atom_ref: atom_ref.to_owned()
+            },
+            (),
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn label_atom_index_status(&self, board: &str) -> Result<Value, ClientError> {
-        self.get(&format!(
-            "/api/v1/boards/{}/labels/atom-index/status",
-            encode_path_segment(board)
-        ))
+    pub async fn label_atom_index_status(&self, board: &str) -> Result<Value, ClientError> {
+        let response: kanban_protocol::LabelAtomIndexStatusResponse = rpc!(
+            self,
+            label_atom_index_status,
+            LabelAtomIndexStatusRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn rebuild_label_atom_index(&self, board: &str) -> Result<Value, ClientError> {
-        self.post_json(
-            &format!(
-                "/api/v1/boards/{}/labels/atom-index/rebuild",
-                encode_path_segment(board)
-            ),
-            &json!({}),
-        )
+    pub async fn rebuild_label_atom_index(&self, board: &str) -> Result<Value, ClientError> {
+        let response: kanban_protocol::RebuildLabelAtomIndexResponse = rpc!(
+            self,
+            rebuild_label_atom_index,
+            RebuildLabelAtomIndexRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn query_label_atom_index(
+    pub async fn query_label_atom_index(
         &self,
         board: &str,
         query: Option<&str>,
         polarity: Option<&str>,
         limit: usize,
     ) -> Result<Value, ClientError> {
-        let mut path = format!(
-            "/api/v1/boards/{}/labels/atom-index/query?limit={limit}",
-            encode_path_segment(board)
-        );
-        if let Some(query) = query {
-            path.push_str(&format!("&q={}", query_value(query)));
-        }
-        if let Some(polarity) = polarity {
-            path.push_str(&format!("&polarity={}", query_value(polarity)));
-        }
-        self.get(&path)
+        let response: kanban_protocol::rpc::dto::LabelAtomIndexQueryResponse = rpc!(
+            self,
+            query_label_atom_index,
+            QueryLabelAtomIndexRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            kanban_protocol::LabelAtomIndexQuery {
+                q: query.map(str::to_owned),
+                polarity: polarity.map(str::to_owned),
+                limit,
+                vector_json: None,
+                embedding_model: None,
+                include_vector: false
+            },
+            ()
+        )?;
+        to_value(kanban_protocol::DataEnvelope::new(response.data.data))
     }
 
-    pub fn suggest_task_labels(
+    pub async fn suggest_task_labels(
         &self,
         task_id: &str,
         board: Option<&str>,
         options: Value,
     ) -> Result<Value, ClientError> {
-        let board = board.unwrap_or("default");
-        let mut path = format!(
-            "/api/v1/tasks/{}/labels/suggestions?board={}",
-            encode_path_segment(task_id),
-            query_value(board)
-        );
-        if let Some(object) = options.as_object() {
-            for (key, value) in object {
-                if let Some(value) = value.as_str() {
-                    path.push_str(&format!("&{key}={}", query_value(value)));
-                } else if let Some(value) = value.as_f64() {
-                    path.push_str(&format!("&{key}={value}"));
-                } else if let Some(value) = value.as_u64() {
-                    path.push_str(&format!("&{key}={value}"));
-                }
-            }
-        }
-        self.get(&path)
+        let response: kanban_protocol::SuggestTaskLabelsResponse = rpc!(
+            self,
+            suggest_task_labels,
+            SuggestTaskLabelsRequest,
+            kanban_protocol::TaskLabelSurfacePath {
+                task_id: task_id.to_owned()
+            },
+            suggestion_query(board.or(Some("default")), options)?,
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn list_label_proposals(
+    pub async fn list_label_proposals(
         &self,
         board: &str,
         task_id: Option<&str>,
         status: Option<&str>,
     ) -> Result<Value, ClientError> {
         if let Some(task_id) = task_id {
-            let response = self.list_task_label_proposals(board, task_id, status)?;
+            let response = self
+                .list_task_label_proposals(board, task_id, status)
+                .await?;
             serde_json::to_value(response)
                 .map_err(|error| ClientError::InvalidResponse(error.to_string()))
         } else {
-            let response = self.list_board_label_proposals(board, status)?;
+            let response = self.list_board_label_proposals(board, status).await?;
             serde_json::to_value(response)
                 .map_err(|error| ClientError::InvalidResponse(error.to_string()))
         }
     }
 
-    pub fn list_task_label_proposals(
+    pub async fn list_task_label_proposals(
         &self,
         board: &str,
         task_id: &str,
         status: Option<&str>,
     ) -> Result<ListTaskLabelProposalsResponse, ClientError> {
-        let path = proposals_path(
-            &format!(
-                "/api/v1/tasks/{}/label-proposals?board={}",
-                encode_path_segment(task_id),
-                query_value(board)
-            ),
-            status,
-        );
-        self.get(&path)
+        let response: kanban_protocol::ListTaskLabelProposalsResponse = rpc!(
+            self,
+            list_task_label_proposals,
+            ListTaskLabelProposalsRequest,
+            kanban_protocol::TaskLabelSurfacePath {
+                task_id: task_id.to_owned()
+            },
+            kanban_protocol::rpc::dto::TaskLabelProposalQuery {
+                board: Some(board.to_owned()),
+                status: status.map(str::to_owned)
+            },
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn list_board_label_proposals(
+    pub async fn list_board_label_proposals(
         &self,
         board: &str,
         status: Option<&str>,
     ) -> Result<ListBoardLabelProposalsResponse, ClientError> {
-        let path = proposals_path(
-            &format!(
-                "/api/v1/boards/{}/label-proposals",
-                encode_path_segment(board)
-            ),
-            status,
-        );
-        self.get(&path)
+        let response: kanban_protocol::ListBoardLabelProposalsResponse = rpc!(
+            self,
+            list_board_label_proposals,
+            ListBoardLabelProposalsRequest,
+            kanban_protocol::ListBoardLabelProposalsPath {
+                board: board.to_owned()
+            },
+            kanban_protocol::ListBoardLabelProposalsQuery {
+                status: status
+                    .map(|status| from_value(serde_json::Value::String(status.to_owned())))
+                    .transpose()?
+            },
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn propose_task_label(
+    pub async fn propose_task_label(
         &self,
         board: &str,
         task_id: &str,
-        mut body: Value,
+        body: Value,
     ) -> Result<Value, ClientError> {
-        body["task_ref"] = Value::String(task_id.to_owned());
-        self.post_json(
-            &format!(
-                "/api/v1/tasks/{}/label-proposals?board={}",
-                encode_path_segment(task_id),
-                query_value(board)
-            ),
-            &body,
-        )
+        let response: kanban_protocol::ProposeTaskLabelResponse = rpc!(
+            self,
+            propose_task_label,
+            ProposeTaskLabelRequest,
+            kanban_protocol::TaskLabelSurfacePath {
+                task_id: task_id.to_owned()
+            },
+            suggestion_query(Some(board), serde_json::json!({}))?,
+            proposal_input(body)?
+        )?;
+        to_value(response)
     }
 
-    pub fn get_label_proposal(&self, proposal_id: &str) -> Result<Value, ClientError> {
-        self.get(&format!(
-            "/api/v1/label-proposals/{}",
-            encode_path_segment(proposal_id)
-        ))
+    pub async fn get_label_proposal(&self, proposal_id: &str) -> Result<Value, ClientError> {
+        let response: kanban_protocol::GetLabelProposalResponse = rpc!(
+            self,
+            get_label_proposal,
+            GetLabelProposalRequest,
+            kanban_protocol::ProposalPath {
+                proposal_id: proposal_id.to_owned()
+            },
+            (),
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn decide_label_proposal(
+    pub async fn decide_label_proposal(
         &self,
         proposal_id: &str,
         accept: bool,
         body: Value,
     ) -> Result<Value, ClientError> {
-        self.post_json(
-            &format!(
-                "/api/v1/label-proposals/{}/{decision}",
-                encode_path_segment(proposal_id),
-                decision = if accept { "accept" } else { "reject" }
-            ),
-            &body,
-        )
+        let path = kanban_protocol::ProposalPath {
+            proposal_id: proposal_id.to_owned(),
+        };
+        let request = decision_input(body)?;
+        let response: kanban_protocol::LabelProposalDecisionResponse = if accept {
+            rpc!(
+                self,
+                accept_label_proposal,
+                AcceptLabelProposalRequest,
+                path,
+                (),
+                request
+            )?
+        } else {
+            rpc!(
+                self,
+                reject_label_proposal,
+                RejectLabelProposalRequest,
+                path,
+                (),
+                request
+            )?
+        };
+        to_value(response)
     }
 
-    pub fn record_label_ontology_observation(
+    pub async fn record_label_ontology_observation(
         &self,
         board: &str,
         task_id: &str,
-        mut body: Value,
+        body: Value,
     ) -> Result<Value, ClientError> {
-        body["task_ref"] = Value::String(task_id.to_owned());
-        self.post_json(
-            &format!(
-                "/api/v1/tasks/{}/label-ontology/observations?board={}",
-                encode_path_segment(task_id),
-                query_value(board)
-            ),
-            &body,
-        )
+        let response: kanban_protocol::RecordLabelOntologyObservationResponse = rpc!(
+            self,
+            record_label_ontology_observation,
+            RecordLabelOntologyObservationRequest,
+            kanban_protocol::TaskLabelSurfacePath {
+                task_id: task_id.to_owned()
+            },
+            kanban_protocol::rpc::dto::TaskLabelBoardQuery {
+                board: Some(board.to_owned())
+            },
+            actor_input(body, Some("task_ref"))?
+        )?;
+        to_value(response)
     }
 
-    pub fn list_label_ontology_signals(
+    pub async fn list_label_ontology_signals(
         &self,
         board: &str,
         query: Value,
     ) -> Result<Value, ClientError> {
-        let mut path = format!(
-            "/api/v1/boards/{}/label-ontology/signals",
-            encode_path_segment(board)
-        );
-        if let Some(object) = query.as_object() {
-            let mut first = true;
-            for (key, value) in object {
-                let encoded = match value {
-                    Value::String(value) => query_value(value),
-                    Value::Bool(value) => value.to_string(),
-                    Value::Number(value) => value.to_string(),
-                    Value::Array(value) => value
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(query_value)
-                        .collect::<Vec<_>>()
-                        .join(","),
-                    _ => continue,
-                };
-                path.push(if first { '?' } else { '&' });
-                first = false;
-                path.push_str(key);
-                path.push('=');
-                path.push_str(&encoded);
-            }
-        }
-        self.get(&path)
+        let response: kanban_protocol::LabelOntologySignalsResponse = rpc!(
+            self,
+            list_label_ontology_signals,
+            ListLabelOntologySignalsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            signals_query(query)?,
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn get_label_ontology_signal(&self, signal_id: &str) -> Result<Value, ClientError> {
-        self.get(&format!(
-            "/api/v1/label-ontology/signals/{}",
-            encode_path_segment(signal_id)
-        ))
+    pub async fn get_label_ontology_signal(&self, signal_id: &str) -> Result<Value, ClientError> {
+        let response: kanban_protocol::GetLabelOntologySignalResponse = rpc!(
+            self,
+            get_label_ontology_signal,
+            GetLabelOntologySignalRequest,
+            kanban_protocol::SignalPath {
+                signal_id: signal_id.to_owned()
+            },
+            (),
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn review_label_ontology(&self, board: &str, query: Value) -> Result<Value, ClientError> {
-        let group_by = query
-            .get("group_by")
-            .and_then(Value::as_str)
-            .unwrap_or("label");
-        self.get(&format!(
-            "/api/v1/boards/{}/label-ontology/review?group_by={}",
-            encode_path_segment(board),
-            query_value(group_by)
-        ))
+    pub async fn review_label_ontology(
+        &self,
+        board: &str,
+        query: Value,
+    ) -> Result<Value, ClientError> {
+        let response: kanban_protocol::ReviewLabelOntologyResponse = rpc!(
+            self,
+            review_label_ontology,
+            ReviewLabelOntologyRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            review_query(query)?,
+            ()
+        )?;
+        to_value(response)
     }
 
-    pub fn create_label_ontology_action(
+    pub async fn create_label_ontology_action(
         &self,
         board: &str,
         body: Value,
     ) -> Result<Value, ClientError> {
-        self.post_json(
-            &format!(
-                "/api/v1/boards/{}/label-ontology/actions",
-                encode_path_segment(board)
-            ),
-            &body,
-        )
+        let response: kanban_protocol::LabelOntologyActionResponse = rpc!(
+            self,
+            create_label_ontology_action,
+            CreateLabelOntologyActionRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            actor_input(body, None)?
+        )?;
+        to_value(response)
     }
 
-    pub fn apply_label_ontology_atom(
+    pub async fn apply_label_ontology_atom(
         &self,
         board: &str,
         body: Value,
     ) -> Result<Value, ClientError> {
-        self.post_json(
-            &format!(
-                "/api/v1/boards/{}/label-ontology/apply/atom",
-                encode_path_segment(board)
-            ),
-            &body,
-        )
+        let response: kanban_protocol::LabelOntologyActionResponse = rpc!(
+            self,
+            apply_label_ontology_atom,
+            ApplyLabelOntologyAtomRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            actor_input(body, None)?
+        )?;
+        to_value(response)
     }
 
-    pub fn revert_label_ontology(&self, board: &str, body: Value) -> Result<Value, ClientError> {
-        self.post_json(
-            &format!(
-                "/api/v1/boards/{}/label-ontology/revert",
-                encode_path_segment(board)
-            ),
-            &body,
-        )
+    pub async fn revert_label_ontology(
+        &self,
+        board: &str,
+        body: Value,
+    ) -> Result<Value, ClientError> {
+        let response: kanban_protocol::LabelOntologyActionResponse = rpc!(
+            self,
+            revert_label_ontology_mutation,
+            RevertLabelOntologyMutationRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            actor_input(body, None)?
+        )?;
+        to_value(response)
     }
 
-    pub fn validate_label_ontology(&self, board: &str, body: Value) -> Result<Value, ClientError> {
-        self.post_json(
-            &format!(
-                "/api/v1/boards/{}/label-ontology/validate",
-                encode_path_segment(board)
-            ),
-            &body,
-        )
+    pub async fn validate_label_ontology(
+        &self,
+        board: &str,
+        body: Value,
+    ) -> Result<Value, ClientError> {
+        let response: kanban_protocol::LabelOntologyActionResponse = rpc!(
+            self,
+            validate_label_ontology_action,
+            ValidateLabelOntologyActionRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            actor_input(body, None)?
+        )?;
+        to_value(response)
     }
 
-    pub fn label_ontology_quality(
+    pub async fn label_ontology_quality(
         &self,
         board: &str,
         sample_limit: usize,
     ) -> Result<Value, ClientError> {
-        self.get(&format!(
-            "/api/v1/boards/{}/label-ontology/review?quality=true&sample_limit={sample_limit}",
-            encode_path_segment(board)
-        ))
+        let response: kanban_protocol::cli_labels::CliLabelOntologyQualityOutput = rpc!(
+            self,
+            get_label_ontology_quality,
+            GetLabelOntologyQualityRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            kanban_protocol::rpc::dto::LabelOntologyQualityQuery { sample_limit },
+            ()
+        )?;
+        to_value(response)
     }
 
     pub fn ontology_data<T: serde::de::DeserializeOwned>(
@@ -371,129 +503,8 @@ impl KanbanClient {
     ) -> Result<T, ClientError> {
         data(response)
     }
-
-    fn post_json(&self, path: &str, body: &Value) -> Result<Value, ClientError> {
-        self.post(path, body)
-    }
-
-    fn put_json(&self, path: &str, body: &Value) -> Result<Value, ClientError> {
-        self.put(path, body)
-    }
 }
 
-fn proposals_path(base: &str, status: Option<&str>) -> String {
-    status.map_or_else(
-        || base.to_owned(),
-        |status| {
-            let separator = if base.contains('?') { '&' } else { '?' };
-            format!("{base}{separator}status={}", query_value(status))
-        },
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        io::{Read, Write},
-        net::TcpListener,
-        thread::{self, JoinHandle},
-    };
-
-    use super::{KanbanClient, proposals_path};
-
-    fn response_server(expected_path: &str, status: &str, body: &str) -> (String, JoinHandle<()>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        let expected_request_line = format!("GET {expected_path} HTTP/1.1");
-        let status = status.to_owned();
-        let body = body.to_owned();
-        let handle = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 8192];
-            let size = stream.read(&mut request).unwrap();
-            let request = String::from_utf8_lossy(&request[..size]);
-            assert_eq!(request.lines().next(), Some(expected_request_line.as_str()));
-            let response = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            stream.write_all(response.as_bytes()).unwrap();
-        });
-        (format!("http://{address}"), handle)
-    }
-
-    #[test]
-    fn proposal_list_paths_keep_task_and_board_scopes_distinct() {
-        assert_eq!(
-            proposals_path(
-                "/api/v1/tasks/t_task/label-proposals?board=team%2Fone",
-                Some("proposed"),
-            ),
-            "/api/v1/tasks/t_task/label-proposals?board=team%2Fone&status=proposed"
-        );
-        assert_eq!(
-            proposals_path(
-                "/api/v1/boards/team%2Fone/label-proposals",
-                Some("accepted"),
-            ),
-            "/api/v1/boards/team%2Fone/label-proposals?status=accepted"
-        );
-        assert_eq!(
-            proposals_path("/api/v1/boards/team%2Fone/label-proposals", None),
-            "/api/v1/boards/team%2Fone/label-proposals"
-        );
-    }
-
-    #[test]
-    fn generic_proposal_list_dispatches_task_and_board_routes_without_fake_task() {
-        let (base_url, handle) = response_server(
-            "/api/v1/boards/team%2Fone/label-proposals?status=accepted",
-            "200 OK",
-            r#"{"data":[]}"#,
-        );
-        let client = KanbanClient::new(base_url, "test").unwrap();
-        let board = client
-            .list_label_proposals("team/one", None, Some("accepted"))
-            .unwrap();
-        assert_eq!(board, serde_json::json!({"data": []}));
-        handle.join().unwrap();
-
-        let (base_url, handle) = response_server(
-            "/api/v1/tasks/t_scope/label-proposals?board=team%2Fone&status=proposed",
-            "200 OK",
-            r#"{"data":[]}"#,
-        );
-        let client = KanbanClient::new(base_url, "test").unwrap();
-        let task = client
-            .list_label_proposals("team/one", Some("t_scope"), Some("proposed"))
-            .unwrap();
-        assert_eq!(task, serde_json::json!({"data": []}));
-        handle.join().unwrap();
-    }
-
-    #[test]
-    fn proposal_list_client_preserves_standard_error_envelope() {
-        let (base_url, handle) = response_server(
-            "/api/v1/boards/missing/label-proposals",
-            "404 Not Found",
-            r#"{"error":{"code":"not_found","message":"board missing"}}"#,
-        );
-        let client = KanbanClient::new(base_url, "test").unwrap();
-        let error = client
-            .list_board_label_proposals("missing", None)
-            .expect_err("HTTP error should decode as ErrorEnvelope");
-        assert_eq!(error.code(), "not_found");
-        match error {
-            crate::ClientError::Api {
-                status,
-                code: kanban_protocol::ApiErrorCode::NotFound,
-                message,
-            } => {
-                assert_eq!(status, 404);
-                assert_eq!(message, "board missing");
-            }
-            other => panic!("unexpected client error: {other:?}"),
-        }
-        handle.join().unwrap();
-    }
+fn to_value<T: serde::Serialize>(value: T) -> Result<Value, ClientError> {
+    serde_json::to_value(value).map_err(|error| ClientError::InvalidResponse(error.to_string()))
 }

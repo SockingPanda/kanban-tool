@@ -18,13 +18,19 @@ pub(crate) struct Args {
     pub(crate) dimensions: usize,
 }
 
-pub(crate) fn run(ctx: &CliContext, client: &KanbanClient, args: &Args) -> Result<(), CliFailure> {
-    let value = client.configure_vector(VectorConfigureRequest {
-        provider: args.provider.clone(),
-        endpoint: args.endpoint.clone(),
-        model: args.model.clone(),
-        dimensions: args.dimensions,
-    })?;
+pub(crate) async fn run(
+    ctx: &CliContext,
+    client: &KanbanClient,
+    args: &Args,
+) -> Result<(), CliFailure> {
+    let value = client
+        .configure_vector(VectorConfigureRequest {
+            provider: args.provider.clone(),
+            endpoint: args.endpoint.clone(),
+            model: args.model.clone(),
+            dimensions: args.dimensions,
+        })
+        .await?;
     let output_value = CliVectorConfigureOutput::new(CliVectorConfig {
         provider: value.provider,
         endpoint: value.endpoint,

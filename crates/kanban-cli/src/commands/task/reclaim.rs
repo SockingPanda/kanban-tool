@@ -19,7 +19,7 @@ pub(crate) struct ReclaimArgs {
     #[arg(long, help = "回收原因")]
     pub(crate) reason: Option<String>,
 }
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ReclaimArgs,
@@ -28,16 +28,18 @@ pub(crate) fn run(
         ReclaimStatus::Ready => ReclaimTargetStatus::Ready,
         ReclaimStatus::Blocked => ReclaimTargetStatus::Blocked,
     });
-    let task = client.reclaim_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &ReclaimTaskRequest {
-            actor: None,
-            force: args.force,
-            to_status,
-            reason: args.reason.clone(),
-        },
-    )?;
+    let task = client
+        .reclaim_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &ReclaimTaskRequest {
+                actor: None,
+                force: args.force,
+                to_status,
+                reason: args.reason.clone(),
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&ReclaimTaskResponse::new(task));
     } else {

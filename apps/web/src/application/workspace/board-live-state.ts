@@ -22,6 +22,8 @@ export function subscribeBrowserConnectivity(
 /** Map sync telemetry to the small set of user-visible Board states. */
 export function boardSyncStatusForTelemetry(type: string): BoardSyncStatus | null {
   switch (type) {
+    case "rpc-connecting":
+      return "connecting"
     case "connection-live":
       return "live"
     case "recovery-start":

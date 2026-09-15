@@ -9,16 +9,15 @@ pub(crate) struct AddArgs {
     pub(crate) parent_task_ref: String,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let parent_id = client
-        .get_task_by_selector(&ctx.board, &args.parent_task_ref)?
+        .get_task_by_selector(&ctx.board, &args.parent_task_ref)
+        .await?
         .id;
-    let dependencies = client.add_dependency_by_selector(
-        &ctx.board,
-        &args.child_task_ref,
-        &args.parent_task_ref,
-    )?;
+    let dependencies = client
+        .add_dependency_by_selector(&ctx.board, &args.child_task_ref, &args.parent_task_ref)
+        .await?;
     if ctx.json {
         let edge = dependencies
             .edges

@@ -32,10 +32,12 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let child_task_ref = args.child_task_ref;
         let parent_task_ref = args.parent_task_ref;
-        let client = self.client.clone();
-        let dependencies = call_client(move || {
-            client.add_dependency_by_selector(&board, &child_task_ref, &parent_task_ref)
-        })
+        let client = &self.client;
+        let dependencies = call_client(client.add_dependency_by_selector(
+            &board,
+            &child_task_ref,
+            &parent_task_ref,
+        ))
         .await?;
         Ok(Json(AddDependencyResponse { data: dependencies }))
     }

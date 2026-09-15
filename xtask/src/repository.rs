@@ -107,45 +107,99 @@ fn collect_files(path: &Path, extension: &str, files: &mut Vec<PathBuf>) -> Tool
 
 pub(crate) fn include_targets(root: &Path, source: &Path, text: &str) -> ToolResult<Vec<PathBuf>> {
     let mut targets = Vec::new();
-    let mut remaining = text;
-    while let Some(start) = remaining.find("include_str!(") {
-        if remaining[..start].ends_with('"') {
-            remaining = &remaining[start + "include_str!(".len()..];
+    for invocation in syn::parse_str::<IncludeMacros>(text)?.0 {
+        if let Ok(literal) = syn::parse2::<syn::LitStr>(invocation.tokens.clone()) {
+            targets.push(source.parent().unwrap_or(root).join(literal.value()));
             continue;
         }
-        let after = remaining[start + "include_str!(".len()..].trim_start();
-        if !after.starts_with('"') {
-            if after.starts_with("concat!(")
-                && after.contains("CARGO_MANIFEST_DIR")
-                && let Some(relative) = after.split('"').find(|value| value.starts_with('/'))
-                && let Some(manifest_dir) = source
-                    .ancestors()
-                    .find(|candidate| candidate.join("Cargo.toml").is_file())
-            {
-                targets.push(manifest_dir.join(relative.trim_start_matches('/')));
-            }
-            remaining = after;
+        let Ok(concat) = syn::parse2::<syn::Macro>(invocation.tokens) else {
             continue;
-        }
-        let after_quote = &after[1..];
-        let Some(end) = after_quote.find('"') else {
-            return Err(std::io::Error::other(format!(
-                "include_str! 字符串未闭合: {}",
-                source.strip_prefix(root).unwrap_or(source).display()
-            ))
-            .into());
         };
-        let relative = &after_quote[..end];
-        if relative.contains('\\') {
-            return Err(
-                std::io::Error::other(format!("include_str! 不支持转义路径: {relative}")).into(),
-            );
+        if !concat.path.is_ident("concat") {
+            continue;
         }
-        let target = source.parent().unwrap_or(root).join(relative);
-        targets.push(target);
-        remaining = &after_quote[end + 1..];
+        let parts = syn::parse2::<IncludeConcat>(concat.tokens)?;
+        if parts.manifest
+            && let Some(manifest_dir) = source
+                .ancestors()
+                .find(|candidate| candidate.join("Cargo.toml").is_file())
+        {
+            targets.push(manifest_dir.join(parts.literal.trim_start_matches('/')));
+        }
     }
     Ok(targets)
+}
+
+/// 扫描 Rust token，而不是把生成器字符串、注释里的示例当作真实宏调用。
+struct IncludeMacros(Vec<syn::Macro>);
+
+impl syn::parse::Parse for IncludeMacros {
+    fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
+        let mut found = Vec::new();
+        while !input.is_empty() {
+            if input.fork().parse::<syn::Macro>().is_ok() {
+                let invocation = input.parse::<syn::Macro>()?;
+                if invocation.path.is_ident("include_str") {
+                    found.push(invocation);
+                } else {
+                    found.extend(syn::parse2::<Self>(invocation.tokens)?.0);
+                }
+            } else if input.peek(syn::token::Paren) {
+                let inner;
+                syn::parenthesized!(inner in input);
+                found.extend(inner.parse::<Self>()?.0);
+            } else if input.peek(syn::token::Brace) {
+                let inner;
+                syn::braced!(inner in input);
+                found.extend(inner.parse::<Self>()?.0);
+            } else if input.peek(syn::token::Bracket) {
+                let inner;
+                syn::bracketed!(inner in input);
+                found.extend(inner.parse::<Self>()?.0);
+            } else {
+                input.step(|cursor| {
+                    let (_, next) = cursor.token_tree().expect("非空 token stream");
+                    Ok(((), next))
+                })?;
+            }
+        }
+        Ok(Self(found))
+    }
+}
+
+#[derive(Default)]
+struct IncludeConcat {
+    manifest: bool,
+    literal: String,
+}
+
+impl syn::parse::Parse for IncludeConcat {
+    fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
+        let mut result = Self::default();
+        let mut dynamic = false;
+        while !input.is_empty() {
+            if !dynamic && input.peek(syn::LitStr) {
+                result
+                    .literal
+                    .push_str(&input.parse::<syn::LitStr>()?.value());
+            } else if !dynamic && input.fork().parse::<syn::Macro>().is_ok() {
+                let invocation = input.parse::<syn::Macro>()?;
+                result.manifest |= invocation.path.is_ident("env")
+                    && syn::parse2::<syn::LitStr>(invocation.tokens)
+                        .is_ok_and(|name| name.value() == "CARGO_MANIFEST_DIR");
+            } else if input.peek(syn::Token![,]) {
+                input.parse::<syn::Token![,]>()?;
+            } else {
+                // 宏定义中的 $literal 由展开和编译检查；这里只核对静态前缀。
+                dynamic = true;
+                input.step(|cursor| {
+                    let (_, next) = cursor.token_tree().expect("非空 token stream");
+                    Ok(((), next))
+                })?;
+            }
+        }
+        Ok(result)
+    }
 }
 
 pub(crate) fn same_file(left: &Path, right: &Path) -> bool {
@@ -189,6 +243,38 @@ pub(crate) fn ensure_regular_file(path: &Path, label: &str) -> ToolResult<()> {
 mod tests {
     use super::*;
     use std::{env, time::SystemTime};
+
+    #[test]
+    fn include_targets_ignore_generator_literals_and_comments() {
+        let text = r##"
+            // include_str!("missing-comment.md")
+            const TEMPLATE: &str = "let value = include_str!(\"missing-template.md\");";
+            const RAW: &str = r#"include_str!("missing-raw.md")"#;
+            #[doc = include_str!("../README.md")]
+            fn body() { let _ = include_str! ("sample.txt"); }
+        "##;
+        let targets = include_targets(Path::new("/repo"), Path::new("/repo/src/lib.rs"), text)
+            .expect("Rust tokens should parse");
+        assert_eq!(
+            targets,
+            [
+                Path::new("/repo/src/../README.md"),
+                Path::new("/repo/src/sample.txt")
+            ]
+        );
+    }
+
+    #[test]
+    fn include_targets_resolve_all_static_concat_segments() {
+        let root = temp_root("include-concat");
+        fs::write(root.join("Cargo.toml"), "").unwrap();
+        let text = r#"include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/", "guide.md"));"#;
+        assert_eq!(
+            include_targets(&root, &root.join("src/lib.rs"), text).unwrap(),
+            [root.join("docs/guide.md")]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn temp_root(label: &str) -> PathBuf {
         let nonce = SystemTime::now()

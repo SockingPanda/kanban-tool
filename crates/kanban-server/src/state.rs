@@ -14,6 +14,8 @@ pub struct AppState {
     attachment_root: Arc<PathBuf>,
     default_actor: Arc<str>,
     event_stream_shutdown: Arc<Sender<bool>>,
+    #[cfg(test)]
+    pub(crate) grpc_probe: Arc<crate::grpc::SourceProbe>,
 }
 
 impl AppState {
@@ -47,6 +49,8 @@ impl AppState {
             attachment_root,
             default_actor: Arc::from(default_actor.into()),
             event_stream_shutdown: Arc::new(shutdown),
+            #[cfg(test)]
+            grpc_probe: Default::default(),
         })
     }
 
@@ -68,6 +72,10 @@ impl AppState {
 
     pub(crate) fn event_stream_shutdown_receiver(&self) -> watch::Receiver<bool> {
         self.event_stream_shutdown.subscribe()
+    }
+
+    pub(crate) fn stream_shutdown_sender(&self) -> Sender<bool> {
+        self.event_stream_shutdown.as_ref().clone()
     }
 
     pub(crate) fn begin_event_stream_shutdown(&self) {

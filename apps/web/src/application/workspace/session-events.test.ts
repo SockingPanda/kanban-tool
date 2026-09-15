@@ -17,6 +17,14 @@ const event = (id: number, eventId = `event-${id}`): ExplorerEvent => ({
 })
 
 describe("Explorer invalidation boundary", () => {
+  test("RPC 刷新提示在原查询边界内合并，连接心跳不触发读取", () => {
+    expect(coalesceExplorerBoundary(["rpc-refresh-required", "rpc-refresh-required", "connection-live"])).toEqual({
+      invalidationDelta: 1, eventsRefreshDelta: 1,
+    })
+    expect(coalesceExplorerBoundary(["rpc-connecting", "connection-live"])).toEqual({
+      invalidationDelta: 0, eventsRefreshDelta: 0,
+    })
+  })
   test("coalesces one poll boundary and completion into one refresh", () => {
     expect(coalesceExplorerBoundary(["poll-boundary-complete", "poll-complete"])).toEqual({
       invalidationDelta: 1,

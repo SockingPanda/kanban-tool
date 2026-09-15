@@ -1,192 +1,69 @@
-use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
 
-use kanban_protocol::ErrorEnvelope;
-use serde::{Serialize, de::DeserializeOwned};
+use kanban_protocol::rpc::{MAX_MESSAGE_BYTES, v1::kanban_service_client::KanbanServiceClient};
+use tonic::{Request, metadata::MetadataValue, transport::Channel};
 
-use crate::{KanbanClient, error::ClientError};
+use crate::{ClientError, KanbanClient};
 
-type AttachmentBytesResponse = (Option<String>, Option<String>, Option<String>, Vec<u8>);
-pub(crate) type ResponseReader = Box<dyn Read + Send + Sync + 'static>;
+pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+pub(crate) const UNARY_TIMEOUT: Duration = Duration::from_secs(30);
+
+// 每个调用点固定 request 类型与生成 client 方法；没有动态方法名或 JSON dispatcher。
+macro_rules! rpc {
+    ($client:expr, $method:ident, $request:ident, $path:expr, $query:expr, $input:expr) => {{
+        let message = kanban_protocol::rpc::v1::$request::from_parts($path, $query, $input)
+            .map_err($crate::ClientError::request_codec)?;
+        let client = $client;
+        tokio::time::timeout($crate::transport::UNARY_TIMEOUT, async {
+            let mut rpc_client = client.rpc_client().await?;
+            let response = rpc_client
+                .$method(client.unary_request(message))
+                .await
+                .map_err($crate::ClientError::status)?
+                .into_inner();
+            response
+                .try_into()
+                .map_err($crate::ClientError::response_codec)
+        })
+        .await
+        .map_err(|_| $crate::ClientError::unary_timeout())?
+    }};
+}
+
+pub(crate) use rpc;
 
 impl KanbanClient {
-    pub(crate) fn get<T>(&self, path: &str) -> Result<T, ClientError>
-    where
-        T: DeserializeOwned,
-    {
-        let request = self
-            .agent
-            .get(&format!("{}{path}", self.base_url))
-            .set("Accept", "application/json")
-            .set("X-KB-Actor", &self.actor);
-        decode_response(request.call())
-    }
-
-    pub(crate) fn post<B, T>(&self, path: &str, body: &B) -> Result<T, ClientError>
-    where
-        B: Serialize,
-        T: DeserializeOwned,
-    {
-        let body = serde_json::to_value(body)
-            .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
-        let request = self
-            .agent
-            .post(&format!("{}{path}", self.base_url))
-            .set("Accept", "application/json")
-            .set("X-KB-Actor", &self.actor);
-        decode_response(request.send_json(body))
-    }
-
-    pub(crate) fn put<B, T>(&self, path: &str, body: &B) -> Result<T, ClientError>
-    where
-        B: Serialize,
-        T: DeserializeOwned,
-    {
-        let body = serde_json::to_value(body)
-            .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
-        let request = self
-            .agent
-            .request("PUT", &format!("{}{path}", self.base_url))
-            .set("Accept", "application/json")
-            .set("X-KB-Actor", &self.actor);
-        decode_response(request.send_json(body))
-    }
-
-    pub(crate) fn delete<T>(&self, path: &str) -> Result<T, ClientError>
-    where
-        T: DeserializeOwned,
-    {
-        let request = self
-            .agent
-            .request("DELETE", &format!("{}{path}", self.base_url))
-            .set("Accept", "application/json")
-            .set("X-KB-Actor", &self.actor);
-        decode_response(request.call())
-    }
-
-    pub(crate) fn patch<B, T>(&self, path: &str, body: &B) -> Result<T, ClientError>
-    where
-        B: Serialize,
-        T: DeserializeOwned,
-    {
-        let body = serde_json::to_value(body)
-            .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
-        let request = self
-            .agent
-            .request("PATCH", &format!("{}{path}", self.base_url))
-            .set("Accept", "application/json")
-            .set("X-KB-Actor", &self.actor);
-        decode_response(request.send_json(body))
-    }
-
-    pub(crate) fn get_stream(
-        &self,
-        path: &str,
-        accept: &str,
-        last_event_id: Option<i64>,
-    ) -> Result<(Option<String>, ResponseReader), ClientError> {
-        let mut request = self
-            .agent
-            .get(&format!("{}{path}", self.base_url))
-            .set("Accept", accept);
-        if let Some(last_event_id) = last_event_id {
-            request = request.set("Last-Event-ID", &last_event_id.to_string());
-        }
-        decode_stream_response(request.call())
-    }
-
-    pub(crate) fn get_bytes(
-        &self,
-        path: &str,
-        accept: &str,
-    ) -> Result<AttachmentBytesResponse, ClientError> {
-        let request = self
-            .agent
-            .get(&format!("{}{path}", self.base_url))
-            .set("Accept", accept)
-            .set("X-KB-Actor", &self.actor);
-        decode_bytes_response(request.call())
-    }
-}
-
-fn decode_response<T>(response: Result<ureq::Response, ureq::Error>) -> Result<T, ClientError>
-where
-    T: DeserializeOwned,
-{
-    match response {
-        Ok(response) => response
-            .into_json::<T>()
-            .map_err(|error| ClientError::InvalidResponse(error.to_string())),
-        Err(ureq::Error::Status(status, response)) => {
-            let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
-                ClientError::InvalidResponse(format!("HTTP {status} 未包含错误 envelope：{error}"))
-            })?;
-            Err(ClientError::Api {
-                status,
-                code: envelope.error.code,
-                message: envelope.error.message,
+    pub(crate) async fn channel(&self) -> Result<Channel, ClientError> {
+        self.channel
+            .get_or_try_init(|| async {
+                self.endpoint.connect().await.map_err(|error| {
+                    ClientError::ServerUnavailable(format!("{}: {error}", self.base_url))
+                })
             })
-        }
-        Err(ureq::Error::Transport(error)) => {
-            Err(ClientError::ServerUnavailable(error.to_string()))
-        }
+            .await
+            .cloned()
     }
-}
 
-fn decode_stream_response(
-    response: Result<ureq::Response, ureq::Error>,
-) -> Result<(Option<String>, ResponseReader), ClientError> {
-    match response {
-        Ok(response) => {
-            let content_type = response.header("Content-Type").map(str::to_owned);
-            Ok((content_type, response.into_reader()))
-        }
-        Err(ureq::Error::Status(status, response)) => {
-            let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
-                ClientError::InvalidResponse(format!(
-                    "HTTP {status} SSE 响应不包含标准错误 envelope：{error}"
-                ))
-            })?;
-            Err(ClientError::Api {
-                status,
-                code: envelope.error.code,
-                message: envelope.error.message,
-            })
-        }
-        Err(ureq::Error::Transport(error)) => {
-            Err(ClientError::ServerUnavailable(error.to_string()))
-        }
+    pub(crate) async fn rpc_client(&self) -> Result<KanbanServiceClient<Channel>, ClientError> {
+        Ok(KanbanServiceClient::new(self.channel().await?)
+            .max_decoding_message_size(MAX_MESSAGE_BYTES)
+            .max_encoding_message_size(MAX_MESSAGE_BYTES))
     }
-}
 
-fn decode_bytes_response(
-    response: Result<ureq::Response, ureq::Error>,
-) -> Result<AttachmentBytesResponse, ClientError> {
-    match response {
-        Ok(response) => {
-            let content_type = response.header("Content-Type").map(str::to_owned);
-            let attachment_id = response.header("X-KB-Attachment-ID").map(str::to_owned);
-            let sha256 = response.header("X-KB-Attachment-SHA256").map(str::to_owned);
-            let mut reader = response.into_reader();
-            let mut bytes = Vec::new();
-            reader
-                .read_to_end(&mut bytes)
-                .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
-            Ok((content_type, attachment_id, sha256, bytes))
-        }
-        Err(ureq::Error::Status(status, response)) => {
-            let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
-                ClientError::InvalidResponse(format!("HTTP {status} 未包含错误 envelope：{error}"))
-            })?;
-            Err(ClientError::Api {
-                status,
-                code: envelope.error.code,
-                message: envelope.error.message,
-            })
-        }
-        Err(ureq::Error::Transport(error)) => {
-            Err(ClientError::ServerUnavailable(error.to_string()))
-        }
+    pub(crate) fn request<T>(&self, message: T) -> Request<T> {
+        let mut request = Request::new(message);
+        request.metadata_mut().insert_bin(
+            "x-kb-actor-bin",
+            MetadataValue::from_bytes(self.actor.as_bytes()),
+        );
+        request
+    }
+
+    pub(crate) fn unary_request<T>(&self, message: T) -> Request<T> {
+        let mut request = self.request(message);
+        request.set_timeout(UNARY_TIMEOUT);
+        request
     }
 }
 
@@ -215,27 +92,4 @@ fn is_loopback_authority(authority: &str) -> bool {
         || authority
             .parse::<SocketAddr>()
             .is_ok_and(|addr| addr.ip().is_loopback())
-}
-
-pub(crate) fn encode_path_segment(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
-            encoded.push(char::from(byte));
-        } else {
-            use std::fmt::Write as _;
-            let _ = write!(encoded, "%{byte:02X}");
-        }
-    }
-    encoded
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn path_segments_are_percent_encoded() {
-        assert_eq!(encode_path_segment("board/#1"), "board%2F%231");
-    }
 }

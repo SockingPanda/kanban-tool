@@ -13,9 +13,9 @@ pub(crate) enum CommentCommand {
     List(list::ListArgs),
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &CommentCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &CommentCommand) -> Result<(), CliFailure> {
     match command {
-        CommentCommand::Add(args) => add::run(ctx, args),
-        CommentCommand::List(args) => list::run(ctx, args),
+        CommentCommand::Add(args) => add::run(ctx, args).await,
+        CommentCommand::List(args) => list::run(ctx, args).await,
     }
 }

@@ -1,7 +1,8 @@
 # kanban-cli
 
 `kanban` 是 canonical localhost host 的薄命令行 adapter。除 `serve`、本地配置/init、completion 和
-hook 外，命令都通过 `kanban-client` 请求 host；CLI 不直接打开数据库，不实现第二套状态机。
+hook 外，命令都通过异步 `kanban-client` 的原生 gRPC channel 请求 host；CLI 不直接打开数据库，
+不实现第二套状态机。同一命令的 selector 解析和业务操作复用 channel，不创建嵌套 runtime。
 
 ## 最小路径
 

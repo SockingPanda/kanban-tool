@@ -14,15 +14,18 @@ pub(crate) struct NeighborhoodArgs {
     pub(crate) include_archived_context: bool,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &NeighborhoodArgs) -> Result<(), CliFailure> {
-    let value = ctx.client()?.task_neighborhood(
-        &args.task_id,
-        &TaskNeighborhoodQuery {
-            depth: args.depth,
-            limit_nodes: args.limit_nodes,
-            include_archived_context: args.include_archived_context,
-        },
-    )?;
+pub(crate) async fn run(ctx: &CliContext, args: &NeighborhoodArgs) -> Result<(), CliFailure> {
+    let value = ctx
+        .client()?
+        .task_neighborhood(
+            &args.task_id,
+            &TaskNeighborhoodQuery {
+                depth: args.depth,
+                limit_nodes: args.limit_nodes,
+                include_archived_context: args.include_archived_context,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&TaskNeighborhoodResponse { data: value });
     } else {

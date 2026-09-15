@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: protoc compiles descriptor containing named services
+ok 1 - protoc compiles descriptor containing named services
+  ---
+  duration_ms: 13.375413
+  type: 'test'
+  ...
+# Subtest: uint64 resume cursor round trips above JS safe integer
+ok 2 - uint64 resume cursor round trips above JS safe integer
+  ---
+  duration_ms: 9.426724
+  type: 'test'
+  ...
+# Subtest: protobuf maximum uint64 and minimum int64 are preserved
+ok 3 - protobuf maximum uint64 and minimum int64 are preserved
+  ---
+  duration_ms: 8.798821
+  type: 'test'
+  ...
+# Subtest: expected version zero retains message presence
+ok 4 - expected version zero retains message presence
+  ---
+  duration_ms: 23.998052
+  type: 'test'
+  ...
+# Subtest: text format encoder rejects simultaneous snapshot and delta
+ok 5 - text format encoder rejects simultaneous snapshot and delta
+  ---
+  duration_ms: 5.248974
+  type: 'test'
+  ...
+# Subtest: stream snapshot commit round trips with exact counts
+ok 6 - stream snapshot commit round trips with exact counts
+  ---
+  duration_ms: 10.070218
+  type: 'test'
+  ...
+# Subtest: Atlas refresh service compiles with exact named endpoint
+ok 7 - Atlas refresh service compiles with exact named endpoint
+  ---
+  duration_ms: 9.102809
+  type: 'test'
+  ...
+# Subtest: refresh sequence is not coerced to JS safe integer
+ok 8 - refresh sequence is not coerced to JS safe integer
+  ---
+  duration_ms: 9.784493
+  type: 'test'
+  ...
+# Subtest: refresh and heartbeat cannot share the same oneof
+ok 9 - refresh and heartbeat cannot share the same oneof
+  ---
+  duration_ms: 4.892355
+  type: 'test'
+  ...
+# Subtest: heartbeat empty message preserves presence
+ok 10 - heartbeat empty message preserves presence
+  ---
+  duration_ms: 13.388021
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 176.995182

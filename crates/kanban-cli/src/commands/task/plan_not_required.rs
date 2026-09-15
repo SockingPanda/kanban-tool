@@ -11,19 +11,21 @@ pub(crate) struct PlanNotRequiredArgs {
     pub(crate) reason: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &PlanNotRequiredArgs,
 ) -> Result<(), CliFailure> {
-    let plan = client.mark_execution_plan_not_required_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &MarkExecutionPlanNotRequiredRequest {
-            reason: args.reason.clone(),
-            actor: None,
-        },
-    )?;
+    let plan = client
+        .mark_execution_plan_not_required_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &MarkExecutionPlanNotRequiredRequest {
+                reason: args.reason.clone(),
+                actor: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&MarkExecutionPlanNotRequiredResponse { data: plan });
     } else {

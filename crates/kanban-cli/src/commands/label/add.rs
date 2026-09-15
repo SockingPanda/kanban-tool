@@ -12,18 +12,20 @@ pub(crate) struct AddArgs {
     pub(crate) create_missing: bool,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let response = client.add_task_labels_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &AddTaskLabelRequest {
-            name: None,
-            names: Some(args.labels.clone()),
-            create_missing: args.create_missing,
-            actor: None,
-        },
-    )?;
+    let response = client
+        .add_task_labels_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &AddTaskLabelRequest {
+                name: None,
+                names: Some(args.labels.clone()),
+                create_missing: args.create_missing,
+                actor: None,
+            },
+        )
+        .await?;
     if ctx.json {
         let data = match response.meta {
             Some(meta) => CliLabelAddResult::WithCreated(

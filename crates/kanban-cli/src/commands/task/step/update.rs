@@ -24,31 +24,33 @@ pub(crate) struct UpdateArgs {
     pub(crate) optional: bool,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &UpdateArgs,
 ) -> Result<(), CliFailure> {
-    let steps = client.update_step_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &args.step_ref,
-        &UpdateStepRequest {
-            title: args.title.clone(),
-            body: args.body.clone(),
-            linked_task_ref: args.linked_task_ref.clone(),
-            unlink_task: args.unlink_task,
-            position: args.position,
-            required: if args.required {
-                Some(true)
-            } else if args.optional {
-                Some(false)
-            } else {
-                None
+    let steps = client
+        .update_step_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &args.step_ref,
+            &UpdateStepRequest {
+                title: args.title.clone(),
+                body: args.body.clone(),
+                linked_task_ref: args.linked_task_ref.clone(),
+                unlink_task: args.unlink_task,
+                position: args.position,
+                required: if args.required {
+                    Some(true)
+                } else if args.optional {
+                    Some(false)
+                } else {
+                    None
+                },
+                actor: None,
             },
-            actor: None,
-        },
-    )?;
+        )
+        .await?;
     if ctx.json {
         output::print_json(&UpdateStepResponse { data: steps });
     } else {

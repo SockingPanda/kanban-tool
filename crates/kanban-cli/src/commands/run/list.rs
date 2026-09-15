@@ -10,12 +10,14 @@ pub(crate) struct ListArgs {
     pub(crate) task_ref: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ListArgs,
 ) -> Result<(), CliFailure> {
-    let runs = client.list_runs_by_selector(&ctx.board, &args.task_ref)?;
+    let runs = client
+        .list_runs_by_selector(&ctx.board, &args.task_ref)
+        .await?;
     if ctx.json {
         output::print_json(&CliRunsOutput::new(runs));
     } else {

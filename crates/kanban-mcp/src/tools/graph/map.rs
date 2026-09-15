@@ -58,8 +58,8 @@ impl KanbanMcp {
             include_archived_context: args.include_archived_context,
             hide_isolated: args.hide_isolated,
         };
-        let client = self.client.clone();
-        let value = call_client(move || client.board_task_map(&board, &query)).await?;
+        let client = &self.client;
+        let value = call_client(client.board_task_map(&board, &query)).await?;
         Ok(Json(DataEnvelope::new(BoardTaskMap {
             nodes: value.nodes,
             edges: value.edges,

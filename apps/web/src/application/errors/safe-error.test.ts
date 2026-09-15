@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { HttpTransportError } from "../data/http-transport";
+import { RpcTransportError } from "../data/rpc-transport";
 import { localizedErrorMessage } from "./safe-error"
 
 describe("safe localized feature errors", () => {
@@ -9,7 +9,7 @@ describe("safe localized feature errors", () => {
   })
 
   test("maps transport API codes to localized safe copy", () => {
-    const error = new HttpTransportError("http", "secret server detail", {
+    const error = new RpcTransportError("http", "secret server detail", {
       status: 409,
       apiError: { code: "invalid_transition", message: "secret" },
     })

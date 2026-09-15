@@ -12,20 +12,22 @@ pub(crate) struct ReopenArgs {
     pub(crate) reason: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ReopenArgs,
 ) -> Result<(), CliFailure> {
-    let step = client.reopen_step_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &args.step_ref,
-        &ReopenStepRequest {
-            reason: args.reason.clone(),
-            actor: None,
-        },
-    )?;
+    let step = client
+        .reopen_step_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &args.step_ref,
+            &ReopenStepRequest {
+                reason: args.reason.clone(),
+                actor: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CliTaskStepReopenOutput::new(step));
     } else {

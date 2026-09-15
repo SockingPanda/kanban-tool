@@ -8,12 +8,14 @@ pub(crate) struct ArchiveArgs {
     pub(crate) board: Option<String>,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &ArchiveArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &ArchiveArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let board = client.archive_board(
-        args.board.as_deref().unwrap_or(&ctx.board),
-        &ArchiveBoardRequest::default(),
-    )?;
+    let board = client
+        .archive_board(
+            args.board.as_deref().unwrap_or(&ctx.board),
+            &ArchiveBoardRequest::default(),
+        )
+        .await?;
     if ctx.json {
         output::print_json(&ArchiveBoardResponse { data: board });
     } else {

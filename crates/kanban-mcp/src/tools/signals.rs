@@ -99,7 +99,7 @@ impl KanbanMcp {
         Parameters(args): Parameters<SignalRecordArgs>,
     ) -> Result<Json<RecordSignalResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
+        let client = &self.client;
         let request = RecordSignalRequest {
             kind: args.kind,
             title: args.title,
@@ -120,7 +120,7 @@ impl KanbanMcp {
                 .comment_body
                 .map(|body| SignalCommentRequest { body: Some(body) }),
         };
-        let response = call_client(move || client.record_signal(&board, &request)).await?;
+        let response = call_client(client.record_signal(&board, &request)).await?;
         Ok(Json(response))
     }
 
@@ -133,7 +133,7 @@ impl KanbanMcp {
         Parameters(args): Parameters<SignalListArgs>,
     ) -> Result<Json<ListSignalsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
+        let client = &self.client;
         let query = SignalQuery {
             status: args.status,
             kind: args.kind,
@@ -141,7 +141,7 @@ impl KanbanMcp {
             include_all: args.include_all,
             limit: args.limit,
         };
-        let response = call_client(move || client.list_signals(&board, &query)).await?;
+        let response = call_client(client.list_signals(&board, &query)).await?;
         Ok(Json(response))
     }
 
@@ -153,8 +153,8 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<SignalShowArgs>,
     ) -> Result<Json<GetSignalResponse>, McpError> {
-        let client = self.client.clone();
-        let response = call_client(move || client.get_signal(&args.signal_id)).await?;
+        let client = &self.client;
+        let response = call_client(client.get_signal(&args.signal_id)).await?;
         Ok(Json(response))
     }
 
@@ -167,7 +167,7 @@ impl KanbanMcp {
         Parameters(args): Parameters<SignalReviewArgs>,
     ) -> Result<Json<ReviewSignalsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
+        let client = &self.client;
         let query = SignalQuery {
             status: args.status,
             kind: args.kind,
@@ -175,7 +175,7 @@ impl KanbanMcp {
             include_all: false,
             limit: args.limit,
         };
-        let response = call_client(move || client.review_signals(&board, &query)).await?;
+        let response = call_client(client.review_signals(&board, &query)).await?;
         Ok(Json(response))
     }
 
@@ -188,9 +188,9 @@ impl KanbanMcp {
         Parameters(args): Parameters<SignalActionArgs>,
     ) -> Result<Json<ConfirmSignalsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
+        let client = &self.client;
         let request = action_request(args.signal_ids, args.reason);
-        let response = call_client(move || client.confirm_signals(&board, &request)).await?;
+        let response = call_client(client.confirm_signals(&board, &request)).await?;
         Ok(Json(response))
     }
 
@@ -200,9 +200,9 @@ impl KanbanMcp {
         Parameters(args): Parameters<SignalActionArgs>,
     ) -> Result<Json<RejectSignalsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
+        let client = &self.client;
         let request = action_request(args.signal_ids, args.reason);
-        let response = call_client(move || client.reject_signals(&board, &request)).await?;
+        let response = call_client(client.reject_signals(&board, &request)).await?;
         Ok(Json(response))
     }
 
@@ -215,9 +215,9 @@ impl KanbanMcp {
         Parameters(args): Parameters<SignalActionArgs>,
     ) -> Result<Json<ResolveSignalsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
+        let client = &self.client;
         let request = action_request(args.signal_ids, args.reason);
-        let response = call_client(move || client.resolve_signals(&board, &request)).await?;
+        let response = call_client(client.resolve_signals(&board, &request)).await?;
         Ok(Json(response))
     }
 
@@ -230,7 +230,7 @@ impl KanbanMcp {
         Parameters(args): Parameters<SignalSupersedeArgs>,
     ) -> Result<Json<SupersedeSignalsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
+        let client = &self.client;
         let request = ReviewSignalsRequest {
             signal_ids: args.signal_ids,
             reason: args.reason,
@@ -238,7 +238,7 @@ impl KanbanMcp {
             actor: None,
             expected_updated_at: None,
         };
-        let response = call_client(move || client.supersede_signals(&board, &request)).await?;
+        let response = call_client(client.supersede_signals(&board, &request)).await?;
         Ok(Json(response))
     }
 }

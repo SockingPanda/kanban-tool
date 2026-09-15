@@ -1,0 +1,446 @@
+{
+  "format": "kanban.grpc-framework.delivery.v1",
+  "artifactKind": "atlas_core_migration_framework",
+  "frameworkVersion": "0.2.0",
+  "baseBranch": "codex/v4-atlas-paper",
+  "repository": "SockingPanda/kanban-tool",
+  "baseCommit": "f53e7b884b440f782020587c6f08a7e451757484",
+  "completeOriginalRepository": false,
+  "modifiesRemote": false,
+  "containsProductionDatabase": false,
+  "sourceFileCount": 43,
+  "rpcCount": 4,
+  "rustTestSourceCount": 30,
+  "scope": {
+    "framework": "provided",
+    "atlasWiringPatch": "provided_not_applied_to_complete_repository",
+    "defaultProductionRpcActivated": false,
+    "atlasVisualFilesModified": false,
+    "fullPaginatedQueryDeltas": "follow_up_G07",
+    "workspaceRefresh": "typed_grpc_invalidation_no_sse_fallback",
+    "existingProductSurfaces": "retained_for_follow_up_tasks",
+    "rpcExamples": "GetBoard, WatchBoard, UpdateTaskTitle, WatchChanges",
+    "existingFilesModifiedByPatch": 10,
+    "newFilesAddedByPatch": 5,
+    "plannedTasks": 9,
+    "tasksWrittenToLiveKanban": false
+  },
+  "verification": {
+    "executedPassedTests": 105,
+    "frontendSemanticTests": 68,
+    "installerFixtureTests": 13,
+    "protobufCompilerTests": 10,
+    "atlasWiringFixtureTests": 14,
+    "typescriptCoreTypecheck": "passed",
+    "protobufDescriptor": "compiled",
+    "rustBuild": "not_run_toolchain_unavailable",
+    "rustTests": "not_run",
+    "rustfmt": "not_run",
+    "fullGeneratedWebClientTypecheck": "not_run_dependencies_unavailable",
+    "realNativeGrpcAndGrpcWebInterop": "not_run",
+    "completeAtlasIntegration": "not_run",
+    "dependencyLockfiles": "not_resolved"
+  },
+  "files": [
+    {
+      "path": ".github/workflows/framework.yml",
+      "bytes": 811,
+      "sha256": "5ce80b4898cf459990dcc5aaee430a844fd470f196373a6ad94ccb4a0c9546f7"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 87,
+      "sha256": "1e26aeab99e71442dc6dab35a0db2008df7c191e81cf2bd82933e21460850f19"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 1744,
+      "sha256": "0e85faca3314cdf72404eb1fc15236b0fb0a30343f1f68e880bf0e0486a07651"
+    },
+    {
+      "path": "Cargo.toml",
+      "bytes": 804,
+      "sha256": "b1235e5bb8049ecbb48b51fb229c3386a039b4043c6555b9bd2bd1791bb47d1f"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4883,
+      "sha256": "7cd994a656472c66274213132386e75af0163ebaa035ce48b1a5e860b4884d7f"
+    },
+    {
+      "path": "crates/kanban-live-core/Cargo.toml",
+      "bytes": 342,
+      "sha256": "cd31d3b3238f65b2945eae8a8f59f4ad51c103fb3dba0df879b347ccb790b10d"
+    },
+    {
+      "path": "crates/kanban-live-core/src/hub.rs",
+      "bytes": 5967,
+      "sha256": "fd3414251e6658867bdb6858b40b4cb69b0106ce2d7b197ff0accb5684be9bbc"
+    },
+    {
+      "path": "crates/kanban-live-core/src/lib.rs",
+      "bytes": 257,
+      "sha256": "01f1b4813dec0320f9fb735ea4fa339c0e521ef4f23de41c3aaa99b9bfd573a4"
+    },
+    {
+      "path": "crates/kanban-live-core/src/model.rs",
+      "bytes": 3152,
+      "sha256": "f6edeb87ba691f81efd9141d47067b69b10dfa1bf9e31ac9a5fdffe5785280d8"
+    },
+    {
+      "path": "crates/kanban-live-core/src/refresh.rs",
+      "bytes": 443,
+      "sha256": "5b0a8c6bcd591745a4dff672b091732fe8fc07641e45d6952b4118b6d93ae8fd"
+    },
+    {
+      "path": "crates/kanban-live-core/src/source.rs",
+      "bytes": 2164,
+      "sha256": "c701706c5f75b18fa4d56fe5c4a3b1fb65a84608d2a168e31c8cebec9f60395c"
+    },
+    {
+      "path": "crates/kanban-live-core/src/tests.rs",
+      "bytes": 5630,
+      "sha256": "56778b4e8f9c8fd9183234cca820993362c350f3debb7963b43ffa6c37087c0c"
+    },
+    {
+      "path": "crates/kanban-rpc-host/Cargo.toml",
+      "bytes": 762,
+      "sha256": "87bcd05524e69727bf2576b278719cc55ae7795d7cb681fec6f7bcfa407e4973"
+    },
+    {
+      "path": "crates/kanban-rpc-host/examples/demo.rs",
+      "bytes": 2999,
+      "sha256": "1c0c697fde31c14671884ad606ce631c22610c5dda176191d4ed331b502c2552"
+    },
+    {
+      "path": "crates/kanban-rpc-host/examples/native_client.rs",
+      "bytes": 1212,
+      "sha256": "df40914ce4509cc5b475fd2e4dd6b37d71e6b2f32a2dc8ea53f19d50841adf36"
+    },
+    {
+      "path": "crates/kanban-rpc-host/src/frames.rs",
+      "bytes": 2090,
+      "sha256": "ae1efb80054b10f91a596980c619c8821e291dbe5cfcd56c7efeb8201a0f0e7c"
+    },
+    {
+      "path": "crates/kanban-rpc-host/src/lib.rs",
+      "bytes": 3619,
+      "sha256": "522a19ae3445315154f4b944a4ecea973e3a533644ece282f8d3976c21eda3f3"
+    },
+    {
+      "path": "crates/kanban-rpc-host/src/refresh.rs",
+      "bytes": 4241,
+      "sha256": "3845f71a96db9baf16b0d69a9a1c8954a2cb0de8ed54066487f037e767020374"
+    },
+    {
+      "path": "crates/kanban-rpc-host/src/service.rs",
+      "bytes": 8726,
+      "sha256": "e8f741d055add1540d04abc8d54eeb8027e8d0179f16b194ebf356b1402ac6ab"
+    },
+    {
+      "path": "crates/kanban-rpc-host/tests/interop.rs",
+      "bytes": 4344,
+      "sha256": "b498ed4a551209f3dd39bb55decc19f9985611e13cbc4a33be08d25f3d407fe6"
+    },
+    {
+      "path": "crates/kanban-rpc-host/tests/refresh.rs",
+      "bytes": 5713,
+      "sha256": "a7167002fe773b4a748d378bbb0ee8d70f15ff7a2d785bef451abbdd7d97facb"
+    },
+    {
+      "path": "crates/kanban-rpc-proto/Cargo.toml",
+      "bytes": 289,
+      "sha256": "921799920199138a028f14cca314bb1e6986bcab2a1486cb4baa190fafcee05f"
+    },
+    {
+      "path": "crates/kanban-rpc-proto/build.rs",
+      "bytes": 394,
+      "sha256": "8a053ade20b54b41bb30a34058b9df5b1191085f0ca0d6b3c74443d471cfbdcf"
+    },
+    {
+      "path": "crates/kanban-rpc-proto/src/lib.rs",
+      "bytes": 271,
+      "sha256": "b5bf263c872b779b573075bd5fdae5405f4edeb51babfa345149ff125d2a8138"
+    },
+    {
+      "path": "docs/00-atlas-branch-audit.md",
+      "bytes": 2430,
+      "sha256": "bb57d5c14ecc28d6e141bcb2d153f80bc93db103ec9a3ae194f6030a09c60ba3"
+    },
+    {
+      "path": "docs/01-scope.md",
+      "bytes": 1089,
+      "sha256": "f3544c40673a60b01e0f24a3c792bfd5a619e814c9cc63651dc77273ac833f04"
+    },
+    {
+      "path": "docs/02-architecture.md",
+      "bytes": 2841,
+      "sha256": "34c12a01cfea562711723167f4689aaea21dc5fd38e2d15b6a4e6196831eeb8a"
+    },
+    {
+      "path": "docs/03-stream-protocol.md",
+      "bytes": 4623,
+      "sha256": "5cc942969ba5d818f496cbfd3b3200752e4b59cd5f3e88fc78532ea0656d6297"
+    },
+    {
+      "path": "docs/04-decisions.md",
+      "bytes": 2437,
+      "sha256": "f8c04db3fbac5d3603068e12610121fcaf6b6435cd6b354ac1db620b8429d946"
+    },
+    {
+      "path": "docs/05-integration.md",
+      "bytes": 3845,
+      "sha256": "818afe3fc2bd2dc51c1c003aea422db3beeb1c2fd0346f42858b61f6264da09e"
+    },
+    {
+      "path": "docs/06-tasks.md",
+      "bytes": 14279,
+      "sha256": "c98dfa99a179d8dd183bf183a63dd3b3bfd9ec53677890e394f5a49232ef11a6"
+    },
+    {
+      "path": "docs/07-validation.md",
+      "bytes": 2404,
+      "sha256": "df311265d57385ea81191cbc85db59cd449171d13f0f769322610e3c69f664ca"
+    },
+    {
+      "path": "docs/08-references.md",
+      "bytes": 2527,
+      "sha256": "925af9e260d4e5a0349a1f59b700b9f30ea7a46f0630448b0ba1f2cf73334787"
+    },
+    {
+      "path": "docs/09-migration-map.md",
+      "bytes": 1523,
+      "sha256": "e078f9efe86616b4c9e70afe8ab31a763a28be94c73d8fec025122d416c14d8e"
+    },
+    {
+      "path": "docs/10-debugging.md",
+      "bytes": 2192,
+      "sha256": "86ba34178a438c59cde1585fe41bfd154eeb19abc92d26342d7fdb0f37e66554"
+    },
+    {
+      "path": "docs/11-atlas-refresh-protocol.md",
+      "bytes": 3080,
+      "sha256": "a918098d935a891e163b87803c5f27e80f948fd42cd10bf33916b0f7a027eb3b"
+    },
+    {
+      "path": "integration/apply-atlas.mjs",
+      "bytes": 4457,
+      "sha256": "09d24503ca4c20fe742c0e67f357ef5dfe0a2edef6e763fb39d39d6108fbb2d5"
+    },
+    {
+      "path": "integration/atlas-server/grpc.rs",
+      "bytes": 1281,
+      "sha256": "a8516a4ae53fea7896243a3daa3411cb5ca9ea4bdc13ebb3aa5e8895de6066b8"
+    },
+    {
+      "path": "integration/atlas-web/bind.ts",
+      "bytes": 1629,
+      "sha256": "cac63afe910f81b96c59ae74298ee6d9f887bef30cb60bf5a1c185741c3b7771"
+    },
+    {
+      "path": "integration/atlas-web/source.ts",
+      "bytes": 820,
+      "sha256": "c66d39eff6b83cd5fb0022d259c9d6a25cdc1a072082d6ba1b57f37eeb28873b"
+    },
+    {
+      "path": "integration/kanban-adapter/Cargo.toml",
+      "bytes": 476,
+      "sha256": "ff4a309e5dd85448237f3385e34d699e771c55d2f00f77248be7abbed58fa980"
+    },
+    {
+      "path": "integration/kanban-adapter/src/lib.rs",
+      "bytes": 3537,
+      "sha256": "f880d561a83aba1e3783a1676c876c5e3f57344541389830ef2026cae3ca9e62"
+    },
+    {
+      "path": "integration/patch-plan.json",
+      "bytes": 10330,
+      "sha256": "2ae4a00b9e229cf71e3db6b0efd6adc8594a5ff4ee03d605038e64bf987d5305"
+    },
+    {
+      "path": "integration/service-src/mutation_gate.rs",
+      "bytes": 4899,
+      "sha256": "9df605efee32d19aa8d709052bfd1c99f81c2a8b183909d2c56eefd078efd492"
+    },
+    {
+      "path": "integration/service-src/realtime.rs",
+      "bytes": 3567,
+      "sha256": "896157bcff68bf484ab43b5c31dd40f8484dc8f7d102371e3f65f191339bfa1f"
+    },
+    {
+      "path": "proto/kanban/framework/v1/board.proto",
+      "bytes": 3473,
+      "sha256": "c6586475a3deb364a0b7c0d07ecabb26b549cbec6aa9f5352b83a18f8628f388"
+    },
+    {
+      "path": "scripts/check-offline.mjs",
+      "bytes": 2050,
+      "sha256": "05abeaac525cd7b75717921cbe6bf913a085a538d8f3f883f9a63a4e74c691b0"
+    },
+    {
+      "path": "scripts/check-package.mjs",
+      "bytes": 6026,
+      "sha256": "51dbfdd4f3ad54cc971486309815f5001564f20a6cb4659edda7112dad10aa4d"
+    },
+    {
+      "path": "scripts/seal-package.mjs",
+      "bytes": 4100,
+      "sha256": "270cce41c6f6e6ba0cf98ab65058fd457506399b7406bfc98a828544829b45fb"
+    },
+    {
+      "path": "scripts/write-task-docs.mjs",
+      "bytes": 1702,
+      "sha256": "bf63ca5052959f021a733e63e081640b0eb398d699a327a6f861523264ce2667"
+    },
+    {
+      "path": "tasks/tasks.json",
+      "bytes": 16618,
+      "sha256": "0f9eea860ea5d0c86483dfa047c76987175384a43c4fa18fb8adc79e249a49e5"
+    },
+    {
+      "path": "tests/apply.test.mjs",
+      "bytes": 4186,
+      "sha256": "d5a0f3f7f88af94394d19592699e9e67ecd894010490ef0d88c4fc8d5780b505"
+    },
+    {
+      "path": "tests/atlas.test.mjs",
+      "bytes": 7223,
+      "sha256": "0a0a23d2c3a1d959223cac26a30961a56aa799a64717313bd2a44ead07f788f7"
+    },
+    {
+      "path": "tests/proto.test.mjs",
+      "bytes": 3501,
+      "sha256": "436a14deca6db96139d665788384bc8681f79d9080f0e78eced6d9ffc79297c7"
+    },
+    {
+      "path": "validation/atlas-tests.tap",
+      "bytes": 2649,
+      "sha256": "46125a57d0229a0fad9409da456549cdb53578bde25d903f11290231e3532627"
+    },
+    {
+      "path": "validation/board-descriptor.pb",
+      "bytes": 3380,
+      "sha256": "2a006be4c9baafb0b65e9a966138330695325ff8a4d8b8809af222503ed2be6d"
+    },
+    {
+      "path": "validation/branch-provenance.json",
+      "bytes": 3273,
+      "sha256": "c4d793a043611c2b2b64c44af7e917a54c237c90cdb5e47237cdc658e8514ff3"
+    },
+    {
+      "path": "validation/installer-tests.tap",
+      "bytes": 2105,
+      "sha256": "986cf34ade4628d1a9b84779ea2c2fe3a9f24d3c9ec9854cee21d5b0d29a0d34"
+    },
+    {
+      "path": "validation/offline-results.json",
+      "bytes": 1474,
+      "sha256": "b425c3e84fe315b3028a7eee075b2afa04ccd0289ea695849573e0ce0ddcd177"
+    },
+    {
+      "path": "validation/package-check.json",
+      "bytes": 818,
+      "sha256": "bbf61b1cb91ba58c21dbfc7d5281379e59a5d007a96e7f99a35374cf1dfe919c"
+    },
+    {
+      "path": "validation/protobuf-tests.tap",
+      "bytes": 1867,
+      "sha256": "d6abdc785ca1aee9ff81c2b5b8179f423e8137cc90c5f24d8c43b1c2ca09e591"
+    },
+    {
+      "path": "validation/toolchain.json",
+      "bytes": 538,
+      "sha256": "e3d5a375539b6549f3f837feaadab3416f412935c21222f59da4831a5befaf6f"
+    },
+    {
+      "path": "validation/typescript-core.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "validation/web-tests.tap",
+      "bytes": 11295,
+      "sha256": "73f3389c48a96f74b04d1696d9affc2636c7f1258bdd3f021a3d6540c257993d"
+    },
+    {
+      "path": "web/generate.mjs",
+      "bytes": 531,
+      "sha256": "29d62d97d34e98f17ddc1d6d707843644b38e17030c06c58a30cd047b55d4dd4"
+    },
+    {
+      "path": "web/package.json",
+      "bytes": 537,
+      "sha256": "4d4d9ffe176b967d7fa737cec6111a34574b2fbf223953c8a7a2c11a12425228"
+    },
+    {
+      "path": "web/src/atlas-client.ts",
+      "bytes": 2371,
+      "sha256": "b7e44e13662f6aef845a2c4bf0b7c45466e98074c5f37b6dd8e49275a820780e"
+    },
+    {
+      "path": "web/src/changes.ts",
+      "bytes": 7145,
+      "sha256": "0a85995d7978724ef8b9a4e4ee8790011094f84284ffc814ff0ce832dc5c5ba8"
+    },
+    {
+      "path": "web/src/client.ts",
+      "bytes": 3080,
+      "sha256": "ee4907ab3a3cd3342131be02091332f823c887ab86ef4588b08fcbd0b27d7996"
+    },
+    {
+      "path": "web/src/endpoint.ts",
+      "bytes": 742,
+      "sha256": "1e742038c4db7b6fefc09dfa1cc808e90ea12d9796f9edd2a979eb20557180db"
+    },
+    {
+      "path": "web/src/model.ts",
+      "bytes": 2286,
+      "sha256": "851a16445564012ccc3f981505c55fc386b2affabe3aca022296a87385894b19"
+    },
+    {
+      "path": "web/src/realtime-port.ts",
+      "bytes": 820,
+      "sha256": "c66d39eff6b83cd5fb0022d259c9d6a25cdc1a072082d6ba1b57f37eeb28873b"
+    },
+    {
+      "path": "web/src/reducer.ts",
+      "bytes": 6624,
+      "sha256": "3fb6ed7552e1d2264a50003395fe69be2951e8ce65c3daf39ab83c2f66f30f26"
+    },
+    {
+      "path": "web/src/watch.ts",
+      "bytes": 3779,
+      "sha256": "55b8fac80ea3a48e7295e52c95256c91ab1d1f58b6cd3189af6add1555934cd4"
+    },
+    {
+      "path": "web/tests/changes.test.mjs",
+      "bytes": 7258,
+      "sha256": "2dcb173de77bf2a844c083ba665aa48b5ffae6a2b312452c8a1778af0a465653"
+    },
+    {
+      "path": "web/tests/reducer.test.mjs",
+      "bytes": 8877,
+      "sha256": "afae5aaf387059169428ba23a86228b28b1f8a44f3ffb113290470fd9828d5bf"
+    },
+    {
+      "path": "web/tests/watch.test.mjs",
+      "bytes": 4356,
+      "sha256": "c78f0ae883036845946a800a397e074d1ef8535478c9ebc31aebb719f86e9211"
+    },
+    {
+      "path": "web/tsconfig.core.json",
+      "bytes": 244,
+      "sha256": "028af0f499fac8df8f20915e4ab2be4de4febabf2ee2ea23d1b7bc286de000ed"
+    },
+    {
+      "path": "web/tsconfig.json",
+      "bytes": 271,
+      "sha256": "e8031f116b9f1c09e4c5b6a88965ce2ff31b4990c9df2cae323b924f0eabcd97"
+    }
+  ]
+}

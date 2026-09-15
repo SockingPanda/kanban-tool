@@ -117,6 +117,10 @@ log_dir = "worker-logs"
         self.temp.path()
     }
 
+    pub fn server_url(&self) -> &str {
+        &self.server_url
+    }
+
     pub fn run(&self, args: &[&str]) -> Output {
         self.command().args(args).output().expect("运行 kanban CLI")
     }

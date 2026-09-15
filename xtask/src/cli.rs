@@ -52,12 +52,14 @@ pub(crate) fn run() -> ToolResult<()> {
     match (group, subcommand) {
         ("schema", Some(command)) => run_schema(command, &root),
         ("web-contracts", Some(command)) => web_contracts::run(&root, command),
+        ("rpc-contracts", Some(command)) => xtask::rpc_contracts::run(&root, command),
         ("docs", Some("check")) => docs::run(&root),
         ("deps", Some("check")) => dependencies::run(&root),
         ("agents", Some("check")) => agents::run(&root),
         ("tooling", Some("check")) => tooling::run(&root),
         ("schema", None) => invalid("schema 缺少子命令"),
         ("web-contracts", None) => invalid("web-contracts 缺少子命令"),
+        ("rpc-contracts", None) => invalid("rpc-contracts 缺少子命令"),
         ("web-assets", Some(command)) => invalid(format!("web-assets 不支持子命令: {command}")),
         ("web-assets", None) => invalid("web-assets 缺少子命令"),
         ("docs", Some(command)) => invalid(format!("docs 不支持子命令: {command}")),
@@ -159,6 +161,6 @@ fn invalid(message: impl Into<String>) -> ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|web-assets check|release check|receipt|package|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n用法：xtask release receipt [--root PATH] [--out PATH] [--artifact PATH]\n用法：xtask release package [--diagnostic] [--root PATH] [--evidence PATH] [--out PATH]"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|rpc-contracts generate|check|web-assets check|release check|receipt|package|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n用法：xtask release receipt [--root PATH] [--out PATH] [--artifact PATH]\n用法：xtask release package [--diagnostic] [--root PATH] [--evidence PATH] [--out PATH]"
     );
 }

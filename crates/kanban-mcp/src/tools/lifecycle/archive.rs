@@ -22,17 +22,15 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskArchiveArgs>,
     ) -> Result<Json<ArchiveTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.archive_task_by_selector(
-                &board,
-                &args.task_ref,
-                &ArchiveTaskRequest {
-                    actor: None,
-                    force: args.force,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.archive_task_by_selector(
+            &board,
+            &args.task_ref,
+            &ArchiveTaskRequest {
+                actor: None,
+                force: args.force,
+            },
+        ))
         .await?;
         Ok(Json(ArchiveTaskResponse::new(task)))
     }

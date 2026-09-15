@@ -1,0 +1,69 @@
+[
+  {
+    "name": "TypeScript core typecheck",
+    "command": [
+      "tsc",
+      "-p",
+      "web/tsconfig.core.json"
+    ],
+    "status": "passed",
+    "exitCode": 0,
+    "log": "typescript-core.log",
+    "passedTests": null,
+    "failedTests": null
+  },
+  {
+    "name": "Frontend behavior tests",
+    "command": [
+      "/opt/nvm/versions/node/v22.16.0/bin/node",
+      "--test",
+      "web/tests/changes.test.mjs",
+      "web/tests/reducer.test.mjs",
+      "web/tests/watch.test.mjs"
+    ],
+    "status": "passed",
+    "exitCode": 0,
+    "log": "web-tests.tap",
+    "passedTests": 68,
+    "failedTests": 0
+  },
+  {
+    "name": "Installer fixture tests",
+    "command": [
+      "/opt/nvm/versions/node/v22.16.0/bin/node",
+      "--test",
+      "tests/apply.test.mjs"
+    ],
+    "status": "passed",
+    "exitCode": 0,
+    "log": "installer-tests.tap",
+    "passedTests": 13,
+    "failedTests": 0
+  },
+  {
+    "name": "Protobuf compiler tests",
+    "command": [
+      "/opt/nvm/versions/node/v22.16.0/bin/node",
+      "--test",
+      "tests/proto.test.mjs"
+    ],
+    "status": "passed",
+    "exitCode": 0,
+    "log": "protobuf-tests.tap",
+    "passedTests": 10,
+    "failedTests": 0
+  },
+  {
+    "name": "Atlas wiring fixtures",
+    "command": [
+      "/opt/nvm/versions/node/v22.16.0/bin/node",
+      "--test",
+      "tests/atlas.test.mjs"
+    ],
+    "status": "passed",
+    "exitCode": 0,
+    "log": "atlas-tests.tap",
+    "passedTests": 14,
+    "failedTests": 0
+  }
+]

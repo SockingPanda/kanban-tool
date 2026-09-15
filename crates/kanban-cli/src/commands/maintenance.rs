@@ -57,65 +57,79 @@ pub(crate) struct MaintenanceRunArgs {
     pub(crate) owner: Option<String>,
 }
 
-pub(crate) fn doctor(ctx: &CliContext) -> Result<(), CliFailure> {
-    emit(ctx.json, ctx.client()?.doctor()?, "doctor")
+pub(crate) async fn doctor(ctx: &CliContext) -> Result<(), CliFailure> {
+    emit(ctx.json, ctx.client()?.doctor().await?, "doctor")
 }
-pub(crate) fn checkpoint(ctx: &CliContext) -> Result<(), CliFailure> {
-    emit(ctx.json, ctx.client()?.checkpoint()?, "checkpoint")
+pub(crate) async fn checkpoint(ctx: &CliContext) -> Result<(), CliFailure> {
+    emit(ctx.json, ctx.client()?.checkpoint().await?, "checkpoint")
 }
-pub(crate) fn backup(ctx: &CliContext, args: &PathArgs) -> Result<(), CliFailure> {
-    emit(ctx.json, ctx.client()?.backup(&args.path)?, "backup")
+pub(crate) async fn backup(ctx: &CliContext, args: &PathArgs) -> Result<(), CliFailure> {
+    emit(ctx.json, ctx.client()?.backup(&args.path).await?, "backup")
 }
-pub(crate) fn export(ctx: &CliContext, args: &PathArgs) -> Result<(), CliFailure> {
-    emit(ctx.json, ctx.client()?.export(&args.path)?, "export")
+pub(crate) async fn export(ctx: &CliContext, args: &PathArgs) -> Result<(), CliFailure> {
+    emit(ctx.json, ctx.client()?.export(&args.path).await?, "export")
 }
-pub(crate) fn import(ctx: &CliContext, args: &ImportArgs) -> Result<(), CliFailure> {
+pub(crate) async fn import(ctx: &CliContext, args: &ImportArgs) -> Result<(), CliFailure> {
     emit(
         ctx.json,
-        ctx.client()?.import(&args.path, args.replace)?,
+        ctx.client()?.import(&args.path, args.replace).await?,
         "import",
     )
 }
-pub(crate) fn import_v30(ctx: &CliContext, args: &LegacyImportArgs) -> Result<(), CliFailure> {
+pub(crate) async fn import_v30(
+    ctx: &CliContext,
+    args: &LegacyImportArgs,
+) -> Result<(), CliFailure> {
     emit(
         ctx.json,
         ctx.client()?
-            .import_legacy_sqlite_v30(&args.path, args.attachment_root.clone())?,
+            .import_legacy_sqlite_v30(&args.path, args.attachment_root.clone())
+            .await?,
         "import-v30",
     )
 }
-pub(crate) fn vacuum(ctx: &CliContext) -> Result<(), CliFailure> {
-    emit(ctx.json, ctx.client()?.vacuum()?, "vacuum")
+pub(crate) async fn vacuum(ctx: &CliContext) -> Result<(), CliFailure> {
+    emit(ctx.json, ctx.client()?.vacuum().await?, "vacuum")
 }
-pub(crate) fn stats(ctx: &CliContext, args: &StatsArgs) -> Result<(), CliFailure> {
+pub(crate) async fn stats(ctx: &CliContext, args: &StatsArgs) -> Result<(), CliFailure> {
     emit(
         ctx.json,
         ctx.client()?
-            .stats(args.board.as_deref().unwrap_or(&ctx.board))?,
+            .stats(args.board.as_deref().unwrap_or(&ctx.board))
+            .await?,
         "stats",
     )
 }
 
-pub(crate) fn maintenance(ctx: &CliContext, args: &MaintenanceArgs) -> Result<(), CliFailure> {
+pub(crate) async fn maintenance(
+    ctx: &CliContext,
+    args: &MaintenanceArgs,
+) -> Result<(), CliFailure> {
     match &args.command {
         MaintenanceCommand::Status => emit(
             ctx.json,
-            ctx.client()?.maintenance_status()?,
+            ctx.client()?.maintenance_status().await?,
             "maintenance status",
         ),
         MaintenanceCommand::Run(args) => emit(
             ctx.json,
-            ctx.client()?.maintenance_run(args.owner.clone(), None)?,
+            ctx.client()?
+                .maintenance_run(args.owner.clone(), None)
+                .await?,
             "maintenance run",
         ),
         MaintenanceCommand::Rebuild(args) => emit(
             ctx.json,
-            ctx.client()?.maintenance_rebuild(args.owner.clone())?,
+            ctx.client()?
+                .maintenance_rebuild(args.owner.clone())
+                .await?,
             "maintenance rebuild",
         ),
         MaintenanceCommand::Cleanup(args) => emit(
             ctx.json,
-            ctx.client()?.maintenance_cleanup(args.owner.clone())?,
+            ctx.client()?
+                .maintenance_cleanup(args.owner.clone())
+                .await?,
             "maintenance cleanup",
         ),
     }

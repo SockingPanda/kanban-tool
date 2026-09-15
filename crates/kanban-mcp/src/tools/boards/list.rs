@@ -25,9 +25,8 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<BoardListArgs>,
     ) -> Result<Json<ListBoardsResponse>, McpError> {
-        let client = self.client.clone();
-        let boards =
-            call_client_internal(move || client.list_boards(args.include_archived)).await?;
+        let client = &self.client;
+        let boards = call_client_internal(client.list_boards(args.include_archived)).await?;
 
         Ok(Json(ListBoardsResponse { data: boards }))
     }

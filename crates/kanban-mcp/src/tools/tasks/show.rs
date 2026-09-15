@@ -31,17 +31,16 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskShowArgs>,
     ) -> Result<Json<Value>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
+        let client = &self.client;
         if args.include_details {
             let detail =
-                call_client(move || client.get_task_details_by_selector(&board, &args.task_ref))
-                    .await?;
+                call_client(client.get_task_details_by_selector(&board, &args.task_ref)).await?;
             return Ok(Json(
                 serde_json::to_value(GetTaskDetailsResponse { data: detail })
                     .map_err(|error| McpError::internal_error(error.to_string(), None))?,
             ));
         }
-        let task = call_client(move || client.get_task_by_selector(&board, &args.task_ref)).await?;
+        let task = call_client(client.get_task_by_selector(&board, &args.task_ref)).await?;
         Ok(Json(
             serde_json::to_value(GetTaskResponse::new(task, None))
                 .map_err(|error| McpError::internal_error(error.to_string(), None))?,

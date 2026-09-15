@@ -113,8 +113,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<LabelListArgs>,
     ) -> Result<Json<ListBoardLabelsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let labels = call_client(move || client.list_board_labels(&board)).await?;
+        let client = &self.client;
+        let labels = call_client(client.list_board_labels(&board)).await?;
         Ok(Json(ListBoardLabelsResponse { data: labels }))
     }
 
@@ -127,16 +127,14 @@ impl KanbanMcp {
         Parameters(args): Parameters<LabelCreateArgs>,
     ) -> Result<Json<CreateBoardLabelResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let label = call_client(move || {
-            client.create_board_label(
-                &board,
-                &CreateBoardLabelRequest {
-                    name: args.name,
-                    color: args.color,
-                },
-            )
-        })
+        let client = &self.client;
+        let label = call_client(client.create_board_label(
+            &board,
+            &CreateBoardLabelRequest {
+                name: args.name,
+                color: args.color,
+            },
+        ))
         .await?;
         Ok(Json(CreateBoardLabelResponse { data: label }))
     }
@@ -152,9 +150,8 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let label_id = args.label_id;
         let force = args.force;
-        let client = self.client.clone();
-        let result =
-            call_client(move || client.delete_board_label(&board, &label_id, force)).await?;
+        let client = &self.client;
+        let result = call_client(client.delete_board_label(&board, &label_id, force)).await?;
         Ok(Json(DeleteBoardLabelResponse { data: result }))
     }
 
@@ -168,9 +165,8 @@ impl KanbanMcp {
     ) -> Result<Json<ListTaskLabelsResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
-        let labels =
-            call_client(move || client.list_task_labels_by_selector(&board, &task_ref)).await?;
+        let client = &self.client;
+        let labels = call_client(client.list_task_labels_by_selector(&board, &task_ref)).await?;
         Ok(Json(ListTaskLabelsResponse { data: labels }))
     }
 
@@ -184,7 +180,7 @@ impl KanbanMcp {
     ) -> Result<Json<AddTaskLabelResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
+        let client = &self.client;
         let request = AddTaskLabelRequest {
             name: args.name,
             names: args.names,
@@ -192,8 +188,7 @@ impl KanbanMcp {
             actor: None,
         };
         let response =
-            call_client(move || client.add_task_labels_by_selector(&board, &task_ref, &request))
-                .await?;
+            call_client(client.add_task_labels_by_selector(&board, &task_ref, &request)).await?;
         Ok(Json(response))
     }
 
@@ -208,10 +203,9 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
         let label_id = args.label_id;
-        let client = self.client.clone();
+        let client = &self.client;
         let task =
-            call_client(move || client.remove_task_label_by_selector(&board, &task_ref, &label_id))
-                .await?;
+            call_client(client.remove_task_label_by_selector(&board, &task_ref, &label_id)).await?;
         Ok(Json(RemoveTaskLabelResponse { data: task }))
     }
 
@@ -225,7 +219,7 @@ impl KanbanMcp {
     ) -> Result<Json<BootstrapTaskLabelResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
+        let client = &self.client;
         let request = BootstrapTaskLabelRequest {
             name: args.name,
             description: args.description,
@@ -238,10 +232,9 @@ impl KanbanMcp {
             vector_config: args.vector_config,
             actor: None,
         };
-        let response = call_client(move || {
-            client.bootstrap_task_label_by_selector(&board, &task_ref, &request)
-        })
-        .await?;
+        let response =
+            call_client(client.bootstrap_task_label_by_selector(&board, &task_ref, &request))
+                .await?;
         Ok(Json(response))
     }
 }

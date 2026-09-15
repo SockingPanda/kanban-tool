@@ -20,14 +20,12 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskUnblockArgs>,
     ) -> Result<Json<UnblockTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.unblock_task_by_selector(
-                &board,
-                &args.task_ref,
-                &UnblockTaskRequest { actor: None },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.unblock_task_by_selector(
+            &board,
+            &args.task_ref,
+            &UnblockTaskRequest { actor: None },
+        ))
         .await?;
         Ok(Json(UnblockTaskResponse::new(task)))
     }

@@ -1,0 +1,27 @@
+# 独立框架仓库的 CI 模板；嵌入 Atlas 分支时由 G01 改 working-directory。
+name: grpc-framework
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - run: cargo test --workspace
+      - run: cargo clippy --workspace --all-targets
+      - run: npm install
+        working-directory: web
+      - run: npm run generate && npm run typecheck && npm test
+        working-directory: web
+      - run: node --test tests/*.test.mjs

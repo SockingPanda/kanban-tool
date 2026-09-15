@@ -1,25 +1,31 @@
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_protocol::{ApiTask, UpdateTaskRequest, UpdateTaskResponse};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
+use kanban_protocol::{ApiTask, UpdateTaskRequest};
 
 impl KanbanClient {
-    pub fn update_task(
+    pub async fn update_task(
         &self,
         task_id: &str,
         request: &UpdateTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let response: UpdateTaskResponse = self.patch(
-            &format!("/api/v1/tasks/{}", encode_path_segment(task_id.trim())),
-            request,
+        let response: kanban_protocol::UpdateTaskResponse = rpc!(
+            self,
+            update_task,
+            UpdateTaskRequest,
+            kanban_protocol::UpdateTaskPath {
+                task_id: task_id.trim().to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
-    pub fn update_task_by_selector(
+    pub async fn update_task_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &UpdateTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.update_task(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.update_task(&task_id, request).await
     }
 }

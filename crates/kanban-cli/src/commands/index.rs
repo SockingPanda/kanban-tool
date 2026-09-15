@@ -16,13 +16,15 @@ pub(crate) enum IndexCommand {
     Sync,
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &IndexCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &IndexCommand) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     match command {
-        IndexCommand::Status => show_status(ctx, client.search_status(&ctx.board)?, false),
-        IndexCommand::Doctor => show_status(ctx, client.search_status(&ctx.board)?, true),
-        IndexCommand::Rebuild => show_status(ctx, client.rebuild_search_index(&ctx.board)?, false),
-        IndexCommand::Sync => show_status(ctx, client.sync_search_index(&ctx.board)?, false),
+        IndexCommand::Status => show_status(ctx, client.search_status(&ctx.board).await?, false),
+        IndexCommand::Doctor => show_status(ctx, client.search_status(&ctx.board).await?, true),
+        IndexCommand::Rebuild => {
+            show_status(ctx, client.rebuild_search_index(&ctx.board).await?, false)
+        }
+        IndexCommand::Sync => show_status(ctx, client.sync_search_index(&ctx.board).await?, false),
     }
 }
 

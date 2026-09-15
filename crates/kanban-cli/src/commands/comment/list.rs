@@ -6,9 +6,11 @@ pub(crate) struct ListArgs {
     pub(crate) task_ref: String,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let comments = client.list_comments_by_selector(&ctx.board, &args.task_ref)?;
+    let comments = client
+        .list_comments_by_selector(&ctx.board, &args.task_ref)
+        .await?;
     if ctx.json {
         output::print_json(&kanban_protocol::CliCommentListOutput::new(comments));
     } else {

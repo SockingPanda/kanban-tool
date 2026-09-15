@@ -37,12 +37,9 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
         let attachment_id = args.attachment_id;
-        let client = self.client.clone();
-        let attachment = call_client(move || {
-            let task_id = client.resolve_task_id(&board, &task_ref)?;
-            client.download_attachment(&task_id, &attachment_id)
-        })
-        .await?;
+        let client = &self.client;
+        let task_id = call_client(client.resolve_task_id(&board, &task_ref)).await?;
+        let attachment = call_client(client.download_attachment(&task_id, &attachment_id)).await?;
         Ok(Json(AttachmentDownloadOutput {
             content_type: attachment.content_type,
             attachment_id: attachment.attachment_id,

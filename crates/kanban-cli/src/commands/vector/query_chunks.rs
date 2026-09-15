@@ -13,15 +13,21 @@ pub(crate) struct Args {
     pub(crate) limit: usize,
 }
 
-pub(crate) fn run(ctx: &CliContext, client: &KanbanClient, args: &Args) -> Result<(), CliFailure> {
-    let hits = client.query_vector_chunks(VectorQuery {
-        board: ctx.board.clone(),
-        q: args.q.clone(),
-        limit: args.limit,
-        embedding_model: None,
-        polarity: None,
-        include_vector: false,
-    })?;
+pub(crate) async fn run(
+    ctx: &CliContext,
+    client: &KanbanClient,
+    args: &Args,
+) -> Result<(), CliFailure> {
+    let hits = client
+        .query_vector_chunks(VectorQuery {
+            board: ctx.board.clone(),
+            q: args.q.clone(),
+            limit: args.limit,
+            embedding_model: None,
+            polarity: None,
+            include_vector: false,
+        })
+        .await?;
     let data = hits
         .into_iter()
         .map(|hit| CliVectorChunkHit {

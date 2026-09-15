@@ -28,14 +28,12 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskPromoteArgs>,
     ) -> Result<Json<PromoteTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.promote_task_by_selector(
-                &board,
-                &args.task_ref,
-                &PromoteTaskRequest { actor: None },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.promote_task_by_selector(
+            &board,
+            &args.task_ref,
+            &PromoteTaskRequest { actor: None },
+        ))
         .await?;
         Ok(Json(PromoteTaskResponse::new(task)))
     }

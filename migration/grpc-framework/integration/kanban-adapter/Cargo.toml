@@ -1,0 +1,12 @@
+# 安装到目标仓库 migration/grpc-framework 后单独构建。
+# 不自动加入当前主 Cargo 工作区，避免影响正在重写的前后端。
+[workspace]
+[package]
+name = "kanban-grpc-adapter"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+[dependencies]
+kanban-live-core = { path = "../../crates/kanban-live-core" }
+kanban-service = { path = "../../../../crates/kanban-service" }
+tokio = { version = "1", default-features = false, features = ["sync"] }

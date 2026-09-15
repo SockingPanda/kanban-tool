@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 
-pub(crate) fn run(ctx: &CliContext) -> Result<(), CliFailure> {
-    let status = ctx.client()?.graph_status(&ctx.board)?;
+pub(crate) async fn run(ctx: &CliContext) -> Result<(), CliFailure> {
+    let status = ctx.client()?.graph_status(&ctx.board).await?;
     let output_value = kanban_protocol::cli_helpers::CliGraphStatus {
         backend: status.backend,
         enabled: status.enabled,

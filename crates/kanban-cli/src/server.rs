@@ -16,7 +16,7 @@ pub(crate) struct ServeArgs {
     /// 要监听的 loopback 地址。
     #[arg(long, default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
     pub(crate) host: IpAddr,
-    /// 本地 HTTP 端口。
+    /// 本地 HTTP、原生 gRPC 与 gRPC-Web 共用端口。
     #[arg(long, default_value_t = 8721)]
     pub(crate) port: u16,
     /// 禁用同源 Web host，仅启动 API host。

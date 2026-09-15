@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = ["crates/kanban-live-core", "crates/kanban-rpc-proto", "crates/kanban-rpc-host"]
+exclude = ["integration/kanban-adapter"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+tokio = { version = "1", default-features = false }
+thiserror = "2"
+prost = "0.14"
+tonic = { package = "tonic", version = "=0.14.6" }
+tonic-prost = "=0.14.6"
+tonic-prost-build = "=0.14.6"
+tonic-web = "=0.14.6"
+async-stream = "0.3"
+tokio-stream = { version = "0.1", default-features = false }
+tower-http = { version = "0.6", default-features = false }
+http = "1"
+ulid = "1"
+kanban-live-core = { path = "crates/kanban-live-core" }
+kanban-rpc-proto = { path = "crates/kanban-rpc-proto" }
+
+tower = { version = "0.5", default-features = false }

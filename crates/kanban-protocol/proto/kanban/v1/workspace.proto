@@ -1,0 +1,28 @@
+syntax = "proto3";
+package kanban.v1;
+
+// 查询刷新流没有历史恢复 cursor；新连接先发送 attached。
+service WorkspaceService {
+  rpc WatchChanges(WatchChangesRequest) returns (stream WorkspaceChangeFrame);
+}
+message WatchChangesRequest {
+  string board_id = 1;
+  uint32 protocol_version = 2;
+}
+enum RefreshReason {
+  REFRESH_REASON_UNSPECIFIED = 0;
+  REFRESH_REASON_ATTACHED = 1;
+  REFRESH_REASON_WRITE_HINT = 2;
+}
+message QueriesInvalidated { RefreshReason reason = 1; }
+message ConnectionHeartbeat {}
+message WorkspaceChangeFrame {
+  string board_id = 1;
+  string epoch = 2;
+  // 只在当前连接递增；独立于 audit event、query revision 和任务版本。
+  uint64 sequence = 3;
+  oneof body {
+    QueriesInvalidated invalidated = 10;
+    ConnectionHeartbeat heartbeat = 11;
+  }
+}

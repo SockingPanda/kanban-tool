@@ -25,14 +25,14 @@ pub(crate) enum VectorCommand {
     QueryLabelAtoms(query_label_atoms::Args),
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &VectorCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &VectorCommand) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     match command {
-        VectorCommand::Configure(args) => configure::run(ctx, &client, args),
-        VectorCommand::Status(args) => status::run(ctx, &client, args),
-        VectorCommand::Rebuild(args) => rebuild::run(ctx, &client, args),
-        VectorCommand::Sync(args) => sync::run(ctx, &client, args),
-        VectorCommand::QueryChunks(args) => query_chunks::run(ctx, &client, args),
-        VectorCommand::QueryLabelAtoms(args) => query_label_atoms::run(ctx, &client, args),
+        VectorCommand::Configure(args) => configure::run(ctx, &client, args).await,
+        VectorCommand::Status(args) => status::run(ctx, &client, args).await,
+        VectorCommand::Rebuild(args) => rebuild::run(ctx, &client, args).await,
+        VectorCommand::Sync(args) => sync::run(ctx, &client, args).await,
+        VectorCommand::QueryChunks(args) => query_chunks::run(ctx, &client, args).await,
+        VectorCommand::QueryLabelAtoms(args) => query_label_atoms::run(ctx, &client, args).await,
     }
 }

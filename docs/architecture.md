@@ -3,11 +3,12 @@
 kanban-tool 只有一条 canonical host 路径：
 
 ```text
-CLI / MCP / Desktop
-        │ typed localhost HTTP/SSE
+CLI / MCP                 Web / Desktop WebView
+        │ 原生 gRPC                │ binary gRPC-Web
+        └─────────────┬────────────┘
         ▼
 kanban-server（kanban serve） ── kanban-web-artifact
-        │ host lifecycle + HTTP/SSE
+        │ typed application service
         ▼
 kanban-service（KanbanService） ── kanban-core
         │
@@ -20,12 +21,18 @@ Turso canonical 数据库 + 可重建 projection
 - `kanban-core` 拥有领域 ID、状态机、readiness 和纯错误；不依赖内部 crate、HTTP 或数据库。
 - `kanban-service` 拥有 `KanbanService` application path、Turso 的打开/初始化/迁移、连接、事务、
   repository、projection provider 和只读 importer；它是唯一直接拥有 Turso canonical persistence 的 crate。
-- `kanban-server` 拥有 host 进程生命周期、数据库及附件/run-log 路径准备、Axum router 和 dispatcher。
+- `kanban-server` 拥有 host 进程生命周期、数据库及附件/run-log 路径准备、同端口 HTTP/2 与
+  gRPC-Web 装配、业务 RPC adapter、Axum router 和 dispatcher。
 - `kanban-web-artifact` 拥有 Web dist 的 no-follow filesystem 校验与 immutable snapshot；它只依赖
   `kanban-protocol` 的 manifest value contract，server/xtask 通过它消费统一的 artifact 事实，HTTP
   content type、ETag 与 package copy 仍归各自 adapter。
-- `kanban-protocol` 拥有 DTO、error envelope、schema 和 endpoint/surface catalog；不拥有 row 或 handler。
-- `kanban-client` 拥有 typed localhost transport；CLI、MCP、Desktop 依赖它而不直连数据库。
+- `kanban-protocol` 拥有 DTO、正式 Protobuf、typed error、schema 和 surface catalog；不拥有 row 或 handler。
+- `kanban-client` 拥有共享原生 gRPC channel；CLI、MCP 的异步调用复用它，Desktop WebView 使用
+  Web 的同源 gRPC-Web 数据源，所有入口都不直连数据库。
+- `kanban-live-core` 拥有纯内存 Hub、快照、delta 与有界历史；刷新提示通过共享 service gate
+  取得，不是事务成功、审计 event ID 或投影 revision。
+- `kanban-rpc-proto`、`kanban-rpc-host` 是迁移框架的编译边界，分别
+  承载生成协议与 Tower service；application adapter 和 Host 装配点在 `kanban-server`。
 - `xtask` 只执行离线 artifact、依赖和文档检查，不是运行时依赖。
 
 第三方依赖的精确 owner 和 feature 由 Cargo manifest 与 `$style` 维护。内部依赖方向必须保持单向：

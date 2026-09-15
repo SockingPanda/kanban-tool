@@ -35,19 +35,17 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskReviewArgs>,
     ) -> Result<Json<SubmitReviewTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.submit_review_task_by_selector(
-                &board,
-                &args.task_ref,
-                &SubmitReviewTaskRequest {
-                    actor: None,
-                    claim_token: args.claim_token,
-                    force: args.force,
-                    summary: args.summary,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.submit_review_task_by_selector(
+            &board,
+            &args.task_ref,
+            &SubmitReviewTaskRequest {
+                actor: None,
+                claim_token: args.claim_token,
+                force: args.force,
+                summary: args.summary,
+            },
+        ))
         .await?;
         Ok(Json(SubmitReviewTaskResponse::new(task)))
     }

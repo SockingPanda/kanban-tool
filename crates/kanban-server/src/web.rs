@@ -98,7 +98,21 @@ impl HostOriginPolicy {
         }
     }
 
+    pub(crate) fn origins(&self) -> Vec<HeaderValue> {
+        let mut origins = desktop_origins();
+        for host in ["localhost", "127.0.0.1", "[::1]"] {
+            origins.push(
+                HeaderValue::from_str(&format!("http://{host}:{}", self.port))
+                    .expect("listener origin is a valid HTTP header"),
+            );
+        }
+        origins
+    }
+
     fn accepts_host(&self, raw: &str) -> bool {
+        if raw.contains('@') {
+            return false;
+        }
         let Ok(authority) = raw.parse::<axum::http::uri::Authority>() else {
             return false;
         };
@@ -106,6 +120,9 @@ impl HostOriginPolicy {
     }
 
     fn accepts_origin(&self, raw: &str) -> bool {
+        if raw.contains('@') {
+            return false;
+        }
         if matches!(
             raw,
             "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost"
@@ -143,25 +160,12 @@ fn matches_loopback_host(host: &str) -> bool {
         || host == "[::1]"
 }
 
-/// 构造带 Web artifact 的生产 router；`build_router` 仍保持 API-only seam。
-pub(crate) fn build_production_router(
-    state: crate::state::AppState,
-    config: WebHostConfig,
-    listener: SocketAddr,
-) -> Router {
+/// 把已冻结的 Web artifact 加入同一业务 router，安全边界由 Host 统一装配。
+pub(crate) fn with_web(router: Router, config: WebHostConfig) -> Router {
     let host_state = Arc::new(WebHostState { config });
-    let web = web_router(host_state);
-    crate::http::operations::router(state)
-        .merge(web)
-        .layer(production_cors_layer(&HostOriginPolicy::for_listener(
-            listener,
-        )))
+    router
+        .merge(web_router(host_state))
         .layer(middleware::from_fn(validate_web_path))
-        .layer(middleware::from_fn_with_state(
-            HostOriginPolicy::for_listener(listener),
-            enforce_host_origin,
-        ))
-        .layer(tower_http::trace::TraceLayer::new_for_http())
 }
 
 fn web_router(state: Arc<WebHostState>) -> Router {
@@ -423,42 +427,54 @@ async fn validate_web_path(request: Request<Body>, next: Next) -> Response<Body>
     next.run(request).await
 }
 
-async fn enforce_host_origin(
+pub(crate) async fn enforce_host_origin(
     State(policy): State<HostOriginPolicy>,
     request: Request<Body>,
     next: Next,
 ) -> Response<Body> {
-    let host_ok = request
-        .headers()
-        .get(header::HOST)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|host| policy.accepts_host(host));
-    let origin_ok = request
-        .headers()
-        .get(header::ORIGIN)
-        .and_then(|value| value.to_str().ok())
-        .is_none_or(|origin| policy.accepts_origin(origin));
+    let hosts: Vec<_> = request.headers().get_all(header::HOST).iter().collect();
+    let authority = request.uri().authority().map(|value| value.as_str());
+    let host = hosts.first().and_then(|value| value.to_str().ok());
+    let host_ok = hosts.len() <= 1
+        && (hosts.is_empty() || host.is_some())
+        && request
+            .uri()
+            .scheme_str()
+            .is_none_or(|scheme| scheme == "http")
+        && match (host, authority) {
+            (Some(host), Some(authority)) => {
+                policy.accepts_host(host)
+                    && policy.accepts_host(authority)
+                    && host.eq_ignore_ascii_case(authority)
+            }
+            (Some(host), None) => policy.accepts_host(host),
+            (None, Some(authority)) => policy.accepts_host(authority),
+            (None, None) => false,
+        };
+    let origins: Vec<_> = request.headers().get_all(header::ORIGIN).iter().collect();
+    let origin_ok = origins.is_empty()
+        || (origins.len() == 1
+            && origins[0]
+                .to_str()
+                .is_ok_and(|origin| policy.accepts_origin(origin)));
     if !host_ok || !origin_ok {
         return plain_status(StatusCode::BAD_REQUEST);
     }
     next.run(request).await
 }
 
-fn production_cors_layer(policy: &HostOriginPolicy) -> tower_http::cors::CorsLayer {
-    use tower_http::cors::{AllowOrigin, CorsLayer};
-    let mut origins = vec![
+pub(crate) fn desktop_origins() -> Vec<HeaderValue> {
+    vec![
         HeaderValue::from_static("http://127.0.0.1:1421"),
         HeaderValue::from_static("http://localhost:1421"),
         HeaderValue::from_static("http://tauri.localhost"),
         HeaderValue::from_static("https://tauri.localhost"),
         HeaderValue::from_static("tauri://localhost"),
-    ];
-    for host in ["localhost", "127.0.0.1", "[::1]"] {
-        let value = format!("http://{host}:{}", policy.port);
-        if let Ok(value) = HeaderValue::from_str(&value) {
-            origins.push(value);
-        }
-    }
+    ]
+}
+
+pub(crate) fn cors_layer(origins: Vec<HeaderValue>) -> tower_http::cors::CorsLayer {
+    use tower_http::cors::{AllowOrigin, CorsLayer};
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
         .allow_methods([
@@ -474,6 +490,16 @@ fn production_cors_layer(policy: &HostOriginPolicy) -> tower_http::cors::CorsLay
             header::ACCEPT,
             HeaderName::from_static("last-event-id"),
             HeaderName::from_static("x-kb-actor"),
+            HeaderName::from_static("x-kb-actor-bin"),
+            HeaderName::from_static("x-grpc-web"),
+            HeaderName::from_static("x-user-agent"),
+            HeaderName::from_static("grpc-timeout"),
+        ])
+        .expose_headers([
+            HeaderName::from_static("grpc-status"),
+            HeaderName::from_static("grpc-message"),
+            HeaderName::from_static("grpc-status-details-bin"),
+            HeaderName::from_static("kb-error-bin"),
         ])
 }
 
@@ -500,8 +526,9 @@ mod tests {
     use tempfile::TempDir;
     use tower::ServiceExt;
 
-    use super::{APP_BASE_PATH, HostOriginPolicy, WebHostConfig, build_production_router};
+    use super::{APP_BASE_PATH, HostOriginPolicy, WebHostConfig};
     use crate::AppState;
+    use crate::build_production_router;
 
     const PORT: u16 = 9876;
 
@@ -589,6 +616,91 @@ mod tests {
             .to_bytes()
             .to_vec();
         (status, headers, body)
+    }
+
+    #[tokio::test]
+    async fn http2_authority_requires_consistent_single_host_and_valid_origin() {
+        let (_artifact, _db, router) = app().await;
+        for (uri, hosts, origins, expected) in [
+            (
+                "http://localhost:9876/health",
+                vec![],
+                vec![],
+                StatusCode::OK,
+            ),
+            (
+                "http://localhost:9876/health",
+                vec!["LOCALHOST:9876"],
+                vec![],
+                StatusCode::OK,
+            ),
+            (
+                "http://localhost:9876/health",
+                vec!["127.0.0.1:9876"],
+                vec![],
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "http://localhost:9876/health",
+                vec!["localhost:9876", "localhost:9876"],
+                vec![],
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "http://foreign.invalid:9876/health",
+                vec![],
+                vec![],
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "http://user@localhost:9876/health",
+                vec![],
+                vec![],
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "http://localhost:9876/health",
+                vec![],
+                vec!["http://localhost:9876", "http://localhost:9876"],
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "http://localhost:9876/health",
+                vec![],
+                vec!["http://user@localhost:9876"],
+                StatusCode::BAD_REQUEST,
+            ),
+        ] {
+            let mut request = Request::builder()
+                .version(axum::http::Version::HTTP_2)
+                .uri(uri);
+            for host in hosts {
+                request = request.header(header::HOST, host);
+            }
+            for origin in origins {
+                request = request.header(header::ORIGIN, origin);
+            }
+            let response = router
+                .clone()
+                .oneshot(request.body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected, "{uri}");
+        }
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("http://localhost:9876/health")
+                    .header(
+                        header::ORIGIN,
+                        axum::http::HeaderValue::from_bytes(&[0xff]).unwrap(),
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

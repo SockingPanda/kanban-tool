@@ -11,15 +11,19 @@ import type { TaskMutationDependencies, TaskMutationClient } from "../data/task-
 import type { AttachmentDownloadDependencies, AttachmentDownloadClient } from "../data/attachment-download";
 import type { HealthReadDependencies, HealthReport } from "../data/health-read-model";
 import type { MaintenanceApiDependencies, MaintenanceApi } from "../data/maintenance-api";
-import type { HttpTransport } from '../data/http-transport';
+import type { RpcTransport } from '../data/rpc-transport';
 import type { SseTransport } from '../sync/contracts';
+import type { BoardRealtimeSource } from "../realtime/source";
 
 /** 按 Board 和查询条件读取数据；提交返回 canonical service 的确认结果。 */
 export interface WorkspaceDataSource {
   readBoardDirectory(signal?: AbortSignal): Promise<readonly BoardOption[]>;
-  readonly transport: HttpTransport;
-  readonly streamTransport: SseTransport;
-  readonly streamUrl: string;
+  readonly transport: RpcTransport;
+  /** 配置 RPC source 后不再创建 SSE controller；禁止自动协议回退。 */
+  readonly boardRealtime?: BoardRealtimeSource;
+  /** 仅供尚未迁移的旧宿主使用。 */
+  readonly streamTransport?: SseTransport;
+  readonly streamUrl?: string;
   loadBoardReadModel(runtime: WebRuntimeConfig, selector?: string, options?: BoardReadModelOptions): Promise<BoardReadModel>;
   createBoardReadQuery(runtime: WebRuntimeConfig, selector?: string, options?: BoardReadModelOptions): BoardReadQuery;
   loadExplorerBoardIdentity(runtime: WebRuntimeConfig, selector?: string, options?: ExplorerReadOptions): Promise<ExplorerBoardIdentity>;

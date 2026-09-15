@@ -1,0 +1,88 @@
+TAP version 13
+# Subtest: dry run does not change any repository files
+ok 1 - dry run does not change any repository files
+  ---
+  duration_ms: 35.174096
+  type: 'test'
+  ...
+# Subtest: writes exact planned edits and additions
+ok 2 - writes exact planned edits and additions
+  ---
+  duration_ms: 42.581491
+  type: 'test'
+  ...
+# Subtest: rejects wrong commit
+ok 3 - rejects wrong commit
+  ---
+  duration_ms: 36.443557
+  type: 'test'
+  ...
+# Subtest: rejects dirty target
+ok 4 - rejects dirty target
+  ---
+  duration_ms: 30.469491
+  type: 'test'
+  ...
+# Subtest: preserves unrelated dirty work
+ok 5 - preserves unrelated dirty work
+  ---
+  duration_ms: 30.320216
+  type: 'test'
+  ...
+# Subtest: rejects existing addition instead of overwriting
+ok 6 - rejects existing addition instead of overwriting
+  ---
+  duration_ms: 30.398327
+  type: 'test'
+  ...
+# Subtest: rejects symlink target
+ok 7 - rejects symlink target
+  ---
+  duration_ms: 32.494411
+  type: 'test'
+  ...
+# Subtest: rejects path traversal
+ok 8 - rejects path traversal
+  ---
+  duration_ms: 22.816937
+  type: 'test'
+  ...
+# Subtest: rejects wrong anchor counts
+ok 9 - rejects wrong anchor counts
+  ---
+  duration_ms: 26.905855
+  type: 'test'
+  ...
+# Subtest: rechecks targets and rolls back earlier writes on conflict
+ok 10 - rechecks targets and rolls back earlier writes on conflict
+  ---
+  duration_ms: 29.409289
+  type: 'test'
+  ...
+# Subtest: rejects duplicate targets in a malformed manifest
+ok 11 - rejects duplicate targets in a malformed manifest
+  ---
+  duration_ms: 22.547658
+  type: 'test'
+  ...
+# Subtest: rejects a staged target even when worktree bytes equal the baseline
+ok 12 - rejects a staged target even when worktree bytes equal the baseline
+  ---
+  duration_ms: 32.65377
+  type: 'test'
+  ...
+# Subtest: requires the fixed embedded package location only when manifest requests it
+ok 13 - requires the fixed embedded package location only when manifest requests it
+  ---
+  duration_ms: 24.715132
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 486.925916

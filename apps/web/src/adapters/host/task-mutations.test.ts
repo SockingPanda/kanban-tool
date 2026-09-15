@@ -1,460 +1,141 @@
-import { describe, expect, test, vi } from "vitest"
-
-import { assertCanonicalBoardSlug } from "../../domain/board-slug"
-import type { WebRuntimeConfig } from "../../lib/runtime"
-import type { HttpTransport } from "../../application/data/http-transport";
-import { createTaskMutationClient } from "./task-mutations";
-import { type BlockTaskIntent, type ClaimTaskIntent, type CompleteTaskIntent, type SubmitReviewTaskIntent } from "../../application/data/task-mutations";
+import { describe,expect,test,vi } from 'vitest'
+import type { RpcTransport } from '../../application/data/rpc-transport'
+import { RpcTransportError } from '../../application/data/rpc-transport'
+import type { ClaimTaskIntent,CompleteTaskIntent,StepMutationIntent } from '../../application/data/task-mutations'
+import { assertCanonicalBoardSlug } from '../../domain/board-slug'
+import type { WebRuntimeConfig } from '../../lib/runtime'
+import { createTaskMutationClient } from './task-mutations'
 
 const runtime = {
-  apiBaseUrl: "/__kb_api__",
-  webBasePath: "/app/",
-  actor: "web-user",
-  defaultBoard: "default",
-  serverVersion: "3.0.0",
-  protocolVersion: "v1",
-  webBuildId: "sha256:test",
+  apiBaseUrl: '/__kb_api__', webBasePath: '/app/', actor: 'web-user', defaultBoard: 'default',
+  serverVersion: '3.1.0', protocolVersion: 'v1', webBuildId: 'sha256:test',
 } satisfies WebRuntimeConfig
-
-const activeBoard = assertCanonicalBoardSlug("default")
-
-const claimInput: ClaimTaskIntent = { worker_profile: "default" }
-const completeInput: CompleteTaskIntent = { claim_token: "claim-token", summary: "done" }
-const blockInput: BlockTaskIntent = { reason: "waiting" }
-const reviewInput: SubmitReviewTaskIntent = { summary: "review" }
-
-function task(id = "t_1", status: "triage" | "todo" | "scheduled" | "ready" | "running" | "blocked" | "review" | "done" | "archived" = "todo") {
-  return {
-    id,
-    board_id: "b_default",
-    board_slug: "default",
-    ref: "default#1",
-    seq: 1,
-    title: "Task",
-    description: null,
-    status,
-    status_reason: null,
-    assignee: null,
-    priority: 3,
-    position: 1024,
-    scheduled_at: null,
-    due_at: null,
-    created_by: "web-user",
-    created_at: 1,
-    updated_at: 2,
-    started_at: null,
-    completed_at: null,
-    archived_at: null,
-    claim_owner: null,
-    claim_expires_at: null,
-    last_heartbeat_at: null,
-    current_run_id: null,
-    retry_count: 0,
-    max_retries: null,
-    result_summary: null,
-    result: null,
-    metadata: {},
-    lock_version: 1,
-    dependency_blocked: false,
-    unfinished_parent_count: 0,
-    execution_plan_state: "not_required" as const,
-    required_step_count: 0,
-    completed_required_step_count: 0,
-    optional_step_count: 0,
-    labels: [],
-  }
+const fixtures = import.meta.glob('../../lib/api/generated/fixtures/*-response.valid.json', { eager: true, import: 'default' })
+function fixture(method: string) {
+  const key = method.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()
+  const payload = fixtures[`../../lib/api/generated/fixtures/api-${key}-response.valid.json`]
+  if (!payload) throw new Error(`缺少真实契约 fixture: ${method}`)
+  return structuredClone(payload)
+}
+function setup(actor?: string, board = 'default') {
+  const call = vi.fn<RpcTransport['call']>(async ({ method }) => ({ payload: fixture(method), bytes: 1 }))
+  const client = createTaskMutationClient(runtime, assertCanonicalBoardSlug(board), { transport: { call }, actor })
+  return { call, client }
 }
 
-const attachment = {
-  id: "a_1",
-  board_id: "b_default",
-  task_id: "t_1",
-  filename: "hello.txt",
-  rel_path: "attachments/b_default/t_1/hello.txt",
-  content_type: "text/plain",
-  size_bytes: 2,
-  sha256: "sha256-fixture",
-  created_by: "web-user",
-  created_at: 1,
-}
-
-function transitionResponse(action: string) {
-  if (action === "claim") {
-    return {
-      payload: {
-        data: {
-          task: task("t_1", "running"),
-          run: {
-            id: "r_1",
-            task_id: "t_1",
-            status: "running",
-            worker_profile: "default",
-            worker_pid: null,
-            claim_owner: "web-user",
-            started_at: 1,
-            finished_at: null,
-            exit_code: null,
-            summary: null,
-            error: null,
-            has_log: false,
-            metadata: {},
-          },
-          claim_token: "claim-token",
-          claim_expires_at: 10,
-        },
-      },
-      bytes: 1,
-    }
-  }
-
-  const statusByAction: Record<string, Parameters<typeof task>[1]> = {
-    specify: "todo",
-    promote: "ready",
-    heartbeat: "running",
-    complete: "done",
-    "submit-review": "review",
-    block: "blocked",
-    unblock: "todo",
-    archive: "archived",
-  }
-  return { payload: { data: task("t_1", statusByAction[action]) }, bytes: 1 }
-}
-
-describe("task mutation operations", () => {
-  test("validates and sends a create intent through the generated path/body contracts", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async () => ({
-      payload: { data: task("t_created", "triage") },
-      bytes: 1,
-    }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    const result = await client.createTask({
-      title: "New task",
-      description: "Details",
-      idempotency_key: "task.create:test",
-    })
-
-    expect(result.data.id).toBe("t_created")
-    expect(request).toHaveBeenCalledWith({
-      method: "POST",
-      path: "/api/v1/boards/default/tasks",
-      body: {
-        actor: "web-user",
-        title: "New task",
-        description: "Details",
-        idempotency_key: "task.create:test",
-      },
-      headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
-    })
+describe('命名任务 RPC', () => {
+  test('创建保持 canonical board、幂等键和中文 actor', async () => {
+    const { client, call } = setup(' 作者甲 ', 'team-two')
+    await client.createTask({ title: '任务', description: '说明', idempotency_key: 'same-key' })
+    expect(call).toHaveBeenCalledWith({ method: 'CreateTask', path: { board: 'team-two' }, input: { title: '任务', description: '说明', idempotency_key: 'same-key', actor: '作者甲' }, actor: '作者甲' })
   })
-
-  test("uses a validated Web actor override in both body and header, with runtime fallback", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async () => ({ payload: { data: task("t_created", "triage") }, bytes: 1 }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request }, actor: " browser-reviewer " })
-    await client.createTask({ title: "Actor override" })
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({
-      body: expect.objectContaining({ actor: "browser-reviewer" }),
-      headers: { "Content-Type": "application/json", "X-KB-Actor": "browser-reviewer" },
-    }))
-
-    const fallbackRequest = vi.fn<HttpTransport["request"]>(async () => ({ payload: { data: task("t_fallback", "triage") }, bytes: 1 }))
-    const fallback = createTaskMutationClient(runtime, activeBoard, { transport: { request: fallbackRequest }, actor: "bad\nactor" })
-    await fallback.createTask({ title: "Runtime actor" })
-    expect(fallbackRequest).toHaveBeenCalledWith(expect.objectContaining({
-      body: expect.objectContaining({ actor: "web-user" }),
-      headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
-    }))
+  test('无效 actor preference 采用 runtime actor', async () => {
+    const { client, call } = setup('bad\nactor')
+    await client.createTask({ title: '任务' })
+    expect(call).toHaveBeenCalledWith(expect.objectContaining({ actor: 'web-user', input: { title: '任务', actor: 'web-user' } }))
   })
-
-  test("binds task creation to the active canonical board selector", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async () => ({
-      payload: { data: task("t_created", "triage") },
-      bytes: 1,
-    }))
-    const client = createTaskMutationClient(runtime, assertCanonicalBoardSlug("team-two"), { transport: { request } })
-
-    await client.createTask({ title: "Team task" })
-
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({
-      path: "/api/v1/boards/team-two/tasks",
-    }))
+  test('更新保持 CAS 和 null 清空，不填入未修改字段', async () => {
+    const { client, call } = setup()
+    await client.updateTask('t_1', { expected_lock_version: 7, description: null })
+    expect(call).toHaveBeenCalledWith({ method: 'UpdateTask', path: { task_id: 't_1' }, input: { expected_lock_version: 7, description: null, actor: 'web-user' }, actor: 'web-user' })
+    expect(call.mock.calls[0]?.[0].input).not.toHaveProperty('title')
   })
-
-  test("uses expected_lock_version for update and parses the canonical task response", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async () => ({
-      payload: { data: task("t_1", "todo") },
-      bytes: 1,
-    }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    await client.updateTask("t_1", { title: "Renamed", expected_lock_version: 7 })
-
-    expect(request).toHaveBeenCalledWith({
-      method: "PATCH",
-      path: "/api/v1/tasks/t_1",
-      body: { actor: "web-user", title: "Renamed", expected_lock_version: 7 },
-      headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
-    })
+  test('标签 ID 按字段保留，添加/删除使用各自命名操作', async () => {
+    const { client, call } = setup()
+    await client.addTaskLabel('t_1', { name: 'urgent', create_missing: true })
+    await client.removeTaskLabel('t_1', 'l_%中')
+    expect(call.mock.calls.map(([r]) => r.method)).toEqual(['AddTaskLabel', 'RemoveTaskLabel'])
+    expect(call.mock.calls[1]?.[0]).toEqual({ method: 'RemoveTaskLabel', path: { task_id: 't_1', label_id: 'l_%中' }, actor: 'web-user' })
   })
-
-  test("adds and removes task labels through the generated path and body contracts", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async ({ method }) => ({
-      payload: method === "POST"
-        ? { data: task("t_1", "todo"), meta: null }
-        : { data: task("t_1", "todo") },
-      bytes: 1,
-    }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    await client.addTaskLabel("t_1", { name: "urgent", create_missing: true })
-    await client.removeTaskLabel("t_1", "l_label/one")
-
-    expect(request).toHaveBeenNthCalledWith(1, {
-      method: "POST",
-      path: "/api/v1/tasks/t_1/labels",
-      body: { actor: "web-user", name: "urgent", create_missing: true },
-      headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
-    })
-    expect(request).toHaveBeenNthCalledWith(2, {
-      method: "DELETE",
-      path: "/api/v1/tasks/t_1/labels/l_label%2Fone",
-      headers: { "X-KB-Actor": "web-user" },
-    })
-  })
-
-  test("keeps heartbeat claim_token required at the public type boundary", () => {
-    const request = vi.fn<HttpTransport["request"]>()
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
+  test('所有可见状态动作保留独立请求和响应', async () => {
+    const { client, call } = setup()
+    const claim: ClaimTaskIntent = { worker_profile: 'default' }
+    const complete: CompleteTaskIntent = { claim_token: 'claim-token', summary: 'done' }
+    await client.transitionTask('t_1', 'specify', { description: 'ready' })
+    await client.transitionTask('t_1', 'promote')
+    await client.transitionTask('t_1', 'claim', claim)
+    await client.transitionTask('t_1', 'heartbeat', { claim_token: 'claim-token' })
+    await client.transitionTask('t_1', 'complete', complete)
+    await client.transitionTask('t_1', 'submit-review', { summary: 'review' })
+    await client.transitionTask('t_1', 'block', { reason: 'waiting' })
+    await client.transitionTask('t_1', 'unblock')
+    await client.transitionTask('t_1', 'archive')
+    expect(call.mock.calls.map(([r]) => r.method)).toEqual(['SpecifyTask', 'PromoteTask', 'ClaimTask', 'HeartbeatTask', 'CompleteTask', 'SubmitReviewTask', 'BlockTask', 'UnblockTask', 'ArchiveTask'])
+    expect(call.mock.calls[2]?.[0].input).toMatchObject({ worker_profile: 'default', actor: 'web-user' })
+    expect(call.mock.calls[3]?.[0].input).toMatchObject({ claim_token: 'claim-token', actor: 'web-user' })
+    expect(call.mock.calls[4]?.[0].input).toMatchObject(complete)
     const invalidCall = () => {
-      // @ts-expect-error heartbeat requests must carry the generated claim_token field
-      return client.transitionTask("t_1", "heartbeat", {})
+      // @ts-expect-error heartbeat 在公开接口要求 claim token。
+      return client.transitionTask('t_1', 'heartbeat', {})
     }
-
-    expect(invalidCall).toBeTypeOf("function")
+    expect(invalidCall).toBeTypeOf('function')
   })
-
-  test("routes each legal transition to its own generated request/response validator", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async ({ path }) => ({
-      payload: { data: task("t_1", path.endsWith("/block") ? "blocked" : "todo") },
-      bytes: 1,
-    }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    const result = await client.transitionTask("t_1", "block", blockInput)
-
-    expect(result.data.status).toBe("blocked")
-    expect(request).toHaveBeenCalledWith({
-      method: "POST",
-      path: "/api/v1/tasks/t_1/transitions/block",
-      body: { actor: "web-user", reason: "waiting" },
-      headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
-    })
+  test('依赖、步骤、评论与执行计划保持各自完整契约', async () => {
+    const { client, call } = setup()
+    await client.listDependencies('t_1')
+    await client.addDependency('t_1', 't_parent')
+    await client.removeDependency('t_1', 't_parent')
+    await client.listSteps('t_1')
+    await client.createStep('t_1', { title: '验证' })
+    await client.markExecutionPlanNotRequired('t_1', { reason: '无需步骤' })
+    await client.listComments('t_1')
+    await client.createComment('t_1', { body: '备注' })
+    expect(call.mock.calls.map(([r]) => r.method)).toEqual(['ListDependencies', 'AddDependency', 'RemoveDependency', 'ListSteps', 'CreateStep', 'MarkExecutionPlanNotRequired', 'ListComments', 'CreateComment'])
+    expect(call.mock.calls[2]?.[0].path).toEqual({ child_task_id: 't_1', parent_task_id: 't_parent' })
+    expect(call.mock.calls[7]?.[0].input).toEqual({ body: '备注', author: 'web-user' })
+    expect(call.mock.calls[0]?.[0]).not.toHaveProperty('actor')
   })
-
-  test("covers every rendered transition route, body, actor header, and response branch", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async ({ path }) => ({
-      ...transitionResponse(path.split("/").at(-1) ?? ""),
-    }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-    const transitionCases = [
-      { action: "specify", run: () => client.transitionTask("t_1", "specify", { description: "ready" }) },
-      { action: "promote", run: () => client.transitionTask("t_1", "promote") },
-      { action: "claim", run: () => client.transitionTask("t_1", "claim", claimInput) },
-      { action: "heartbeat", run: () => client.transitionTask("t_1", "heartbeat", { claim_token: "claim-token" }) },
-      { action: "complete", run: () => client.transitionTask("t_1", "complete", completeInput) },
-      { action: "submit-review", run: () => client.transitionTask("t_1", "submit-review", reviewInput) },
-      { action: "block", run: () => client.transitionTask("t_1", "block", blockInput) },
-      { action: "unblock", run: () => client.transitionTask("t_1", "unblock") },
-      { action: "archive", run: () => client.transitionTask("t_1", "archive") },
-    ]
-
-    for (const transition of transitionCases) await transition.run()
-
-    expect(request).toHaveBeenCalledTimes(9)
-    for (const [index, transition] of transitionCases.entries()) {
-      expect(request).toHaveBeenNthCalledWith(index + 1, expect.objectContaining({
-        method: "POST",
-        path: `/api/v1/tasks/t_1/transitions/${transition.action}`,
-        headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
-      }))
-    }
-    expect(request.mock.calls[2]?.[0]).toMatchObject({ body: { actor: "web-user", worker_profile: "default" } })
-    expect(request.mock.calls[3]?.[0]).toMatchObject({ body: { actor: "web-user", claim_token: "claim-token" } })
-    expect(request.mock.calls[6]?.[0]).toMatchObject({ body: { actor: "web-user", reason: "waiting" } })
+  test.each([
+    { action: 'update', input: { title: '新标题', unlink_task: false } }, { action: 'remove' },
+    { action: 'complete', input: { note: '完成依据' } }, { action: 'skip', input: { reason: '跳过原因' } }, { action: 'reopen', input: { reason: '重新验证' } },
+  ] satisfies StepMutationIntent[])('步骤动作 $action 只提交命名操作', async command => {
+    const { client, call } = setup()
+    await client.mutateStep('t_1', 's_1', command)
+    expect(call).toHaveBeenCalledWith(expect.objectContaining({ path: { task_id: 't_1', step_id: 's_1' }, actor: 'web-user' }))
+    expect(call.mock.calls[0]?.[0].method).toBe(`${command.action[0]?.toUpperCase()}${command.action.slice(1)}Step`)
   })
-
-  test("rejects invalid response payloads before exposing a mutation result", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async () => ({
-      payload: { data: { id: "missing-fields" } },
-      bytes: 1,
-    }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    await expect(client.createTask({ title: "New task" })).rejects.toMatchObject({
-      name: "ContractValidationError",
-      contractId: "api.create-task.response",
-    })
+  test('附件内容保持原始 bytes，元数据列表和删除为命名操作', async () => {
+    const { client, call } = setup()
+    const content = new Uint8Array([0, 255, 13])
+    await client.listAttachments('t_1')
+    await client.createAttachment('t_1', { filename: '内容.bin', content, content_type: 'application/octet-stream' })
+    await client.deleteAttachment('t_1', 'a_%中')
+    expect(call.mock.calls.map(([r]) => r.method)).toEqual(['ListAttachments', 'CreateAttachment', 'DeleteAttachment'])
+    expect(call.mock.calls[1]?.[0].input).toMatchObject({ filename: '内容.bin', content_type: 'application/octet-stream', content })
+    expect((call.mock.calls[1]?.[0].input as { content: Uint8Array }).content).toBe(content)
+    expect(call.mock.calls[2]?.[0].path).toEqual({ task_id: 't_1', attachment_id: 'a_%中' })
   })
-
-  test("covers dependency, step, and comment intents without exposing untyped requests", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async ({ path }) => {
-      if (path.endsWith("/dependencies")) return { payload: { data: { task: { id: "t_1", board_id: "b_default", board_slug: "default", ref: "default#1", title: "Task", status: "todo" }, parents: [], children: [], edges: [] } }, bytes: 1 }
-      if (path.endsWith("/steps")) return { payload: { data: { task_id: "t_1", steps: [], execution_plan: { board_id: "b_default", task_id: "t_1", state: "planned", reason: null, updated_by: "web-user", updated_at: 1 } } }, bytes: 1 }
-      return { payload: { data: { id: "c_1", board_id: "b_default", task_id: "t_1", author: "web-user", author_type: "user", agent_type: null, body: "note", kind: "note", metadata: {}, created_at: 1 } }, bytes: 1 }
-    })
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    await client.addDependency("t_1", "t_parent")
-    await client.createStep("t_1", { title: "Verify" })
-    await client.createComment("t_1", { body: "note" })
-
-    expect(request).toHaveBeenNthCalledWith(1, { method: "POST", path: "/api/v1/tasks/t_1/dependencies", body: { actor: "web-user", parent_task_id: "t_parent" }, headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" } })
-    expect(request).toHaveBeenNthCalledWith(2, { method: "POST", path: "/api/v1/tasks/t_1/steps", body: { actor: "web-user", title: "Verify" }, headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" } })
-    expect(request).toHaveBeenNthCalledWith(3, { method: "POST", path: "/api/v1/tasks/t_1/comments", body: { author: "web-user", body: "note" }, headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" } })
+  test('保留既有 number[] 调用，但拒绝不合法字节', async () => {
+    const { client, call } = setup()
+    await client.createAttachment('t_1', { filename: 'x.bin', content: [0, 255] })
+    expect(call.mock.calls[0]?.[0].input).toMatchObject({ content: new Uint8Array([0, 255]) })
+    expect(() => client.createAttachment('t_1', { filename: 'x.bin', content: [256] })).toThrow()
+    expect(call).toHaveBeenCalledTimes(1)
   })
-
-  test("covers read/remove dependency, step, plan, and comment branches", async () => {
-    const dependencyTask = { id: "t_1", board_id: "b_default", board_slug: "default", ref: "default#1", title: "Task", status: "todo" }
-    const request = vi.fn<HttpTransport["request"]>(async ({ method, path }) => {
-      if (path.endsWith("/dependencies") && method === "GET") {
-        return { payload: { data: { task: dependencyTask, parents: [], children: [], edges: [] } }, bytes: 1 }
-      }
-      if (path.includes("/dependencies/") && method === "DELETE") {
-        return { payload: { data: { task: dependencyTask, parents: [], children: [], edges: [] } }, bytes: 1 }
-      }
-      if (path.endsWith("/steps")) {
-        return { payload: { data: { task_id: "t_1", steps: [], execution_plan: { board_id: "b_default", task_id: "t_1", state: "planned", reason: null, updated_by: "web-user", updated_at: 1 } } }, bytes: 1 }
-      }
-      if (path.endsWith("/execution-plan/not-required")) {
-        return { payload: { data: { board_id: "b_default", task_id: "t_1", state: "not_required", reason: "not needed", updated_by: "web-user", updated_at: 1 } }, bytes: 1 }
-      }
-      if (path.endsWith("/comments")) return { payload: { data: [] }, bytes: 1 }
-      throw new Error(`unexpected request: ${method} ${path}`)
-    })
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    await client.listDependencies("t_1")
-    await client.removeDependency("t_1", "t_parent")
-    await client.listSteps("t_1")
-    await client.markExecutionPlanNotRequired("t_1", { reason: "not needed" })
-    await client.listComments("t_1")
-
-    expect(request).toHaveBeenNthCalledWith(1, expect.objectContaining({ method: "GET", path: "/api/v1/tasks/t_1/dependencies", headers: {} }))
-    expect(request).toHaveBeenNthCalledWith(2, expect.objectContaining({ method: "DELETE", path: "/api/v1/tasks/t_1/dependencies/t_parent", headers: { "X-KB-Actor": "web-user" } }))
-    expect(request).toHaveBeenNthCalledWith(3, expect.objectContaining({ method: "GET", path: "/api/v1/tasks/t_1/steps", headers: {} }))
-    expect(request).toHaveBeenNthCalledWith(4, expect.objectContaining({ method: "POST", path: "/api/v1/tasks/t_1/execution-plan/not-required", body: { actor: "web-user", reason: "not needed" }, headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" } }))
-    expect(request).toHaveBeenNthCalledWith(5, expect.objectContaining({ method: "GET", path: "/api/v1/tasks/t_1/comments", headers: {} }))
-  })
-
-  test("covers attachment metadata list/create/delete operations", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async ({ method, path }) => {
-      if (method === "GET") return { payload: { data: [attachment] }, bytes: 1 }
-      if (method === "POST") return { payload: { data: attachment }, bytes: 1 }
-      if (path.endsWith("/attachments/a_1")) return { payload: { data: { deleted: true } }, bytes: 1 }
-      throw new Error(`unexpected request: ${method} ${path}`)
-    })
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    await expect(client.listAttachments("t_1")).resolves.toEqual({ data: [attachment] })
-    await expect(client.createAttachment("t_1", {
-      filename: "hello.txt",
-      content: [104, 105],
-      content_type: "text/plain",
-    })).resolves.toEqual({ data: attachment })
-    await expect(client.deleteAttachment("t_1", "a_1")).resolves.toEqual({ data: { deleted: true } })
-
-    expect(request).toHaveBeenNthCalledWith(1, {
-      method: "GET",
-      path: "/api/v1/tasks/t_1/attachments",
-      headers: {},
-    })
-    expect(request).toHaveBeenNthCalledWith(2, {
-      method: "POST",
-      path: "/api/v1/tasks/t_1/attachments",
-      body: {
-        actor: "web-user",
-        filename: "hello.txt",
-        content: [104, 105],
-        content_type: "text/plain",
-      },
-      headers: { "Content-Type": "application/json", "X-KB-Actor": "web-user" },
-    })
-    expect(request).toHaveBeenNthCalledWith(3, {
-      method: "DELETE",
-      path: "/api/v1/tasks/t_1/attachments/a_1",
-      headers: { "X-KB-Actor": "web-user" },
-    })
-  })
-
-  test("requests manual label suggestions with generated query contracts and preserves degraded reasons", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async () => ({
-      payload: {
-        data: {
-          task_id: "t_1",
-          board_id: "b_default",
-          selected_labels: [],
-          candidates: [],
-          coverage: 0,
-          coverage_cosine: 0,
-          residual_norm: 1,
-          needs_new_label: false,
-          reason_codes: ["degraded_result", "vector_store_disabled"],
-          degraded: true,
-          diagnostics: ["vector_store_disabled"],
-        },
-      },
-      bytes: 1,
-    }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
+  test('标签建议 query、取消和降级信息保留', async () => {
+    const { client, call } = setup()
     const signal = new AbortController().signal
-
-    const result = await client.suggestTaskLabels("t_1", {
-      limit: 3,
-      candidate_limit: 32,
-      atom_limit: 80,
-      max_selected_labels: 4,
-      min_score: 0.15,
-    }, { signal })
-
-    expect(result.data).toMatchObject({
-      task_id: "t_1",
-      reason_codes: ["degraded_result", "vector_store_disabled"],
-      degraded: true,
-      diagnostics: ["vector_store_disabled"],
-    })
-    expect(request).toHaveBeenCalledWith({
-      method: "GET",
-      path: "/api/v1/tasks/t_1/labels/suggestions?limit=3&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15",
-      headers: {},
-      signal,
-    })
+    const query = { limit: 3, candidate_limit: 32, atom_limit: 80, max_selected_labels: 4, min_score: 0.15 }
+    const result = await client.suggestTaskLabels('t_1', query, { signal })
+    expect(call).toHaveBeenCalledWith({ method: 'SuggestTaskLabels', path: { task_id: 't_1' }, query, signal })
+    expect(result).toEqual(fixture('SuggestTaskLabels'))
   })
-
-  test("rejects a malformed label suggestion response through its generated validator", async () => {
-    const request = vi.fn<HttpTransport["request"]>(async () => ({
-      payload: {
-        data: {
-          task_id: "t_1",
-          board_id: "b_default",
-          selected_labels: [],
-          candidates: [],
-          coverage: "unknown",
-          coverage_cosine: 0,
-          residual_norm: 1,
-          needs_new_label: false,
-          reason_codes: [],
-          degraded: false,
-          diagnostics: [],
-        },
-      },
-      bytes: 1,
-    }))
-    const client = createTaskMutationClient(runtime, activeBoard, { transport: { request } })
-
-    await expect(client.suggestTaskLabels("t_1")).rejects.toMatchObject({
-      name: "ContractValidationError",
-      contractId: "api.suggest-task-labels.response",
-    })
+  test('契约异常不会暴露为成功的 mutation result', async () => {
+    const { client, call } = setup()
+    call.mockResolvedValueOnce({ payload: { data: { id: 'missing-fields' } }, bytes: 1 })
+    await expect(client.createTask({ title: '任务' })).rejects.toMatchObject({ name: 'ContractValidationError', contractId: 'api.create-task.response' })
+  })
+  test('冲突和取消原样交给 controller，重试保留幂等键', async () => {
+    const { client, call } = setup()
+    const error = new RpcTransportError('http', 'conflict', { status: 409, apiError: { code: 'claim_conflict', message: 'conflict' } })
+    call.mockRejectedValueOnce(error)
+    const intent = { title: '任务', idempotency_key: 'retry-key' }
+    await expect(client.createTask(intent)).rejects.toBe(error)
+    await client.createTask(intent)
+    expect(call.mock.calls[0]?.[0].input).toEqual(call.mock.calls[1]?.[0].input)
+    const aborted = new DOMException('cancelled', 'AbortError')
+    call.mockRejectedValueOnce(aborted)
+    await expect(client.updateTask('t_1', { expected_lock_version: 1 })).rejects.toBe(aborted)
+    expect(call).toHaveBeenCalledTimes(3)
   })
 })

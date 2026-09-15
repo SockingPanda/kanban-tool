@@ -33,8 +33,8 @@ impl KanbanMcp {
             polarity: None,
             include_vector: false,
         };
-        let client = self.client.clone();
-        let hits = call_client_internal(move || client.query_vector_chunks(query)).await?;
+        let client = &self.client;
+        let hits = call_client_internal(client.query_vector_chunks(query)).await?;
         Ok(Json(DataEnvelope::new(hits)))
     }
 }

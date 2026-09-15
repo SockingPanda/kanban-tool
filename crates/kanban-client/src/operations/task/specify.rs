@@ -1,28 +1,31 @@
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_protocol::{ApiTask, SpecifyTaskRequest, SpecifyTaskResponse};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
+use kanban_protocol::{ApiTask, SpecifyTaskRequest};
 
 impl KanbanClient {
-    pub fn specify_task(
+    pub async fn specify_task(
         &self,
         task_id: &str,
         request: &SpecifyTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let response: SpecifyTaskResponse = self.post(
-            &format!(
-                "/api/v1/tasks/{}/transitions/specify",
-                encode_path_segment(task_id.trim())
-            ),
-            request,
+        let response: kanban_protocol::SpecifyTaskResponse = rpc!(
+            self,
+            specify_task,
+            SpecifyTaskRequest,
+            kanban_protocol::SpecifyTaskPath {
+                task_id: task_id.trim().to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
-    pub fn specify_task_by_selector(
+    pub async fn specify_task_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &SpecifyTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.specify_task(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.specify_task(&task_id, request).await
     }
 }

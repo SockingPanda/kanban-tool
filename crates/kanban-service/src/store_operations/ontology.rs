@@ -14,11 +14,12 @@ use crate::{
     db::TursoStore,
     domain::{
         LabelAtomExplainActionRecord, LabelAtomExplainRecord, LabelAtomExplainSignalRecord,
-        LabelAtomExplainValidationRecord, LabelAtomIndexStatusRecord, LabelAtomRecord,
-        LabelOntologyActionRecord, LabelOntologyObservationRecord, LabelOntologyQualityRecord,
-        LabelOntologyReviewGroupRecord, LabelOntologySignalDetailRecord, LabelOntologySignalRecord,
-        LabelProposalAttemptRecord, LabelSemanticProposalRecord, LabelSemanticsRecord,
-        LabelSuggestionCandidateRecord, LabelSuggestionEvidenceRecord, LabelSuggestionResultRecord,
+        LabelAtomExplainValidationRecord, LabelAtomIndexHitRecord, LabelAtomIndexQueryRecord,
+        LabelAtomIndexStatusRecord, LabelAtomRecord, LabelOntologyActionRecord,
+        LabelOntologyObservationRecord, LabelOntologyQualityRecord, LabelOntologyReviewGroupRecord,
+        LabelOntologySignalDetailRecord, LabelOntologySignalRecord, LabelProposalAttemptRecord,
+        LabelSemanticProposalRecord, LabelSemanticsRecord, LabelSuggestionCandidateRecord,
+        LabelSuggestionEvidenceRecord, LabelSuggestionResultRecord,
     },
     error::StoreError,
     shared::{
@@ -983,7 +984,7 @@ impl TursoStore {
         query: Option<&str>,
         polarity: Option<&str>,
         limit: usize,
-    ) -> Result<JsonValue, StoreError> {
+    ) -> Result<LabelAtomIndexQueryRecord, StoreError> {
         let board_id = self.ontology_board_id(board).await?;
         let limit = limit.clamp(1, MAX_LIST_LIMIT as usize);
         let connection = self.connection().await?;
@@ -1007,21 +1008,25 @@ impl TursoStore {
             .await?;
         let mut hits = Vec::new();
         while let Some(row) = rows.next().await? {
-            hits.push(json!({
-                "atom_id": text_value(row.get_value(0)?, "label_atoms.id")?,
-                "label_id": text_value(row.get_value(1)?, "label_atoms.label_id")?,
-                "label_name": text_value(row.get_value(2)?, "labels.name")?,
-                "board_id": text_value(row.get_value(3)?, "label_atoms.board_id")?,
-                "polarity": text_value(row.get_value(4)?, "label_atoms.polarity")?,
-                "kind": text_value(row.get_value(5)?, "label_atoms.kind")?,
-                "text": text_value(row.get_value(6)?, "label_atoms.text")?,
-                "ordinal": integer_value(row.get_value(7)?, "label_atoms.ordinal")?,
-                "content_hash": text_value(row.get_value(8)?, "label_atoms.content_hash")?,
-                "embedding_model": "unavailable",
-                "distance": 0.0,
-            }));
+            hits.push(LabelAtomIndexHitRecord {
+                atom_id: text_value(row.get_value(0)?, "label_atoms.id")?,
+                label_id: text_value(row.get_value(1)?, "label_atoms.label_id")?,
+                label_name: text_value(row.get_value(2)?, "labels.name")?,
+                board_id: text_value(row.get_value(3)?, "label_atoms.board_id")?,
+                polarity: text_value(row.get_value(4)?, "label_atoms.polarity")?,
+                kind: text_value(row.get_value(5)?, "label_atoms.kind")?,
+                text: text_value(row.get_value(6)?, "label_atoms.text")?,
+                ordinal: integer_value(row.get_value(7)?, "label_atoms.ordinal")?,
+                content_hash: text_value(row.get_value(8)?, "label_atoms.content_hash")?,
+                embedding_model: "unavailable".to_owned(),
+                distance: 0.0,
+            });
         }
-        Ok(json!({"data": hits, "degraded": true, "diagnostics": ["vector_provider_unavailable"]}))
+        Ok(LabelAtomIndexQueryRecord {
+            data: hits,
+            degraded: true,
+            diagnostics: vec!["vector_provider_unavailable".to_owned()],
+        })
     }
 
     pub async fn suggest_task_labels(

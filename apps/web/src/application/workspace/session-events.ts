@@ -6,6 +6,8 @@ import { classifyEvent, fullRefetchPlan } from "../sync/invalidation"
 import type { CanonicalBoardId, InvalidationPlan, QueryRoot, ValidatedBusinessEvent } from "../sync/contracts"
 
 const explorerBoundaryTelemetry = new Set([
+  // RPC 查询刷新提示不经过 audit event parser。分页、total 与表单草稿沿用原逻辑。
+  "rpc-refresh-required",
   "recovery-complete",
   "poll-complete",
   "poll-boundary-complete",
@@ -21,6 +23,14 @@ const explorerBoundaryTelemetry = new Set([
   "circuit-open",
   "detached-async-failure",
 ])
+
+/** App 的入口筛选与查询边界共用同一分类，防止新协议提示在进入页面前被丢弃。 */
+export function classifyExplorerSessionTelemetry(type: string): "event" | "boundary" | "state" | null {
+  if (explorerBoundaryTelemetry.has(type)) return "boundary"
+  if (type === "event-applied") return "event"
+  if (["rpc-connecting", "connection-live", "recovery-start", "recovery-connection-retry"].includes(type)) return "state"
+  return null
+}
 
 export interface ExplorerEventInvalidation {
   readonly board: boolean

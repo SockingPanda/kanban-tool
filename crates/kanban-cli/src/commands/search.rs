@@ -35,7 +35,7 @@ pub(crate) enum SearchStatus {
     Archived,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &SearchArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &SearchArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let query = SearchTasksQuery {
         board: ctx.board.clone(),
@@ -47,7 +47,7 @@ pub(crate) fn run(ctx: &CliContext, args: &SearchArgs) -> Result<(), CliFailure>
         offset: args.offset,
         assignee: args.assignee.clone(),
     };
-    let response = client.search_tasks(&query)?;
+    let response = client.search_tasks(&query).await?;
     let data = response.data;
     if ctx.json {
         output::print_json(&CliSearchOutput::new(

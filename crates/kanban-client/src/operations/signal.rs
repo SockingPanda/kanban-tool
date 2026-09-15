@@ -1,14 +1,14 @@
 use kanban_protocol::{
     ConfirmSignalsResponse, GetSignalResponse, ListSignalsResponse, RecordSignalRequest,
     RecordSignalResponse, RejectSignalsResponse, ResolveSignalsResponse, ReviewSignalsRequest,
-    ReviewSignalsResponse, SignalQuery, SignalWire, SupersedeSignalsResponse,
+    ReviewSignalsResponse, SignalQuery, SupersedeSignalsResponse,
 };
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
 
 impl KanbanClient {
     /// 记录一个通用 signal，并在请求中固定当前 client actor。
-    pub fn record_signal(
+    pub async fn record_signal(
         &self,
         board: &str,
         request: &RecordSignalRequest,
@@ -16,86 +16,154 @@ impl KanbanClient {
         let board = required_board(board)?;
         let mut request = request.clone();
         request.actor = Some(self.actor.clone());
-        self.post(
-            &format!("/api/v1/boards/{}/signals", encode_path_segment(board)),
-            &request,
-        )
+        let response: kanban_protocol::RecordSignalResponse = rpc!(
+            self,
+            record_signal,
+            RecordSignalRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            request.clone()
+        )?;
+        Ok(response)
     }
 
-    pub fn list_signals(
+    pub async fn list_signals(
         &self,
         board: &str,
         query: &SignalQuery,
     ) -> Result<ListSignalsResponse, ClientError> {
         let board = required_board(board)?;
-        self.get(&signals_path(board, "signals", query))
+        let response: kanban_protocol::ListSignalsResponse = rpc!(
+            self,
+            list_signals,
+            ListSignalsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            query.clone(),
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn review_signals(
+    pub async fn review_signals(
         &self,
         board: &str,
         query: &SignalQuery,
     ) -> Result<ReviewSignalsResponse, ClientError> {
         let board = required_board(board)?;
-        self.get(&signals_path(board, "signals/review", query))
+        let response: kanban_protocol::ReviewSignalsResponse = rpc!(
+            self,
+            review_signals,
+            ReviewSignalsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            query.clone(),
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn get_signal(&self, signal_id: &str) -> Result<GetSignalResponse, ClientError> {
+    pub async fn get_signal(&self, signal_id: &str) -> Result<GetSignalResponse, ClientError> {
         let signal_id = required_signal_id(signal_id)?;
-        self.get(&format!(
-            "/api/v1/signals/{}",
-            encode_path_segment(signal_id)
-        ))
+        let response: kanban_protocol::GetSignalResponse = rpc!(
+            self,
+            get_signal,
+            GetSignalRequest,
+            kanban_protocol::SignalPath {
+                signal_id: signal_id.to_owned()
+            },
+            (),
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn confirm_signals(
+    pub async fn confirm_signals(
         &self,
         board: &str,
         request: &ReviewSignalsRequest,
     ) -> Result<ConfirmSignalsResponse, ClientError> {
-        self.review_signal_action(board, "confirm", request)
+        let board = required_board(board)?;
+        let mut request = request.clone();
+        request.actor = Some(self.actor.clone());
+        let response: kanban_protocol::ConfirmSignalsResponse = rpc!(
+            self,
+            confirm_signals,
+            ConfirmSignalsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            request.clone()
+        )?;
+        Ok(response)
     }
 
-    pub fn reject_signals(
+    pub async fn reject_signals(
         &self,
         board: &str,
         request: &ReviewSignalsRequest,
     ) -> Result<RejectSignalsResponse, ClientError> {
-        self.review_signal_action(board, "reject", request)
+        let board = required_board(board)?;
+        let mut request = request.clone();
+        request.actor = Some(self.actor.clone());
+        let response: kanban_protocol::RejectSignalsResponse = rpc!(
+            self,
+            reject_signals,
+            RejectSignalsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            request.clone()
+        )?;
+        Ok(response)
     }
 
-    pub fn resolve_signals(
+    pub async fn resolve_signals(
         &self,
         board: &str,
         request: &ReviewSignalsRequest,
     ) -> Result<ResolveSignalsResponse, ClientError> {
-        self.review_signal_action(board, "resolve", request)
+        let board = required_board(board)?;
+        let mut request = request.clone();
+        request.actor = Some(self.actor.clone());
+        let response: kanban_protocol::ResolveSignalsResponse = rpc!(
+            self,
+            resolve_signals,
+            ResolveSignalsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            request.clone()
+        )?;
+        Ok(response)
     }
 
-    pub fn supersede_signals(
+    pub async fn supersede_signals(
         &self,
         board: &str,
         request: &ReviewSignalsRequest,
     ) -> Result<SupersedeSignalsResponse, ClientError> {
-        self.review_signal_action(board, "supersede", request)
-    }
-
-    fn review_signal_action(
-        &self,
-        board: &str,
-        action: &str,
-        request: &ReviewSignalsRequest,
-    ) -> Result<kanban_protocol::DataEnvelope<Vec<SignalWire>>, ClientError> {
         let board = required_board(board)?;
         let mut request = request.clone();
         request.actor = Some(self.actor.clone());
-        self.post(
-            &format!(
-                "/api/v1/boards/{}/signals/{action}",
-                encode_path_segment(board)
-            ),
-            &request,
-        )
+        let response: kanban_protocol::SupersedeSignalsResponse = rpc!(
+            self,
+            supersede_signals,
+            SupersedeSignalsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.to_owned()
+            },
+            (),
+            request.clone()
+        )?;
+        Ok(response)
     }
 }
 
@@ -117,59 +185,15 @@ fn required_signal_id(signal_id: &str) -> Result<&str, ClientError> {
     Ok(signal_id)
 }
 
-fn signals_path(board: &str, suffix: &str, query: &SignalQuery) -> String {
-    let mut pairs = Vec::new();
-    for status in &query.status {
-        pairs.push(format!("status={}", encode_path_segment(status)));
-    }
-    for kind in &query.kind {
-        pairs.push(format!("kind={}", encode_path_segment(kind)));
-    }
-    if let Some(task_ref) = query.task_ref.as_deref().map(str::trim)
-        && !task_ref.is_empty()
-    {
-        pairs.push(format!("task_ref={}", encode_path_segment(task_ref)));
-    }
-    if query.include_all {
-        pairs.push("include_all=true".to_owned());
-    }
-    pairs.push(format!("limit={}", query.limit));
-    format!(
-        "/api/v1/boards/{}/{}?{}",
-        encode_path_segment(board),
-        suffix,
-        pairs.join("&")
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn signal_paths_are_encoded_and_stable() {
-        let path = signals_path(
-            "team/one #",
-            "signals/review",
-            &SignalQuery {
-                status: vec!["open".into(), "confirmed".into()],
-                kind: vec!["failure/observed".into()],
-                task_ref: Some("team/one#1".into()),
-                include_all: true,
-                limit: 12,
-            },
-        );
-        assert_eq!(
-            path,
-            "/api/v1/boards/team%2Fone%20%23/signals/review?status=open&status=confirmed&kind=failure%2Fobserved&task_ref=team%2Fone%231&include_all=true&limit=12"
-        );
-    }
-
-    #[test]
-    fn invalid_signal_identifiers_are_rejected_before_http() {
+    #[tokio::test]
+    async fn invalid_signal_identifiers_are_rejected_before_http() {
         let client = KanbanClient::new(crate::DEFAULT_SERVER_URL, "test").unwrap();
         assert_eq!(
-            client.get_signal("task#1").unwrap_err().code(),
+            client.get_signal("task#1").await.unwrap_err().code(),
             "invalid_input"
         );
         assert_eq!(
@@ -184,6 +208,7 @@ mod tests {
                         limit: 100,
                     },
                 )
+                .await
                 .unwrap_err()
                 .code(),
             "invalid_input"

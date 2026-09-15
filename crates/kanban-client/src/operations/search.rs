@@ -2,47 +2,84 @@ use kanban_protocol::{
     SearchStatusResponse, SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse,
 };
 
-use crate::{KanbanClient, error::ClientError, shared::search_tasks_path};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
 
 impl KanbanClient {
-    pub fn search_tasks(
+    pub async fn search_tasks(
         &self,
         query: &SearchTasksQuery,
     ) -> Result<SearchTasksResponse, ClientError> {
-        self.get(&search_tasks_path(query, false))
+        let response: kanban_protocol::SearchTasksResponse = rpc!(
+            self,
+            search_tasks,
+            SearchTasksRequest,
+            (),
+            query.clone(),
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn search_tasks_by_status(
+    pub async fn search_tasks_by_status(
         &self,
         query: &SearchTasksQuery,
     ) -> Result<SearchTasksByStatusResponse, ClientError> {
-        self.get(&search_tasks_path(query, true))
+        let response: kanban_protocol::SearchTasksByStatusResponse = rpc!(
+            self,
+            search_tasks_by_status,
+            SearchTasksByStatusRequest,
+            (),
+            query.clone(),
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn search_status(&self, board: &str) -> Result<SearchStatusResponse, ClientError> {
-        self.get(&format!(
-            "/api/v1/search/status?board={}",
-            crate::transport::encode_path_segment(board.trim())
-        ))
+    pub async fn search_status(&self, board: &str) -> Result<SearchStatusResponse, ClientError> {
+        let response: kanban_protocol::SearchStatusResponse = rpc!(
+            self,
+            search_status,
+            SearchStatusRequest,
+            (),
+            kanban_protocol::BoardQuery {
+                board: board.trim().to_owned()
+            },
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn rebuild_search_index(&self, board: &str) -> Result<SearchStatusResponse, ClientError> {
-        self.post(
-            &format!(
-                "/api/v1/search/index/rebuild?board={}",
-                crate::transport::encode_path_segment(board.trim())
-            ),
-            &serde_json::json!({}),
-        )
+    pub async fn rebuild_search_index(
+        &self,
+        board: &str,
+    ) -> Result<SearchStatusResponse, ClientError> {
+        let response: kanban_protocol::SearchStatusResponse = rpc!(
+            self,
+            rebuild_search_index,
+            RebuildSearchIndexRequest,
+            (),
+            kanban_protocol::BoardQuery {
+                board: board.trim().to_owned()
+            },
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn sync_search_index(&self, board: &str) -> Result<SearchStatusResponse, ClientError> {
-        self.post(
-            &format!(
-                "/api/v1/search/index/sync?board={}",
-                crate::transport::encode_path_segment(board.trim())
-            ),
-            &serde_json::json!({}),
-        )
+    pub async fn sync_search_index(
+        &self,
+        board: &str,
+    ) -> Result<SearchStatusResponse, ClientError> {
+        let response: kanban_protocol::SearchStatusResponse = rpc!(
+            self,
+            sync_search_index,
+            SyncSearchIndexRequest,
+            (),
+            kanban_protocol::BoardQuery {
+                board: board.trim().to_owned()
+            },
+            ()
+        )?;
+        Ok(response)
     }
 }

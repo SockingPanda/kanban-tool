@@ -57,8 +57,8 @@ impl KanbanMcp {
             offset: args.offset,
             assignee: args.assignee,
         };
-        let client = self.client.clone();
-        let response = call_client(move || client.search_tasks(&query)).await?;
+        let client = &self.client;
+        let response = call_client(client.search_tasks(&query)).await?;
         Ok(Json(response))
     }
 
@@ -71,8 +71,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<SearchStatusArgs>,
     ) -> Result<Json<SearchStatusResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let response = call_client(move || client.search_status(&board)).await?;
+        let client = &self.client;
+        let response = call_client(client.search_status(&board)).await?;
         Ok(Json(response))
     }
 
@@ -94,8 +94,8 @@ impl KanbanMcp {
             offset: args.offset,
             assignee: args.assignee,
         };
-        let client = self.client.clone();
-        let response = call_client(move || client.search_tasks_by_status(&query)).await?;
+        let client = &self.client;
+        let response = call_client(client.search_tasks_by_status(&query)).await?;
         Ok(Json(response))
     }
 
@@ -108,8 +108,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<SearchStatusArgs>,
     ) -> Result<Json<SearchStatusResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let response = call_client(move || client.rebuild_search_index(&board)).await?;
+        let client = &self.client;
+        let response = call_client(client.rebuild_search_index(&board)).await?;
         Ok(Json(response))
     }
 
@@ -122,8 +122,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<SearchStatusArgs>,
     ) -> Result<Json<SearchStatusResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let response = call_client(move || client.sync_search_index(&board)).await?;
+        let client = &self.client;
+        let response = call_client(client.sync_search_index(&board)).await?;
         Ok(Json(response))
     }
 }

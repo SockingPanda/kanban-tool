@@ -1,0 +1,21 @@
+//! 各具名 RPC 共用的应用服务适配；不持有数据库或网络生命周期。
+pub(crate) mod attachments;
+pub(crate) mod boards;
+pub(crate) mod comments;
+pub(crate) mod context;
+pub(crate) mod dependencies;
+pub(crate) mod entities;
+pub(crate) mod events;
+pub(crate) mod graph;
+pub(crate) mod health;
+pub(crate) mod labels;
+pub(crate) mod maintenance;
+pub(crate) mod ontology;
+pub(crate) mod runs;
+pub(crate) mod search;
+pub(crate) mod signals;
+pub(crate) mod stats;
+pub(crate) mod steps;
+pub(crate) mod support;
+pub(crate) mod tasks;
+pub(crate) mod vector;

@@ -4,13 +4,35 @@ mod shared;
 mod tools;
 
 use rmcp::{
-    ServerHandler, ServiceExt, handler::server::router::tool::ToolRouter, tool_handler,
+    ErrorData as McpError, RoleServer, ServerHandler, ServiceExt,
+    handler::server::{router::tool::ToolRouter, tool::ToolCallContext},
+    model::{CallToolRequestParams, CallToolResponse},
+    service::RequestContext,
+    tool_handler,
     transport::stdio,
 };
 use shared::KanbanMcp;
 
 #[tool_handler]
-impl ServerHandler for KanbanMcp {}
+impl ServerHandler for KanbanMcp {
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResponse, McpError> {
+        let cancellation = context.ct.clone();
+        let call = ToolCallContext::new(self, request, context);
+        let router = Self::tool_router();
+        // rmcp 取消通知只触发 token；丢弃 router Future 才会取消在途 gRPC。
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => {
+                Err(McpError::internal_error("MCP tool 调用已取消", None))
+            }
+            result = router.call(call) => result,
+        }
+    }
+}
 
 impl KanbanMcp {
     fn tool_router() -> ToolRouter<Self> {

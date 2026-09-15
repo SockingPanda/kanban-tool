@@ -21,6 +21,7 @@ use kanban_protocol::{
 
 pub type ToolResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
+pub mod rpc_contracts;
 pub mod web_assets;
 pub mod web_contracts;
 
@@ -870,3 +871,5 @@ mod tests {
         assert!(error.to_string().contains("excluded surface"), "{error}");
     }
 }
+
+pub mod rpc_codegen;

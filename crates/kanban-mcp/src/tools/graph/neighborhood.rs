@@ -44,9 +44,9 @@ impl KanbanMcp {
             limit_nodes: args.limit_nodes,
             include_archived_context: args.include_archived_context,
         };
-        let client = self.client.clone();
+        let client = &self.client;
         let task_id = args.task_id;
-        let value = call_client(move || client.task_neighborhood(&task_id, &query)).await?;
+        let value = call_client(client.task_neighborhood(&task_id, &query)).await?;
         Ok(Json(DataEnvelope::new(TaskNeighborhood {
             center_task_id: value.center_task_id,
             nodes: value.nodes,

@@ -22,18 +22,16 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskSpecifyArgs>,
     ) -> Result<Json<SpecifyTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.specify_task_by_selector(
-                &board,
-                &args.task_ref,
-                &SpecifyTaskRequest {
-                    actor: None,
-                    description: args.description,
-                    scheduled_at: args.scheduled_at,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.specify_task_by_selector(
+            &board,
+            &args.task_ref,
+            &SpecifyTaskRequest {
+                actor: None,
+                description: args.description,
+                scheduled_at: args.scheduled_at,
+            },
+        ))
         .await?;
         Ok(Json(SpecifyTaskResponse::new(task)))
     }

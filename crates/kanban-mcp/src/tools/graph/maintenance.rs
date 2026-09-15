@@ -26,8 +26,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<GraphMaintenanceArgs>,
     ) -> Result<Json<DataEnvelope<CliGraphMaintenance>>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let result = call_client(move || client.graph_rebuild(&board)).await?;
+        let client = &self.client;
+        let result = call_client(client.graph_rebuild(&board)).await?;
         Ok(Json(DataEnvelope::new(result)))
     }
 
@@ -40,8 +40,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<GraphMaintenanceArgs>,
     ) -> Result<Json<DataEnvelope<CliGraphMaintenance>>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let result = call_client(move || client.graph_sync(&board)).await?;
+        let client = &self.client;
+        let result = call_client(client.graph_sync(&board)).await?;
         Ok(Json(DataEnvelope::new(result)))
     }
 }

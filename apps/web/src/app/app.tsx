@@ -8,7 +8,7 @@ import { BoardLive } from "../features/tasks/index"
 import { boardSyncStatusForTelemetry } from "../application/workspace/board-live-state"
 import type { BoardTaskCanonicalReloadHandler, BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "../application/tasks/task-mutation-state"
 import type { BoardSyncStatus } from "../domain/tasks/board"
-import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation } from "../application/workspace/session-events"
+import { appendExplorerEventBatch, classifyExplorerSessionTelemetry, coalesceExplorerBoundary, explorerEventInvalidation } from "../application/workspace/session-events"
 import { parseBoardEvent, type BoardEventsBatch, type ExplorerEvent } from "../application/data/explorer-read-model";
 import type { SyncTelemetryEntry } from "../application/sync/contracts";
 import type { CanonicalBoardId } from "../application/sync/contracts"
@@ -17,27 +17,6 @@ import { PreferencesProvider } from "../platform/preferences/preferences-provide
 import { routePath, useAppRouter } from "../application/navigation/router"
 import { useWebRuntime } from "../lib/runtime-context"
 import { boardSessionRevision, hasActiveBoardSession, reconnectActiveBoardSession, subscribeBoardSessions } from "../application/workspace/board-session-registry"
-
-const explorerInvalidationTelemetry = new Set([
-  "connection-live",
-  "recovery-start",
-  "recovery-connection-retry",
-  "event-applied",
-  "recovery-complete",
-  "poll-complete",
-  "poll-boundary-complete",
-  "protocol-anomaly",
-  "isolation-anomaly",
-  "poll-protocol-anomaly",
-  "protocol-anomaly-suppressed",
-  "stalled",
-  "transport-failure",
-  "sink-effect-failure",
-  "recovery-failure",
-  "poll-failure",
-  "circuit-open",
-  "detached-async-failure",
-])
 
 const EVENT_APPLIED_DEBOUNCE_MS = 200
 
@@ -240,11 +219,12 @@ function useRuntimeThemedShellState() {
   }, [])
 
   const onSessionTelemetry = useCallback((entry: SyncTelemetryEntry) => {
-    if (!explorerInvalidationTelemetry.has(entry.type)) return
+    const kind = classifyExplorerSessionTelemetry(entry.type)
+    if (kind === null) return
     const nextSyncStatus = boardSyncStatusForTelemetry(entry.type)
     if (nextSyncStatus !== null) setSyncStatus(nextSyncStatus)
-    if (entry.type === "connection-live" || entry.type === "recovery-start" || entry.type === "recovery-connection-retry") return
-    if (entry.type === "event-applied") {
+    if (kind === "state") return
+    if (kind === "event") {
       const event = parseBoardEvent(entry.details?.event)
       if (!event || event.board_id !== entry.boardId) {
         scheduleBoundaryRefresh("protocol-anomaly")

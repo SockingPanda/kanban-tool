@@ -25,8 +25,8 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<RunLogArgs>,
     ) -> Result<Json<GetRunLogResponse>, McpError> {
-        let client = self.client.clone();
-        let log = call_client(move || client.get_run_log(&args.run_id)).await?;
+        let client = &self.client;
+        let log = call_client(client.get_run_log(&args.run_id)).await?;
         Ok(Json(GetRunLogResponse { data: log }))
     }
 }

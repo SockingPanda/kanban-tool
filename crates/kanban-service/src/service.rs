@@ -3,8 +3,8 @@ use std::{
     sync::Arc,
 };
 
+use crate::mutation_gate::MutationGate;
 use kanban_core::{Clock, SystemClock};
-use tokio::sync::Mutex;
 
 use crate::{KanbanError, Result, db::TursoStore};
 
@@ -18,7 +18,7 @@ pub struct KanbanService<C = SystemClock> {
     pub(crate) run_log_root: Option<Arc<PathBuf>>,
     pub(crate) attachment_root: Option<Arc<PathBuf>>,
     pub(crate) clock: C,
-    pub(crate) mutation_gate: Arc<Mutex<()>>,
+    pub(crate) mutation_gate: Arc<MutationGate>,
 }
 
 impl KanbanService<SystemClock> {

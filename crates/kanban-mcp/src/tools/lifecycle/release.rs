@@ -30,17 +30,15 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskReleaseArgs>,
     ) -> Result<Json<ReleaseTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.release_task_by_selector(
-                &board,
-                &args.task_ref,
-                &ReleaseTaskRequest {
-                    actor: None,
-                    claim_token: args.claim_token,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.release_task_by_selector(
+            &board,
+            &args.task_ref,
+            &ReleaseTaskRequest {
+                actor: None,
+                claim_token: args.claim_token,
+            },
+        ))
         .await?;
         Ok(Json(ReleaseTaskResponse::new(task)))
     }

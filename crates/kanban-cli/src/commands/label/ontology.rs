@@ -169,106 +169,141 @@ fn emit(ctx: &CliContext, value: Value) {
     }
 }
 
-pub(crate) fn run_semantics(
+pub(crate) async fn run_semantics(
     ctx: &CliContext,
     command: &SemanticsCommand,
 ) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let value = match command {
-        SemanticsCommand::List => client.list_label_semantics(&ctx.board)?,
-        SemanticsCommand::Show(args) => client.get_label_semantics(&ctx.board, &args.reference)?,
-        SemanticsCommand::Upsert(args) => client.upsert_label_semantics(
-            &ctx.board,
-            args.reference.as_deref().unwrap_or(""),
-            parse_json(&args.payload)?,
-        )?,
-        SemanticsCommand::Delete(args) => client.delete_label_semantics(
-            &ctx.board,
-            &args.reference,
-            &args.expected_hash,
-            &args.reason,
-        )?,
+        SemanticsCommand::List => client.list_label_semantics(&ctx.board).await?,
+        SemanticsCommand::Show(args) => {
+            client
+                .get_label_semantics(&ctx.board, &args.reference)
+                .await?
+        }
+        SemanticsCommand::Upsert(args) => {
+            client
+                .upsert_label_semantics(
+                    &ctx.board,
+                    args.reference.as_deref().unwrap_or(""),
+                    parse_json(&args.payload)?,
+                )
+                .await?
+        }
+        SemanticsCommand::Delete(args) => {
+            client
+                .delete_label_semantics(
+                    &ctx.board,
+                    &args.reference,
+                    &args.expected_hash,
+                    &args.reason,
+                )
+                .await?
+        }
     };
     emit(ctx, value);
     Ok(())
 }
 
-pub(crate) fn run_atoms(ctx: &CliContext, command: &AtomCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run_atoms(ctx: &CliContext, command: &AtomCommand) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let value = match command {
-        AtomCommand::List => client.list_label_atoms(&ctx.board)?,
-        AtomCommand::Explain(args) => client.explain_label_atom(&ctx.board, &args.reference)?,
+        AtomCommand::List => client.list_label_atoms(&ctx.board).await?,
+        AtomCommand::Explain(args) => {
+            client
+                .explain_label_atom(&ctx.board, &args.reference)
+                .await?
+        }
     };
     emit(ctx, value);
     Ok(())
 }
 
-pub(crate) fn run_atom_index(
+pub(crate) async fn run_atom_index(
     ctx: &CliContext,
     command: &AtomIndexCommand,
 ) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let value = match command {
-        AtomIndexCommand::Status => client.label_atom_index_status(&ctx.board)?,
-        AtomIndexCommand::Rebuild => client.rebuild_label_atom_index(&ctx.board)?,
-        AtomIndexCommand::Query(args) => client.query_label_atom_index(
-            &ctx.board,
-            args.q.as_deref(),
-            args.polarity.as_deref(),
-            args.limit,
-        )?,
+        AtomIndexCommand::Status => client.label_atom_index_status(&ctx.board).await?,
+        AtomIndexCommand::Rebuild => client.rebuild_label_atom_index(&ctx.board).await?,
+        AtomIndexCommand::Query(args) => {
+            client
+                .query_label_atom_index(
+                    &ctx.board,
+                    args.q.as_deref(),
+                    args.polarity.as_deref(),
+                    args.limit,
+                )
+                .await?
+        }
     };
     emit(ctx, value);
     Ok(())
 }
 
-pub(crate) fn run_suggest(ctx: &CliContext, args: &SuggestArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run_suggest(ctx: &CliContext, args: &SuggestArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let value = client.suggest_task_labels(
-        &args.task_ref,
-        Some(&ctx.board),
-        json!({
-            "limit": args.limit,
-            "candidate_limit": args.candidate_limit,
-            "atom_limit": args.atom_limit,
-            "max_selected_labels": args.max_selected_labels,
-            "min_score": args.min_score
-        }),
-    )?;
+    let value = client
+        .suggest_task_labels(
+            &args.task_ref,
+            Some(&ctx.board),
+            json!({
+                "limit": args.limit,
+                "candidate_limit": args.candidate_limit,
+                "atom_limit": args.atom_limit,
+                "max_selected_labels": args.max_selected_labels,
+                "min_score": args.min_score
+            }),
+        )
+        .await?;
     emit(ctx, value);
     Ok(())
 }
 
-pub(crate) fn run_propose(ctx: &CliContext, args: &ProposeArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run_propose(ctx: &CliContext, args: &ProposeArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let mut payload = parse_json(&args.payload)?;
     if let Some(name) = &args.name {
         payload["name"] = Value::String(name.clone());
     }
-    let value = client.propose_task_label(&ctx.board, &args.task_ref, payload)?;
+    let value = client
+        .propose_task_label(&ctx.board, &args.task_ref, payload)
+        .await?;
     emit(ctx, value);
     Ok(())
 }
 
-pub(crate) fn run_proposals(ctx: &CliContext, command: &ProposalCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run_proposals(
+    ctx: &CliContext,
+    command: &ProposalCommand,
+) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let value = match command {
-        ProposalCommand::List(args) => client.list_label_proposals(
-            &ctx.board,
-            args.task_ref.as_deref(),
-            args.status.as_deref(),
-        )?,
-        ProposalCommand::Show(args) => client.get_label_proposal(&args.reference)?,
-        ProposalCommand::Accept(args) => client.decide_label_proposal(
-            &args.proposal_id,
-            true,
-            json!({"reason": args.reason, "actor": ctx.actor()}),
-        )?,
-        ProposalCommand::Reject(args) => client.decide_label_proposal(
-            &args.proposal_id,
-            false,
-            json!({"reason": args.reason, "actor": ctx.actor()}),
-        )?,
+        ProposalCommand::List(args) => {
+            client
+                .list_label_proposals(&ctx.board, args.task_ref.as_deref(), args.status.as_deref())
+                .await?
+        }
+        ProposalCommand::Show(args) => client.get_label_proposal(&args.reference).await?,
+        ProposalCommand::Accept(args) => {
+            client
+                .decide_label_proposal(
+                    &args.proposal_id,
+                    true,
+                    json!({"reason": args.reason, "actor": ctx.actor()}),
+                )
+                .await?
+        }
+        ProposalCommand::Reject(args) => {
+            client
+                .decide_label_proposal(
+                    &args.proposal_id,
+                    false,
+                    json!({"reason": args.reason, "actor": ctx.actor()}),
+                )
+                .await?
+        }
     };
     emit(ctx, value);
     Ok(())
@@ -282,57 +317,92 @@ fn action_payload(args: &PayloadArgs, action_type: &str) -> Result<Value, CliFai
     Ok(payload)
 }
 
-pub(crate) fn run_ledger(ctx: &CliContext, command: &LedgerCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run_ledger(
+    ctx: &CliContext,
+    command: &LedgerCommand,
+) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let value = match command {
-        LedgerCommand::Signals(args) => client.list_label_ontology_signals(
-            &ctx.board,
-            json!({
-                "status": args.status,
-                "kind": args.kind,
-                "include_all": args.include_all,
-                "limit": args.limit
-            }),
-        )?,
-        LedgerCommand::Show(args) => client.get_label_ontology_signal(&args.reference)?,
-        LedgerCommand::Review(args) => client.review_label_ontology(
-            &ctx.board,
-            json!({
-                "group_by": args.group_by,
-                "include_all": args.include_all,
-                "limit": args.limit
-            }),
-        )?,
+        LedgerCommand::Signals(args) => {
+            client
+                .list_label_ontology_signals(
+                    &ctx.board,
+                    json!({
+                        "status": args.status,
+                        "kind": args.kind,
+                        "include_all": args.include_all,
+                        "limit": args.limit
+                    }),
+                )
+                .await?
+        }
+        LedgerCommand::Show(args) => client.get_label_ontology_signal(&args.reference).await?,
+        LedgerCommand::Review(args) => {
+            client
+                .review_label_ontology(
+                    &ctx.board,
+                    json!({
+                        "group_by": args.group_by,
+                        "include_all": args.include_all,
+                        "limit": args.limit
+                    }),
+                )
+                .await?
+        }
         LedgerCommand::Quality(args) => {
-            client.label_ontology_quality(&ctx.board, args.sample_limit)?
+            client
+                .label_ontology_quality(&ctx.board, args.sample_limit)
+                .await?
         }
         LedgerCommand::Confirm(args) => {
-            client.create_label_ontology_action(&ctx.board, action_payload(args, "confirm")?)?
+            client
+                .create_label_ontology_action(&ctx.board, action_payload(args, "confirm")?)
+                .await?
         }
         LedgerCommand::Reject(args) => {
-            client.create_label_ontology_action(&ctx.board, action_payload(args, "reject")?)?
+            client
+                .create_label_ontology_action(&ctx.board, action_payload(args, "reject")?)
+                .await?
         }
-        LedgerCommand::Resolve(args) => client
-            .create_label_ontology_action(&ctx.board, action_payload(args, "resolve_no_change")?)?,
+        LedgerCommand::Resolve(args) => {
+            client
+                .create_label_ontology_action(
+                    &ctx.board,
+                    action_payload(args, "resolve_no_change")?,
+                )
+                .await?
+        }
         LedgerCommand::Supersede(args) => {
-            client.create_label_ontology_action(&ctx.board, action_payload(args, "supersede")?)?
+            client
+                .create_label_ontology_action(&ctx.board, action_payload(args, "supersede")?)
+                .await?
         }
         LedgerCommand::Apply { command } => match command {
             ApplyCommand::Atom(args) => {
-                client.apply_label_ontology_atom(&ctx.board, parse_json(&args.payload)?)?
+                client
+                    .apply_label_ontology_atom(&ctx.board, parse_json(&args.payload)?)
+                    .await?
             }
         },
         LedgerCommand::Revert(args) => {
-            client.revert_label_ontology(&ctx.board, parse_json(&args.payload)?)?
+            client
+                .revert_label_ontology(&ctx.board, parse_json(&args.payload)?)
+                .await?
         }
         LedgerCommand::Validate(args) => {
-            client.validate_label_ontology(&ctx.board, parse_json(&args.payload)?)?
+            client
+                .validate_label_ontology(&ctx.board, parse_json(&args.payload)?)
+                .await?
         }
-        LedgerCommand::Record(args) => client.record_label_ontology_observation(
-            &ctx.board,
-            &args.task_ref,
-            parse_json(&args.payload)?,
-        )?,
+        LedgerCommand::Record(args) => {
+            client
+                .record_label_ontology_observation(
+                    &ctx.board,
+                    &args.task_ref,
+                    parse_json(&args.payload)?,
+                )
+                .await?
+        }
     };
     emit(ctx, value);
     Ok(())

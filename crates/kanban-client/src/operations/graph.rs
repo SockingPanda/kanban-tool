@@ -1,99 +1,123 @@
 use kanban_protocol::cli_helpers::{CliGraphMaintenance, CliGraphQueryOutput};
 use kanban_protocol::{
-    BoardTaskMap, BoardTaskMapQuery, BoardTaskMapResponse, GraphMaintenanceResponse,
-    GraphNeighborsQuery, GraphNeighborsResponse, GraphStatus, GraphStatusResponse,
-    TaskNeighborhood, TaskNeighborhoodQuery, TaskNeighborhoodResponse,
+    BoardTaskMap, BoardTaskMapQuery, GraphNeighborsQuery, GraphNeighborsResponse, GraphStatus,
+    TaskNeighborhood, TaskNeighborhoodQuery,
 };
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
 
 impl KanbanClient {
-    pub fn graph_status(&self, board: &str) -> Result<GraphStatus, ClientError> {
-        let path = format!("/api/v1/graph/status?board={}", encode_path_segment(board));
-        let response: GraphStatusResponse = self.get(&path)?;
+    pub async fn graph_status(&self, board: &str) -> Result<GraphStatus, ClientError> {
+        let response: kanban_protocol::GraphStatusResponse = rpc!(
+            self,
+            graph_status,
+            GraphStatusRequest,
+            (),
+            kanban_protocol::BoardQuery {
+                board: board.trim().to_owned()
+            },
+            ()
+        )?;
         Ok(response.data)
     }
 
-    pub fn graph_rebuild(&self, board: &str) -> Result<CliGraphMaintenance, ClientError> {
-        let response: GraphMaintenanceResponse = self.post(
-            &format!("/api/v1/graph/rebuild?board={}", encode_path_segment(board)),
-            &serde_json::json!({}),
+    pub async fn graph_rebuild(&self, board: &str) -> Result<CliGraphMaintenance, ClientError> {
+        let response: kanban_protocol::GraphMaintenanceResponse = rpc!(
+            self,
+            graph_rebuild,
+            GraphRebuildRequest,
+            (),
+            kanban_protocol::BoardQuery {
+                board: board.trim().to_owned()
+            },
+            ()
         )?;
         Ok(cli_graph_maintenance(response.data))
     }
 
-    pub fn graph_sync(&self, board: &str) -> Result<CliGraphMaintenance, ClientError> {
-        let response: GraphMaintenanceResponse = self.post(
-            &format!("/api/v1/graph/sync?board={}", encode_path_segment(board)),
-            &serde_json::json!({}),
+    pub async fn graph_sync(&self, board: &str) -> Result<CliGraphMaintenance, ClientError> {
+        let response: kanban_protocol::GraphMaintenanceResponse = rpc!(
+            self,
+            graph_sync,
+            GraphSyncRequest,
+            (),
+            kanban_protocol::BoardQuery {
+                board: board.trim().to_owned()
+            },
+            ()
         )?;
         Ok(cli_graph_maintenance(response.data))
     }
 
-    pub fn graph_neighbors(
+    pub async fn graph_neighbors(
         &self,
         query: &GraphNeighborsQuery,
     ) -> Result<GraphNeighborsResponse, ClientError> {
-        let mut path = format!(
-            "/api/v1/graph/neighbors?board={}&entity_uri={}&limit={}",
-            encode_path_segment(&query.board),
-            encode_path_segment(&query.entity_uri),
-            query.limit
-        );
-        if let Some(predicate) = query.predicate.as_deref() {
-            path.push_str("&predicate=");
-            path.push_str(&encode_path_segment(predicate));
-        }
-        self.get(&path)
+        let response: kanban_protocol::GraphNeighborsResponse = rpc!(
+            self,
+            graph_neighbors,
+            GraphNeighborsRequest,
+            (),
+            query.clone(),
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn graph_query(
+    pub async fn graph_query(
         &self,
         board: &str,
         query: &str,
         limit: usize,
     ) -> Result<CliGraphQueryOutput, ClientError> {
-        let path = format!(
-            "/api/v1/graph/query?board={}&query={}&limit={}",
-            encode_path_segment(board),
-            encode_path_segment(query),
-            limit
-        );
-        self.get(&path)
+        let response: kanban_protocol::cli_helpers::CliGraphQueryOutput = rpc!(
+            self,
+            graph_query,
+            GraphQueryRequest,
+            (),
+            kanban_protocol::GraphQueryQuery {
+                board: board.to_owned(),
+                query: query.to_owned(),
+                limit
+            },
+            ()
+        )?;
+        Ok(response)
     }
 
-    pub fn task_neighborhood(
+    pub async fn task_neighborhood(
         &self,
         task_id: &str,
         query: &TaskNeighborhoodQuery,
     ) -> Result<TaskNeighborhood, ClientError> {
-        let path = format!(
-            "/api/v1/tasks/{}/neighborhood?depth={}&limit_nodes={}&include_archived_context={}",
-            encode_path_segment(task_id),
-            query.depth,
-            query.limit_nodes,
-            query.include_archived_context
-        );
-        let response: TaskNeighborhoodResponse = self.get(&path)?;
+        let response: kanban_protocol::TaskNeighborhoodResponse = rpc!(
+            self,
+            task_neighborhood,
+            TaskNeighborhoodRequest,
+            kanban_protocol::TaskNeighborhoodPath {
+                task_id: task_id.to_owned()
+            },
+            query.clone(),
+            ()
+        )?;
         Ok(response.data)
     }
 
-    pub fn board_task_map(
+    pub async fn board_task_map(
         &self,
         board: &str,
         query: &BoardTaskMapQuery,
     ) -> Result<BoardTaskMap, ClientError> {
-        let path = format!(
-            "/api/v1/boards/{}/task-map?active_only={}&context_depth={}&limit_nodes={}&include_done_context={}&include_archived_context={}&hide_isolated={}",
-            encode_path_segment(board),
-            query.active_only,
-            query.context_depth,
-            query.limit_nodes,
-            query.include_done_context,
-            query.include_archived_context,
-            query.hide_isolated
-        );
-        let response: BoardTaskMapResponse = self.get(&path)?;
+        let response: kanban_protocol::BoardTaskMapResponse = rpc!(
+            self,
+            board_task_map,
+            BoardTaskMapRequest,
+            kanban_protocol::BoardTaskMapPath {
+                board: board.to_owned()
+            },
+            query.clone(),
+            ()
+        )?;
         Ok(response.data)
     }
 }

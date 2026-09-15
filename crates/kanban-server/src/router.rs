@@ -1,29 +1,52 @@
-use std::{
-    future::{Future, IntoFuture},
-    net::SocketAddr,
-};
+use std::{future::Future, net::SocketAddr};
 
-use axum::{
-    Router,
-    http::{HeaderValue, Method, header},
-};
+use axum::{Router, middleware};
 use tokio::sync::{oneshot, watch};
-use tower_http::{
-    cors::{AllowOrigin, CorsLayer},
-    trace::TraceLayer,
-};
+use tower_http::trace::TraceLayer;
 
 use crate::{
     dispatcher::{DispatcherConfig, ShutdownSignal, run_dispatcher},
+    grpc::{RpcLifetime, WorkspaceRpcMount, workspace_rpc_mount},
     http::operations,
     state::AppState,
     web::WebHostConfig,
 };
 
 pub fn build_router(state: AppState) -> Router {
-    operations::router(state)
-        .layer(desktop_cors_layer())
+    let origins = crate::web::desktop_origins();
+    application_router(state, origins.clone())
+        .router
+        .layer(crate::web::cors_layer(origins))
         .layer(TraceLayer::new_for_http())
+}
+
+fn application_router(state: AppState, origins: Vec<axum::http::HeaderValue>) -> WorkspaceRpcMount {
+    let mut mount =
+        workspace_rpc_mount(&state, origins).expect("Host Origin 来自经过验证的本地配置");
+    mount.router = operations::router(state).merge(mount.router);
+    mount
+}
+
+fn host_router(
+    state: AppState,
+    web: Option<WebHostConfig>,
+    listener: SocketAddr,
+) -> WorkspaceRpcMount {
+    let policy = crate::web::HostOriginPolicy::for_listener(listener);
+    let origins = policy.origins();
+    let mut mount = application_router(state, origins.clone());
+    if let Some(web) = web {
+        mount.router = crate::web::with_web(mount.router, web);
+    }
+    mount.router = mount
+        .router
+        .layer(crate::web::cors_layer(origins))
+        .layer(middleware::from_fn_with_state(
+            policy,
+            crate::web::enforce_host_origin,
+        ))
+        .layer(TraceLayer::new_for_http());
+    mount
 }
 
 pub fn build_production_router(
@@ -31,7 +54,7 @@ pub fn build_production_router(
     config: WebHostConfig,
     listener: SocketAddr,
 ) -> Router {
-    crate::web::build_production_router(state, config, listener)
+    host_router(state, Some(config), listener).router
 }
 
 pub async fn serve(addr: SocketAddr, state: AppState) -> std::io::Result<()> {
@@ -53,13 +76,18 @@ where
         ));
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    let mount = host_router(state.clone(), None, listener.local_addr()?);
+    let rpc = RpcLifetime(mount.runtime);
+    let shutdown_rpc = rpc.0.clone();
     let shutdown_state = state.clone();
-    axum::serve(listener, build_router(state))
-        .with_graceful_shutdown(async move {
-            shutdown.await;
-            shutdown_state.begin_event_stream_shutdown();
-        })
-        .await
+    let result = crate::connections::serve(listener, mount.router, async move {
+        shutdown.await;
+        shutdown_state.begin_event_stream_shutdown();
+        shutdown_rpc.stop().await;
+    })
+    .await;
+    rpc.stop().await;
+    result
 }
 
 pub async fn serve_with_shutdown_and_web<S>(
@@ -79,13 +107,18 @@ where
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let listener_addr = listener.local_addr()?;
+    let mount = host_router(state.clone(), Some(web), listener_addr);
+    let rpc = RpcLifetime(mount.runtime);
+    let shutdown_rpc = rpc.0.clone();
     let shutdown_state = state.clone();
-    axum::serve(listener, build_production_router(state, web, listener_addr))
-        .with_graceful_shutdown(async move {
-            shutdown.await;
-            shutdown_state.begin_event_stream_shutdown();
-        })
-        .await
+    let result = crate::connections::serve(listener, mount.router, async move {
+        shutdown.await;
+        shutdown_state.begin_event_stream_shutdown();
+        shutdown_rpc.stop().await;
+    })
+    .await;
+    rpc.stop().await;
+    result
 }
 
 pub async fn serve_with_dispatcher_shutdown(
@@ -123,17 +156,16 @@ async fn serve_with_dispatcher_shutdown_inner(
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let listener_addr = listener.local_addr()?;
     let shutdown_state = state.clone();
-    let router = web
-        .map(|web| build_production_router(state.clone(), web, listener_addr))
-        .unwrap_or_else(|| build_router(state.clone()));
+    let mount = host_router(state.clone(), web, listener_addr);
+    let rpc = RpcLifetime(mount.runtime);
     let (http_shutdown_tx, http_shutdown_rx) = oneshot::channel();
-    let mut http = std::pin::pin!(
-        axum::serve(listener, router)
-            .with_graceful_shutdown(async move {
-                let _ = http_shutdown_rx.await;
-            })
-            .into_future()
-    );
+    let mut http = std::pin::pin!(crate::connections::serve(
+        listener,
+        mount.router,
+        async move {
+            let _ = http_shutdown_rx.await;
+        }
+    ));
     let dispatcher_shutdown = shutdown.clone();
     let mut dispatcher = std::pin::pin!(async move {
         if let Some(config) = dispatcher {
@@ -148,6 +180,7 @@ async fn serve_with_dispatcher_shutdown_inner(
     let dispatcher_result = tokio::select! {
         result = &mut http => {
             shutdown_state.begin_event_stream_shutdown();
+            rpc.stop().await;
             return result;
         },
         result = &mut dispatcher => result,
@@ -160,6 +193,7 @@ async fn serve_with_dispatcher_shutdown_inner(
     if *shutdown.borrow() == ShutdownSignal::Force {
         return Err(force_shutdown_error());
     }
+    rpc.stop().await;
     http_shutdown_tx.send(()).ok();
     if let Err(error) = dispatcher_result {
         return Err(std::io::Error::other(error.to_string()));
@@ -198,31 +232,6 @@ async fn wait_for_force(shutdown: &mut watch::Receiver<ShutdownSignal>) {
 
 fn force_shutdown_error() -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Interrupted, "kanban serve 被强制停止")
-}
-
-fn desktop_cors_layer() -> CorsLayer {
-    CorsLayer::new()
-        .allow_origin(AllowOrigin::list([
-            HeaderValue::from_static("http://127.0.0.1:1421"),
-            HeaderValue::from_static("http://localhost:1421"),
-            HeaderValue::from_static("http://tauri.localhost"),
-            HeaderValue::from_static("https://tauri.localhost"),
-            HeaderValue::from_static("tauri://localhost"),
-        ]))
-        .allow_methods([
-            Method::GET,
-            Method::POST,
-            Method::PUT,
-            Method::PATCH,
-            Method::DELETE,
-            Method::OPTIONS,
-        ])
-        .allow_headers([
-            header::CONTENT_TYPE,
-            header::ACCEPT,
-            header::HeaderName::from_static("last-event-id"),
-            header::HeaderName::from_static("x-kb-actor"),
-        ])
 }
 
 #[cfg(test)]

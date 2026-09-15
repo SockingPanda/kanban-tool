@@ -29,17 +29,15 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskPlanNotRequiredArgs>,
     ) -> Result<Json<MarkExecutionPlanNotRequiredResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let plan = call_client(move || {
-            client.mark_execution_plan_not_required_by_selector(
-                &board,
-                &args.task_ref,
-                &MarkExecutionPlanNotRequiredRequest {
-                    reason: args.reason,
-                    actor: None,
-                },
-            )
-        })
+        let client = &self.client;
+        let plan = call_client(client.mark_execution_plan_not_required_by_selector(
+            &board,
+            &args.task_ref,
+            &MarkExecutionPlanNotRequiredRequest {
+                reason: args.reason,
+                actor: None,
+            },
+        ))
         .await?;
         Ok(Json(MarkExecutionPlanNotRequiredResponse { data: plan }))
     }

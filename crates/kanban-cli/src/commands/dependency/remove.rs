@@ -11,12 +11,16 @@ pub(crate) struct RemoveArgs {
     pub(crate) parent_task_ref: String,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let child = client.get_task_by_selector(&ctx.board, &args.child_task_ref)?;
-    let parent = client.get_task_by_selector(&ctx.board, &args.parent_task_ref)?;
-    let before = client.list_dependencies(&child.id)?;
-    let dependencies = client.remove_dependency(&child.id, &parent.id)?;
+    let child = client
+        .get_task_by_selector(&ctx.board, &args.child_task_ref)
+        .await?;
+    let parent = client
+        .get_task_by_selector(&ctx.board, &args.parent_task_ref)
+        .await?;
+    let before = client.list_dependencies(&child.id).await?;
+    let dependencies = client.remove_dependency(&child.id, &parent.id).await?;
     if ctx.json {
         let edge = before
             .edges

@@ -26,8 +26,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<BoardColumnsArgs>,
     ) -> Result<Json<ListBoardColumnsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let columns = call_client(move || client.list_board_columns(&board)).await?;
+        let client = &self.client;
+        let columns = call_client(client.list_board_columns(&board)).await?;
         Ok(Json(ListBoardColumnsResponse { data: columns }))
     }
 }

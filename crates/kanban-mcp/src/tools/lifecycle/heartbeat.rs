@@ -39,19 +39,17 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskHeartbeatArgs>,
     ) -> Result<Json<HeartbeatTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.heartbeat_task_by_selector(
-                &board,
-                &args.task_ref,
-                &HeartbeatTaskRequest {
-                    actor: None,
-                    claim_token: args.claim_token,
-                    ttl_ms: args.ttl_ms,
-                    note: args.note,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.heartbeat_task_by_selector(
+            &board,
+            &args.task_ref,
+            &HeartbeatTaskRequest {
+                actor: None,
+                claim_token: args.claim_token,
+                ttl_ms: args.ttl_ms,
+                note: args.note,
+            },
+        ))
         .await?;
         Ok(Json(HeartbeatTaskResponse::new(task)))
     }

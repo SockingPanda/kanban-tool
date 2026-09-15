@@ -43,19 +43,17 @@ impl KanbanMcp {
         let task_ref = args.task_ref;
         let after = args.after;
         let limit = args.limit;
-        let client = self.client.clone();
-        let response = call_client(move || {
-            let task_id = task_ref
-                .as_deref()
-                .map(|selector| client.resolve_task_id(&board, selector))
-                .transpose()?;
-            client.list_events(&ListEventsQuery {
-                board,
-                task_id,
-                after,
-                limit,
-            })
-        })
+        let client = &self.client;
+        let task_id = match task_ref.as_deref() {
+            Some(selector) => Some(call_client(client.resolve_task_id(&board, selector)).await?),
+            None => None,
+        };
+        let response = call_client(client.list_events(&ListEventsQuery {
+            board,
+            task_id,
+            after,
+            limit,
+        }))
         .await?;
         Ok(Json(response))
     }

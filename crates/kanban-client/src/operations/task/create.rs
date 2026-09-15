@@ -1,19 +1,24 @@
-use kanban_protocol::{ApiTask, CreateTaskRequest, CreateTaskResponse};
+use kanban_protocol::{ApiTask, CreateTaskRequest};
 
-use crate::{
-    KanbanClient, error::ClientError, shared::prepare_create_request,
-    transport::encode_path_segment,
-};
+use crate::{KanbanClient, error::ClientError, shared::prepare_create_request, transport::rpc};
 
 impl KanbanClient {
-    pub fn create_task(
+    pub async fn create_task(
         &self,
         board: &str,
         request: CreateTaskRequest,
     ) -> Result<ApiTask, ClientError> {
         let request = prepare_create_request(request);
-        let path = format!("/api/v1/boards/{}/tasks", encode_path_segment(board));
-        let response: CreateTaskResponse = self.post(&path, &request)?;
+        let response: kanban_protocol::CreateTaskResponse = rpc!(
+            self,
+            create_task,
+            CreateTaskRequest,
+            kanban_protocol::CreateTaskPath {
+                board: board.to_owned()
+            },
+            (),
+            request.clone()
+        )?;
         Ok(response.data)
     }
 }

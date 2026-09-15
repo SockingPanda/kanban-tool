@@ -1,37 +1,44 @@
 use kanban_protocol::{
     AddTaskLabelRequest, AddTaskLabelResponse, ApiLabel, ApiTask, BootstrapTaskLabelRequest,
-    BootstrapTaskLabelResponse, CreateBoardLabelRequest, CreateBoardLabelResponse,
-    DeleteBoardLabelResponse, DeleteBoardLabelResult, ListBoardLabelsResponse,
-    ListTaskLabelsResponse, RemoveTaskLabelResponse,
+    BootstrapTaskLabelResponse, CreateBoardLabelRequest, DeleteBoardLabelResult,
 };
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
 
 impl KanbanClient {
-    pub fn list_board_labels(&self, board: &str) -> Result<Vec<ApiLabel>, ClientError> {
-        let response: ListBoardLabelsResponse = self.get(&format!(
-            "/api/v1/boards/{}/labels",
-            encode_path_segment(board.trim())
-        ))?;
-        Ok(response.data)
-    }
-
-    pub fn create_board_label(
-        &self,
-        board: &str,
-        request: &CreateBoardLabelRequest,
-    ) -> Result<ApiLabel, ClientError> {
-        let response: CreateBoardLabelResponse = self.post(
-            &format!(
-                "/api/v1/boards/{}/labels",
-                encode_path_segment(board.trim())
-            ),
-            request,
+    pub async fn list_board_labels(&self, board: &str) -> Result<Vec<ApiLabel>, ClientError> {
+        let response: kanban_protocol::ListBoardLabelsResponse = rpc!(
+            self,
+            list_board_labels,
+            ListBoardLabelsRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.trim().to_owned()
+            },
+            (),
+            ()
         )?;
         Ok(response.data)
     }
 
-    pub fn delete_board_label(
+    pub async fn create_board_label(
+        &self,
+        board: &str,
+        request: &CreateBoardLabelRequest,
+    ) -> Result<ApiLabel, ClientError> {
+        let response: kanban_protocol::CreateBoardLabelResponse = rpc!(
+            self,
+            create_board_label,
+            CreateBoardLabelRequest,
+            kanban_protocol::BoardLabelPath {
+                board: board.trim().to_owned()
+            },
+            (),
+            request.clone()
+        )?;
+        Ok(response.data)
+    }
+
+    pub async fn delete_board_label(
         &self,
         board: &str,
         label_ref: &str,
@@ -39,35 +46,45 @@ impl KanbanClient {
     ) -> Result<DeleteBoardLabelResult, ClientError> {
         let board = require_board(board)?;
         let label_ref = require_label_ref(label_ref)?;
-        let query = if force { "?force=true" } else { "" };
-        let response: DeleteBoardLabelResponse = self.delete(&format!(
-            "/api/v1/boards/{}/labels/{}{}",
-            encode_path_segment(board),
-            encode_path_segment(label_ref),
-            query
-        ))?;
+        let response: kanban_protocol::DeleteBoardLabelResponse = rpc!(
+            self,
+            delete_board_label,
+            DeleteBoardLabelRequest,
+            kanban_protocol::DeleteBoardLabelPath {
+                board: board.to_owned(),
+                label_id: label_ref.to_owned()
+            },
+            kanban_protocol::DeleteBoardLabelQuery { force },
+            ()
+        )?;
         Ok(response.data)
     }
 
-    pub fn list_task_labels(&self, task_id: &str) -> Result<Vec<ApiLabel>, ClientError> {
+    pub async fn list_task_labels(&self, task_id: &str) -> Result<Vec<ApiLabel>, ClientError> {
         let task_id = require_task_id(task_id)?;
-        let response: ListTaskLabelsResponse = self.get(&format!(
-            "/api/v1/tasks/{}/labels",
-            encode_path_segment(task_id)
-        ))?;
+        let response: kanban_protocol::ListTaskLabelsResponse = rpc!(
+            self,
+            list_task_labels,
+            ListTaskLabelsRequest,
+            kanban_protocol::ListTaskLabelsPath {
+                task_id: task_id.to_owned()
+            },
+            (),
+            ()
+        )?;
         Ok(response.data)
     }
 
-    pub fn list_task_labels_by_selector(
+    pub async fn list_task_labels_by_selector(
         &self,
         board: &str,
         selector: &str,
     ) -> Result<Vec<ApiLabel>, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.list_task_labels(&task_id)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.list_task_labels(&task_id).await
     }
 
-    pub fn add_task_labels(
+    pub async fn add_task_labels(
         &self,
         task_id: &str,
         request: &AddTaskLabelRequest,
@@ -76,86 +93,108 @@ impl KanbanClient {
         request
             .label_names()
             .map_err(|error| ClientError::InvalidInput(error.to_owned()))?;
-        self.post(
-            &format!("/api/v1/tasks/{}/labels", encode_path_segment(task_id)),
-            request,
-        )
+        let response: kanban_protocol::AddTaskLabelResponse = rpc!(
+            self,
+            add_task_label,
+            AddTaskLabelRequest,
+            kanban_protocol::AddTaskLabelPath {
+                task_id: task_id.to_owned()
+            },
+            (),
+            request.clone()
+        )?;
+        Ok(response)
     }
 
-    pub fn add_task_label(
+    pub async fn add_task_label(
         &self,
         task_id: &str,
         request: &AddTaskLabelRequest,
     ) -> Result<AddTaskLabelResponse, ClientError> {
-        self.add_task_labels(task_id, request)
+        self.add_task_labels(task_id, request).await
     }
 
-    pub fn add_task_labels_by_selector(
+    pub async fn add_task_labels_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &AddTaskLabelRequest,
     ) -> Result<AddTaskLabelResponse, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.add_task_labels(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.add_task_labels(&task_id, request).await
     }
 
-    pub fn add_task_label_by_selector(
+    pub async fn add_task_label_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &AddTaskLabelRequest,
     ) -> Result<AddTaskLabelResponse, ClientError> {
         self.add_task_labels_by_selector(board, selector, request)
+            .await
     }
 
-    pub fn remove_task_label(&self, task_id: &str, label_id: &str) -> Result<ApiTask, ClientError> {
+    pub async fn remove_task_label(
+        &self,
+        task_id: &str,
+        label_id: &str,
+    ) -> Result<ApiTask, ClientError> {
         let task_id = require_task_id(task_id)?;
         let label_id = label_id.trim();
         if label_id.is_empty() {
             return Err(ClientError::InvalidInput("必须提供 label ID".to_owned()));
         }
-        let response: RemoveTaskLabelResponse = self.delete(&format!(
-            "/api/v1/tasks/{}/labels/{}",
-            encode_path_segment(task_id),
-            encode_path_segment(label_id)
-        ))?;
+        let response: kanban_protocol::RemoveTaskLabelResponse = rpc!(
+            self,
+            remove_task_label,
+            RemoveTaskLabelRequest,
+            kanban_protocol::RemoveTaskLabelPath {
+                task_id: task_id.to_owned(),
+                label_id: label_id.to_owned()
+            },
+            (),
+            ()
+        )?;
         Ok(response.data)
     }
 
-    pub fn remove_task_label_by_selector(
+    pub async fn remove_task_label_by_selector(
         &self,
         board: &str,
         selector: &str,
         label_id: &str,
     ) -> Result<ApiTask, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.remove_task_label(&task_id, label_id)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.remove_task_label(&task_id, label_id).await
     }
 
-    pub fn bootstrap_task_label(
+    pub async fn bootstrap_task_label(
         &self,
         task_id: &str,
         request: &BootstrapTaskLabelRequest,
     ) -> Result<BootstrapTaskLabelResponse, ClientError> {
         let task_id = require_task_id(task_id)?;
-        self.post(
-            &format!(
-                "/api/v1/tasks/{}/labels/bootstrap",
-                encode_path_segment(task_id)
-            ),
-            request,
-        )
+        let response: kanban_protocol::BootstrapTaskLabelResponse = rpc!(
+            self,
+            bootstrap_task_label,
+            BootstrapTaskLabelRequest,
+            kanban_protocol::TaskLabelSurfacePath {
+                task_id: task_id.to_owned()
+            },
+            (),
+            request.clone()
+        )?;
+        Ok(response)
     }
 
-    pub fn bootstrap_task_label_by_selector(
+    pub async fn bootstrap_task_label_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &BootstrapTaskLabelRequest,
     ) -> Result<BootstrapTaskLabelResponse, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.bootstrap_task_label(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.bootstrap_task_label(&task_id, request).await
     }
 }
 
@@ -191,24 +230,26 @@ fn require_label_ref(label_ref: &str) -> Result<&str, ClientError> {
 mod tests {
     use crate::{DEFAULT_SERVER_URL, KanbanClient};
 
-    #[test]
-    fn label_client_requires_global_task_ids() {
+    #[tokio::test]
+    async fn label_client_requires_global_task_ids() {
         let client = KanbanClient::new(DEFAULT_SERVER_URL, "test").unwrap();
         assert_eq!(
             client
                 .list_task_labels("default#1")
+                .await
                 .expect_err("board-local selector must be resolved first")
                 .code(),
             "invalid_input"
         );
     }
 
-    #[test]
-    fn label_delete_requires_board_and_label_reference() {
+    #[tokio::test]
+    async fn label_delete_requires_board_and_label_reference() {
         let client = KanbanClient::new(DEFAULT_SERVER_URL, "test").unwrap();
         assert_eq!(
             client
                 .delete_board_label(" ", "l_label", false)
+                .await
                 .expect_err("empty board must be rejected")
                 .code(),
             "invalid_input"
@@ -216,6 +257,7 @@ mod tests {
         assert_eq!(
             client
                 .delete_board_label("default", " ", false)
+                .await
                 .expect_err("empty label reference must be rejected")
                 .code(),
             "invalid_input"

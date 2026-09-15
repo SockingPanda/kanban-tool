@@ -28,6 +28,9 @@
 - `kanban-protocol`：当前 active wire DTO、error、schema 和 surface catalog；不承载数据库 row 或 store 规则。
 - `kanban-web-artifact`：复用 `kanban-protocol` value contract，负责绝对 Web dist 的 no-follow filesystem 校验与 immutable snapshot；不提供 HTTP/package 语义。
 - `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。
+- `kanban-live-core`：纯内存 Hub、快照、delta 与有界历史，不持有 persistence。
+- `kanban-rpc-proto`、`kanban-rpc-host`：当前迁移框架的生成协议、
+  Tower service；共享 application adapter 位于 `kanban-server`；正式归属收敛到 protocol/server，不能另开 canonical host。
 - `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：薄入口或 shell；`xtask` 负责离线仓库工具。
 - 依赖 ownership 和模块边界见 [`docs/architecture.md`](docs/architecture.md) 及 `$style`。
 

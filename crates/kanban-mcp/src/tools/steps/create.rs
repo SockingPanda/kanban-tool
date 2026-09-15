@@ -40,7 +40,7 @@ impl KanbanMcp {
     ) -> Result<Json<CreateStepResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
+        let client = &self.client;
         let request = CreateStepRequest {
             idempotency_key: args.idempotency_key,
             title: args.title,
@@ -51,8 +51,7 @@ impl KanbanMcp {
             actor: None,
         };
         let steps =
-            call_client(move || client.create_step_by_selector(&board, &task_ref, &request))
-                .await?;
+            call_client(client.create_step_by_selector(&board, &task_ref, &request)).await?;
         Ok(Json(CreateStepResponse { data: steps }))
     }
 }

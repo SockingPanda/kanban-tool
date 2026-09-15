@@ -46,6 +46,22 @@ pub use labels::{
     CreateBoardLabelCommand, DeleteBoardLabelCommand, DeleteBoardLabelRecord,
     RemoveTaskLabelCommand,
 };
+pub use ontology::{
+    DeleteLabelSemanticsCommand, LabelAtomExplainActionRecord, LabelAtomExplainRecord,
+    LabelAtomExplainSignalRecord, LabelAtomExplainValidationRecord, LabelAtomIndexHitRecord,
+    LabelAtomIndexQuery, LabelAtomIndexQueryRecord, LabelAtomIndexStatusRecord,
+    LabelOntologyActionRecord, LabelOntologyObservationRecord, LabelOntologyPrecisionRecall,
+    LabelOntologyQualityDenominator, LabelOntologyQualityDisagreement, LabelOntologyQualityRates,
+    LabelOntologyQualityRecord, LabelOntologyReviewAtomVariantRecord,
+    LabelOntologyReviewGroupRecord, LabelOntologyReviewLabelRefRecord, LabelOntologyReviewQuery,
+    LabelOntologySignalDetailRecord, LabelOntologySignalQuery, LabelOntologySignalRecord,
+    LabelProposalAttemptRecord, LabelProposalCommand, LabelProposalDecisionCommand,
+    LabelSemanticProposalRecord, LabelSuggestionCandidateRecord, LabelSuggestionEvidenceRecord,
+    LabelSuggestionOptions, LabelSuggestionResultRecord, OntologyActionCommand,
+    OntologyActorCommand, OntologyApplyAtomCommand, OntologyObservationCommand,
+    OntologyRevertCommand, OntologySignalCommand, OntologyValidateCommand,
+    UpsertLabelSemanticsCommand,
+};
 pub use relations::{
     RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationUpsertCommand,
 };

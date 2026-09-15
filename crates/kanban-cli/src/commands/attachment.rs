@@ -19,11 +19,11 @@ pub(crate) enum AttachmentCommand {
     Remove(remove::RemoveArgs),
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &AttachmentCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &AttachmentCommand) -> Result<(), CliFailure> {
     match command {
-        AttachmentCommand::Add(args) => add::run(ctx, args),
-        AttachmentCommand::List(args) => list::run(ctx, args),
-        AttachmentCommand::Download(args) => download::run(ctx, args),
-        AttachmentCommand::Remove(args) => remove::run(ctx, args),
+        AttachmentCommand::Add(args) => add::run(ctx, args).await,
+        AttachmentCommand::List(args) => list::run(ctx, args).await,
+        AttachmentCommand::Download(args) => download::run(ctx, args).await,
+        AttachmentCommand::Remove(args) => remove::run(ctx, args).await,
     }
 }

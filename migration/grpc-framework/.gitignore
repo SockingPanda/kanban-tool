@@ -1,0 +1,4 @@
+/target/
+/integration/main-adapter/target/
+/web/node_modules/
+/web/dist/

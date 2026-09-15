@@ -94,25 +94,23 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskUpdateArgs>,
     ) -> Result<Json<UpdateTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.update_task_by_selector(
-                &board,
-                &args.task_ref,
-                &UpdateTaskRequest {
-                    title: args.title,
-                    description: args.description,
-                    assignee: args.assignee,
-                    priority: args.priority,
-                    scheduled_at: args.scheduled_at,
-                    due_at: args.due_at,
-                    max_retries: args.max_retries,
-                    metadata: args.metadata,
-                    actor: None,
-                    expected_lock_version: args.expected_lock_version,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.update_task_by_selector(
+            &board,
+            &args.task_ref,
+            &UpdateTaskRequest {
+                title: args.title,
+                description: args.description,
+                assignee: args.assignee,
+                priority: args.priority,
+                scheduled_at: args.scheduled_at,
+                due_at: args.due_at,
+                max_retries: args.max_retries,
+                metadata: args.metadata,
+                actor: None,
+                expected_lock_version: args.expected_lock_version,
+            },
+        ))
         .await?;
         Ok(Json(UpdateTaskResponse::new(task)))
     }

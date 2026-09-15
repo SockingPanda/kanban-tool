@@ -11,21 +11,23 @@ pub(crate) struct ClaimArgs {
     pub(crate) ttl_ms: i64,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ClaimArgs,
 ) -> Result<(), CliFailure> {
-    let claim = client.claim_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &ClaimTaskRequest {
-            actor: None,
-            ttl_ms: args.ttl_ms,
-            worker_profile: None,
-            metadata: None,
-        },
-    )?;
+    let claim = client
+        .claim_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &ClaimTaskRequest {
+                actor: None,
+                ttl_ms: args.ttl_ms,
+                worker_profile: None,
+                metadata: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&ClaimTaskResponse::new(claim));
     } else {

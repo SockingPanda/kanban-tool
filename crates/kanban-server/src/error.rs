@@ -17,8 +17,8 @@ impl From<KanbanError> for ApiError {
     }
 }
 
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
+impl ApiError {
+    fn parts(self) -> (StatusCode, ErrorBody) {
         let (status, code) = match &self.0 {
             KanbanError::NotFound(_) => (StatusCode::NOT_FOUND, ApiErrorCode::NotFound),
             KanbanError::IdempotencyConflict(_) => {
@@ -63,13 +63,18 @@ impl IntoResponse for ApiError {
         } else {
             self.0.to_string()
         };
-        (
-            status,
-            Json(ErrorEnvelope {
-                error: ErrorBody { code, message },
-            }),
-        )
-            .into_response()
+        (status, ErrorBody { code, message })
+    }
+
+    pub(crate) fn into_wire(self) -> ErrorBody {
+        self.parts().1
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let (status, error) = self.parts();
+        (status, Json(ErrorEnvelope { error })).into_response()
     }
 }
 

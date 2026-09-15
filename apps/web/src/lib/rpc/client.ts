@@ -1,0 +1,18 @@
+import { createClient } from '@connectrpc/connect'
+import { createGrpcWebTransport } from '@connectrpc/connect-web'
+import { KanbanService } from '../../generated/rpc/kanban/v1/kanban_pb'
+import { WorkspaceService } from '../../generated/rpc/kanban/v1/workspace_pb'
+import { createRpcFetch } from './endpoint'
+
+/** 同一个 runtime 的查询、命令和持续更新共享 binary gRPC-Web transport。 */
+export function createRpcClients(baseUrl: string, fetcher?: typeof globalThis.fetch, onMessageBytes?: (bytes: number) => void) {
+  const transport = createGrpcWebTransport({
+    baseUrl,
+    useBinaryFormat: true,
+    fetch: createRpcFetch(baseUrl, fetcher, onMessageBytes),
+  })
+  return {
+    business: createClient(KanbanService, transport),
+    workspace: createClient(WorkspaceService, transport),
+  }
+}

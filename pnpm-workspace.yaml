@@ -1,5 +1,9 @@
 packages:
   - "apps/*"
+  - "migration/grpc-framework/web"
 
 allowBuilds:
   esbuild: true
+
+patchedDependencies:
+  '@bufbuild/protobuf@2.15.0': patches/@bufbuild__protobuf@2.15.0.patch

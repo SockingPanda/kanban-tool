@@ -1,0 +1,20 @@
+syntax = "proto3";
+package kanban.v1;
+
+message Empty {}
+
+// 真实业务动态字段的自然 JSON；signed/unsigned 分支保持整数精度。
+message JsonValue {
+  oneof kind {
+    Empty null_value = 1;
+    bool bool_value = 2;
+    string string_value = 3;
+    sint64 signed_value = 4;
+    uint64 unsigned_value = 5;
+    double float_value = 6;
+    JsonObject object_value = 7;
+    JsonArray array_value = 8;
+  }
+}
+message JsonObject { map<string, JsonValue> entries = 1; }
+message JsonArray { repeated JsonValue items = 1; }

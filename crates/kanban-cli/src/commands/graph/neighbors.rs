@@ -13,13 +13,16 @@ pub(crate) struct NeighborsArgs {
     pub(crate) limit: usize,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &NeighborsArgs) -> Result<(), CliFailure> {
-    let response = ctx.client()?.graph_neighbors(&GraphNeighborsQuery {
-        board: ctx.board.clone(),
-        entity_uri: args.entity_uri.clone(),
-        predicate: args.predicate.clone(),
-        limit: args.limit,
-    })?;
+pub(crate) async fn run(ctx: &CliContext, args: &NeighborsArgs) -> Result<(), CliFailure> {
+    let response = ctx
+        .client()?
+        .graph_neighbors(&GraphNeighborsQuery {
+            board: ctx.board.clone(),
+            entity_uri: args.entity_uri.clone(),
+            predicate: args.predicate.clone(),
+            limit: args.limit,
+        })
+        .await?;
     let relations = response
         .data
         .into_iter()

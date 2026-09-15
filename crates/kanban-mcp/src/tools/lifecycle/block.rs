@@ -35,19 +35,17 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskBlockArgs>,
     ) -> Result<Json<BlockTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.block_task_by_selector(
-                &board,
-                &args.task_ref,
-                &BlockTaskRequest {
-                    actor: None,
-                    reason: args.reason,
-                    claim_token: args.claim_token,
-                    force: args.force,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.block_task_by_selector(
+            &board,
+            &args.task_ref,
+            &BlockTaskRequest {
+                actor: None,
+                reason: args.reason,
+                claim_token: args.claim_token,
+                force: args.force,
+            },
+        ))
         .await?;
         Ok(Json(BlockTaskResponse::new(task)))
     }

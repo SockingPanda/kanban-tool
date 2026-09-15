@@ -21,17 +21,15 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskReopenArgs>,
     ) -> Result<Json<ReopenTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.reopen_task_by_selector(
-                &board,
-                &args.task_ref,
-                &ReopenTaskRequest {
-                    actor: None,
-                    reason: args.reason,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.reopen_task_by_selector(
+            &board,
+            &args.task_ref,
+            &ReopenTaskRequest {
+                actor: None,
+                reason: args.reason,
+            },
+        ))
         .await?;
         Ok(Json(ReopenTaskResponse::new(task)))
     }

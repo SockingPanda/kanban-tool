@@ -10,12 +10,14 @@ pub(crate) struct RemoveArgs {
     pub(crate) step_ref: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &RemoveArgs,
 ) -> Result<(), CliFailure> {
-    let before = client.list_steps_by_selector(&ctx.board, &args.task_ref)?;
+    let before = client
+        .list_steps_by_selector(&ctx.board, &args.task_ref)
+        .await?;
     let step_id = resolve_step_id(&before, &args.step_ref)?;
     let removed = before
         .steps
@@ -27,7 +29,9 @@ pub(crate) fn run(
             message: format!("step 响应缺少 {step_id}"),
             exit_code: 2,
         })?;
-    client.remove_step_by_selector(&ctx.board, &args.task_ref, &args.step_ref)?;
+    client
+        .remove_step_by_selector(&ctx.board, &args.task_ref, &args.step_ref)
+        .await?;
     if ctx.json {
         output::print_json(&CliTaskStepRemoveOutput::new(CliTaskStepRemoveResult {
             removed: true,

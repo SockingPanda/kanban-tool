@@ -1,0 +1,992 @@
+// @generated: xtask rpc-codegen
+syntax = "proto3";
+package kanban.v1;
+import "kanban/v1/common.proto";
+import "kanban/v1/dto.proto";
+
+service KanbanService {
+  rpc GetHealth(GetHealthRequest) returns (GetHealthResponse);
+  rpc ListBoards(ListBoardsRequest) returns (ListBoardsResponse);
+  rpc CreateBoard(CreateBoardRequest) returns (CreateBoardResponse);
+  rpc GetBoard(GetBoardRequest) returns (GetBoardResponse);
+  rpc ArchiveBoard(ArchiveBoardRequest) returns (ArchiveBoardResponse);
+  rpc ListBoardColumns(ListBoardColumnsRequest) returns (ListBoardColumnsResponse);
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc ListTasksByStatus(ListTasksByStatusRequest) returns (ListTasksByStatusResponse);
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
+  rpc SpecifyTask(SpecifyTaskRequest) returns (SpecifyTaskResponse);
+  rpc PromoteTask(PromoteTaskRequest) returns (PromoteTaskResponse);
+  rpc ClaimTask(ClaimTaskRequest) returns (ClaimTaskResponse);
+  rpc ReopenTask(ReopenTaskRequest) returns (ReopenTaskResponse);
+  rpc ReclaimTask(ReclaimTaskRequest) returns (ReclaimTaskResponse);
+  rpc HeartbeatTask(HeartbeatTaskRequest) returns (HeartbeatTaskResponse);
+  rpc ReleaseTask(ReleaseTaskRequest) returns (ReleaseTaskResponse);
+  rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskResponse);
+  rpc SubmitReviewTask(SubmitReviewTaskRequest) returns (SubmitReviewTaskResponse);
+  rpc BlockTask(BlockTaskRequest) returns (BlockTaskResponse);
+  rpc UnblockTask(UnblockTaskRequest) returns (UnblockTaskResponse);
+  rpc ArchiveTask(ArchiveTaskRequest) returns (ArchiveTaskResponse);
+  rpc ListSteps(ListStepsRequest) returns (ListStepsResponse);
+  rpc CreateStep(CreateStepRequest) returns (CreateStepResponse);
+  rpc UpdateStep(UpdateStepRequest) returns (UpdateStepResponse);
+  rpc RemoveStep(RemoveStepRequest) returns (RemoveStepResponse);
+  rpc CompleteStep(CompleteStepRequest) returns (CompleteStepResponse);
+  rpc SkipStep(SkipStepRequest) returns (SkipStepResponse);
+  rpc ReopenStep(ReopenStepRequest) returns (ReopenStepResponse);
+  rpc MarkExecutionPlanNotRequired(MarkExecutionPlanNotRequiredRequest) returns (MarkExecutionPlanNotRequiredResponse);
+  rpc ListDependencies(ListDependenciesRequest) returns (ListDependenciesResponse);
+  rpc AddDependency(AddDependencyRequest) returns (AddDependencyResponse);
+  rpc RemoveDependency(RemoveDependencyRequest) returns (RemoveDependencyResponse);
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+  rpc GetRunLog(GetRunLogRequest) returns (GetRunLogResponse);
+  rpc ListComments(ListCommentsRequest) returns (ListCommentsResponse);
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse);
+  rpc ListAttachments(ListAttachmentsRequest) returns (ListAttachmentsResponse);
+  rpc CreateAttachment(CreateAttachmentRequest) returns (CreateAttachmentResponse);
+  rpc DownloadAttachment(DownloadAttachmentRequest) returns (DownloadAttachmentResponse);
+  rpc DeleteAttachment(DeleteAttachmentRequest) returns (DeleteAttachmentResponse);
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+  rpc ListTaskLabels(ListTaskLabelsRequest) returns (ListTaskLabelsResponse);
+  rpc AddTaskLabel(AddTaskLabelRequest) returns (AddTaskLabelResponse);
+  rpc BootstrapTaskLabel(BootstrapTaskLabelRequest) returns (BootstrapTaskLabelResponse);
+  rpc RemoveTaskLabel(RemoveTaskLabelRequest) returns (RemoveTaskLabelResponse);
+  rpc ListBoardLabels(ListBoardLabelsRequest) returns (ListBoardLabelsResponse);
+  rpc ListBoardLabelProposals(ListBoardLabelProposalsRequest) returns (ListBoardLabelProposalsResponse);
+  rpc CreateBoardLabel(CreateBoardLabelRequest) returns (CreateBoardLabelResponse);
+  rpc DeleteBoardLabel(DeleteBoardLabelRequest) returns (DeleteBoardLabelResponse);
+  rpc ListLabelSemantics(ListLabelSemanticsRequest) returns (ListLabelSemanticsResponse);
+  rpc GetLabelSemantics(GetLabelSemanticsRequest) returns (GetLabelSemanticsResponse);
+  rpc UpsertLabelSemantics(UpsertLabelSemanticsRequest) returns (UpsertLabelSemanticsResponse);
+  rpc DeleteLabelSemantics(DeleteLabelSemanticsRequest) returns (DeleteLabelSemanticsResponse);
+  rpc ListLabelAtoms(ListLabelAtomsRequest) returns (ListLabelAtomsResponse);
+  rpc ExplainLabelAtom(ExplainLabelAtomRequest) returns (ExplainLabelAtomResponse);
+  rpc LabelAtomIndexStatus(LabelAtomIndexStatusRequest) returns (LabelAtomIndexStatusResponse);
+  rpc RebuildLabelAtomIndex(RebuildLabelAtomIndexRequest) returns (RebuildLabelAtomIndexResponse);
+  rpc QueryLabelAtomIndex(QueryLabelAtomIndexRequest) returns (QueryLabelAtomIndexResponse);
+  rpc ListSignals(ListSignalsRequest) returns (ListSignalsResponse);
+  rpc ReviewSignals(ReviewSignalsRequest) returns (ReviewSignalsResponse);
+  rpc GetSignal(GetSignalRequest) returns (GetSignalResponse);
+  rpc RecordSignal(RecordSignalRequest) returns (RecordSignalResponse);
+  rpc ConfirmSignals(ConfirmSignalsRequest) returns (ConfirmSignalsResponse);
+  rpc RejectSignals(RejectSignalsRequest) returns (RejectSignalsResponse);
+  rpc ResolveSignals(ResolveSignalsRequest) returns (ResolveSignalsResponse);
+  rpc SupersedeSignals(SupersedeSignalsRequest) returns (SupersedeSignalsResponse);
+  rpc SuggestTaskLabels(SuggestTaskLabelsRequest) returns (SuggestTaskLabelsResponse);
+  rpc ListTaskLabelProposals(ListTaskLabelProposalsRequest) returns (ListTaskLabelProposalsResponse);
+  rpc ProposeTaskLabel(ProposeTaskLabelRequest) returns (ProposeTaskLabelResponse);
+  rpc RecordLabelOntologyObservation(RecordLabelOntologyObservationRequest) returns (RecordLabelOntologyObservationResponse);
+  rpc ListLabelOntologySignals(ListLabelOntologySignalsRequest) returns (ListLabelOntologySignalsResponse);
+  rpc ReviewLabelOntology(ReviewLabelOntologyRequest) returns (ReviewLabelOntologyResponse);
+  rpc CreateLabelOntologyAction(CreateLabelOntologyActionRequest) returns (CreateLabelOntologyActionResponse);
+  rpc ApplyLabelOntologyAtom(ApplyLabelOntologyAtomRequest) returns (ApplyLabelOntologyAtomResponse);
+  rpc RevertLabelOntologyMutation(RevertLabelOntologyMutationRequest) returns (RevertLabelOntologyMutationResponse);
+  rpc ValidateLabelOntologyAction(ValidateLabelOntologyActionRequest) returns (ValidateLabelOntologyActionResponse);
+  rpc GetLabelOntologySignal(GetLabelOntologySignalRequest) returns (GetLabelOntologySignalResponse);
+  rpc GetLabelProposal(GetLabelProposalRequest) returns (GetLabelProposalResponse);
+  rpc AcceptLabelProposal(AcceptLabelProposalRequest) returns (AcceptLabelProposalResponse);
+  rpc RejectLabelProposal(RejectLabelProposalRequest) returns (RejectLabelProposalResponse);
+  rpc BoardTaskMap(BoardTaskMapRequest) returns (BoardTaskMapResponse);
+  rpc TaskNeighborhood(TaskNeighborhoodRequest) returns (TaskNeighborhoodResponse);
+  rpc SearchTasks(SearchTasksRequest) returns (SearchTasksResponse);
+  rpc SearchTasksByStatus(SearchTasksByStatusRequest) returns (SearchTasksByStatusResponse);
+  rpc SearchStatus(SearchStatusRequest) returns (SearchStatusResponse);
+  rpc RebuildSearchIndex(RebuildSearchIndexRequest) returns (RebuildSearchIndexResponse);
+  rpc SyncSearchIndex(SyncSearchIndexRequest) returns (SyncSearchIndexResponse);
+  rpc BuildContext(BuildContextRequest) returns (BuildContextResponse);
+  rpc GraphStatus(GraphStatusRequest) returns (GraphStatusResponse);
+  rpc GraphNeighbors(GraphNeighborsRequest) returns (GraphNeighborsResponse);
+  rpc GraphQuery(GraphQueryRequest) returns (GraphQueryResponse);
+  rpc GraphRebuild(GraphRebuildRequest) returns (GraphRebuildResponse);
+  rpc GraphSync(GraphSyncRequest) returns (GraphSyncResponse);
+  rpc ListEntities(ListEntitiesRequest) returns (ListEntitiesResponse);
+  rpc UpsertEntity(UpsertEntityRequest) returns (UpsertEntityResponse);
+  rpc GetEntity(GetEntityRequest) returns (GetEntityResponse);
+  rpc VectorStatus(VectorStatusRequest) returns (VectorStatusResponse);
+  rpc VectorConfigure(VectorConfigureRequest) returns (VectorConfigureResponse);
+  rpc VectorRebuild(VectorRebuildRequest) returns (VectorRebuildResponse);
+  rpc VectorSync(VectorSyncRequest) returns (VectorSyncResponse);
+  rpc VectorQueryChunks(VectorQueryChunksRequest) returns (VectorQueryChunksResponse);
+  rpc VectorQueryLabelAtoms(VectorQueryLabelAtomsRequest) returns (VectorQueryLabelAtomsResponse);
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+  rpc Doctor(DoctorRequest) returns (DoctorResponse);
+  rpc Checkpoint(CheckpointRequest) returns (CheckpointResponse);
+  rpc MaintenanceBackup(MaintenanceBackupRequest) returns (MaintenanceBackupResponse);
+  rpc MaintenanceExport(MaintenanceExportRequest) returns (MaintenanceExportResponse);
+  rpc MaintenanceImport(MaintenanceImportRequest) returns (MaintenanceImportResponse);
+  rpc MaintenanceVacuum(MaintenanceVacuumRequest) returns (MaintenanceVacuumResponse);
+  rpc MaintenanceStatus(MaintenanceStatusRequest) returns (MaintenanceStatusResponse);
+  rpc MaintenanceRun(MaintenanceRunRequest) returns (MaintenanceRunResponse);
+  rpc MaintenanceRebuild(MaintenanceRebuildRequest) returns (MaintenanceRebuildResponse);
+  rpc MaintenanceCleanup(MaintenanceCleanupRequest) returns (MaintenanceCleanupResponse);
+  rpc MaintenanceImportV30(MaintenanceImportV30Request) returns (MaintenanceImportV30Response);
+  rpc GetTaskDetails(GetTaskDetailsRequest) returns (GetTaskDetailsResponse);
+  rpc GetLabelOntologyQuality(GetLabelOntologyQualityRequest) returns (GetLabelOntologyQualityResponse);
+}
+
+message ErrorDetail {
+  DtoApiErrorCode code = 1;
+  string message = 2;
+  bool retryable = 3;
+}
+
+// api.health
+message GetHealthRequest {
+
+}
+// api.list-boards
+message ListBoardsRequest {
+  optional bool include_archived = 1;
+}
+// api.create-board
+message CreateBoardRequest {
+  optional string slug = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string actor = 4;
+}
+// api.get-board
+message GetBoardRequest {
+  optional string board = 1;
+}
+// api.archive-board
+message ArchiveBoardRequest {
+  optional string board = 1;
+  optional string actor = 2;
+}
+// api.list-board-columns
+message ListBoardColumnsRequest {
+  optional string board = 1;
+}
+// api.list-tasks
+message ListTasksRequest {
+  optional string board = 1;
+  repeated DtoApiTaskStatus status = 2;
+  repeated DtoApiTaskPriority priority = 3;
+  repeated DtoTaskReadLabel label = 4;
+  repeated DtoTaskReadPlanFilter plan_filter = 5;
+  optional string assignee = 6;
+  optional string q = 7;
+  optional bool include_archived = 8;
+  optional uint64 limit = 9;
+  optional uint64 offset = 10;
+  optional DtoTaskReadSort sort = 11;
+}
+// api.list-tasks-by-status
+message ListTasksByStatusRequest {
+  optional string board = 1;
+  repeated DtoApiTaskStatus status = 2;
+  repeated DtoApiTaskPriority priority = 3;
+  repeated DtoTaskReadLabel label = 4;
+  repeated DtoTaskReadPlanFilter plan_filter = 5;
+  optional string assignee = 6;
+  optional string q = 7;
+  optional bool include_archived = 8;
+  optional uint64 limit = 9;
+  optional uint64 offset = 10;
+  optional DtoTaskReadSort sort = 11;
+}
+// api.create-task
+message CreateTaskRequest {
+  optional string board = 1;
+  optional string task_id = 2;
+  optional string idempotency_key = 3;
+  optional string title = 4;
+  optional string description = 5;
+  optional DtoApiCreateTaskStatus status = 6;
+  optional string assignee = 7;
+  optional int64 priority = 8;
+  optional int64 scheduled_at = 9;
+  optional int64 due_at = 10;
+  optional int64 max_retries = 11;
+  MapOfJsonValue metadata = 12;
+  repeated string labels = 13;
+  repeated string depends_on = 14;
+  optional string actor = 15;
+}
+// api.get-task
+message GetTaskRequest {
+  optional string task_id = 1;
+  optional string include = 2;
+}
+// api.update-task
+message UpdateTaskRequest {
+  optional string task_id = 1;
+  optional string title = 2;
+  PatchString description = 3;
+  PatchString assignee = 4;
+  optional int64 priority = 5;
+  PatchI64 scheduled_at = 6;
+  PatchI64 due_at = 7;
+  PatchI64 max_retries = 8;
+  PatchJsonValue metadata = 9;
+  optional string actor = 10;
+  optional int64 expected_lock_version = 11;
+}
+// api.specify-task
+message SpecifyTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional string description = 3;
+  optional int64 scheduled_at = 4;
+}
+// api.promote-task
+message PromoteTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+}
+// api.claim-task
+message ClaimTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional int64 ttl_ms = 3;
+  optional string worker_profile = 4;
+  JsonValue metadata = 5;
+}
+// api.reopen-task
+message ReopenTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional string reason = 3;
+}
+// api.reclaim-task
+message ReclaimTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional bool force = 3;
+  optional DtoReclaimTargetStatus to_status = 4;
+  optional string reason = 5;
+}
+// api.heartbeat-task
+message HeartbeatTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional string claim_token = 3;
+  optional int64 ttl_ms = 4;
+  optional string note = 5;
+}
+// api.release-task
+message ReleaseTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional string claim_token = 3;
+}
+// api.complete-task
+message CompleteTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional string claim_token = 3;
+  optional bool force = 4;
+  optional string summary = 5;
+  JsonValue result = 6;
+}
+// api.submit-review-task
+message SubmitReviewTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional string claim_token = 3;
+  optional bool force = 4;
+  optional string summary = 5;
+}
+// api.block-task
+message BlockTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional string reason = 3;
+  optional string claim_token = 4;
+  optional bool force = 5;
+}
+// api.unblock-task
+message UnblockTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+}
+// api.archive-task
+message ArchiveTaskRequest {
+  optional string task_id = 1;
+  optional string actor = 2;
+  optional bool force = 3;
+}
+// api.list-steps
+message ListStepsRequest {
+  optional string task_id = 1;
+}
+// api.create-step
+message CreateStepRequest {
+  optional string task_id = 1;
+  optional string idempotency_key = 2;
+  optional string title = 3;
+  optional string body = 4;
+  optional string linked_task_ref = 5;
+  optional int64 position = 6;
+  optional bool required = 7;
+  optional string actor = 8;
+}
+// api.update-step
+message UpdateStepRequest {
+  optional string task_id = 1;
+  optional string step_id = 2;
+  optional string title = 3;
+  optional string body = 4;
+  optional string linked_task_ref = 5;
+  optional bool unlink_task = 6;
+  optional int64 position = 7;
+  optional bool required = 8;
+  optional string actor = 9;
+}
+// api.remove-step
+message RemoveStepRequest {
+  optional string task_id = 1;
+  optional string step_id = 2;
+}
+// api.complete-step
+message CompleteStepRequest {
+  optional string task_id = 1;
+  optional string step_id = 2;
+  optional string note = 3;
+  optional string actor = 4;
+}
+// api.skip-step
+message SkipStepRequest {
+  optional string task_id = 1;
+  optional string step_id = 2;
+  optional string reason = 3;
+  optional string actor = 4;
+}
+// api.reopen-step
+message ReopenStepRequest {
+  optional string task_id = 1;
+  optional string step_id = 2;
+  optional string reason = 3;
+  optional string actor = 4;
+}
+// api.mark-execution-plan-not-required
+message MarkExecutionPlanNotRequiredRequest {
+  optional string task_id = 1;
+  optional string reason = 2;
+  optional string actor = 3;
+}
+// api.list-dependencies
+message ListDependenciesRequest {
+  optional string task_id = 1;
+}
+// api.add-dependency
+message AddDependencyRequest {
+  optional string task_id = 1;
+  optional string parent_task_id = 2;
+  optional string actor = 3;
+}
+// api.remove-dependency
+message RemoveDependencyRequest {
+  optional string child_task_id = 1;
+  optional string parent_task_id = 2;
+}
+// api.list-runs
+message ListRunsRequest {
+  optional string task_id = 1;
+}
+// api.get-run
+message GetRunRequest {
+  optional string run_id = 1;
+}
+// api.get-run-log
+message GetRunLogRequest {
+  optional string run_id = 1;
+}
+// api.list-comments
+message ListCommentsRequest {
+  optional string task_id = 1;
+}
+// api.create-comment
+message CreateCommentRequest {
+  optional string task_id = 1;
+  optional string idempotency_key = 2;
+  optional string author = 3;
+  optional string body = 4;
+  optional DtoCommentsCommentKind kind = 5;
+  optional DtoCommentsCommentAuthorType author_type = 6;
+  optional string agent_type = 7;
+  JsonValue metadata = 8;
+}
+// api.list-attachments
+message ListAttachmentsRequest {
+  optional string task_id = 1;
+}
+// api.create-attachment
+message CreateAttachmentRequest {
+  optional string task_id = 1;
+  optional string id = 2;
+  optional string filename = 3;
+  bytes content = 4;
+  optional string content_type = 5;
+  optional string rel_path = 6;
+  optional string sha256 = 7;
+  optional string actor = 8;
+}
+// api.download-attachment
+message DownloadAttachmentRequest {
+  optional string task_id = 1;
+  optional string attachment_id = 2;
+}
+// api.delete-attachment
+message DeleteAttachmentRequest {
+  optional string task_id = 1;
+  optional string attachment_id = 2;
+}
+// api.list-events
+message ListEventsRequest {
+  optional string board = 1;
+  optional string task_id = 2;
+  optional int64 after = 3;
+  optional uint64 limit = 4;
+}
+// api.list-task-labels
+message ListTaskLabelsRequest {
+  optional string task_id = 1;
+}
+// api.add-task-label
+message AddTaskLabelRequest {
+  optional string task_id = 1;
+  optional string name = 2;
+  ListOfString names = 3;
+  optional bool create_missing = 4;
+  optional string actor = 5;
+}
+// api.bootstrap-task-label
+message BootstrapTaskLabelRequest {
+  optional string task_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  repeated string applies_when = 4;
+  repeated string excludes_when = 5;
+  repeated string positive_examples = 6;
+  repeated string negative_examples = 7;
+  optional bool verify = 8;
+  optional float min_verify_score = 9;
+  DtoVectorConfigureRequest vector_config = 10;
+  optional string actor = 11;
+}
+// api.remove-task-label
+message RemoveTaskLabelRequest {
+  optional string task_id = 1;
+  optional string label_id = 2;
+}
+// api.list-board-labels
+message ListBoardLabelsRequest {
+  optional string board = 1;
+}
+// api.list-board-label-proposals
+message ListBoardLabelProposalsRequest {
+  optional string board = 1;
+  optional DtoLabelProposalStatusWire status = 2;
+}
+// api.create-board-label
+message CreateBoardLabelRequest {
+  optional string board = 1;
+  optional string name = 2;
+  optional string color = 3;
+}
+// api.delete-board-label
+message DeleteBoardLabelRequest {
+  optional string board = 1;
+  optional string label_id = 2;
+  optional bool force = 3;
+}
+// api.list-label-semantics
+message ListLabelSemanticsRequest {
+  optional string board = 1;
+}
+// api.get-label-semantics
+message GetLabelSemanticsRequest {
+  optional string board = 1;
+  optional string label_id = 2;
+}
+// api.upsert-label-semantics
+message UpsertLabelSemanticsRequest {
+  optional string board = 1;
+  optional string label_id = 2;
+  optional string actor = 3;
+  optional string expected_semantics_hash = 4;
+  optional bool replace = 5;
+  optional string reason = 6;
+  repeated string source_signal_ids = 7;
+  optional string description = 8;
+  ListOfString applies_when = 9;
+  ListOfString excludes_when = 10;
+  ListOfString positive_examples = 11;
+  ListOfString negative_examples = 12;
+  repeated string remove_applies_when = 13;
+  repeated string remove_excludes_when = 14;
+  repeated string remove_positive_examples = 15;
+  repeated string remove_negative_examples = 16;
+}
+// api.delete-label-semantics
+message DeleteLabelSemanticsRequest {
+  optional string board = 1;
+  optional string label_id = 2;
+  optional string expected_semantics_hash = 3;
+  optional string reason = 4;
+}
+// api.list-label-atoms
+message ListLabelAtomsRequest {
+  optional string board = 1;
+}
+// api.explain-label-atom
+message ExplainLabelAtomRequest {
+  optional string board = 1;
+  optional string atom_ref = 2;
+}
+// api.label-atom-index-status
+message LabelAtomIndexStatusRequest {
+  optional string board = 1;
+}
+// api.rebuild-label-atom-index
+message RebuildLabelAtomIndexRequest {
+  optional string board = 1;
+}
+// api.query-label-atom-index
+message QueryLabelAtomIndexRequest {
+  optional string board = 1;
+  optional string q = 2;
+  optional string vector_json = 3;
+  optional string embedding_model = 4;
+  optional bool include_vector = 5;
+  optional string polarity = 6;
+  optional uint64 limit = 7;
+}
+// api.list-signals
+message ListSignalsRequest {
+  optional string board = 1;
+  repeated string status = 2;
+  repeated string kind = 3;
+  optional string task_ref = 4;
+  optional bool include_all = 5;
+  optional uint64 limit = 6;
+}
+// api.review-signals
+message ReviewSignalsRequest {
+  optional string board = 1;
+  repeated string status = 2;
+  repeated string kind = 3;
+  optional string task_ref = 4;
+  optional bool include_all = 5;
+  optional uint64 limit = 6;
+}
+// api.get-signal
+message GetSignalRequest {
+  optional string signal_id = 1;
+}
+// api.record-signal
+message RecordSignalRequest {
+  optional string board = 1;
+  optional string kind = 2;
+  optional string title = 3;
+  optional string summary = 4;
+  optional string severity = 5;
+  optional string task_ref = 6;
+  optional string task_id = 7;
+  optional string run_id = 8;
+  optional string comment_id = 9;
+  optional string actor = 10;
+  optional string agent_type = 11;
+  optional string dedupe_key = 12;
+  optional string source = 13;
+  DtoStructuredMetadataJsonObject evidence = 14;
+  DtoSignalCommentRequest comment = 15;
+}
+// api.confirm-signals
+message ConfirmSignalsRequest {
+  optional string board = 1;
+  repeated string signal_ids = 2;
+  optional string reason = 3;
+  optional string replacement_signal_id = 4;
+  optional string actor = 5;
+  optional int64 expected_updated_at = 6;
+}
+// api.reject-signals
+message RejectSignalsRequest {
+  optional string board = 1;
+  repeated string signal_ids = 2;
+  optional string reason = 3;
+  optional string replacement_signal_id = 4;
+  optional string actor = 5;
+  optional int64 expected_updated_at = 6;
+}
+// api.resolve-signals
+message ResolveSignalsRequest {
+  optional string board = 1;
+  repeated string signal_ids = 2;
+  optional string reason = 3;
+  optional string replacement_signal_id = 4;
+  optional string actor = 5;
+  optional int64 expected_updated_at = 6;
+}
+// api.supersede-signals
+message SupersedeSignalsRequest {
+  optional string board = 1;
+  repeated string signal_ids = 2;
+  optional string reason = 3;
+  optional string replacement_signal_id = 4;
+  optional string actor = 5;
+  optional int64 expected_updated_at = 6;
+}
+// api.suggest-task-labels
+message SuggestTaskLabelsRequest {
+  optional string task_id = 1;
+  optional string board = 2;
+  optional uint64 limit = 3;
+  optional uint64 candidate_limit = 4;
+  optional uint64 atom_limit = 5;
+  optional uint64 max_selected_labels = 6;
+  optional float min_score = 7;
+}
+// api.list-task-label-proposals
+message ListTaskLabelProposalsRequest {
+  optional string task_id = 1;
+  optional string board = 2;
+  optional string status = 3;
+}
+// api.propose-task-label
+message ProposeTaskLabelRequest {
+  optional string task_id = 1;
+  optional string board = 2;
+  optional uint64 limit = 3;
+  optional uint64 candidate_limit = 4;
+  optional uint64 atom_limit = 5;
+  optional uint64 max_selected_labels = 6;
+  optional float min_score = 7;
+  DtoLabelProposalCandidateWire proposal = 8;
+  optional string actor = 9;
+  repeated string source_signal_ids = 10;
+  DtoLabelOntologyActorWire ontology_actor = 11;
+  optional bool allow_retarget = 12;
+  optional string retarget_reason = 13;
+}
+// api.record-label-ontology-observation
+message RecordLabelOntologyObservationRequest {
+  optional string task_id = 1;
+  optional string board = 2;
+  DtoLabelOntologyActorWire actor = 3;
+  JsonValue agent_candidates = 4;
+  JsonValue suggestion_snapshot = 5;
+  JsonValue final_decision = 6;
+  optional double suggest_coverage = 7;
+  optional double suggest_coverage_cosine = 8;
+  optional double suggest_residual_norm = 9;
+  optional bool suggest_needs_new_label = 10;
+  optional bool suggest_degraded = 11;
+  JsonValue diagnostics = 12;
+  optional string capture_fingerprint = 13;
+  repeated DtoLabelOntologySignalRequest signals = 14;
+}
+// api.list-label-ontology-signals
+message ListLabelOntologySignalsRequest {
+  optional string board = 1;
+  repeated string status = 2;
+  repeated string kind = 3;
+  optional string task_ref = 4;
+  optional string target_label_ref = 5;
+  optional string proposed_label_name = 6;
+  optional bool include_all = 7;
+  optional uint64 limit = 8;
+}
+// api.review-label-ontology
+message ReviewLabelOntologyRequest {
+  optional string board = 1;
+  optional DtoLabelOntologyReviewGroupByWire group_by = 2;
+  optional bool include_all = 3;
+  optional uint64 limit = 4;
+}
+// api.create-label-ontology-action
+message CreateLabelOntologyActionRequest {
+  optional string board = 1;
+  DtoLabelOntologyActorWire actor = 2;
+  optional string idempotency_key = 3;
+  optional DtoLabelOntologyActionTypeWire action_type = 4;
+  repeated string signal_ids = 5;
+  optional string reason = 6;
+  optional string superseded_by_signal_id = 7;
+  optional string parent_action_id = 8;
+  optional string target_label_ref = 9;
+  optional string result_label_ref = 10;
+  optional string result_atom_id = 11;
+  optional string result_atom_content_hash = 12;
+  optional string result_proposal_id = 13;
+  optional string canonical_before_hash = 14;
+  optional string canonical_after_hash = 15;
+  JsonValue change = 16;
+  optional DtoLabelOntologyValidationStatusWire validation_status = 17;
+  JsonValue validation = 18;
+}
+// api.apply-label-ontology-atom
+message ApplyLabelOntologyAtomRequest {
+  optional string board = 1;
+  DtoLabelOntologyActorWire actor = 2;
+  repeated string signal_ids = 3;
+  optional string label_ref = 4;
+  optional string kind = 5;
+  optional string text = 6;
+  optional string reason = 7;
+  optional bool allow_retarget = 8;
+  optional string retarget_reason = 9;
+}
+// api.revert-label-ontology-mutation
+message RevertLabelOntologyMutationRequest {
+  optional string board = 1;
+  DtoLabelOntologyActorWire actor = 2;
+  optional string target_action_id = 3;
+  optional string expected_current_hash = 4;
+  optional string reason = 5;
+}
+// api.validate-label-ontology-action
+message ValidateLabelOntologyActionRequest {
+  optional string board = 1;
+  DtoLabelOntologyActorWire actor = 2;
+  optional string parent_action_id = 3;
+  repeated string signal_ids = 4;
+  optional string reason = 5;
+  optional DtoLabelOntologyValidationStatusWire validation_status = 6;
+  JsonValue validation = 7;
+}
+// api.get-label-ontology-signal
+message GetLabelOntologySignalRequest {
+  optional string signal_id = 1;
+}
+// api.get-label-proposal
+message GetLabelProposalRequest {
+  optional string proposal_id = 1;
+}
+// api.accept-label-proposal
+message AcceptLabelProposalRequest {
+  optional string proposal_id = 1;
+  optional string reason = 2;
+  optional string actor = 3;
+  repeated string source_signal_ids = 4;
+  DtoLabelOntologyActorWire ontology_actor = 5;
+  optional bool allow_retarget = 6;
+  optional string retarget_reason = 7;
+}
+// api.reject-label-proposal
+message RejectLabelProposalRequest {
+  optional string proposal_id = 1;
+  optional string reason = 2;
+  optional string actor = 3;
+  repeated string source_signal_ids = 4;
+  DtoLabelOntologyActorWire ontology_actor = 5;
+  optional bool allow_retarget = 6;
+  optional string retarget_reason = 7;
+}
+// api.board-task-map
+message BoardTaskMapRequest {
+  optional string board = 1;
+  optional bool active_only = 2;
+  optional uint64 context_depth = 3;
+  optional uint64 limit_nodes = 4;
+  optional bool include_done_context = 5;
+  optional bool include_archived_context = 6;
+  optional bool hide_isolated = 7;
+}
+// api.task-neighborhood
+message TaskNeighborhoodRequest {
+  optional string task_id = 1;
+  optional uint64 depth = 2;
+  optional uint64 limit_nodes = 3;
+  optional bool include_archived_context = 4;
+}
+// api.search-tasks
+message SearchTasksRequest {
+  optional string board = 1;
+  optional string q = 2;
+  repeated DtoApiTaskStatus status = 3;
+  repeated string label = 4;
+  optional bool include_archived = 5;
+  optional uint64 limit = 6;
+  optional uint64 offset = 7;
+  optional string assignee = 8;
+}
+// api.search-tasks-by-status
+message SearchTasksByStatusRequest {
+  optional string board = 1;
+  optional string q = 2;
+  repeated DtoApiTaskStatus status = 3;
+  repeated string label = 4;
+  optional bool include_archived = 5;
+  optional uint64 limit = 6;
+  optional uint64 offset = 7;
+  optional string assignee = 8;
+}
+// api.search-status
+message SearchStatusRequest {
+  optional string board = 1;
+}
+// api.rebuild-search-index
+message RebuildSearchIndexRequest {
+  optional string board = 1;
+}
+// api.sync-search-index
+message SyncSearchIndexRequest {
+  optional string board = 1;
+}
+// api.build-context
+message BuildContextRequest {
+  optional string task_id = 1;
+  optional string board = 2;
+  optional uint64 lexical_limit = 3;
+  optional uint64 graph_limit = 4;
+  optional uint64 vector_limit = 5;
+  optional uint64 max_items = 6;
+  optional string task = 7;
+  optional string reference = 8;
+  optional string query = 9;
+  optional uint64 depth = 10;
+  optional uint64 budget = 11;
+}
+// api.graph-status
+message GraphStatusRequest {
+  optional string board = 1;
+}
+// api.graph-neighbors
+message GraphNeighborsRequest {
+  optional string board = 1;
+  optional string entity_uri = 2;
+  optional string predicate = 3;
+  optional uint64 limit = 4;
+}
+// api.graph-query
+message GraphQueryRequest {
+  optional string board = 1;
+  optional string query = 2;
+  optional uint64 limit = 3;
+}
+// api.graph-rebuild
+message GraphRebuildRequest {
+  optional string board = 1;
+}
+// api.graph-sync
+message GraphSyncRequest {
+  optional string board = 1;
+}
+// api.list-entities
+message ListEntitiesRequest {
+  optional string board = 1;
+  optional string kind = 2;
+  optional uint64 limit = 3;
+}
+// api.upsert-entity
+message UpsertEntityRequest {
+  optional string uri = 1;
+  optional string kind = 2;
+  optional string source_table = 3;
+  optional string source_id = 4;
+  optional string board = 5;
+  optional string task_id = 6;
+  optional string title = 7;
+  optional string summary = 8;
+  optional string content_hash = 9;
+  optional int64 archived_at = 10;
+}
+// api.get-entity
+message GetEntityRequest {
+  optional string uri = 1;
+}
+// api.vector-status
+message VectorStatusRequest {
+  optional string board = 1;
+}
+// api.vector-configure
+message VectorConfigureRequest {
+  optional string provider = 1;
+  optional string endpoint = 2;
+  optional string model = 3;
+  optional uint64 dimensions = 4;
+}
+// api.vector-rebuild
+message VectorRebuildRequest {
+  optional string board = 1;
+}
+// api.vector-sync
+message VectorSyncRequest {
+  optional string board = 1;
+}
+// api.vector-query-chunks
+message VectorQueryChunksRequest {
+  optional string board = 1;
+  optional string q = 2;
+  optional uint64 limit = 3;
+  optional string embedding_model = 4;
+  optional string polarity = 5;
+  optional bool include_vector = 6;
+}
+// api.vector-query-label-atoms
+message VectorQueryLabelAtomsRequest {
+  optional string board = 1;
+  optional string q = 2;
+  optional uint64 limit = 3;
+  optional string embedding_model = 4;
+  optional string polarity = 5;
+  optional bool include_vector = 6;
+}
+// api.get-stats
+message GetStatsRequest {
+  optional string board = 1;
+}
+// api.doctor
+message DoctorRequest {
+
+}
+// api.checkpoint
+message CheckpointRequest {
+
+}
+// api.maintenance-backup
+message MaintenanceBackupRequest {
+  optional string path = 1;
+}
+// api.maintenance-export
+message MaintenanceExportRequest {
+  optional string path = 1;
+}
+// api.maintenance-import
+message MaintenanceImportRequest {
+  optional string path = 1;
+  optional bool replace = 2;
+}
+// api.maintenance-vacuum
+message MaintenanceVacuumRequest {
+
+}
+// api.maintenance-status
+message MaintenanceStatusRequest {
+
+}
+// api.maintenance-run
+message MaintenanceRunRequest {
+  optional string owner = 1;
+  optional string action = 2;
+}
+// api.maintenance-rebuild
+message MaintenanceRebuildRequest {
+  optional string owner = 1;
+  optional string action = 2;
+}
+// api.maintenance-cleanup
+message MaintenanceCleanupRequest {
+  optional string owner = 1;
+  optional string action = 2;
+}
+// api.maintenance-import-v30
+message MaintenanceImportV30Request {
+  optional string path = 1;
+  optional string canonical_attachment_root = 2;
+}
+// rpc.get-task-details
+message GetTaskDetailsRequest {
+  optional string task_id = 1;
+}
+// rpc.get-label-ontology-quality
+message GetLabelOntologyQualityRequest {
+  optional string board = 1;
+  optional uint64 sample_limit = 2;
+}

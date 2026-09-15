@@ -12,7 +12,7 @@ description: 在 kanban-tool 新写或修改 Rust、Cargo manifest、模块、�
 硬边界：
 
 - `kanban-core` 不依赖内部 crate、HTTP、Turso 或 UI；protocol/client/MCP/Desktop 不直连 canonical database。
-- 只有 service 直接依赖 `turso`、server 直接依赖 `axum`、client 直接依赖 `ureq`、MCP 直接依赖 `rmcp`、Desktop 直接依赖 `tauri`。
+- 只有 service 直接依赖 `turso`、server 直接依赖 `axum`、MCP 直接依赖 `rmcp`、Desktop 直接依赖 `tauri`。client 的业务传输使用共享 `tonic` channel，禁止重新引入 `ureq` 或 `reqwest`。
 - 新增第三方依赖放在最窄使用 crate；workspace 只统一 version/source/path 和 `default-features` baseline，leaf 直接声明自身所需 positive features，不依赖其他 workspace member 偶然启用的 feature。
 - 状态、事务和错误语义放在共享 core/service path；adapter 不复制 SQL、状态机或 fallback。
 - 项目 Rust 注释/rustdoc 以简体中文为主，机器标识和协议 literal 保持原文。
@@ -40,7 +40,7 @@ description: 在 kanban-tool 新写或修改 Rust、Cargo manifest、模块、�
 
 - 新增第三方依赖放在实际使用它的最窄 crate；workspace 只统一 version/source/path 和 `default-features` baseline，positive features 由实际使用它的 leaf crate 显式选择。leaf 不得依赖其他 workspace member 偶然启用的 feature；需要的 feature 必须在自身 manifest 直接声明。不要为方便跨层调用而扩大 dependency owner。
 - 第三方类型需要 re-export 时使用显式 named re-export（例如 `pub use dep::{TypeA, TypeB};`），不要用 glob 让依赖升级悄然扩大公开 API；项目内部聚合仍遵循上面的 barrel 规则。
-- 保持现有专用 owner：`turso` → `kanban-service`、`axum` → `kanban-server`、`ureq` → `kanban-client`、`rmcp` → `kanban-mcp`、`tauri` → Desktop；adapter 不绕过共享 application/service path。
+- 保持现有专用 owner：`turso` → `kanban-service`、`axum` → `kanban-server`、`rmcp` → `kanban-mcp`、`tauri` → Desktop。`tonic` 由 protocol、server 和原生 client 按各自职责持有；adapter 不绕过共享 application/service path。
 
 ## Documentation
 

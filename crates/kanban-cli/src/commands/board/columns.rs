@@ -8,10 +8,10 @@ pub(crate) struct ColumnsArgs {
     pub(crate) board: Option<String>,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &ColumnsArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &ColumnsArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let board = args.board.as_deref().unwrap_or(&ctx.board);
-    let columns = client.list_board_columns(board)?;
+    let columns = client.list_board_columns(board).await?;
     if ctx.json {
         output::print_json(&ListBoardColumnsResponse { data: columns });
     } else {

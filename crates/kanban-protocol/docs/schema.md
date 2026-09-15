@@ -13,6 +13,15 @@ artifact 是精确事实源；本页只保留语义和维护规则。
 
 ## 契约边界
 
+正式 RPC 使用 binary Protobuf。请求中的 presence 区分省略、显式清空和具体值；可选集合使用
+wrapper 保留空集合，PATCH nullable 字段使用 oneof 保留清空语义。`int64`、`uint64` 及动态
+JSON 的 signed/unsigned integer 分支保持整数精度。业务错误通过标准 `google.rpc.Status`
+中的 `kanban.v1.ErrorDetail` 传递，原生 tonic 和浏览器 Connect 客户端共享稳定业务错误码。
+
+精确 RPC 清单、原 DTO parts 和字段映射分别位于 `proto/rpc-operations.json`、
+`proto/rpc-methods.json`，字段编号保存在 `proto/rpc-field-numbers.json`。生成实现由 `xtask`
+持有，protocol 的 build script 只编译 owner 下的 Protobuf source。
+
 schema 描述序列化形状、字段可选性和 transport envelope；状态 transition、claim token、board
 isolation、依赖环、idempotency 和事务原子性由 service/server/client 测试与领域规则证明，不能从
 JSON Schema 推断。

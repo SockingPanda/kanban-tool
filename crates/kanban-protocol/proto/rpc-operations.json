@@ -1,0 +1,954 @@
+[
+  {
+    "id": "api.health",
+    "method": "GetHealth",
+    "path": null,
+    "query": null,
+    "input": null,
+    "response": "crate::HealthResponse"
+  },
+  {
+    "id": "api.list-boards",
+    "method": "ListBoards",
+    "path": null,
+    "query": "crate::ListBoardsQuery",
+    "input": null,
+    "response": "crate::ListBoardsResponse"
+  },
+  {
+    "id": "api.create-board",
+    "method": "CreateBoard",
+    "path": null,
+    "query": null,
+    "input": "crate::CreateBoardRequest",
+    "response": "crate::CreateBoardResponse"
+  },
+  {
+    "id": "api.get-board",
+    "method": "GetBoard",
+    "path": "crate::GetBoardPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetBoardResponse"
+  },
+  {
+    "id": "api.archive-board",
+    "method": "ArchiveBoard",
+    "path": "crate::ArchiveBoardPath",
+    "query": null,
+    "input": "crate::ArchiveBoardRequest",
+    "response": "crate::ArchiveBoardResponse"
+  },
+  {
+    "id": "api.list-board-columns",
+    "method": "ListBoardColumns",
+    "path": "crate::ListBoardColumnsPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListBoardColumnsResponse"
+  },
+  {
+    "id": "api.list-tasks",
+    "method": "ListTasks",
+    "path": "crate::ListTasksPath",
+    "query": "crate::ListTasksQuery",
+    "input": null,
+    "response": "crate::ListTasksResponse"
+  },
+  {
+    "id": "api.list-tasks-by-status",
+    "method": "ListTasksByStatus",
+    "path": "crate::ListTasksByStatusPath",
+    "query": "crate::ListTasksByStatusQuery",
+    "input": null,
+    "response": "crate::ListTasksByStatusResponse"
+  },
+  {
+    "id": "api.create-task",
+    "method": "CreateTask",
+    "path": "crate::CreateTaskPath",
+    "query": null,
+    "input": "crate::CreateTaskRequest",
+    "response": "crate::CreateTaskResponse"
+  },
+  {
+    "id": "api.get-task",
+    "method": "GetTask",
+    "path": "crate::GetTaskPath",
+    "query": "crate::GetTaskQuery",
+    "input": null,
+    "response": "crate::GetTaskResponse"
+  },
+  {
+    "id": "api.update-task",
+    "method": "UpdateTask",
+    "path": "crate::UpdateTaskPath",
+    "query": null,
+    "input": "crate::UpdateTaskRequest",
+    "response": "crate::UpdateTaskResponse"
+  },
+  {
+    "id": "api.specify-task",
+    "method": "SpecifyTask",
+    "path": "crate::SpecifyTaskPath",
+    "query": null,
+    "input": "crate::SpecifyTaskRequest",
+    "response": "crate::SpecifyTaskResponse"
+  },
+  {
+    "id": "api.promote-task",
+    "method": "PromoteTask",
+    "path": "crate::PromoteTaskPath",
+    "query": null,
+    "input": "crate::PromoteTaskRequest",
+    "response": "crate::PromoteTaskResponse"
+  },
+  {
+    "id": "api.claim-task",
+    "method": "ClaimTask",
+    "path": "crate::ClaimTaskPath",
+    "query": null,
+    "input": "crate::ClaimTaskRequest",
+    "response": "crate::ClaimTaskResponse"
+  },
+  {
+    "id": "api.reopen-task",
+    "method": "ReopenTask",
+    "path": "crate::ReopenTaskPath",
+    "query": null,
+    "input": "crate::ReopenTaskRequest",
+    "response": "crate::ReopenTaskResponse"
+  },
+  {
+    "id": "api.reclaim-task",
+    "method": "ReclaimTask",
+    "path": "crate::ReclaimTaskPath",
+    "query": null,
+    "input": "crate::ReclaimTaskRequest",
+    "response": "crate::ReclaimTaskResponse"
+  },
+  {
+    "id": "api.heartbeat-task",
+    "method": "HeartbeatTask",
+    "path": "crate::HeartbeatTaskPath",
+    "query": null,
+    "input": "crate::HeartbeatTaskRequest",
+    "response": "crate::HeartbeatTaskResponse"
+  },
+  {
+    "id": "api.release-task",
+    "method": "ReleaseTask",
+    "path": "crate::ReleaseTaskPath",
+    "query": null,
+    "input": "crate::ReleaseTaskRequest",
+    "response": "crate::ReleaseTaskResponse"
+  },
+  {
+    "id": "api.complete-task",
+    "method": "CompleteTask",
+    "path": "crate::CompleteTaskPath",
+    "query": null,
+    "input": "crate::CompleteTaskRequest",
+    "response": "crate::CompleteTaskResponse"
+  },
+  {
+    "id": "api.submit-review-task",
+    "method": "SubmitReviewTask",
+    "path": "crate::SubmitReviewTaskPath",
+    "query": null,
+    "input": "crate::SubmitReviewTaskRequest",
+    "response": "crate::SubmitReviewTaskResponse"
+  },
+  {
+    "id": "api.block-task",
+    "method": "BlockTask",
+    "path": "crate::BlockTaskPath",
+    "query": null,
+    "input": "crate::BlockTaskRequest",
+    "response": "crate::BlockTaskResponse"
+  },
+  {
+    "id": "api.unblock-task",
+    "method": "UnblockTask",
+    "path": "crate::UnblockTaskPath",
+    "query": null,
+    "input": "crate::UnblockTaskRequest",
+    "response": "crate::UnblockTaskResponse"
+  },
+  {
+    "id": "api.archive-task",
+    "method": "ArchiveTask",
+    "path": "crate::ArchiveTaskPath",
+    "query": null,
+    "input": "crate::ArchiveTaskRequest",
+    "response": "crate::ArchiveTaskResponse"
+  },
+  {
+    "id": "api.list-steps",
+    "method": "ListSteps",
+    "path": "crate::ListStepsPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListStepsResponse"
+  },
+  {
+    "id": "api.create-step",
+    "method": "CreateStep",
+    "path": "crate::CreateStepPath",
+    "query": null,
+    "input": "crate::CreateStepRequest",
+    "response": "crate::CreateStepResponse"
+  },
+  {
+    "id": "api.update-step",
+    "method": "UpdateStep",
+    "path": "crate::UpdateStepPath",
+    "query": null,
+    "input": "crate::UpdateStepRequest",
+    "response": "crate::UpdateStepResponse"
+  },
+  {
+    "id": "api.remove-step",
+    "method": "RemoveStep",
+    "path": "crate::RemoveStepPath",
+    "query": null,
+    "input": null,
+    "response": "crate::RemoveStepResponse"
+  },
+  {
+    "id": "api.complete-step",
+    "method": "CompleteStep",
+    "path": "crate::CompleteStepPath",
+    "query": null,
+    "input": "crate::CompleteStepRequest",
+    "response": "crate::CompleteStepResponse"
+  },
+  {
+    "id": "api.skip-step",
+    "method": "SkipStep",
+    "path": "crate::SkipStepPath",
+    "query": null,
+    "input": "crate::SkipStepRequest",
+    "response": "crate::SkipStepResponse"
+  },
+  {
+    "id": "api.reopen-step",
+    "method": "ReopenStep",
+    "path": "crate::ReopenStepPath",
+    "query": null,
+    "input": "crate::ReopenStepRequest",
+    "response": "crate::ReopenStepResponse"
+  },
+  {
+    "id": "api.mark-execution-plan-not-required",
+    "method": "MarkExecutionPlanNotRequired",
+    "path": "crate::MarkExecutionPlanNotRequiredPath",
+    "query": null,
+    "input": "crate::MarkExecutionPlanNotRequiredRequest",
+    "response": "crate::MarkExecutionPlanNotRequiredResponse"
+  },
+  {
+    "id": "api.list-dependencies",
+    "method": "ListDependencies",
+    "path": "crate::ListDependenciesPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListDependenciesResponse"
+  },
+  {
+    "id": "api.add-dependency",
+    "method": "AddDependency",
+    "path": "crate::AddDependencyPath",
+    "query": null,
+    "input": "crate::AddDependencyRequest",
+    "response": "crate::AddDependencyResponse"
+  },
+  {
+    "id": "api.remove-dependency",
+    "method": "RemoveDependency",
+    "path": "crate::RemoveDependencyPath",
+    "query": null,
+    "input": null,
+    "response": "crate::RemoveDependencyResponse"
+  },
+  {
+    "id": "api.list-runs",
+    "method": "ListRuns",
+    "path": "crate::ListRunsPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListRunsResponse"
+  },
+  {
+    "id": "api.get-run",
+    "method": "GetRun",
+    "path": "crate::GetRunPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetRunResponse"
+  },
+  {
+    "id": "api.get-run-log",
+    "method": "GetRunLog",
+    "path": "crate::GetRunLogPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetRunLogResponse"
+  },
+  {
+    "id": "api.list-comments",
+    "method": "ListComments",
+    "path": "crate::ListCommentsPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListCommentsResponse"
+  },
+  {
+    "id": "api.create-comment",
+    "method": "CreateComment",
+    "path": "crate::CreateCommentPath",
+    "query": null,
+    "input": "crate::CreateCommentRequest",
+    "response": "crate::CreateCommentResponse"
+  },
+  {
+    "id": "api.list-attachments",
+    "method": "ListAttachments",
+    "path": "crate::ListAttachmentsPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListAttachmentsResponse"
+  },
+  {
+    "id": "api.create-attachment",
+    "method": "CreateAttachment",
+    "path": "crate::CreateAttachmentPath",
+    "query": null,
+    "input": "crate::CreateAttachmentRequest",
+    "response": "crate::CreateAttachmentResponse"
+  },
+  {
+    "id": "api.download-attachment",
+    "method": "DownloadAttachment",
+    "path": "crate::GetAttachmentPath",
+    "query": null,
+    "input": null,
+    "response": "crate::rpc::dto::AttachmentDownload"
+  },
+  {
+    "id": "api.delete-attachment",
+    "method": "DeleteAttachment",
+    "path": "crate::DeleteAttachmentPath",
+    "query": null,
+    "input": null,
+    "response": "crate::DeleteAttachmentResponse"
+  },
+  {
+    "id": "api.list-events",
+    "method": "ListEvents",
+    "path": null,
+    "query": "crate::ListEventsQuery",
+    "input": null,
+    "response": "crate::ListEventsResponse"
+  },
+  {
+    "id": "api.list-task-labels",
+    "method": "ListTaskLabels",
+    "path": "crate::ListTaskLabelsPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListTaskLabelsResponse"
+  },
+  {
+    "id": "api.add-task-label",
+    "method": "AddTaskLabel",
+    "path": "crate::AddTaskLabelPath",
+    "query": null,
+    "input": "crate::AddTaskLabelRequest",
+    "response": "crate::AddTaskLabelResponse"
+  },
+  {
+    "id": "api.bootstrap-task-label",
+    "method": "BootstrapTaskLabel",
+    "path": "crate::TaskLabelSurfacePath",
+    "query": null,
+    "input": "crate::BootstrapTaskLabelRequest",
+    "response": "crate::BootstrapTaskLabelResponse"
+  },
+  {
+    "id": "api.remove-task-label",
+    "method": "RemoveTaskLabel",
+    "path": "crate::RemoveTaskLabelPath",
+    "query": null,
+    "input": null,
+    "response": "crate::RemoveTaskLabelResponse"
+  },
+  {
+    "id": "api.list-board-labels",
+    "method": "ListBoardLabels",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListBoardLabelsResponse"
+  },
+  {
+    "id": "api.list-board-label-proposals",
+    "method": "ListBoardLabelProposals",
+    "path": "crate::ListBoardLabelProposalsPath",
+    "query": "crate::ListBoardLabelProposalsQuery",
+    "input": null,
+    "response": "crate::ListBoardLabelProposalsResponse"
+  },
+  {
+    "id": "api.create-board-label",
+    "method": "CreateBoardLabel",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::CreateBoardLabelRequest",
+    "response": "crate::CreateBoardLabelResponse"
+  },
+  {
+    "id": "api.delete-board-label",
+    "method": "DeleteBoardLabel",
+    "path": "crate::DeleteBoardLabelPath",
+    "query": "crate::DeleteBoardLabelQuery",
+    "input": null,
+    "response": "crate::DeleteBoardLabelResponse"
+  },
+  {
+    "id": "api.list-label-semantics",
+    "method": "ListLabelSemantics",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListLabelSemanticsResponse"
+  },
+  {
+    "id": "api.get-label-semantics",
+    "method": "GetLabelSemantics",
+    "path": "crate::LabelSemanticsPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetLabelSemanticsResponse"
+  },
+  {
+    "id": "api.upsert-label-semantics",
+    "method": "UpsertLabelSemantics",
+    "path": "crate::LabelSemanticsPath",
+    "query": null,
+    "input": "crate::UpsertLabelSemanticsRequest",
+    "response": "crate::UpsertLabelSemanticsResponse"
+  },
+  {
+    "id": "api.delete-label-semantics",
+    "method": "DeleteLabelSemantics",
+    "path": "crate::LabelSemanticsPath",
+    "query": "crate::DeleteLabelSemanticsQuery",
+    "input": null,
+    "response": "crate::DeleteResponse"
+  },
+  {
+    "id": "api.list-label-atoms",
+    "method": "ListLabelAtoms",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ListLabelAtomsResponse"
+  },
+  {
+    "id": "api.explain-label-atom",
+    "method": "ExplainLabelAtom",
+    "path": "crate::LabelAtomPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ExplainLabelAtomResponse"
+  },
+  {
+    "id": "api.label-atom-index-status",
+    "method": "LabelAtomIndexStatus",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": null,
+    "response": "crate::LabelAtomIndexStatusResponse"
+  },
+  {
+    "id": "api.rebuild-label-atom-index",
+    "method": "RebuildLabelAtomIndex",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": null,
+    "response": "crate::RebuildLabelAtomIndexResponse"
+  },
+  {
+    "id": "api.query-label-atom-index",
+    "method": "QueryLabelAtomIndex",
+    "path": "crate::BoardLabelPath",
+    "query": "crate::LabelAtomIndexQuery",
+    "input": null,
+    "response": "crate::rpc::dto::LabelAtomIndexQueryResponse"
+  },
+  {
+    "id": "api.list-signals",
+    "method": "ListSignals",
+    "path": "crate::BoardLabelPath",
+    "query": "crate::SignalQuery",
+    "input": null,
+    "response": "crate::ListSignalsResponse"
+  },
+  {
+    "id": "api.review-signals",
+    "method": "ReviewSignals",
+    "path": "crate::BoardLabelPath",
+    "query": "crate::SignalQuery",
+    "input": null,
+    "response": "crate::ReviewSignalsResponse"
+  },
+  {
+    "id": "api.get-signal",
+    "method": "GetSignal",
+    "path": "crate::SignalPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetSignalResponse"
+  },
+  {
+    "id": "api.record-signal",
+    "method": "RecordSignal",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::RecordSignalRequest",
+    "response": "crate::RecordSignalResponse"
+  },
+  {
+    "id": "api.confirm-signals",
+    "method": "ConfirmSignals",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::ReviewSignalsRequest",
+    "response": "crate::ConfirmSignalsResponse"
+  },
+  {
+    "id": "api.reject-signals",
+    "method": "RejectSignals",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::ReviewSignalsRequest",
+    "response": "crate::RejectSignalsResponse"
+  },
+  {
+    "id": "api.resolve-signals",
+    "method": "ResolveSignals",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::ReviewSignalsRequest",
+    "response": "crate::ResolveSignalsResponse"
+  },
+  {
+    "id": "api.supersede-signals",
+    "method": "SupersedeSignals",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::ReviewSignalsRequest",
+    "response": "crate::SupersedeSignalsResponse"
+  },
+  {
+    "id": "api.suggest-task-labels",
+    "method": "SuggestTaskLabels",
+    "path": "crate::TaskLabelSurfacePath",
+    "query": "crate::rpc::dto::TaskLabelSuggestionQuery",
+    "input": null,
+    "response": "crate::SuggestTaskLabelsResponse"
+  },
+  {
+    "id": "api.list-task-label-proposals",
+    "method": "ListTaskLabelProposals",
+    "path": "crate::TaskLabelSurfacePath",
+    "query": "crate::rpc::dto::TaskLabelProposalQuery",
+    "input": null,
+    "response": "crate::ListTaskLabelProposalsResponse"
+  },
+  {
+    "id": "api.propose-task-label",
+    "method": "ProposeTaskLabel",
+    "path": "crate::TaskLabelSurfacePath",
+    "query": "crate::rpc::dto::TaskLabelSuggestionQuery",
+    "input": "crate::ProposeTaskLabelRequest",
+    "response": "crate::ProposeTaskLabelResponse"
+  },
+  {
+    "id": "api.record-label-ontology-observation",
+    "method": "RecordLabelOntologyObservation",
+    "path": "crate::TaskLabelSurfacePath",
+    "query": "crate::rpc::dto::TaskLabelBoardQuery",
+    "input": "crate::RecordLabelOntologyObservationRequest",
+    "response": "crate::RecordLabelOntologyObservationResponse"
+  },
+  {
+    "id": "api.list-label-ontology-signals",
+    "method": "ListLabelOntologySignals",
+    "path": "crate::BoardLabelPath",
+    "query": "crate::LabelOntologySignalQuery",
+    "input": null,
+    "response": "crate::LabelOntologySignalsResponse"
+  },
+  {
+    "id": "api.review-label-ontology",
+    "method": "ReviewLabelOntology",
+    "path": "crate::BoardLabelPath",
+    "query": "crate::LabelOntologyReviewQuery",
+    "input": null,
+    "response": "crate::ReviewLabelOntologyResponse"
+  },
+  {
+    "id": "api.create-label-ontology-action",
+    "method": "CreateLabelOntologyAction",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::LabelOntologyActionRequest",
+    "response": "crate::LabelOntologyActionResponse"
+  },
+  {
+    "id": "api.apply-label-ontology-atom",
+    "method": "ApplyLabelOntologyAtom",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::ApplyLabelOntologyAtomRequest",
+    "response": "crate::LabelOntologyActionResponse"
+  },
+  {
+    "id": "api.revert-label-ontology-mutation",
+    "method": "RevertLabelOntologyMutation",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::RevertLabelOntologyMutationRequest",
+    "response": "crate::LabelOntologyActionResponse"
+  },
+  {
+    "id": "api.validate-label-ontology-action",
+    "method": "ValidateLabelOntologyAction",
+    "path": "crate::BoardLabelPath",
+    "query": null,
+    "input": "crate::ValidateLabelOntologyActionRequest",
+    "response": "crate::LabelOntologyActionResponse"
+  },
+  {
+    "id": "api.get-label-ontology-signal",
+    "method": "GetLabelOntologySignal",
+    "path": "crate::SignalPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetLabelOntologySignalResponse"
+  },
+  {
+    "id": "api.get-label-proposal",
+    "method": "GetLabelProposal",
+    "path": "crate::ProposalPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetLabelProposalResponse"
+  },
+  {
+    "id": "api.accept-label-proposal",
+    "method": "AcceptLabelProposal",
+    "path": "crate::ProposalPath",
+    "query": null,
+    "input": "crate::LabelProposalDecisionRequest",
+    "response": "crate::LabelProposalDecisionResponse"
+  },
+  {
+    "id": "api.reject-label-proposal",
+    "method": "RejectLabelProposal",
+    "path": "crate::ProposalPath",
+    "query": null,
+    "input": "crate::LabelProposalDecisionRequest",
+    "response": "crate::LabelProposalDecisionResponse"
+  },
+  {
+    "id": "api.board-task-map",
+    "method": "BoardTaskMap",
+    "path": "crate::BoardTaskMapPath",
+    "query": "crate::BoardTaskMapQuery",
+    "input": null,
+    "response": "crate::BoardTaskMapResponse"
+  },
+  {
+    "id": "api.task-neighborhood",
+    "method": "TaskNeighborhood",
+    "path": "crate::TaskNeighborhoodPath",
+    "query": "crate::TaskNeighborhoodQuery",
+    "input": null,
+    "response": "crate::TaskNeighborhoodResponse"
+  },
+  {
+    "id": "api.search-tasks",
+    "method": "SearchTasks",
+    "path": null,
+    "query": "crate::SearchTasksQuery",
+    "input": null,
+    "response": "crate::SearchTasksResponse"
+  },
+  {
+    "id": "api.search-tasks-by-status",
+    "method": "SearchTasksByStatus",
+    "path": null,
+    "query": "crate::SearchTasksQuery",
+    "input": null,
+    "response": "crate::SearchTasksByStatusResponse"
+  },
+  {
+    "id": "api.search-status",
+    "method": "SearchStatus",
+    "path": null,
+    "query": "crate::BoardQuery",
+    "input": null,
+    "response": "crate::SearchStatusResponse"
+  },
+  {
+    "id": "api.rebuild-search-index",
+    "method": "RebuildSearchIndex",
+    "path": null,
+    "query": "crate::BoardQuery",
+    "input": null,
+    "response": "crate::SearchStatusResponse"
+  },
+  {
+    "id": "api.sync-search-index",
+    "method": "SyncSearchIndex",
+    "path": null,
+    "query": "crate::BoardQuery",
+    "input": null,
+    "response": "crate::SearchStatusResponse"
+  },
+  {
+    "id": "api.build-context",
+    "method": "BuildContext",
+    "path": "crate::BuildContextPath",
+    "query": "crate::BuildContextQuery",
+    "input": null,
+    "response": "crate::BuildContextResponse"
+  },
+  {
+    "id": "api.graph-status",
+    "method": "GraphStatus",
+    "path": null,
+    "query": "crate::BoardQuery",
+    "input": null,
+    "response": "crate::GraphStatusResponse"
+  },
+  {
+    "id": "api.graph-neighbors",
+    "method": "GraphNeighbors",
+    "path": null,
+    "query": "crate::GraphNeighborsQuery",
+    "input": null,
+    "response": "crate::GraphNeighborsResponse"
+  },
+  {
+    "id": "api.graph-query",
+    "method": "GraphQuery",
+    "path": null,
+    "query": "crate::GraphQueryQuery",
+    "input": null,
+    "response": "crate::cli_helpers::CliGraphQueryOutput"
+  },
+  {
+    "id": "api.graph-rebuild",
+    "method": "GraphRebuild",
+    "path": null,
+    "query": "crate::BoardQuery",
+    "input": null,
+    "response": "crate::GraphMaintenanceResponse"
+  },
+  {
+    "id": "api.graph-sync",
+    "method": "GraphSync",
+    "path": null,
+    "query": "crate::BoardQuery",
+    "input": null,
+    "response": "crate::GraphMaintenanceResponse"
+  },
+  {
+    "id": "api.list-entities",
+    "method": "ListEntities",
+    "path": null,
+    "query": "crate::EntityListQuery",
+    "input": null,
+    "response": "crate::EntityListResponse"
+  },
+  {
+    "id": "api.upsert-entity",
+    "method": "UpsertEntity",
+    "path": null,
+    "query": null,
+    "input": "crate::EntityUpsertRequest",
+    "response": "crate::EntityResponse"
+  },
+  {
+    "id": "api.get-entity",
+    "method": "GetEntity",
+    "path": "crate::EntityPath",
+    "query": null,
+    "input": null,
+    "response": "crate::EntityResponse"
+  },
+  {
+    "id": "api.vector-status",
+    "method": "VectorStatus",
+    "path": null,
+    "query": "crate::VectorStatusQuery",
+    "input": null,
+    "response": "crate::VectorStatusResponse"
+  },
+  {
+    "id": "api.vector-configure",
+    "method": "VectorConfigure",
+    "path": null,
+    "query": null,
+    "input": "crate::VectorConfigureRequest",
+    "response": "crate::VectorConfigureResponse"
+  },
+  {
+    "id": "api.vector-rebuild",
+    "method": "VectorRebuild",
+    "path": null,
+    "query": null,
+    "input": "crate::VectorProjectionRequest",
+    "response": "crate::VectorProjectionResponse"
+  },
+  {
+    "id": "api.vector-sync",
+    "method": "VectorSync",
+    "path": null,
+    "query": null,
+    "input": "crate::VectorProjectionRequest",
+    "response": "crate::VectorProjectionResponse"
+  },
+  {
+    "id": "api.vector-query-chunks",
+    "method": "VectorQueryChunks",
+    "path": null,
+    "query": "crate::VectorQuery",
+    "input": null,
+    "response": "crate::VectorQueryChunksResponse"
+  },
+  {
+    "id": "api.vector-query-label-atoms",
+    "method": "VectorQueryLabelAtoms",
+    "path": null,
+    "query": "crate::VectorQuery",
+    "input": null,
+    "response": "crate::VectorQueryLabelAtomsResponse"
+  },
+  {
+    "id": "api.get-stats",
+    "method": "GetStats",
+    "path": null,
+    "query": "crate::BoardQuery",
+    "input": null,
+    "response": "crate::StatsResponse"
+  },
+  {
+    "id": "api.doctor",
+    "method": "Doctor",
+    "path": null,
+    "query": null,
+    "input": null,
+    "response": "crate::DoctorResponse"
+  },
+  {
+    "id": "api.checkpoint",
+    "method": "Checkpoint",
+    "path": null,
+    "query": null,
+    "input": null,
+    "response": "crate::CheckpointResponse"
+  },
+  {
+    "id": "api.maintenance-backup",
+    "method": "MaintenanceBackup",
+    "path": null,
+    "query": null,
+    "input": "crate::MaintenancePathRequest",
+    "response": "crate::BackupResponse"
+  },
+  {
+    "id": "api.maintenance-export",
+    "method": "MaintenanceExport",
+    "path": null,
+    "query": null,
+    "input": "crate::MaintenancePathRequest",
+    "response": "crate::ExportResponse"
+  },
+  {
+    "id": "api.maintenance-import",
+    "method": "MaintenanceImport",
+    "path": null,
+    "query": null,
+    "input": "crate::MaintenanceImportRequest",
+    "response": "crate::ImportResponse"
+  },
+  {
+    "id": "api.maintenance-vacuum",
+    "method": "MaintenanceVacuum",
+    "path": null,
+    "query": null,
+    "input": null,
+    "response": "crate::VacuumResponse"
+  },
+  {
+    "id": "api.maintenance-status",
+    "method": "MaintenanceStatus",
+    "path": null,
+    "query": null,
+    "input": null,
+    "response": "crate::MaintenanceStatusResponse"
+  },
+  {
+    "id": "api.maintenance-run",
+    "method": "MaintenanceRun",
+    "path": null,
+    "query": null,
+    "input": "crate::MaintenanceRunRequest",
+    "response": "crate::MaintenanceRunResponse"
+  },
+  {
+    "id": "api.maintenance-rebuild",
+    "method": "MaintenanceRebuild",
+    "path": null,
+    "query": null,
+    "input": "crate::MaintenanceRunRequest",
+    "response": "crate::MaintenanceRunResponse"
+  },
+  {
+    "id": "api.maintenance-cleanup",
+    "method": "MaintenanceCleanup",
+    "path": null,
+    "query": null,
+    "input": "crate::MaintenanceRunRequest",
+    "response": "crate::MaintenanceRunResponse"
+  },
+  {
+    "id": "api.maintenance-import-v30",
+    "method": "MaintenanceImportV30",
+    "path": null,
+    "query": null,
+    "input": "crate::LegacyImportRequest",
+    "response": "crate::LegacyImportResponse"
+  },
+  {
+    "id": "rpc.get-task-details",
+    "method": "GetTaskDetails",
+    "path": "crate::GetTaskPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetTaskDetailsResponse"
+  },
+  {
+    "id": "rpc.get-label-ontology-quality",
+    "method": "GetLabelOntologyQuality",
+    "path": "crate::BoardLabelPath",
+    "query": "crate::rpc::dto::LabelOntologyQualityQuery",
+    "input": null,
+    "response": "crate::cli_labels::CliLabelOntologyQualityOutput"
+  }
+]

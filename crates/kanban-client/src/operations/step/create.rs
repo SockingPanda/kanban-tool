@@ -1,12 +1,11 @@
-use kanban_protocol::{ApiTaskSteps, CreateStepRequest, CreateStepResponse};
+use kanban_protocol::{ApiTaskSteps, CreateStepRequest};
 
 use crate::{
-    KanbanClient, error::ClientError, shared::prepare_create_step_request,
-    transport::encode_path_segment,
+    KanbanClient, error::ClientError, shared::prepare_create_step_request, transport::rpc,
 };
 
 impl KanbanClient {
-    pub fn create_step(
+    pub async fn create_step(
         &self,
         task_id: &str,
         request: &CreateStepRequest,
@@ -18,25 +17,31 @@ impl KanbanClient {
             ));
         }
         let request = prepare_create_step_request(request.clone());
-        let response: CreateStepResponse = self.post(
-            &format!("/api/v1/tasks/{}/steps", encode_path_segment(task_id)),
-            &request,
+        let response: kanban_protocol::CreateStepResponse = rpc!(
+            self,
+            create_step,
+            CreateStepRequest,
+            kanban_protocol::CreateStepPath {
+                task_id: task_id.to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
 
-    pub fn create_step_by_selector(
+    pub async fn create_step_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &CreateStepRequest,
     ) -> Result<ApiTaskSteps, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
+        let task_id = self.resolve_task_id(board, selector).await?;
         let mut request = request.clone();
         if let Some(linked_task_ref) = request.linked_task_ref.as_deref() {
-            let linked_task_id = self.resolve_task_id(board, linked_task_ref)?;
+            let linked_task_id = self.resolve_task_id(board, linked_task_ref).await?;
             request.linked_task_ref = Some(linked_task_id);
         }
-        self.create_step(&task_id, &request)
+        self.create_step(&task_id, &request).await
     }
 }

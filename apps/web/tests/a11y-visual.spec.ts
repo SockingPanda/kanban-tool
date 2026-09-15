@@ -152,7 +152,8 @@ test("captures maintenance confirmation and settings baselines", async ({ page }
   await page.keyboard.press("Escape")
 
   await goto(page, "/app/settings", "settings-page")
-  await page.getByText("连接与诊断", { exact: true }).click()
-  await expect(page.getByTestId("settings-connection")).toBeVisible()
-  await capture(page, "settings-ready", ["[data-testid='connection-web-build']", "[data-testid='settings-health']"])
+  await page.getByRole("tab", { name: "连接与诊断" }).click()
+  await expect(page.getByRole("tabpanel", { name: "连接与诊断" })).toBeVisible()
+  await expect(page.getByTestId("settings-health-status")).not.toHaveText("正在检查")
+  await capture(page, "settings-ready", ["[data-testid='settings-health-status']"])
 })

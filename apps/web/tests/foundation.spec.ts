@@ -51,12 +51,15 @@ test.describe("纸本应用壳层", () => {
     await expect(page.getByTestId("settings-page")).toBeVisible()
     await expect(page.locator("html")).not.toHaveAttribute("data-theme")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
-    await page.getByText("外观与语言", { exact: true }).click()
-    await page.getByTestId("appearance-theme").selectOption("dark")
-    await page.getByTestId("appearance-density").selectOption("compact")
-    await page.getByTestId("settings-locale").selectOption("en")
+    await page.getByTestId("appearance-theme").click()
+    await page.getByRole("option", { name: "深色", exact: true }).click()
+    await page.getByTestId("appearance-density").click()
+    await page.getByRole("option", { name: "紧凑", exact: true }).click()
+    await page.getByTestId("settings-locale").click()
+    await page.getByRole("option", { name: "English", exact: true }).click()
+    await page.getByRole("tab", { name: "Identity", exact: true }).click()
     await page.getByTestId("identity-actor").fill("playwright")
-    await page.getByTestId("identity-actor-save").click()
+    await page.getByTestId("identity-save").click()
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1b1b1b")
@@ -72,11 +75,31 @@ test.describe("纸本应用壳层", () => {
     await page.getByTestId("nav-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
     await expect(page.getByTestId("nav-board")).toBeEnabled()
-    await page.keyboard.press("Escape")
+    const brand = page.getByRole("link", { name: "返回任务" })
+    await expect(brand).toHaveText("Kanban")
+    await expect(brand).toHaveAttribute("href", "/app/boards/default/list")
+    await brand.click()
     await expect(page).toHaveURL(/\/app\/boards\/default\/list$/)
     await expect(page.getByTestId("task-list")).toBeVisible()
     await page.goBack()
     await expect(page).toHaveURL(/\/app\/settings$/)
+  })
+
+  test("Kanban 名称链接保留修饰键的新标签页行为", async ({ page, context }) => {
+    await page.goto("/app/boards/default/list")
+    await expect(page.getByTestId("task-list")).toBeVisible()
+    await page.getByTestId("nav-settings").click()
+    const brand = page.getByRole("link", { name: "返回任务" })
+    const popupPromise = context.waitForEvent("page")
+    await brand.click({ modifiers: ["ControlOrMeta"] })
+    const popup = await popupPromise
+    try {
+      await expect(popup).toHaveURL(/\/app\/boards\/default\/list$/)
+      await expect(page).toHaveURL(/\/app\/settings$/)
+      await expect(brand).toHaveText("Kanban")
+    } finally {
+      await popup.close()
+    }
   })
 
   test("surfaces a rejected navigation without an unhandled page error", async ({ page }) => {

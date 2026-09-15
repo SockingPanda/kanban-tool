@@ -1,74 +1,27 @@
-/* Owned by features/settings. Paper light/dark only. */
-
-.settings-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 20px
-}
-.settings-stack>section {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 21px
-}
-.settings-row {
-  display: flex;
-  align-items: center;
-  gap: 12px
-}
-.settings-icon {
-  width: 35px;
-  height: 35px;
-  background: var(--muted);
-  border-radius: 8px;
-  color: var(--muted-foreground);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0
-}
-.settings-row>div {
-  flex: 1
-}
-.settings-row strong {
-  font-size: 12px;
-  font-weight: 500
-}
-.settings-row p {
-  font-size: 10px;
-  color: var(--muted-foreground);
-  line-height: 1.8;
-  margin-top: 5px
-}
-.settings-actions {
-  display: flex;
-  gap: 10px;
-  padding-left: 47px;
-  margin-top: 16px
-}
-.settings-stack>.subtle-note {
-  font-size: 10px
-}
-@media(max-width:600px) {
-.settings-row {
-  gap: 9px;
-  align-items: flex-start
-}
-.settings-icon {
-  width: 30px;
-  height: 30px
-}
-.settings-icon>svg {
-  width: 17px
-}
-.settings-row strong {
-  font-size: 11px
-}
-.settings-row p {
-  font-size: 9px
-}
-.settings-actions {
-  padding-left: 39px;
-  gap: 8px
-}
-.settings-actions .ui-button {
-  font-size: 10px
-}
-}
+.settings-page {width:100%;max-width:1056px;margin:0 auto;padding:32px 40px 48px;}
+.settings-page-heading h1 {font:600 29px/1.3 var(--font-display,var(--font-serif));margin:0 0 8px;}
+.settings-page-heading>p {font-size:13px;line-height:1.7;color:var(--muted-foreground);margin:0;}
+.settings-tabs {display:flex;gap:24px;border-bottom:1px solid var(--border);margin:24px 0;}
+.settings-tabs>[role=tab] {border:0;border-bottom:2px solid transparent;display:flex;gap:8px;align-items:center;background:transparent;color:var(--muted-foreground);border-radius:0;padding:12px 0;font-size:13px;white-space:nowrap;}
+.settings-tabs>[role=tab][aria-selected=true] {border-bottom-color:var(--primary);color:var(--primary);font-weight:600;}
+.settings-tabs>[role=tab]:focus-visible {outline:2px solid var(--ring);outline-offset:4px;}
+.settings-tab-panel:focus-visible {outline:2px solid var(--ring);outline-offset:4px;}
+.settings-identity-form {max-width:570px;display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:24px 0;font-size:13px;}
+.settings-identity-form>.ui-input {width:100%;}
+.settings-button-row {display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.settings-feedback {margin:0;font-size:12px;line-height:1.65;color:var(--muted-foreground);}
+.settings-feedback.is-error {color:var(--red);}
+.settings-connection-stack {display:grid;gap:20px;}
+.settings-connection-summary {display:flex;justify-content:space-between;align-items:center;gap:16px;padding:22px 0 8px;}
+.settings-service-status {display:inline-flex;gap:8px;align-items:center;font-weight:500;font-size:14px;}
+.settings-service-status.is-available {color:var(--green);}.settings-service-status.is-error {color:var(--red);}.settings-service-status.is-warning {color:var(--amber);}
+.settings-service-message {color:var(--muted-foreground);font-size:12px;line-height:1.7;margin:0 0 12px;overflow-wrap:anywhere;}
+.settings-health-error {display:grid;justify-items:start;gap:10px;}.settings-health-error>.settings-service-message {margin:0;}
+.service-links {margin:18px 0 22px;padding-top:18px;border-top:1px solid var(--border);}
+.settings-diagnostics-actions {display:grid;justify-items:start;gap:10px;padding:20px 0;}
+.settings-technical {padding:0 0 20px;font-size:12px;color:var(--muted-foreground);}
+.settings-technical summary {cursor:pointer;width:fit-content;line-height:1.7;}
+.settings-technical dl {margin:15px 0 0;display:grid;gap:0;}
+.settings-technical dl>div {display:grid;grid-template-columns:136px minmax(0,1fr);gap:18px;padding:10px 0;border-top:1px solid var(--border);}
+.settings-technical dt {margin:0;}.settings-technical dd {margin:0;font-family:var(--mono);color:var(--foreground);overflow-wrap:anywhere;}
+@media(max-width:760px){.settings-page{padding:22px 18px;}.settings-tabs{gap:20px;overflow-x:auto;}.settings-page-heading h1{font-size:25px;}.settings-technical dl>div{grid-template-columns:1fr;gap:5px;}}

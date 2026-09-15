@@ -13,7 +13,8 @@ async function create(request:APIRequestContext,board:string,title:string) {
 }
 async function selectProject(page:Page,slug:string) {
   await page.getByRole('button',{name:'选择项目',exact:true}).click();
-  await page.getByRole('combobox',{name:'选择项目',exact:true}).selectOption(slug);
+  await page.getByRole('combobox',{name:'选择项目',exact:true}).click();
+  await page.getByRole('listbox',{name:'选择项目',exact:true}).getByRole('option').filter({hasText:slug}).click();
   await expect(page).toHaveURL(new RegExp(`/boards/${slug}/list`));
 }
 
@@ -103,10 +104,12 @@ test('设置、健康及维护确认与取消',async({page})=>{
   page.on('request',request=>{if(request.url().endsWith('/maintenance/backup')&&request.method()==='POST')backupRequests++;});
   await page.goto(`/app/boards/${beta}/list`);
   await page.getByTestId('nav-settings').click();
-  await expect(page.getByRole('dialog',{name:'设置',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'健康检查',exact:true}).click();
+  await expect(page.getByTestId('settings-page')).toBeVisible();
+  await page.getByRole('tab',{name:'连接与诊断'}).click();
+  await page.getByTestId('diagnostics-health-link').click();
   await expect(page.getByTestId('health-page')).toBeVisible();
   await page.getByTestId('nav-settings').click();
+  await page.getByRole('tab',{name:'连接与诊断'}).click();
   await page.getByRole('button',{name:'数据维护',exact:true}).click();
   await expect(page.getByTestId('maintenance-status')).toBeVisible();
   await page.getByTestId('maintenance-doctor-submit').click();

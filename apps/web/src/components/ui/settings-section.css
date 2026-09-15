@@ -1,0 +1,12 @@
+.settings-section {border:1px solid var(--border);border-radius:var(--card-radius);background:var(--card);}
+.settings-section>header {padding:22px 24px 18px;border-bottom:1px solid var(--border);}
+.settings-section>header h2 {margin:0;font-size:16px;font-weight:600;line-height:1.5;}
+.settings-section>header p,.settings-control-copy p {margin:5px 0 0;color:var(--muted-foreground);font-size:12px;line-height:1.65;}
+.settings-section-content {padding:0 24px;}
+.settings-control-row {display:flex;align-items:center;justify-content:space-between;gap:28px;padding:20px 0;}
+.settings-control-row+.settings-control-row {border-top:1px solid var(--border);}
+.settings-control-copy {min-width:0;max-width:480px;}
+.settings-control-copy>label,.settings-control-copy>span {font-size:13px;font-weight:500;}
+.settings-control-value {width:218px;flex-shrink:0;}
+.settings-control-value>.ui-select {width:100%;}
+@media(max-width:760px){.settings-section>header{padding:18px;}.settings-section-content{padding:0 18px;}.settings-control-row{align-items:flex-start;gap:12px;flex-direction:column;}.settings-control-value{width:100%;}}

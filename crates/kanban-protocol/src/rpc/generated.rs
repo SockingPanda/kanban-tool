@@ -10155,9 +10155,9 @@ impl TryFrom<v1::DtoStepStatus> for crate::event_payload::StepStatus {
         })
     }
 }
-impl TryFrom<crate::sse::StreamEventData> for v1::DtoStreamEventData {
+impl TryFrom<crate::event_stream::StreamEventData> for v1::DtoStreamEventData {
     type Error = RpcCodecError;
-    fn try_from(dto: crate::sse::StreamEventData) -> Result<Self, Self::Error> {
+    fn try_from(dto: crate::event_stream::StreamEventData) -> Result<Self, Self::Error> {
         Ok(Self {
             id: Some(dto.id),
             event_id: Some(dto.event_id),
@@ -10171,10 +10171,10 @@ impl TryFrom<crate::sse::StreamEventData> for v1::DtoStreamEventData {
         })
     }
 }
-impl TryFrom<v1::DtoStreamEventData> for crate::sse::StreamEventData {
+impl TryFrom<v1::DtoStreamEventData> for crate::event_stream::StreamEventData {
     type Error = RpcCodecError;
     fn try_from(wire: v1::DtoStreamEventData) -> Result<Self, Self::Error> {
-        let result: Self = crate::sse::StreamEventData {
+        let result: Self = crate::event_stream::StreamEventData {
             id: required(wire.id, "id")?,
             event_id: required(wire.event_id, "event_id")?,
             board_id: required(wire.board_id, "board_id")?,

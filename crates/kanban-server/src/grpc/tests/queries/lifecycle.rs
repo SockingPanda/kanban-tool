@@ -80,7 +80,7 @@ async fn assert_query_reclaimed(stop: Stop) {
     })
     .await
     .expect("客户端仍持有未读响应时，Host 必须回收 query source 和完整字节");
-    assert!(*host.state.event_stream_shutdown_receiver().borrow());
+    assert!(*host.state.stream_shutdown_receiver().borrow());
     assert_eq!(response.status(), reqwest::StatusCode::OK);
     println!(
         "G08_QUERY_SHUTDOWN mode={stop:?} h2_window_bytes=1024 retained_before={} released_ms={:.3} remaining_application_refs=2 client_response_still_held=true",

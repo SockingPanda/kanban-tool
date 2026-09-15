@@ -1,20 +1,22 @@
 //! 唯一 Host 的 RPC 装配与生命周期，不打开数据库、不绑定第二个端口。
 use crate::AppState;
-use axum::{Router, http::HeaderValue};
+use axum::Router;
 use tower::Layer;
-mod adapter;
 mod business;
 mod context;
-mod query;
-mod workspace;
-use adapter::KanbanAdapter;
+mod deadline;
 #[cfg(test)]
-pub(crate) use adapter::probe::SourceProbe;
-use kanban_rpc_host::RpcApp;
-use kanban_service::{KanbanError, Result};
-use std::sync::Arc;
+mod probe;
+mod query;
+#[cfg(test)]
+pub(crate) use probe::SourceProbe;
 
-pub struct WorkspaceRpcMount {
+pub(crate) const RPC_ROUTES: &[&str] = &[
+    "/kanban.v1.KanbanService/*method",
+    "/kanban.v1.QueryService/WatchQueries",
+];
+
+pub struct RpcMount {
     pub router: Router,
     /// 跟随唯一 host 的关闭流程调用 stop；不能交给 detached task 永久持有。
     pub runtime: HostRpcRuntime,
@@ -22,41 +24,22 @@ pub struct WorkspaceRpcMount {
 
 #[derive(Clone)]
 pub struct HostRpcRuntime {
-    legacy: RpcApp,
     query: query::QueryRuntime,
 }
 
 impl HostRpcRuntime {
     pub fn begin_shutdown(&self) {
-        self.legacy.begin_shutdown();
         self.query.begin_shutdown();
     }
 
     pub async fn stop(&self) {
         self.begin_shutdown();
         self.query.stop().await;
-        self.legacy.stop().await;
     }
 }
 
-/// 在唯一 Host 装配正式的具名业务 RPC 与 WorkspaceService。
-/// allowed_origins 必须由实际 listener、已验证的 runtime 与开发配置确定，不接受 wildcard。
-pub fn workspace_rpc_mount(
-    state: &AppState,
-    allowed_origins: Vec<HeaderValue>,
-) -> Result<WorkspaceRpcMount> {
-    let adapter = KanbanAdapter::new(state.application().clone());
-    #[cfg(test)]
-    let adapter = adapter.with_probe(state.grpc_probe.clone());
-    let adapter = Arc::new(adapter);
-    let runtime = RpcApp::new(Vec::new(), adapter.clone(), allowed_origins)
-        .map_err(|error| KanbanError::InvalidInput(error.to_string()))?
-        .with_refresh_source(adapter)
-        .with_shutdown(state.stream_shutdown_sender());
-    let router = Router::new().route_service(
-        "/kanban.framework.v1.WorkspaceService/WatchChanges",
-        kanban_rpc_host::workspace_service(runtime.clone()),
-    );
+/// 在唯一 Host 装配正式具名业务 RPC 与完整查询流；来源策略由外层 Host 统一检查。
+pub fn rpc_mount(state: &AppState) -> RpcMount {
     let business = kanban_protocol::rpc::v1::kanban_service_server::KanbanServiceServer::new(
         business::BusinessRpc {
             state: state.clone(),
@@ -64,37 +47,24 @@ pub fn workspace_rpc_mount(
     )
     .max_decoding_message_size(kanban_protocol::rpc::MAX_MESSAGE_BYTES)
     .max_encoding_message_size(kanban_protocol::rpc::MAX_MESSAGE_BYTES);
-    let workspace =
-        kanban_protocol::rpc::v1::workspace_service_server::WorkspaceServiceServer::new(
-            workspace::WorkspaceRpc(runtime.clone()),
-        )
-        .max_decoding_message_size(4096)
-        .max_encoding_message_size(4096);
     let queries = query::QueryRuntime::new(state.clone());
     let query_service =
         kanban_protocol::rpc::v1::query_service_server::QueryServiceServer::new(queries.clone())
             .max_decoding_message_size(256 * 1024)
             .max_encoding_message_size(kanban_protocol::rpc::query::MAX_QUERY_FRAME_BYTES);
-    let router = router
+    let router = Router::new()
         .route_service(
-            "/kanban.v1.KanbanService/*method",
-            tonic_web::GrpcWebLayer::new().layer(kanban_rpc_host::Deadline::new(business)),
+            RPC_ROUTES[0],
+            tonic_web::GrpcWebLayer::new().layer(deadline::Deadline::new(business)),
         )
         .route_service(
-            "/kanban.v1.WorkspaceService/WatchChanges",
-            tonic_web::GrpcWebLayer::new().layer(kanban_rpc_host::Deadline::new(workspace)),
-        )
-        .route_service(
-            "/kanban.v1.QueryService/WatchQueries",
+            RPC_ROUTES[1],
             tonic_web::GrpcWebLayer::new().layer(query_service),
         );
-    Ok(WorkspaceRpcMount {
+    RpcMount {
         router,
-        runtime: HostRpcRuntime {
-            legacy: runtime,
-            query: queries,
-        },
-    })
+        runtime: HostRpcRuntime { query: queries },
+    }
 }
 
 /// 即使 HTTP future 提前返回或被取消，也同步关闭所有订阅；正常退出再等待 Hub 收尾。

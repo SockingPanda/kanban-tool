@@ -488,7 +488,6 @@ pub(crate) fn cors_layer(origins: Vec<HeaderValue>) -> tower_http::cors::CorsLay
         .allow_headers([
             header::CONTENT_TYPE,
             header::ACCEPT,
-            HeaderName::from_static("last-event-id"),
             HeaderName::from_static("x-kb-actor"),
             HeaderName::from_static("x-kb-actor-bin"),
             HeaderName::from_static("x-grpc-web"),
@@ -742,7 +741,10 @@ mod tests {
         assert_eq!(runtime.web_base_path, APP_BASE_PATH);
         assert_eq!(runtime.actor, "test-actor");
         assert_eq!(runtime.default_board, "default");
-        assert_eq!(runtime.protocol_version, "v1");
+        assert_eq!(
+            runtime.protocol_version,
+            kanban_protocol::WEB_PROTOCOL_VERSION
+        );
         assert!(runtime.web_build_id.starts_with("sha256:"));
 
         let (status, headers, body) = response(&mut router, "GET", "/app/manifest.json", &[]).await;
@@ -860,11 +862,11 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("OPTIONS")
-                    .uri("/api/v1/stream/events")
+                    .uri("/kanban.v1.QueryService/WatchQueries")
                     .header(header::HOST, format!("localhost:{PORT}"))
                     .header(header::ORIGIN, format!("http://localhost:{PORT}"))
-                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
-                    .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "last-event-id")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                    .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "grpc-timeout")
                     .body(Body::empty())
                     .expect("preflight request"),
             )
@@ -876,7 +878,7 @@ mod tests {
                 .to_str()
                 .expect("allow headers")
                 .split(',')
-                .any(|value| value.trim().eq_ignore_ascii_case("last-event-id"))
+                .any(|value| value.trim().eq_ignore_ascii_case("grpc-timeout"))
         );
 
         let policy = HostOriginPolicy::for_listener(SocketAddr::from(([127, 0, 0, 1], 9988)));

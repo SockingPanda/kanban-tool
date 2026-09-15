@@ -21,12 +21,6 @@ pub fn run(root: &Path, action: &str) -> ToolResult<()> {
     generate(
         &root,
         action,
-        "proto",
-        "migration/grpc-framework/web/src/gen",
-    )?;
-    generate(
-        &root,
-        action,
         "crates/kanban-protocol/proto",
         "apps/web/src/generated/rpc",
     )

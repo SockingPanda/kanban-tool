@@ -31,8 +31,6 @@ Turso canonical 数据库 + 可重建 projection
   Web 的同源 gRPC-Web 数据源，所有入口都不直连数据库。
 - `kanban-live-core` 拥有纯内存 Hub、快照、delta 与有界历史；刷新提示通过共享 service gate
   取得，不是事务成功、审计 event ID 或投影 revision。
-- `kanban-rpc-proto`、`kanban-rpc-host` 是迁移框架的编译边界，分别
-  承载生成协议与 Tower service；application adapter 和 Host 装配点在 `kanban-server`。
 - `xtask` 只执行离线 artifact、依赖和文档检查，不是运行时依赖。
 
 第三方依赖的精确 owner 和 feature 由 Cargo manifest 与 `$style` 维护。内部依赖方向必须保持单向：
@@ -54,7 +52,7 @@ FTS、vector、graph/context、projection jobs、缓存和 capability probe 是�
 `kanban-server` 负责 host 进程生命周期、数据库及附件/run-log 路径准备、router、dispatcher 和
 shutdown；启动时由 `kanban-service::KanbanService::open_with_roots` 打开并初始化 Turso，并在 service
 内执行 migration、连接、事务、repository、projection 与维护操作。因而只有 `kanban serve` 进程会
-触达这份 canonical 数据库；client、CLI、MCP、Desktop 和 dispatcher 通过 typed localhost contract
+触达这份 canonical 数据库；client、CLI、MCP、Desktop 和 dispatcher 通过 本机 gRPC contract
 工作，host 停止或输入无效时返回稳定错误，不 fallback 到另一个数据库。
 
 ## 指南

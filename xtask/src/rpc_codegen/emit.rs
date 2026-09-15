@@ -387,7 +387,7 @@ impl<'a> Emitter<'a> {
             return Err("struct 需要named类型".into());
         };
         let rust = ty.rust();
-        let extra = if base == "crate::sse::StreamEventData" {
+        let extra = if base == "crate::event_stream::StreamEventData" {
             "validate_stream_event(&result)?;"
         } else {
             ""

@@ -33,6 +33,7 @@ pub mod dependency_catalog;
 mod derived;
 mod endpoint;
 pub mod event_payload;
+mod event_stream;
 mod events;
 mod headers;
 pub mod history_catalog;
@@ -57,7 +58,6 @@ mod runs;
 mod runtime;
 pub mod runtime_catalog;
 mod signals;
-mod sse;
 pub mod step_catalog;
 mod steps;
 pub mod structured_metadata;
@@ -149,6 +149,10 @@ pub use endpoint::{
     HttpMethod, endpoint_catalog, endpoint_descriptor, endpoint_obligation_todo_count,
     validate_contract_topology, validate_endpoint_catalog, validate_operation_contracts,
 };
+pub use event_stream::{
+    EventHeartbeatData, MAX_SAFE_EVENT_CURSOR, STREAM_EVENT_ENVELOPE_FIELDS, StreamEventData,
+    StreamEventsQuery, TASK_SCOPED_EVENT_KINDS, task_scoped_event_kind, validate_event_cursor,
+};
 pub use events::ListEventsResponse;
 pub use headers::{ApiHeaderContractSpec, ApiHeaderProfile, api_header_contract_specs};
 pub use inventory::{
@@ -192,11 +196,6 @@ pub use signals::{
     ConfirmSignalsResponse, RecordSignalRequest, RecordSignalResponse, RejectSignalsResponse,
     ResolveSignalsResponse, ReviewSignalsRequest, SignalCommentRequest, SignalRecordResult,
     SupersedeSignalsResponse,
-};
-pub use sse::{
-    MAX_SAFE_EVENT_CURSOR, SSE_HEARTBEAT_EVENT, STREAM_EVENT_ENVELOPE_FIELDS, SseHeartbeatData,
-    StreamEventData, StreamEventsHeaders, StreamEventsQuery, TASK_SCOPED_EVENT_KINDS,
-    parse_event_cursor, task_scoped_event_kind, validate_event_cursor,
 };
 pub use steps::{
     ApiExecutionPlan, ApiStepStatus, ApiTaskStep, ApiTaskSteps, CompleteStepPath,

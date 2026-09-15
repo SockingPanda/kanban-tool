@@ -1635,7 +1635,7 @@ enum DtoStepStatus {
   DTO_STEP_STATUS_SKIPPED = 3;
 }
 
-// crate::sse::StreamEventData
+// crate::event_stream::StreamEventData
 message DtoStreamEventData {
   optional int64 id = 1;
   optional string event_id = 2;

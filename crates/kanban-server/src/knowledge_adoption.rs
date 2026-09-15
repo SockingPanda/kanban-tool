@@ -1,17 +1,14 @@
-//! 知识面 HTTP 契约的真实 host adoption tests。
+//! 知识面正式 RPC 的真实路由 adoption tests。
 //!
 //! 这些测试只通过 `build_router` 发请求，并用已提交的 fixture 作为请求/响应
 //! DTO 的输入。时间戳、ULID 和 board id 等由真实 store 生成的字段在断言前
-//! 做局部归一化；不以 `serde_json::Value` 代替 wire DTO。
+//! 做局部归一化；正式 Protobuf 请求和响应均经过生成的 typed codec。
 
 use std::collections::BTreeMap;
 
-use axum::{
-    Router,
-    body::Body,
-    http::{Method, Request, Response, StatusCode},
-};
-use http_body_util::BodyExt;
+use crate::test_support::{decode_error, decode_response, parts, rpc_request};
+use axum::{Router, http::StatusCode};
+use kanban_protocol::rpc::v1 as pb;
 use kanban_protocol::{
     AddTaskLabelRequest, AddTaskLabelResponse, ApiCreateTaskStatus, ApiTask, ArchiveBoardRequest,
     ArchiveBoardResponse, BoardLabelPath, BoardQuery, BoardTaskMapPath, BoardTaskMapQuery,
@@ -23,20 +20,19 @@ use kanban_protocol::{
     GetSignalResponse, GraphMaintenanceResponse, GraphNeighborsQuery, GraphNeighborsResponse,
     GraphQueryQuery, GraphStatusResponse, LabelAtomIndexStatusResponse, LabelOntologyActionRequest,
     LabelOntologyActionResponse, LabelOntologyReviewQuery, LabelOntologySignalQuery,
-    LabelOntologySignalWire, LabelOntologySignalsResponse, LabelProposalCandidateWire,
-    LabelProposalDecisionRequest, LabelSemanticsPath, ListBoardsResponse, ListLabelAtomsResponse,
-    ListLabelSemanticsResponse, ListSignalsResponse, ListTaskLabelProposalsResponse,
-    MetadataEnvelope, ProposalPath, ProposeTaskLabelRequest, ProposeTaskLabelResponse,
-    RecordLabelOntologyObservationRequest, RecordLabelOntologyObservationResponse,
-    RecordSignalRequest, RecordSignalResponse, RemoveTaskLabelResponse, ReviewSignalsRequest,
-    SearchStatusResponse, SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse,
-    SignalFilterMeta, SignalPath, TaskLabelSurfacePath, TaskNeighborhoodPath,
-    TaskNeighborhoodQuery, TaskNeighborhoodResponse, UpsertLabelSemanticsRequest,
-    UpsertLabelSemanticsResponse, VectorConfigureRequest, VectorConfigureResponse,
-    VectorProjectionRequest, VectorProjectionResponse, VectorQuery, VectorStatusQuery,
-    VectorStatusResponse,
+    LabelOntologySignalsResponse, LabelProposalCandidateWire, LabelProposalDecisionRequest,
+    LabelSemanticsPath, ListBoardsResponse, ListLabelAtomsResponse, ListLabelSemanticsResponse,
+    ListSignalsResponse, ListTaskLabelProposalsResponse, ProposalPath, ProposeTaskLabelRequest,
+    ProposeTaskLabelResponse, RecordLabelOntologyObservationRequest,
+    RecordLabelOntologyObservationResponse, RecordSignalRequest, RecordSignalResponse,
+    RemoveTaskLabelResponse, ReviewSignalsRequest, SearchStatusResponse,
+    SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse, SignalPath,
+    TaskLabelSurfacePath, TaskNeighborhoodPath, TaskNeighborhoodQuery, TaskNeighborhoodResponse,
+    UpsertLabelSemanticsRequest, UpsertLabelSemanticsResponse, VectorConfigureRequest,
+    VectorConfigureResponse, VectorProjectionRequest, VectorProjectionResponse, VectorQuery,
+    VectorStatusQuery, VectorStatusResponse,
 };
-use serde::{Serialize, de::DeserializeOwned};
+use serde_json::json;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
@@ -66,64 +62,6 @@ async fn test_router_with_state() -> (TempDir, AppState, Router) {
         .expect("open state");
     let router = build_router(state.clone());
     (directory, state, router)
-}
-
-async fn response_json<T: DeserializeOwned>(response: Response<Body>) -> T {
-    let status = response.status();
-    let bytes = response
-        .into_body()
-        .collect()
-        .await
-        .expect("response body")
-        .to_bytes();
-    serde_json::from_slice(&bytes)
-        .unwrap_or_else(|error| panic!("decode {status} response: {error}; body={bytes:?}"))
-}
-
-fn request_json<T: Serialize>(method: Method, uri: &str, body: &T) -> Request<Body> {
-    Request::builder()
-        .method(method)
-        .uri(uri)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(body).expect("request JSON")))
-        .expect("JSON request")
-}
-
-fn request_json_with_headers<T: Serialize>(
-    method: Method,
-    uri: &str,
-    body: &T,
-    headers: &BTreeMap<String, String>,
-) -> Request<Body> {
-    let mut builder = Request::builder().method(method).uri(uri);
-    for (name, value) in headers {
-        builder = builder.header(name, value);
-    }
-    builder
-        .body(Body::from(serde_json::to_vec(body).expect("request JSON")))
-        .expect("JSON request with headers")
-}
-
-fn request_empty_with_headers(
-    method: Method,
-    uri: &str,
-    headers: &BTreeMap<String, String>,
-) -> Request<Body> {
-    let mut builder = Request::builder().method(method).uri(uri);
-    for (name, value) in headers {
-        builder = builder.header(name, value);
-    }
-    builder
-        .body(Body::empty())
-        .expect("empty request with headers")
-}
-
-fn request_empty(method: Method, uri: &str) -> Request<Body> {
-    Request::builder()
-        .method(method)
-        .uri(uri)
-        .body(Body::empty())
-        .expect("empty request")
 }
 
 fn actor_headers() -> BTreeMap<String, String> {
@@ -175,15 +113,16 @@ async fn create_task(router: &Router, board: &str, task_id: &str, title: &str) -
     };
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/boards/{board}/tasks"),
-            &request,
+        .oneshot(rpc_request(
+            "CreateTask",
+            pb::CreateTaskRequest::from_parts(parts(json!({"board":board})), (), request.clone())
+                .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("create task response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let created: CreateTaskResponse = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let created: CreateTaskResponse = decode_response::<pb::CreateTaskResponse, _>(response).await;
     created.data
 }
 
@@ -206,15 +145,16 @@ async fn create_assigned_task(router: &Router, board: &str, task_id: &str, title
     };
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/boards/{board}/tasks"),
-            &request,
+        .oneshot(rpc_request(
+            "CreateTask",
+            pb::CreateTaskRequest::from_parts(parts(json!({"board":board})), (), request.clone())
+                .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("create assigned task response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let _: CreateTaskResponse = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _: CreateTaskResponse = decode_response::<pb::CreateTaskResponse, _>(response).await;
 }
 
 async fn create_dependent_task(router: &Router, board: &str, task_id: &str, parent_id: &str) {
@@ -236,15 +176,16 @@ async fn create_dependent_task(router: &Router, board: &str, task_id: &str, pare
     };
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/boards/{board}/tasks"),
-            &request,
+        .oneshot(rpc_request(
+            "CreateTask",
+            pb::CreateTaskRequest::from_parts(parts(json!({"board":board})), (), request.clone())
+                .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("create dependent task response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let _: CreateTaskResponse = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _: CreateTaskResponse = decode_response::<pb::CreateTaskResponse, _>(response).await;
 }
 
 async fn create_board(router: &Router, slug: &str) {
@@ -256,11 +197,15 @@ async fn create_board(router: &Router, slug: &str) {
     };
     let response = router
         .clone()
-        .oneshot(request_json(Method::POST, "/api/v1/boards", &request))
+        .oneshot(rpc_request(
+            "CreateBoard",
+            pb::CreateBoardRequest::from_parts((), (), request.clone()).unwrap(),
+            &BTreeMap::new(),
+        ))
         .await
         .expect("create board response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let _: CreateBoardResponse = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _: CreateBoardResponse = decode_response::<pb::CreateBoardResponse, _>(response).await;
 }
 
 async fn create_label(
@@ -270,15 +215,20 @@ async fn create_label(
 ) -> CreateBoardLabelResponse {
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/boards/{board}/labels"),
-            &request,
+        .oneshot(rpc_request(
+            "CreateBoardLabel",
+            pb::CreateBoardLabelRequest::from_parts(
+                parts(json!({"board":board})),
+                (),
+                request.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("create label response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    response_json(response).await
+    assert_eq!(response.status(), StatusCode::OK);
+    decode_response::<pb::CreateBoardLabelResponse, _>(response).await
 }
 
 #[tokio::test]
@@ -295,14 +245,16 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
     let atom_path: BoardLabelPath = fixture!(BoardLabelPath, "list-label-atoms-path.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/boards/{}/labels/atoms", atom_path.board),
+        .oneshot(rpc_request(
+            "ListLabelAtoms",
+            pb::ListLabelAtomsRequest::from_parts(atom_path.clone(), (), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("empty list atoms response");
     assert_eq!(response.status(), StatusCode::OK);
-    let actual: ListLabelAtomsResponse = response_json(response).await;
+    let actual: ListLabelAtomsResponse =
+        decode_response::<pb::ListLabelAtomsResponse, _>(response).await;
     let expected_atoms: ListLabelAtomsResponse = fixture!(
         ListLabelAtomsResponse,
         "list-label-atoms-response.v1.valid.json"
@@ -314,14 +266,16 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
     assert_eq!(board_path.board, "fixture");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/boards/{}/labels/semantics", board_path.board),
+        .oneshot(rpc_request(
+            "ListLabelSemantics",
+            pb::ListLabelSemanticsRequest::from_parts(board_path.clone(), (), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("list semantics response");
     assert_eq!(response.status(), StatusCode::OK);
-    let actual: ListLabelSemanticsResponse = response_json(response).await;
+    let actual: ListLabelSemanticsResponse =
+        decode_response::<pb::ListLabelSemanticsResponse, _>(response).await;
     let expected: ListLabelSemanticsResponse = fixture!(
         ListLabelSemanticsResponse,
         "list-label-semantics-response.v1.valid.json"
@@ -339,18 +293,21 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
     );
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::PUT,
-            &format!(
-                "/api/v1/boards/{}/labels/{}/semantics",
-                semantics_path.board, semantics_path.label_id
-            ),
-            &request,
+        .oneshot(rpc_request(
+            "UpsertLabelSemantics",
+            pb::UpsertLabelSemanticsRequest::from_parts(
+                semantics_path.clone(),
+                (),
+                request.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("upsert semantics response");
     assert_eq!(response.status(), StatusCode::OK);
-    let actual: UpsertLabelSemanticsResponse = response_json(response).await;
+    let actual: UpsertLabelSemanticsResponse =
+        decode_response::<pb::UpsertLabelSemanticsResponse, _>(response).await;
     let expected_upsert: UpsertLabelSemanticsResponse = fixture!(
         UpsertLabelSemanticsResponse,
         "upsert-label-semantics-response.v1.valid.json"
@@ -363,29 +320,30 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
 
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/boards/{}/labels/atoms", atom_path.board),
+        .oneshot(rpc_request(
+            "ListLabelAtoms",
+            pb::ListLabelAtomsRequest::from_parts(atom_path.clone(), (), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("list atoms response");
     assert_eq!(response.status(), StatusCode::OK);
-    let actual: ListLabelAtomsResponse = response_json(response).await;
+    let actual: ListLabelAtomsResponse =
+        decode_response::<pb::ListLabelAtomsResponse, _>(response).await;
     assert_eq!(actual.data.len(), 1);
     assert_eq!(actual.data[0].label_id, label.data.id);
 
     let response = router
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/boards/{}/labels/atom-index/status",
-                atom_path.board
-            ),
+        .oneshot(rpc_request(
+            "LabelAtomIndexStatus",
+            pb::LabelAtomIndexStatusRequest::from_parts(atom_path.clone(), (), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("atom index status response");
     assert_eq!(response.status(), StatusCode::OK);
-    let status: LabelAtomIndexStatusResponse = response_json(response).await;
+    let status: LabelAtomIndexStatusResponse =
+        decode_response::<pb::LabelAtomIndexStatusResponse, _>(response).await;
     assert!(!status.data.backend.is_empty());
 }
 
@@ -405,16 +363,16 @@ async fn bootstrap_task_label_request_and_response_fixtures_reach_real_host() {
     );
     let response = router
         .clone()
-        .oneshot(request_json_with_headers(
-            Method::POST,
-            &format!("/api/v1/tasks/{}/labels/bootstrap", path.task_id),
-            &request,
+        .oneshot(rpc_request(
+            "BootstrapTaskLabel",
+            pb::BootstrapTaskLabelRequest::from_parts(path.clone(), (), request.clone()).unwrap(),
             &actor_headers(),
         ))
         .await
         .expect("bootstrap task label response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let actual: BootstrapTaskLabelResponse = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let actual: BootstrapTaskLabelResponse =
+        decode_response::<pb::BootstrapTaskLabelResponse, _>(response).await;
     let expected: BootstrapTaskLabelResponse = fixture!(
         BootstrapTaskLabelResponse,
         "bootstrap-task-label-response.v1.valid.json"
@@ -462,16 +420,21 @@ async fn locale_actor_json_header_fixture_is_consumed_by_real_router() {
         Some("schema-agent")
     );
     let response = router
-        .oneshot(request_json_with_headers(
-            Method::POST,
-            &format!("/api/v1/tasks/{}/labels", task.id),
-            &request,
+        .oneshot(rpc_request(
+            "AddTaskLabel",
+            pb::AddTaskLabelRequest::from_parts(
+                parts(json!({"task_id":task.id})),
+                (),
+                request.clone(),
+            )
+            .unwrap(),
             &headers,
         ))
         .await
         .expect("add label response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let added: kanban_protocol::AddTaskLabelResponse = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let added: kanban_protocol::AddTaskLabelResponse =
+        decode_response::<pb::AddTaskLabelResponse, _>(response).await;
     assert_eq!(added.data.labels.len(), 1);
     assert_eq!(added.data.labels[0].id, label.data.id);
 }
@@ -481,15 +444,15 @@ async fn locale_header_fixture_is_consumed_by_real_router() {
     let (_directory, router) = test_router().await;
     let headers = header_fixture("locale-headers");
     let response = router
-        .oneshot(request_empty_with_headers(
-            Method::GET,
-            "/api/v1/boards",
+        .oneshot(rpc_request(
+            "ListBoards",
+            pb::ListBoardsRequest::from_parts((), parts(json!({})), ()).unwrap(),
             &headers,
         ))
         .await
         .expect("list boards response");
     assert_eq!(response.status(), StatusCode::OK);
-    let _: ListBoardsResponse = response_json(response).await;
+    let _: ListBoardsResponse = decode_response::<pb::ListBoardsResponse, _>(response).await;
 }
 
 #[tokio::test]
@@ -502,16 +465,21 @@ async fn locale_json_header_fixture_is_consumed_by_real_router() {
         "create-board-label-request.v1.valid.json"
     );
     let response = router
-        .oneshot(request_json_with_headers(
-            Method::POST,
-            "/api/v1/boards/fixture/labels",
-            &request,
+        .oneshot(rpc_request(
+            "CreateBoardLabel",
+            pb::CreateBoardLabelRequest::from_parts(
+                parts(json!({"board":"fixture"})),
+                (),
+                request.clone(),
+            )
+            .unwrap(),
             &headers,
         ))
         .await
         .expect("create board label response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let _: CreateBoardLabelResponse = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _: CreateBoardLabelResponse =
+        decode_response::<pb::CreateBoardLabelResponse, _>(response).await;
 }
 
 #[tokio::test]
@@ -536,27 +504,39 @@ async fn locale_actor_header_fixture_is_consumed_by_real_router() {
     };
     let add_response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/tasks/{}/labels", task.id),
-            &add_request,
+        .oneshot(rpc_request(
+            "AddTaskLabel",
+            pb::AddTaskLabelRequest::from_parts(
+                parts(json!({"task_id":task.id})),
+                (),
+                add_request.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("add label response");
-    assert_eq!(add_response.status(), StatusCode::CREATED);
-    let _: AddTaskLabelResponse = response_json(add_response).await;
+    assert_eq!(add_response.status(), StatusCode::OK);
+    let _: AddTaskLabelResponse =
+        decode_response::<pb::AddTaskLabelResponse, _>(add_response).await;
 
     let headers = header_fixture("locale-actor-headers");
     let response = router
-        .oneshot(request_empty_with_headers(
-            Method::DELETE,
-            &format!("/api/v1/tasks/{}/labels/{}", task.id, label.data.id),
+        .oneshot(rpc_request(
+            "RemoveTaskLabel",
+            pb::RemoveTaskLabelRequest::from_parts(
+                parts(json!({"task_id":task.id,"label_id":label.data.id})),
+                (),
+                (),
+            )
+            .unwrap(),
             &headers,
         ))
         .await
         .expect("remove label response");
     assert_eq!(response.status(), StatusCode::OK);
-    let _: RemoveTaskLabelResponse = response_json(response).await;
+    let _: RemoveTaskLabelResponse =
+        decode_response::<pb::RemoveTaskLabelResponse, _>(response).await;
 }
 
 #[tokio::test]
@@ -564,23 +544,26 @@ async fn locale_actor_optional_json_header_fixture_is_consumed_by_real_router() 
     let (_directory, router) = test_router().await;
     create_board(&router, "fixture").await;
     let mut headers = header_fixture("locale-actor-optional-json-headers");
-    // 此 profile 有意将 Content-Type 设为可选；archive route 仍通过 Axum 的
-    // Json extractor 接收带 actor 的 JSON body。
+    // Content-Type 由 RPC framing 指定；可选 actor 的 metadata fixture 继续传入正式 adapter。
     assert!(!headers.contains_key("Content-Type"));
     headers.insert("Content-Type".to_owned(), "application/json".to_owned());
     let request: ArchiveBoardRequest =
         fixture!(ArchiveBoardRequest, "archive-board-request.v1.valid.json");
     let response = router
-        .oneshot(request_json_with_headers(
-            Method::POST,
-            "/api/v1/boards/fixture/archive",
-            &request,
+        .oneshot(rpc_request(
+            "ArchiveBoard",
+            pb::ArchiveBoardRequest::from_parts(
+                parts(json!({"board":"fixture"})),
+                (),
+                request.clone(),
+            )
+            .unwrap(),
             &headers,
         ))
         .await
         .expect("archive board response");
     assert_eq!(response.status(), StatusCode::OK);
-    let _: ArchiveBoardResponse = response_json(response).await;
+    let _: ArchiveBoardResponse = decode_response::<pb::ArchiveBoardResponse, _>(response).await;
 }
 
 #[tokio::test]
@@ -599,15 +582,21 @@ async fn label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal(
     );
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/tasks/{}/label-proposals", task_path.task_id),
-            &empty_request,
+        .oneshot(rpc_request(
+            "ProposeTaskLabel",
+            pb::ProposeTaskLabelRequest::from_parts(
+                task_path.clone(),
+                parts(json!({})),
+                empty_request.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("degraded proposal response");
     assert_eq!(response.status(), StatusCode::OK);
-    let degraded: ProposeTaskLabelResponse = response_json(response).await;
+    let degraded: ProposeTaskLabelResponse =
+        decode_response::<pb::ProposeTaskLabelResponse, _>(response).await;
     let mut expected_degraded: ProposeTaskLabelResponse = fixture!(
         ProposeTaskLabelResponse,
         "propose-task-label-response.v1.valid.json"
@@ -618,14 +607,17 @@ async fn label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal(
 
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/tasks/{}/label-proposals", task_path.task_id),
+        .oneshot(rpc_request(
+            "ListTaskLabelProposals",
+            pb::ListTaskLabelProposalsRequest::from_parts(task_path.clone(), parts(json!({})), ())
+                .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("empty proposal list response");
     assert_eq!(response.status(), StatusCode::OK);
-    let listed: ListTaskLabelProposalsResponse = response_json(response).await;
+    let listed: ListTaskLabelProposalsResponse =
+        decode_response::<pb::ListTaskLabelProposalsResponse, _>(response).await;
     let expected_empty: ListTaskLabelProposalsResponse = fixture!(
         ListTaskLabelProposalsResponse,
         "list-task-label-proposals-response.v1.valid.json"
@@ -647,30 +639,43 @@ async fn label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal(
     });
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/tasks/{}/label-proposals", task_path.task_id),
-            &request,
+        .oneshot(rpc_request(
+            "ProposeTaskLabel",
+            pb::ProposeTaskLabelRequest::from_parts(
+                task_path.clone(),
+                parts(json!({})),
+                request.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("persisted proposal response");
     assert_eq!(response.status(), StatusCode::OK);
-    let created: ProposeTaskLabelResponse = response_json(response).await;
+    let created: ProposeTaskLabelResponse =
+        decode_response::<pb::ProposeTaskLabelResponse, _>(response).await;
     let proposal = created.data.proposal.clone().expect("created proposal");
     assert_eq!(proposal.name, "fixture");
     assert_eq!(proposal.task_id, task_path.task_id);
 
-    let proposal_list: ListTaskLabelProposalsResponse = response_json(
-        router
-            .clone()
-            .oneshot(request_empty(
-                Method::GET,
-                &format!("/api/v1/tasks/{}/label-proposals", task_path.task_id),
-            ))
-            .await
-            .expect("proposal list response"),
-    )
-    .await;
+    let proposal_list: ListTaskLabelProposalsResponse =
+        decode_response::<pb::ListTaskLabelProposalsResponse, _>(
+            router
+                .clone()
+                .oneshot(rpc_request(
+                    "ListTaskLabelProposals",
+                    pb::ListTaskLabelProposalsRequest::from_parts(
+                        task_path.clone(),
+                        parts(json!({})),
+                        (),
+                    )
+                    .unwrap(),
+                    &BTreeMap::new(),
+                ))
+                .await
+                .expect("proposal list response"),
+        )
+        .await;
     assert_eq!(proposal_list.data.len(), 1);
     assert_eq!(proposal_list.data[0].id, proposal.id);
 
@@ -680,14 +685,16 @@ async fn label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal(
     proposal_path.proposal_id = proposal.id.clone();
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/label-proposals/{}", proposal_path.proposal_id),
+        .oneshot(rpc_request(
+            "GetLabelProposal",
+            pb::GetLabelProposalRequest::from_parts(proposal_path.clone(), (), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("proposal show response");
     assert_eq!(response.status(), StatusCode::OK);
-    let shown: GetLabelProposalResponse = response_json(response).await;
+    let shown: GetLabelProposalResponse =
+        decode_response::<pb::GetLabelProposalResponse, _>(response).await;
     let expected_shown: GetLabelProposalResponse = fixture!(
         GetLabelProposalResponse,
         "get-label-proposal-response.v1.valid.json"
@@ -703,15 +710,21 @@ async fn label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal(
         .name = "reject fixture".to_owned();
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/tasks/{}/label-proposals", task_path.task_id),
-            &reject_request,
+        .oneshot(rpc_request(
+            "ProposeTaskLabel",
+            pb::ProposeTaskLabelRequest::from_parts(
+                task_path.clone(),
+                parts(json!({})),
+                reject_request.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("reject proposal create response");
     assert_eq!(response.status(), StatusCode::OK);
-    let reject_created: ProposeTaskLabelResponse = response_json(response).await;
+    let reject_created: ProposeTaskLabelResponse =
+        decode_response::<pb::ProposeTaskLabelResponse, _>(response).await;
     let reject_proposal = reject_created.data.proposal.expect("reject proposal");
     let mut reject_path: ProposalPath =
         fixture!(ProposalPath, "reject-label-proposal-path.v1.valid.json");
@@ -722,15 +735,21 @@ async fn label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal(
     );
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/label-proposals/{}/reject", reject_path.proposal_id),
-            &reject_body,
+        .oneshot(rpc_request(
+            "RejectLabelProposal",
+            pb::RejectLabelProposalRequest::from_parts(
+                reject_path.clone(),
+                (),
+                reject_body.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("proposal reject response");
     assert_eq!(response.status(), StatusCode::OK);
-    let rejected: kanban_protocol::LabelProposalDecisionResponse = response_json(response).await;
+    let rejected: kanban_protocol::LabelProposalDecisionResponse =
+        decode_response::<pb::RejectLabelProposalResponse, _>(response).await;
     let expected_rejected: kanban_protocol::LabelProposalDecisionResponse = fixture!(
         kanban_protocol::LabelProposalDecisionResponse,
         "reject-label-proposal-response.v1.valid.json"
@@ -746,15 +765,17 @@ async fn label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal(
         fixture!(ProposalPath, "accept-label-proposal-path.v1.valid.json");
     accept_path.proposal_id = proposal.id.clone();
     let response = router
-        .oneshot(request_json(
-            Method::POST,
-            &format!("/api/v1/label-proposals/{}/accept", accept_path.proposal_id),
-            &decision,
+        .oneshot(rpc_request(
+            "AcceptLabelProposal",
+            pb::AcceptLabelProposalRequest::from_parts(accept_path.clone(), (), decision.clone())
+                .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("proposal accept response");
     assert_eq!(response.status(), StatusCode::OK);
-    let accepted: kanban_protocol::LabelProposalDecisionResponse = response_json(response).await;
+    let accepted: kanban_protocol::LabelProposalDecisionResponse =
+        decode_response::<pb::AcceptLabelProposalResponse, _>(response).await;
     let expected_accepted: kanban_protocol::LabelProposalDecisionResponse = fixture!(
         kanban_protocol::LabelProposalDecisionResponse,
         "accept-label-proposal-response.v1.valid.json"
@@ -790,24 +811,23 @@ async fn ontology_ledger_routes_consume_observation_and_action_fixtures() {
     );
     let mut review_query = review_query;
     review_query.limit = 1;
-    let group_by = match review_query.group_by {
-        kanban_protocol::LabelOntologyReviewGroupByWire::Label => "label",
-        kanban_protocol::LabelOntologyReviewGroupByWire::CandidateAtom => "candidate_atom",
-        kanban_protocol::LabelOntologyReviewGroupByWire::ProposedLabel => "proposed_label",
-    };
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/boards/{}/label-ontology/review?group_by={group_by}&include_all={}&limit={}",
-                review_path.board, review_query.include_all, review_query.limit
-            ),
+        .oneshot(rpc_request(
+            "ReviewLabelOntology",
+            pb::ReviewLabelOntologyRequest::from_parts(
+                review_path.clone(),
+                review_query.clone(),
+                (),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("ontology review response");
     assert_eq!(response.status(), StatusCode::OK);
-    let review: kanban_protocol::ReviewLabelOntologyResponse = response_json(response).await;
+    let review: kanban_protocol::ReviewLabelOntologyResponse =
+        decode_response::<pb::ReviewLabelOntologyResponse, _>(response).await;
     assert!(review.data.is_empty());
     assert_eq!(review.meta.limit, 1);
     let expected_review: kanban_protocol::ReviewLabelOntologyResponse = fixture!(
@@ -826,18 +846,21 @@ async fn ontology_ledger_routes_consume_observation_and_action_fixtures() {
     );
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!(
-                "/api/v1/tasks/{}/label-ontology/observations",
-                observation_path.task_id
-            ),
-            &observation,
+        .oneshot(rpc_request(
+            "RecordLabelOntologyObservation",
+            pb::RecordLabelOntologyObservationRequest::from_parts(
+                observation_path.clone(),
+                parts(json!({})),
+                observation.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("ontology observation response");
     assert_eq!(response.status(), StatusCode::OK);
-    let recorded: RecordLabelOntologyObservationResponse = response_json(response).await;
+    let recorded: RecordLabelOntologyObservationResponse =
+        decode_response::<pb::RecordLabelOntologyObservationResponse, _>(response).await;
     assert_eq!(recorded.data.task_id, observation_path.task_id);
     assert_eq!(recorded.data.signals.len(), 1);
     let signal_id = recorded.data.signals[0].id.clone();
@@ -852,18 +875,21 @@ async fn ontology_ledger_routes_consume_observation_and_action_fixtures() {
     );
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/boards/{}/label-ontology/signals?limit={}",
-                signal_path.board, signal_query.limit
-            ),
+        .oneshot(rpc_request(
+            "ListLabelOntologySignals",
+            pb::ListLabelOntologySignalsRequest::from_parts(
+                signal_path.clone(),
+                parts(json!({"limit":signal_query.limit})),
+                (),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("ontology signal list response");
     assert_eq!(response.status(), StatusCode::OK);
-    let signals: MetadataEnvelope<Vec<LabelOntologySignalWire>, SignalFilterMeta> =
-        response_json(response).await;
+    let signals: LabelOntologySignalsResponse =
+        decode_response::<pb::ListLabelOntologySignalsResponse, _>(response).await;
     let expected_signals: LabelOntologySignalsResponse = fixture!(
         LabelOntologySignalsResponse,
         "list-label-ontology-signals-response.v1.valid.json"
@@ -878,14 +904,16 @@ async fn ontology_ledger_routes_consume_observation_and_action_fixtures() {
     get_path.signal_id = signal_id.clone();
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/label-ontology/signals/{}", get_path.signal_id),
+        .oneshot(rpc_request(
+            "GetLabelOntologySignal",
+            pb::GetLabelOntologySignalRequest::from_parts(get_path.clone(), (), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("ontology signal show response");
     assert_eq!(response.status(), StatusCode::OK);
-    let detail: GetLabelOntologySignalResponse = response_json(response).await;
+    let detail: GetLabelOntologySignalResponse =
+        decode_response::<pb::GetLabelOntologySignalResponse, _>(response).await;
     assert_eq!(detail.data.signal.id, signal_id);
 
     let mut action: LabelOntologyActionRequest = fixture!(
@@ -899,18 +927,21 @@ async fn ontology_ledger_routes_consume_observation_and_action_fixtures() {
     );
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            &format!(
-                "/api/v1/boards/{}/label-ontology/actions",
-                action_path.board
-            ),
-            &action,
+        .oneshot(rpc_request(
+            "CreateLabelOntologyAction",
+            pb::CreateLabelOntologyActionRequest::from_parts(
+                action_path.clone(),
+                (),
+                action.clone(),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("ontology action response");
     assert_eq!(response.status(), StatusCode::OK);
-    let action_response: LabelOntologyActionResponse = response_json(response).await;
+    let action_response: LabelOntologyActionResponse =
+        decode_response::<pb::CreateLabelOntologyActionResponse, _>(response).await;
     let expected_action: LabelOntologyActionResponse = fixture!(
         LabelOntologyActionResponse,
         "create-label-ontology-action-response.v1.valid.json"
@@ -928,18 +959,17 @@ async fn ontology_ledger_routes_consume_observation_and_action_fixtures() {
         "apply-label-ontology-atom-path.v1.valid.json"
     );
     let response = router
-        .oneshot(request_json(
-            Method::POST,
-            &format!(
-                "/api/v1/boards/{}/label-ontology/apply/atom",
-                apply_path.board
-            ),
-            &apply,
+        .oneshot(rpc_request(
+            "ApplyLabelOntologyAtom",
+            pb::ApplyLabelOntologyAtomRequest::from_parts(apply_path.clone(), (), apply.clone())
+                .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("apply ontology atom response");
     assert_eq!(response.status(), StatusCode::OK);
-    let applied: LabelOntologyActionResponse = response_json(response).await;
+    let applied: LabelOntologyActionResponse =
+        decode_response::<pb::ApplyLabelOntologyAtomResponse, _>(response).await;
     let expected_applied: LabelOntologyActionResponse = fixture!(
         LabelOntologyActionResponse,
         "apply-label-ontology-atom-response.v1.valid.json"
@@ -963,17 +993,20 @@ async fn signal_routes_consume_record_list_show_and_review_fixtures() {
     list_query.limit = 1;
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/boards/{}/signals?limit={}",
-                list_path.board, list_query.limit
-            ),
+        .oneshot(rpc_request(
+            "ListSignals",
+            pb::ListSignalsRequest::from_parts(
+                list_path.clone(),
+                parts(json!({"limit":list_query.limit})),
+                (),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("empty signal list response");
     assert_eq!(response.status(), StatusCode::OK);
-    let listed: ListSignalsResponse = response_json(response).await;
+    let listed: ListSignalsResponse = decode_response::<pb::ListSignalsResponse, _>(response).await;
     let expected_list: ListSignalsResponse =
         fixture!(ListSignalsResponse, "list-signals-response.v1.valid.json");
     assert_eq!(listed, expected_list);
@@ -983,16 +1016,17 @@ async fn signal_routes_consume_record_list_show_and_review_fixtures() {
     let record_path: BoardLabelPath = fixture!(BoardLabelPath, "record-signal-path.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_json_with_headers(
-            Method::POST,
-            &format!("/api/v1/boards/{}/signals", record_path.board),
-            &record_request,
+        .oneshot(rpc_request(
+            "RecordSignal",
+            pb::RecordSignalRequest::from_parts(record_path.clone(), (), record_request.clone())
+                .unwrap(),
             &actor_headers(),
         ))
         .await
         .expect("record signal response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let recorded: RecordSignalResponse = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let recorded: RecordSignalResponse =
+        decode_response::<pb::RecordSignalResponse, _>(response).await;
     let expected_record: RecordSignalResponse =
         fixture!(RecordSignalResponse, "record-signal-response.v1.valid.json");
     assert_eq!(recorded.data.signal.kind, expected_record.data.signal.kind);
@@ -1014,14 +1048,15 @@ async fn signal_routes_consume_record_list_show_and_review_fixtures() {
     show_path.signal_id = signal_id.clone();
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/signals/{}", show_path.signal_id),
+        .oneshot(rpc_request(
+            "GetSignal",
+            pb::GetSignalRequest::from_parts(show_path.clone(), (), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("signal show response");
     assert_eq!(response.status(), StatusCode::OK);
-    let shown: GetSignalResponse = response_json(response).await;
+    let shown: GetSignalResponse = decode_response::<pb::GetSignalResponse, _>(response).await;
     let expected_show: GetSignalResponse =
         fixture!(GetSignalResponse, "get-signal-response.v1.valid.json");
     assert_eq!(shown.data.id, signal_id);
@@ -1034,16 +1069,17 @@ async fn signal_routes_consume_record_list_show_and_review_fixtures() {
         fixture!(ReviewSignalsRequest, "review-signals-request.v1.valid.json");
     review_request.signal_ids = vec![signal_id.clone()];
     let response = router
-        .oneshot(request_json_with_headers(
-            Method::POST,
-            &format!("/api/v1/boards/{}/signals/confirm", review_path.board),
-            &review_request,
+        .oneshot(rpc_request(
+            "ConfirmSignals",
+            pb::ConfirmSignalsRequest::from_parts(review_path.clone(), (), review_request.clone())
+                .unwrap(),
             &actor_headers(),
         ))
         .await
         .expect("confirm signals response");
     assert_eq!(response.status(), StatusCode::OK);
-    let confirmed: ConfirmSignalsResponse = response_json(response).await;
+    let confirmed: ConfirmSignalsResponse =
+        decode_response::<pb::ConfirmSignalsResponse, _>(response).await;
     let expected_confirmed: ConfirmSignalsResponse = fixture!(
         ConfirmSignalsResponse,
         "confirm-signals-response.v1.valid.json"
@@ -1054,52 +1090,6 @@ async fn signal_routes_consume_record_list_show_and_review_fixtures() {
     assert_eq!(confirmed.data[0].status, "confirmed");
 }
 
-fn encode_component(value: &str) -> String {
-    const HEX: &[u8; 16] = b"0123456789ABCDEF";
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
-            encoded.push(byte as char);
-        } else {
-            encoded.push('%');
-            encoded.push(HEX[(byte >> 4) as usize] as char);
-            encoded.push(HEX[(byte & 0x0f) as usize] as char);
-        }
-    }
-    encoded
-}
-
-fn search_query_uri(base: &str, query: &SearchTasksQuery) -> String {
-    let mut params = vec![format!("board={}", encode_component(&query.board))];
-    if let Some(value) = query.q.as_deref() {
-        params.push(format!("q={}", encode_component(value)));
-    }
-    for status in &query.status {
-        let value = match status {
-            kanban_protocol::ApiTaskStatus::Triage => "triage",
-            kanban_protocol::ApiTaskStatus::Todo => "todo",
-            kanban_protocol::ApiTaskStatus::Scheduled => "scheduled",
-            kanban_protocol::ApiTaskStatus::Ready => "ready",
-            kanban_protocol::ApiTaskStatus::Running => "running",
-            kanban_protocol::ApiTaskStatus::Blocked => "blocked",
-            kanban_protocol::ApiTaskStatus::Review => "review",
-            kanban_protocol::ApiTaskStatus::Done => "done",
-            kanban_protocol::ApiTaskStatus::Archived => "archived",
-        };
-        params.push(format!("status={value}"));
-    }
-    for label in &query.label {
-        params.push(format!("label={}", encode_component(label)));
-    }
-    params.push(format!("include_archived={}", query.include_archived));
-    params.push(format!("limit={}", query.limit));
-    params.push(format!("offset={}", query.offset));
-    if let Some(value) = query.assignee.as_deref() {
-        params.push(format!("assignee={}", encode_component(value)));
-    }
-    format!("{base}?{}", params.join("&"))
-}
-
 #[tokio::test]
 async fn entity_routes_consume_upsert_list_and_path_fixtures() {
     let (_directory, router) = test_router().await;
@@ -1108,11 +1098,15 @@ async fn entity_routes_consume_upsert_list_and_path_fixtures() {
         fixture!(EntityUpsertRequest, "entity-upsert-request.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_json(Method::PUT, "/api/v1/entities", &request))
+        .oneshot(rpc_request(
+            "UpsertEntity",
+            pb::UpsertEntityRequest::from_parts((), (), request.clone()).unwrap(),
+            &BTreeMap::new(),
+        ))
         .await
         .expect("entity upsert response");
     assert_eq!(response.status(), StatusCode::OK);
-    let actual: EntityResponse = response_json(response).await;
+    let actual: EntityResponse = decode_response::<pb::UpsertEntityResponse, _>(response).await;
     let expected: EntityResponse = fixture!(EntityResponse, "entity-upsert-response.v1.valid.json");
     assert_eq!(actual.data.uri, expected.data.uri);
     assert_eq!(actual.data.kind, expected.data.kind);
@@ -1123,19 +1117,15 @@ async fn entity_routes_consume_upsert_list_and_path_fixtures() {
     let list_query: EntityListQuery = fixture!(EntityListQuery, "entity-list-query.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/entities?board={}&kind={}&limit={}",
-                list_query.board.as_deref().unwrap_or("default"),
-                list_query.kind.as_deref().unwrap_or("task"),
-                list_query.limit
-            ),
+        .oneshot(rpc_request(
+            "ListEntities",
+            pb::ListEntitiesRequest::from_parts((), list_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("entity list response");
     assert_eq!(response.status(), StatusCode::OK);
-    let listed: EntityListResponse = response_json(response).await;
+    let listed: EntityListResponse = decode_response::<pb::ListEntitiesResponse, _>(response).await;
     let expected_list: EntityListResponse =
         fixture!(EntityListResponse, "entity-list-response.v1.valid.json");
     assert_eq!(listed.data.len(), expected_list.data.len());
@@ -1143,14 +1133,15 @@ async fn entity_routes_consume_upsert_list_and_path_fixtures() {
 
     let path: EntityPath = fixture!(EntityPath, "entity-path.v1.valid.json");
     let response = router
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/entities/{}", encode_component(&path.uri)),
+        .oneshot(rpc_request(
+            "GetEntity",
+            pb::GetEntityRequest::from_parts(path.clone(), (), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("entity show response");
     assert_eq!(response.status(), StatusCode::OK);
-    let shown: EntityResponse = response_json(response).await;
+    let shown: EntityResponse = decode_response::<pb::GetEntityResponse, _>(response).await;
     assert_eq!(shown.data.uri, path.uri);
 }
 
@@ -1186,26 +1177,35 @@ async fn search_routes_consume_query_and_status_fixtures_against_real_index() {
         };
         let response = router
             .clone()
-            .oneshot(request_json(
-                Method::POST,
-                &format!("/api/v1/tasks/{task_id}/labels"),
-                &labels,
+            .oneshot(rpc_request(
+                "AddTaskLabel",
+                pb::AddTaskLabelRequest::from_parts(
+                    parts(json!({"task_id":task_id})),
+                    (),
+                    labels.clone(),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .expect("search label response");
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let _: kanban_protocol::AddTaskLabelResponse = response_json(response).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let _: kanban_protocol::AddTaskLabelResponse =
+            decode_response::<pb::AddTaskLabelResponse, _>(response).await;
     }
 
     let query: SearchTasksQuery = fixture!(SearchTasksQuery, "search-tasks-query.v1.valid.json");
-    let search_uri = search_query_uri("/api/v1/search/tasks", &query);
     let response = router
         .clone()
-        .oneshot(request_empty(Method::GET, &search_uri))
+        .oneshot(rpc_request(
+            "SearchTasks",
+            pb::SearchTasksRequest::from_parts((), query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
+        ))
         .await
         .expect("search tasks response");
     assert_eq!(response.status(), StatusCode::OK);
-    let actual: SearchTasksResponse = response_json(response).await;
+    let actual: SearchTasksResponse = decode_response::<pb::SearchTasksResponse, _>(response).await;
     let expected: SearchTasksResponse =
         fixture!(SearchTasksResponse, "search-tasks-response.v1.valid.json");
     assert_eq!(actual.meta.limit, query.limit);
@@ -1218,14 +1218,18 @@ async fn search_routes_consume_query_and_status_fixtures_against_real_index() {
     );
     assert_eq!(actual.data.hits[0].task.assignee, Some("agent".to_owned()));
 
-    let by_status_uri = search_query_uri("/api/v1/search/tasks/by-status", &query);
     let response = router
         .clone()
-        .oneshot(request_empty(Method::GET, &by_status_uri))
+        .oneshot(rpc_request(
+            "SearchTasksByStatus",
+            pb::SearchTasksByStatusRequest::from_parts((), query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
+        ))
         .await
         .expect("search by status response");
     assert_eq!(response.status(), StatusCode::OK);
-    let by_status: SearchTasksByStatusResponse = response_json(response).await;
+    let by_status: SearchTasksByStatusResponse =
+        decode_response::<pb::SearchTasksByStatusResponse, _>(response).await;
     assert_eq!(by_status.data.statuses.len(), 2);
     assert_eq!(by_status.data.statuses[1].tasks.len(), 1);
     assert_eq!(by_status.data.statuses[1].tasks[0].id, "t_fixture");
@@ -1243,14 +1247,16 @@ async fn search_routes_consume_query_and_status_fixtures_against_real_index() {
         "search-status-query.v1.valid.json"
     );
     let response = router
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/search/status?board={}", status_query.board),
+        .oneshot(rpc_request(
+            "SearchStatus",
+            pb::SearchStatusRequest::from_parts((), status_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("search status response");
     assert_eq!(response.status(), StatusCode::OK);
-    let status: SearchStatusResponse = response_json(response).await;
+    let status: SearchStatusResponse =
+        decode_response::<pb::SearchStatusResponse, _>(response).await;
     let expected_status: SearchStatusResponse =
         fixture!(SearchStatusResponse, "search-status-response.v1.valid.json");
     assert_eq!(expected_status.data.backend, "sqlite");
@@ -1265,14 +1271,16 @@ async fn vector_routes_consume_typed_projection_fixtures_and_real_degraded_queri
         fixture!(VectorStatusQuery, "vector-status-query.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/vector/status?board={}", status_query.board),
+        .oneshot(rpc_request(
+            "VectorStatus",
+            pb::VectorStatusRequest::from_parts((), status_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("vector status response");
     assert_eq!(response.status(), StatusCode::OK);
-    let status: VectorStatusResponse = response_json(response).await;
+    let status: VectorStatusResponse =
+        decode_response::<pb::VectorStatusResponse, _>(response).await;
     let expected_status: VectorStatusResponse =
         fixture!(VectorStatusResponse, "vector-status-response.v1.valid.json");
     assert!(!status.data.enabled);
@@ -1285,15 +1293,16 @@ async fn vector_routes_consume_typed_projection_fixtures_and_real_degraded_queri
     );
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            "/api/v1/vector/configure",
-            &configure,
+        .oneshot(rpc_request(
+            "VectorConfigure",
+            pb::VectorConfigureRequest::from_parts((), (), configure.clone()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("vector configure response");
     assert_eq!(response.status(), StatusCode::OK);
-    let configured: VectorConfigureResponse = response_json(response).await;
+    let configured: VectorConfigureResponse =
+        decode_response::<pb::VectorConfigureResponse, _>(response).await;
     let expected_configured: VectorConfigureResponse = fixture!(
         VectorConfigureResponse,
         "vector-configure-response.v1.valid.json"
@@ -1306,15 +1315,16 @@ async fn vector_routes_consume_typed_projection_fixtures_and_real_degraded_queri
     );
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            "/api/v1/vector/rebuild",
-            &rebuild_request,
+        .oneshot(rpc_request(
+            "VectorRebuild",
+            pb::VectorRebuildRequest::from_parts((), (), rebuild_request.clone()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("vector rebuild response");
     assert_eq!(response.status(), StatusCode::OK);
-    let rebuilt: VectorProjectionResponse = response_json(response).await;
+    let rebuilt: VectorProjectionResponse =
+        decode_response::<pb::VectorRebuildResponse, _>(response).await;
     let expected_rebuilt: VectorProjectionResponse = fixture!(
         VectorProjectionResponse,
         "vector-rebuild-response.v1.valid.json"
@@ -1327,15 +1337,16 @@ async fn vector_routes_consume_typed_projection_fixtures_and_real_degraded_queri
         fixture!(VectorProjectionRequest, "vector-sync-request.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_json(
-            Method::POST,
-            "/api/v1/vector/sync",
-            &sync_request,
+        .oneshot(rpc_request(
+            "VectorSync",
+            pb::VectorSyncRequest::from_parts((), (), sync_request.clone()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("vector sync response");
     assert_eq!(response.status(), StatusCode::OK);
-    let synced: VectorProjectionResponse = response_json(response).await;
+    let synced: VectorProjectionResponse =
+        decode_response::<pb::VectorSyncResponse, _>(response).await;
     let expected_synced: VectorProjectionResponse = fixture!(
         VectorProjectionResponse,
         "vector-sync-response.v1.valid.json"
@@ -1348,19 +1359,15 @@ async fn vector_routes_consume_typed_projection_fixtures_and_real_degraded_queri
         fixture!(VectorQuery, "vector-query-chunks-query.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/vector/query-chunks?board={}&q={}&limit={}",
-                encode_component(&chunks_query.board),
-                encode_component(&chunks_query.q),
-                chunks_query.limit
-            ),
+        .oneshot(rpc_request(
+            "VectorQueryChunks",
+            pb::VectorQueryChunksRequest::from_parts((), chunks_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("vector chunk query response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let error: ErrorEnvelope = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let error: ErrorEnvelope = decode_error(response).await;
     assert_eq!(
         error.error.code,
         kanban_protocol::ApiErrorCode::InvalidInput
@@ -1370,21 +1377,15 @@ async fn vector_routes_consume_typed_projection_fixtures_and_real_degraded_queri
     let atoms_query: VectorQuery =
         fixture!(VectorQuery, "vector-query-label-atoms-query.v1.valid.json");
     let response = router
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/vector/query-label-atoms?board={}&q={}&limit={}&polarity={}&include_vector={}",
-                encode_component(&atoms_query.board),
-                encode_component(&atoms_query.q),
-                atoms_query.limit,
-                encode_component(atoms_query.polarity.as_deref().unwrap_or("positive")),
-                atoms_query.include_vector
-            ),
+        .oneshot(rpc_request(
+            "VectorQueryLabelAtoms",
+            pb::VectorQueryLabelAtomsRequest::from_parts((), atoms_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("vector atom query response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let error: ErrorEnvelope = response_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let error: ErrorEnvelope = decode_error(response).await;
     assert_eq!(
         error.error.code,
         kanban_protocol::ApiErrorCode::InvalidInput
@@ -1426,14 +1427,15 @@ async fn graph_routes_consume_query_and_projection_fixtures() {
     let status_query: BoardQuery = fixture!(BoardQuery, "graph-status-query.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!("/api/v1/graph/status?board={}", status_query.board),
+        .oneshot(rpc_request(
+            "GraphStatus",
+            pb::GraphStatusRequest::from_parts((), status_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("graph status response");
     assert_eq!(response.status(), StatusCode::OK);
-    let status: GraphStatusResponse = response_json(response).await;
+    let status: GraphStatusResponse = decode_response::<pb::GraphStatusResponse, _>(response).await;
     let expected_status: GraphStatusResponse =
         fixture!(GraphStatusResponse, "graph-status-response.v1.valid.json");
     assert!(!status.data.backend.is_empty());
@@ -1443,20 +1445,16 @@ async fn graph_routes_consume_query_and_projection_fixtures() {
         fixture!(GraphNeighborsQuery, "graph-neighbors-query.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/graph/neighbors?board={}&entity_uri={}&predicate={}&limit={}",
-                encode_component(&neighbors_query.board),
-                encode_component(&neighbors_query.entity_uri),
-                encode_component(neighbors_query.predicate.as_deref().unwrap_or("depends_on")),
-                neighbors_query.limit
-            ),
+        .oneshot(rpc_request(
+            "GraphNeighbors",
+            pb::GraphNeighborsRequest::from_parts((), neighbors_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("graph neighbors response");
     assert_eq!(response.status(), StatusCode::OK);
-    let neighbors: GraphNeighborsResponse = response_json(response).await;
+    let neighbors: GraphNeighborsResponse =
+        decode_response::<pb::GraphNeighborsResponse, _>(response).await;
     assert_eq!(neighbors.meta.limit, neighbors_query.limit);
     assert_eq!(neighbors.data.len(), expected_neighbors.data.len());
     let mut normalized_neighbors = neighbors.clone();
@@ -1467,19 +1465,16 @@ async fn graph_routes_consume_query_and_projection_fixtures() {
     let query: GraphQueryQuery = fixture!(GraphQueryQuery, "graph-query-query.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/graph/query?board={}&query={}&limit={}",
-                encode_component(&query.board),
-                encode_component(&query.query),
-                query.limit
-            ),
+        .oneshot(rpc_request(
+            "GraphQuery",
+            pb::GraphQueryRequest::from_parts((), query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("graph query response");
     assert_eq!(response.status(), StatusCode::OK);
-    let rows: kanban_protocol::cli_helpers::CliGraphQueryOutput = response_json(response).await;
+    let rows: kanban_protocol::cli_helpers::CliGraphQueryOutput =
+        decode_response::<pb::GraphQueryResponse, _>(response).await;
     let expected_rows: kanban_protocol::cli_helpers::CliGraphQueryOutput = fixture!(
         kanban_protocol::cli_helpers::CliGraphQueryOutput,
         "graph-query-response.v1.valid.json"
@@ -1489,14 +1484,16 @@ async fn graph_routes_consume_query_and_projection_fixtures() {
     let rebuild_query: BoardQuery = fixture!(BoardQuery, "graph-rebuild-query.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::POST,
-            &format!("/api/v1/graph/rebuild?board={}", rebuild_query.board),
+        .oneshot(rpc_request(
+            "GraphRebuild",
+            pb::GraphRebuildRequest::from_parts((), rebuild_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("graph rebuild response");
     assert_eq!(response.status(), StatusCode::OK);
-    let rebuilt: GraphMaintenanceResponse = response_json(response).await;
+    let rebuilt: GraphMaintenanceResponse =
+        decode_response::<pb::GraphRebuildResponse, _>(response).await;
     let expected_rebuilt: GraphMaintenanceResponse = fixture!(
         GraphMaintenanceResponse,
         "graph-rebuild-response.v1.valid.json"
@@ -1506,14 +1503,16 @@ async fn graph_routes_consume_query_and_projection_fixtures() {
 
     let sync_query: BoardQuery = fixture!(BoardQuery, "graph-sync-query.v1.valid.json");
     let response = router
-        .oneshot(request_empty(
-            Method::POST,
-            &format!("/api/v1/graph/sync?board={}", sync_query.board),
+        .oneshot(rpc_request(
+            "GraphSync",
+            pb::GraphSyncRequest::from_parts((), sync_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("graph sync response");
     assert_eq!(response.status(), StatusCode::OK);
-    let synced: GraphMaintenanceResponse = response_json(response).await;
+    let synced: GraphMaintenanceResponse =
+        decode_response::<pb::GraphSyncResponse, _>(response).await;
     let expected_synced: GraphMaintenanceResponse = fixture!(
         GraphMaintenanceResponse,
         "graph-sync-response.v1.valid.json"
@@ -1534,25 +1533,17 @@ async fn context_neighborhood_and_task_map_routes_consume_typed_fixtures() {
         fixture!(BuildContextQuery, "build-context-query.v1.valid.json");
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/tasks/{}/context?board={}&lexical_limit={}&graph_limit={}&vector_limit={}&max_items={}&task={}&depth={}&budget={}",
-                context_path.task_id,
-                context_query.board,
-                context_query.lexical_limit,
-                context_query.graph_limit,
-                context_query.vector_limit,
-                context_query.max_items,
-                context_query.task.as_deref().unwrap_or("t_fixture"),
-                context_query.depth,
-                context_query.budget.unwrap_or(20)
-            ),
+        .oneshot(rpc_request(
+            "BuildContext",
+            pb::BuildContextRequest::from_parts(context_path.clone(), context_query.clone(), ())
+                .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("context response");
     assert_eq!(response.status(), StatusCode::OK);
-    let context: BuildContextResponse = response_json(response).await;
+    let context: BuildContextResponse =
+        decode_response::<pb::BuildContextResponse, _>(response).await;
     let expected_context: BuildContextResponse =
         fixture!(BuildContextResponse, "build-context-response.v1.valid.json");
     assert_eq!(context.data.subject, "kb://task/t_fixture");
@@ -1571,20 +1562,21 @@ async fn context_neighborhood_and_task_map_routes_consume_typed_fixtures() {
     );
     let response = router
         .clone()
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/tasks/{}/neighborhood?depth={}&limit_nodes={}&include_archived_context={}",
-                neighborhood_path.task_id,
-                neighborhood_query.depth,
-                neighborhood_query.limit_nodes,
-                neighborhood_query.include_archived_context
-            ),
+        .oneshot(rpc_request(
+            "TaskNeighborhood",
+            pb::TaskNeighborhoodRequest::from_parts(
+                neighborhood_path.clone(),
+                neighborhood_query.clone(),
+                (),
+            )
+            .unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("neighborhood response");
     assert_eq!(response.status(), StatusCode::OK);
-    let neighborhood: TaskNeighborhoodResponse = response_json(response).await;
+    let neighborhood: TaskNeighborhoodResponse =
+        decode_response::<pb::TaskNeighborhoodResponse, _>(response).await;
     let expected_neighborhood: TaskNeighborhoodResponse = fixture!(
         TaskNeighborhoodResponse,
         "task-neighborhood-response.v1.valid.json"
@@ -1602,23 +1594,15 @@ async fn context_neighborhood_and_task_map_routes_consume_typed_fixtures() {
     let map_query: BoardTaskMapQuery =
         fixture!(BoardTaskMapQuery, "board-task-map-query.v1.valid.json");
     let response = router
-        .oneshot(request_empty(
-            Method::GET,
-            &format!(
-                "/api/v1/boards/{}/task-map?active_only={}&context_depth={}&limit_nodes={}&include_done_context={}&include_archived_context={}&hide_isolated={}",
-                map_path.board,
-                map_query.active_only,
-                map_query.context_depth,
-                map_query.limit_nodes,
-                map_query.include_done_context,
-                map_query.include_archived_context,
-                map_query.hide_isolated
-            ),
+        .oneshot(rpc_request(
+            "BoardTaskMap",
+            pb::BoardTaskMapRequest::from_parts(map_path.clone(), map_query.clone(), ()).unwrap(),
+            &BTreeMap::new(),
         ))
         .await
         .expect("task map response");
     assert_eq!(response.status(), StatusCode::OK);
-    let map: BoardTaskMapResponse = response_json(response).await;
+    let map: BoardTaskMapResponse = decode_response::<pb::BoardTaskMapResponse, _>(response).await;
     let expected_map: BoardTaskMapResponse = fixture!(
         BoardTaskMapResponse,
         "board-task-map-response.v1.valid.json"

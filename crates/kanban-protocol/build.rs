@@ -1,14 +1,12 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let protos = [
         "proto/kanban/v1/kanban.proto",
-        "proto/kanban/v1/workspace.proto",
         "proto/kanban/v1/query.proto",
     ];
     for path in [
         "proto/kanban/v1/common.proto",
         "proto/kanban/v1/dto.proto",
         "proto/kanban/v1/kanban.proto",
-        "proto/kanban/v1/workspace.proto",
         "proto/kanban/v1/query.proto",
     ] {
         println!("cargo:rerun-if-changed={path}");

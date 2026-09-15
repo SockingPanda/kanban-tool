@@ -7,7 +7,7 @@ import { RpcTransportError, type RpcCall, type RpcMethod } from "../src/applicat
 export async function rpcRequest(method: RpcMethod, parts: Omit<RpcCall, "method"> = {}) {
   const baseURL = process.env.KANBAN_RELEASE_BASE_URL
   if (!baseURL) throw new Error("真实 RPC 验收需要 KANBAN_RELEASE_BASE_URL")
-  const transport = createRpcTransport({ apiBaseUrl: "", webBasePath: "/app/", actor: "v4-proof", defaultBoard: "default", serverVersion: "proof", protocolVersion: "v4", webBuildId: "proof" }, { documentBaseURI: `${baseURL}/app/`, fetcher: globalThis.fetch })
+  const transport = createRpcTransport({ apiBaseUrl: "", webBasePath: "/app/", actor: "v4-proof", defaultBoard: "default", serverVersion: "proof", protocolVersion: "v2", webBuildId: "proof" }, { documentBaseURI: `${baseURL}/app/`, fetcher: globalThis.fetch })
   let status = 200
   let payload: unknown
   try { payload = (await transport.call({ method, ...parts })).payload }

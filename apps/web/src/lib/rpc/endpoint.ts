@@ -86,7 +86,7 @@ function boundedFrames(onMessageBytes?: (bytes: number) => void): TransformStrea
   })
 }
 
-/** 查询、命令和 WatchChanges 共用的 Fetch 边界。 */
+/** 查询、命令和 QueryService 共用的 Fetch 边界。 */
 export function createRpcFetch(
   baseUrl: string,
   fetcher: typeof fetch = globalThis.fetch,

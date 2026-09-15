@@ -156,7 +156,7 @@ impl ContractDeclaration {
 
 /// 一个 operation parent 的唯一声明。
 ///
-/// API/SSE parent 必须提供 `method` 与 raw URI `path`；CLI、JSONL、metadata 和 config
+/// API DTO parent 必须提供 `method` 与 raw URI `path`；CLI、JSONL、metadata 和 config
 /// 等 non-HTTP surface 可将两者设为 `None`，并用 `key` 指定其 canonical surface key。
 #[derive(Debug, Clone, Copy)]
 pub struct OperationDeclaration {
@@ -237,17 +237,17 @@ impl OperationDeclaration {
         self.contracts
     }
 
-    /// 将 API/SSE parent 投影为现有 endpoint shape。
+    /// 将 API DTO parent 投影为现有 endpoint shape。
     pub fn endpoint_descriptor(&self) -> EndpointDescriptor {
         let method = self
             .method
-            .expect("API/SSE operation declaration must provide an HTTP method");
+            .expect("API DTO operation declaration must provide an HTTP method");
         let path = self
             .path
-            .expect("API/SSE operation declaration must provide an HTTP path");
+            .expect("API DTO operation declaration must provide an HTTP path");
         assert!(
-            matches!(self.surface, ContractSurface::Api | ContractSurface::Sse),
-            "only API/SSE operation declarations can project to EndpointDescriptor"
+            matches!(self.surface, ContractSurface::Api),
+            "only API DTO operation declarations can project to EndpointDescriptor"
         );
 
         EndpointDescriptor {
@@ -263,7 +263,6 @@ impl OperationDeclaration {
                 headers: self.obligation(EndpointObligationKind::Headers),
                 body: self.obligation(EndpointObligationKind::Body),
                 success: self.obligation(EndpointObligationKind::Success),
-                sse: self.obligation(EndpointObligationKind::Sse),
             },
         }
     }

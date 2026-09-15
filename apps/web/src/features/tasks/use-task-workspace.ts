@@ -60,7 +60,6 @@ import { parseTaskMapUrlState, serializeTaskMapUrlState, type TaskMapUrlState } 
 
 
 
-import type { BoardEventsBatch } from "../../application/data/explorer-read-model";
 
 
 
@@ -70,14 +69,6 @@ export interface ExplorerPageProps {
   readonly onNavigate?: (target: AppNavigationTarget, options?: { readonly replace?: boolean }) => void | Promise<unknown>
   /** 由 ProductShell 持有的响应式浏览器 connectivity 状态。 */
   readonly online?: boolean
-  /** 现有 persistent SSE integration 持有的 revision/batch seam。 */
-  readonly invalidationRevision?: number
-  readonly boardRevision?: number
-  readonly inspectorRevision?: number
-  readonly runsRevision?: number
-  /** 仅 recovery/gap/poll boundaries 触发 Events catch-up read。 */
-  readonly eventsRefreshRevision?: number
-  readonly eventsBatch?: BoardEventsBatch | null
   readonly syncStatus?: BoardSyncStatus
   readonly taskMutations?: BoardTaskMutationSurface
   readonly onVisibleCanonicalReloadChange?: (reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => void
@@ -271,7 +262,7 @@ function taskPageMutationModel(page: ExplorerTaskListPage | null): BoardViewMode
   return { board: { id: page.board.id, slug: page.board.slug, name: page.board.name }, columns: [], tasksByStatus }
 }
 
-export function useTaskWorkspace({ runtime, route, onNavigate, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
+export function useTaskWorkspace({ runtime, route, onNavigate, online, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
   const { loadTaskInspectorAttachments, loadTaskInspector, loadTaskInspectorEvents, loadTaskInspectorNeighborhood, loadTaskInspectorRuns, loadExplorerBoardIdentity, loadTaskListPage, createAttachmentDownloadClient } = useWorkspaceOperations();
   const { locale } = usePreferences()
   const copy = explorerCopies[locale]
@@ -287,16 +278,16 @@ export function useTaskWorkspace({ runtime, route, onNavigate, online, invalidat
   const listQuery = useMemo(() => parseTaskListQuery(new URLSearchParams(route.query ?? "")), [route.query])
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
   const collectionVisible = collectionViews.has(view)
-  const listRead = useAsyncRead(collectionVisible, listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }), boardRevision, online !== false)
+  const listRead = useAsyncRead(collectionVisible, listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }), online !== false)
   const listMutationModel = useMemo(() => taskPageMutationModel(listRead.data), [listRead.data])
   const listMutationController = useBoardTaskMutationController(listMutationModel, taskMutations, [], boardMessagesForLocale(locale))
-  const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }), boardRevision, online !== false)
+  const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }), online !== false)
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
   const inspectorIdentity = `${runtime.apiBaseUrl}\u0000${runtime.webBuildId}\u0000${inspectorKey}`
-  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false, includeAttachments: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
+  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal, includeNeighborhood: false, includeRuns: false, includeEvents: false, includeAttachments: false }) : Promise.reject(new Error("Task Inspector 尚未选择任务")), online !== false)
   const attachmentsRead = useAsyncRead(showInspector, `${inspectorKey}\u0000attachments`, (signal) => taskId
     ? loadTaskInspectorAttachments(runtime, route.boardSlug, taskId, { signal })
-    : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
+    : Promise.reject(new Error("Task Inspector 尚未选择任务")), online !== false)
   const reloadInspector = inspectorRead.reload
   const reloadAttachments = attachmentsRead.reload
   const reloadList = listRead.reload
@@ -519,19 +510,14 @@ export function useTaskWorkspace({ runtime, route, onNavigate, online, invalidat
     listMutationController,
     listMutationModel,
     mapIdentityRead,
-    boardRevision,
     online,
     mapUrlState,
     updateMapUrlState,
-    runsRevision,
     kindFilter,
-    eventsRefreshRevision,
-    eventsBatch,
     updateEventKindFilter,
     showInspector,
     inspectorModel,
     inspectorIdentity,
-    inspectorRevision,
     inspectorRead,
     loadInspectorRuns,
     loadInspectorEvents,

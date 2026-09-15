@@ -13,7 +13,7 @@ pub struct AppState {
     db_path: Arc<PathBuf>,
     attachment_root: Arc<PathBuf>,
     default_actor: Arc<str>,
-    event_stream_shutdown: Arc<Sender<bool>>,
+    stream_shutdown: Arc<Sender<bool>>,
     #[cfg(test)]
     pub(crate) grpc_probe: Arc<crate::grpc::SourceProbe>,
 }
@@ -48,7 +48,7 @@ impl AppState {
             db_path: Arc::new(db_path),
             attachment_root,
             default_actor: Arc::from(default_actor.into()),
-            event_stream_shutdown: Arc::new(shutdown),
+            stream_shutdown: Arc::new(shutdown),
             #[cfg(test)]
             grpc_probe: Default::default(),
         })
@@ -70,16 +70,17 @@ impl AppState {
         &self.default_actor
     }
 
-    pub(crate) fn event_stream_shutdown_receiver(&self) -> watch::Receiver<bool> {
-        self.event_stream_shutdown.subscribe()
+    #[cfg(test)]
+    pub(crate) fn stream_shutdown_receiver(&self) -> watch::Receiver<bool> {
+        self.stream_shutdown.subscribe()
     }
 
     pub(crate) fn stream_shutdown_sender(&self) -> Sender<bool> {
-        self.event_stream_shutdown.as_ref().clone()
+        self.stream_shutdown.as_ref().clone()
     }
 
-    pub(crate) fn begin_event_stream_shutdown(&self) {
-        self.event_stream_shutdown.send_replace(true);
+    pub(crate) fn begin_stream_shutdown(&self) {
+        self.stream_shutdown.send_replace(true);
     }
 }
 
@@ -163,14 +164,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn event_stream_shutdown_is_sticky_before_subscribe() {
+    async fn stream_shutdown_is_sticky_before_subscribe() {
         let db = tempfile::tempdir().expect("temporary database directory");
         let state = AppState::open(db.path().join("kanban.db"), "test")
             .await
             .expect("open state");
 
-        state.begin_event_stream_shutdown();
-        let receiver = state.event_stream_shutdown_receiver();
+        state.begin_stream_shutdown();
+        let receiver = state.stream_shutdown_receiver();
         assert!(*receiver.borrow());
     }
 }

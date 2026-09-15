@@ -6,6 +6,10 @@ Web 与 Desktop 的业务通信采用 Connect-ES `createGrpcWebTransport()` 和 
 由 `tonic-web` 接入现有 Host。CLI 与 MCP 内部通过共享异步 channel 使用原生 gRPC；MCP 对外
 保持 stdio/JSON-RPC。业务协议收敛为命名 RPC，HTTP 保留静态 Web、runtime、manifest 与健康探测。
 
+Web artifact 与 runtime 的 `protocolVersion` 使用 `v2` 标记此次不兼容的业务传输切换，
+旧 `v1` artifact 在 Host/Desktop 身份校验时拒绝。Protobuf 的 `kanban.v1` 是正式 RPC 契约自己的
+版本命名空间，与 artifact 格式版本和 Cargo package version 分别维护。
+
 所有协议共用一个 loopback listener。原生 HTTP/2 的 `:authority` 与 HTTP `Host` 一致校验；
 同源静态 Web 保持 strict CSP。开发代理也只连接明确的 loopback Host。
 

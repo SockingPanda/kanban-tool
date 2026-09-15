@@ -22,7 +22,7 @@ export interface RpcTransportResponse {
 
 export interface RpcTransport {
   call(request: RpcCall): Promise<RpcTransportResponse>
-  /** 已挂载 Events 消费完整有界窗口；旧测试 adapter 可继续独立验证向前分页。 */
+  /** QueryService 提供的完整有界审计窗口；普通 unary transport 不提供此能力。 */
   recentEvents?(query: { readonly board: string; readonly task_id?: string; readonly limit: number }, signal?: AbortSignal): Promise<RpcTransportResponse>
 }
 

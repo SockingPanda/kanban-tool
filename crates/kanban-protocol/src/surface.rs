@@ -15,12 +15,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         crate::CatalogProjection::new(crate::operation_catalog::operation_catalog())
             .surfaces()
             .into_iter()
-            .filter(|operation| {
-                !matches!(
-                    operation.surface,
-                    ContractSurface::Api | ContractSurface::Sse
-                )
-            })
+            .filter(|operation| !matches!(operation.surface, ContractSurface::Api))
             .collect::<Vec<_>>();
     operations.push(SurfaceOperation {
         key: "POST /api/v1/maintenance/{operation}".to_owned(),
@@ -60,7 +55,6 @@ fn endpoint_contract_references(endpoint: &crate::EndpointDescriptor) -> Vec<&'s
         endpoint.obligations.headers,
         endpoint.obligations.body,
         endpoint.obligations.success,
-        endpoint.obligations.sse,
     ]
     .into_iter()
     .filter_map(|obligation| match obligation {

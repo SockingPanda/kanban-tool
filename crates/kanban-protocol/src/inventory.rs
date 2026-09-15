@@ -1,3 +1,5 @@
+//! 可复用 DTO/schema 的字段清单；历史 HTTP 标识不代表当前可调用的业务路径。
+
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -6,7 +8,6 @@ pub enum ContractSurface {
     Api,
     Cli,
     Jsonl,
-    Sse,
     Metadata,
     Config,
 }
@@ -50,7 +51,6 @@ pub enum HttpTransportLocation {
     Body,
     Success,
     Error,
-    Sse,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]

@@ -33,7 +33,7 @@ pnpm install --frozen-lockfile
 pnpm --filter @kanban-tool/web dev
 ```
 
-Vite 开发与 preview 都将 RPC、现有 HTTP API、健康检查和 bootstrap metadata 代理到同一个
+Vite 开发与 preview 都将 正式 RPC、健康检查和 bootstrap metadata 代理到同一个
 `kanban serve`，默认地址为 `http://127.0.0.1:8721`。Host 使用其他端口时，在启动命令前设置
 `KANBAN_HOST_URL`，或写入 `apps/web/.env.local`：
 
@@ -70,7 +70,7 @@ React Doctor 固定为 `0.9.13`，完整扫描与增量扫描都以 warning 阻�
 | `src/features` | 任务、运行记录、动态、健康、维护与设置的领域组件 |
 | `src/application` | 数据源接口、订阅读取与展示映射、异步操作、通知和导航 |
 | `src/domain` | 展示模型、纯查询与操作意图 |
-| `src/adapters/host` | named RPC、共享查询流与 cursor、健康探测和生成契约的实际接入 |
+| `src/adapters/host` | named RPC、共享查询流与 cursor、诊断查询和生成契约的实际接入 |
 | `src/components` | 基础控件、布局和浮层 |
 | `src/styles`、`src/platform` | 静态主题、浏览器能力和本机偏好 |
 
@@ -84,11 +84,12 @@ React Doctor 固定为 `0.9.13`，完整扫描与增量扫描都以 warning 阻�
 
 完整快照与 byte splice delta 在结束帧通过大小、SHA-256 和具名类型校验后，才同时提交数据和
 cursor。组件从自己依赖的已提交结果映射展示模型；流更新保留当前 URL、表单草稿、焦点与滚动。
-断流丢弃未完成的暂存数据，重连携带已提交 cursor；明确的重试和写后同步等待服务端 `Ready`。
+断流丢弃未完成的暂存数据，重连携带已提交 cursor；明确的重试和写后同步等待服务端 `Ready`。查询归属、取消和恢复规则见 [查询订阅](docs/query-subscriptions.md)。
 业务写入与一次性用户操作使用 `KanbanService`，`/health` 保留为启动探测。
 
-`src/lib/api/generated` 由 `kanban-protocol` 生成，类型和运行时 validator 保持同源；手写 adapter
-在 `unknown` 边界完成验证。正式 Protobuf client 位于 `src/generated/rpc`，由根 `proto` 生成，
+`src/lib/api/generated` 由 `kanban-protocol` 生成，保留页面业务 DTO、错误与启动配置的 value
+contract；类型和运行时 validator 保持同源，手写 adapter 在 `unknown` 边界完成验证。
+DTO 中的 path/query 表示参数值，网络方法和路径由正式 RPC descriptor 决定。正式 Protobuf client 位于 `src/generated/rpc`，由根 `proto` 生成，
 通过 `src/lib/rpc` 转换为页面使用的 DTO。基础控件使用 React 和静态 CSS，浅色、深色与响应式布局共享主题
 token；不在运行时注入样式。依赖图按需加载。
 

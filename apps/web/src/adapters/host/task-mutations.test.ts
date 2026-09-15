@@ -8,7 +8,7 @@ import { createTaskMutationClient } from './task-mutations'
 
 const runtime = {
   apiBaseUrl: '/__kb_api__', webBasePath: '/app/', actor: 'web-user', defaultBoard: 'default',
-  serverVersion: '3.1.0', protocolVersion: 'v1', webBuildId: 'sha256:test',
+  serverVersion: '3.1.0', protocolVersion: 'v2', webBuildId: 'sha256:test',
 } satisfies WebRuntimeConfig
 const fixtures = import.meta.glob('../../lib/api/generated/fixtures/*-response.valid.json', { eager: true, import: 'default' })
 function fixture(method: string) {

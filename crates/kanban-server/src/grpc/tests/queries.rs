@@ -1,4 +1,4 @@
-mod common;
+pub(super) mod common;
 mod disconnect;
 mod lifecycle;
 mod recovery;

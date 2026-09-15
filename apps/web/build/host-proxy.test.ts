@@ -12,8 +12,8 @@ import { resolveKanbanHostUrl } from "./host-proxy"
 
 const configFile = fileURLToPath(new URL("../vite.config.ts", import.meta.url))
 const rpcPaths = [
-  "/kanban.framework.v1.WorkspaceService/WatchChanges",
-  "/kanban.v1.WorkspaceService/WatchChanges",
+  "/kanban.v1.QueryService/WatchQueries",
+  "/kanban.v1.KanbanService/CreateTask",
 ]
 const strictCsp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 
@@ -112,7 +112,7 @@ describe("KANBAN_HOST_URL", () => {
 })
 
 describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind => {
-  test("两组 RPC 前缀使用同一个 Host，原样转发方法、Content-Type 与字节", async () => {
+  test("两个正式 RPC service使用同一个 Host，原样转发方法、Content-Type 与字节", async () => {
     const received: Array<{ url?: string; method?: string; headers: IncomingMessage["headers"]; body: Buffer }> = []
     const value = await fixture(kind, (request, response) => {
       void readBody(request).then(body => {
@@ -146,7 +146,7 @@ describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind =>
     } finally { await value.close() }
   })
 
-  test("metadata、过渡 HTTP API 与健康检查共用 Host，本地 /app/ 与 strict preview CSP 保留", async () => {
+  test("metadata 与健康检查共用 Host，本地 /app/ 与 strict preview CSP 保留", async () => {
     const paths: string[] = []
     const origins: Array<string | undefined> = []
     const value = await fixture(kind, (request, response) => {
@@ -155,17 +155,20 @@ describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind =>
       response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ owner: "host", path: request.url }))
     })
     try {
-      for (const path of ["/app/runtime.json", "/app/manifest.json?fresh=1", "/api/v1/boards", "/health"]) {
+      for (const path of ["/app/runtime.json", "/app/manifest.json?fresh=1", "/health"]) {
         const result = await send(value.origin, path)
         expect(result.status).toBe(200)
         expect(JSON.parse(result.body.toString())).toEqual({ owner: "host", path })
       }
-      expect(paths).toEqual(["/app/runtime.json", "/app/manifest.json?fresh=1", "/api/v1/boards", "/health"])
-      expect(origins).toEqual([undefined, undefined, undefined, undefined])
+      expect(paths).toEqual(["/app/runtime.json", "/app/manifest.json?fresh=1", "/health"])
+      expect(origins).toEqual([undefined, undefined, undefined])
       const page = await send(value.origin, "/app/")
       expect(page.status).toBe(200)
       expect(page.body.toString()).toContain(kind === "dev" ? "本地 Vite 页面" : "本地 preview 页面")
-      expect(paths).toHaveLength(4)
+      for (const retired of ['/api/v1/boards', '/kanban.framework.v1.WorkspaceService/WatchChanges', '/kanban.v1.WorkspaceService/WatchChanges']) {
+        await send(value.origin, retired)
+      }
+      expect(paths).toHaveLength(3)
       if (kind === "preview") expect(page.headers["content-security-policy"]).toBe(strictCsp)
     } finally { await value.close() }
   })

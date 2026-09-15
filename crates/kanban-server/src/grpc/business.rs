@@ -19,6 +19,8 @@ macro_rules! implement_service {
             $(async fn $method(&self, request: Request<v1::$request>) -> Result<Response<v1::$response>, Status> {
                 let $context = call_context(request.metadata())?;
                 let ($path, $query, $input) = request.into_inner().decode_parts().map_err(invalid_request)?;
+                #[cfg(test)]
+                self.state.grpc_probe.business();
                 let $state = self.state.clone();
                 let value = $call.await.map_err(service_error)?;
                 let response = value.try_into().map_err(response_codec_error)?;

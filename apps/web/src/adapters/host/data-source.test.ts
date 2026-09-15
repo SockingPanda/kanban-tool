@@ -7,7 +7,7 @@ import type { WebRuntimeConfig } from '../../lib/runtime'
 import { createHostDataSource } from './data-source'
 
 const runtime: WebRuntimeConfig = {
-  apiBaseUrl: '', webBasePath: '/app/', actor: 'test', defaultBoard: 'default', serverVersion: '3.1.0', protocolVersion: 'v1', webBuildId: 'test',
+  apiBaseUrl: '', webBasePath: '/app/', actor: 'test', defaultBoard: 'default', serverVersion: '3.1.0', protocolVersion: 'v2', webBuildId: 'test',
 }
 const documentBaseURI = 'http://127.0.0.1:1421/app/'
 const board = { id: 'b_default', slug: 'default', name: 'Default', description: null, created_at: 1, updated_at: 2, archived_at: null }
@@ -67,10 +67,6 @@ describe('生产 Host 数据源', () => {
     expect(list?.value).toMatchObject({ board: 'default', q: '保留查询', limit: 25n, offset: 25n })
     const recent = calls.find(query => query.query.case === 'recentEvents')?.query
     expect(recent?.value).toMatchObject({ boardId: 'b_default', limit: 150 })
-    expect(source.boardRealtime).toBeUndefined()
-    expect(source.streamTransport).toBeUndefined()
-    expect(source.streamUrl).toBeUndefined()
-    expect(source.querySubscriptions).toBe(true)
   })
 
   test('连接失败保持错误，用户重试仍走 QueryService，不退回 unary', async () => {

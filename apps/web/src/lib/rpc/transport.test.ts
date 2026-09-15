@@ -11,7 +11,7 @@ import { decodeRpcRequest, encodeRpcResponse } from "./codec.generated"
 import { sameOriginRpcBase } from "./endpoint"
 import { actorHeaders, rpcTransportError } from "./errors"
 
-const runtime: WebRuntimeConfig = { apiBaseUrl: "", webBasePath: "/app/", actor: "local", defaultBoard: "default", serverVersion: "test", protocolVersion: "v4", webBuildId: "test" }
+const runtime: WebRuntimeConfig = { apiBaseUrl: "", webBasePath: "/app/", actor: "local", defaultBoard: "default", serverVersion: "test", protocolVersion: "v2", webBuildId: "test" }
 const baseURI = "http://127.0.0.1:8721/app/boards/default"
 
 function frame(flag: number, data: Uint8Array): Uint8Array {

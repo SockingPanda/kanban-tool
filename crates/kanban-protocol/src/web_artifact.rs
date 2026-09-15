@@ -32,7 +32,7 @@ pub const WEB_ARTIFACT_ENTRYPOINT: &str = "index.html";
 /// manifest 在 dist 根的固定路径；它不在 manifest.files 中。
 pub const WEB_ARTIFACT_MANIFEST_PATH: &str = "manifest.json";
 /// 当前 API wire protocol generation；它不是 protocol crate 的 Cargo package version。
-pub const WEB_PROTOCOL_VERSION: &str = "v1";
+pub const WEB_PROTOCOL_VERSION: &str = "v2";
 
 const BUILD_ID_DOMAIN: &str = "kanban-tool:web-artifact-build-id:v1";
 const BUILD_ID_PREFIX: &str = "sha256:";

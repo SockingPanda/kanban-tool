@@ -270,7 +270,7 @@ describe('单连接 multiplex 查询 registry', () => {
     const next = vi.fn()
     const failed = vi.fn()
     const run = (id: string) => ({ id, task_id: 't_1', status: 'succeeded', worker_profile: 'worker', worker_pid: null, claim_owner: 'owner', started_at: 1, finished_at: 2, exit_code: 0, summary: 'done', error: null, has_log: true, metadata: {} })
-    const runtime = { apiBaseUrl: '', webBasePath: '/app/', actor: 'test', defaultBoard: 'a', serverVersion: '3.1.0', protocolVersion: 'v1', webBuildId: 'test' }
+    const runtime = { apiBaseUrl: '', webBasePath: '/app/', actor: 'test', defaultBoard: 'a', serverVersion: '3.1.0', protocolVersion: 'v2', webBuildId: 'test' }
     observeRead(signal => loadTaskRuns(runtime, 't_1', { signal, transport: { call: request => h.registry.read(request) } }), controller.signal, next, failed)
     await vi.waitFor(() => expect(h.connections).toHaveLength(1))
     const runs = h.latest().request.queries[0]

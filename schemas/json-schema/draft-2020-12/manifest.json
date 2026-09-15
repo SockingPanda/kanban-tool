@@ -1,7 +1,11 @@
 {
-  "contract_inventory": {
-    "path": "operations.json",
-    "sha256": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5"
+  "dto_contract_inventory": {
+    "path": "dto-contracts.json",
+    "sha256": "sha256:f167802055e4d950096c1d0c634e7cc3e55da912dce48191bf1c6b8df76672bd"
+  },
+  "dto_operation_bindings": {
+    "path": "dto-bindings.json",
+    "sha256": "sha256:d64fe0108b9728666a50c15003f4117584eaa8e7c58db8ad9641b104d27c1b19"
   },
   "roots": [
     {
@@ -1655,43 +1659,13 @@
       "strictness": "deny_unknown_fields"
     },
     {
-      "contract_id": "sse.stream-events.headers",
-      "direction": "deserialize",
-      "id": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
-      "invalid_fixture": "schemas/fixtures/sse/stream-events-headers.v1.invalid.json",
-      "path": "sse/stream-events-headers.v1.schema.json",
-      "schema_fixture": "schemas/fixtures/sse/stream-events-headers.v1.valid.json",
-      "sha256": "sha256:693eee453795817b6a74a07e594df371347b8d135a1c98789333241b925eee62",
-      "strictness": "deny_unknown_fields"
-    },
-    {
-      "contract_id": "sse.stream-events.query",
-      "direction": "deserialize",
-      "id": "urn:kanban-tool:schema:sse:stream-events-query:v1",
-      "invalid_fixture": "schemas/fixtures/sse/stream-events-query.v1.invalid.json",
-      "path": "sse/stream-events-query.v1.schema.json",
-      "schema_fixture": "schemas/fixtures/sse/stream-events-query.v1.valid.json",
-      "sha256": "sha256:d4766f504fc765c93700d31e4475a9308d999ee185f9fc3bddb4617fde9a97f9",
-      "strictness": "deny_unknown_fields"
-    },
-    {
-      "contract_id": "sse.event.data",
+      "contract_id": "api.event.data",
       "direction": "serialize",
-      "id": "urn:kanban-tool:schema:sse:stream-event-data:v1",
-      "invalid_fixture": "schemas/fixtures/sse/stream-event-data.v1.invalid.json",
-      "path": "sse/stream-event-data.v1.schema.json",
-      "schema_fixture": "schemas/fixtures/sse/stream-event-data.v1.valid.json",
-      "sha256": "sha256:1e37043ab93382ec66b1d00e87c7814a134f17d28d4129087af4c72bf2d52470",
-      "strictness": "deny_unknown_fields"
-    },
-    {
-      "contract_id": "sse.event.heartbeat",
-      "direction": "serialize",
-      "id": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
-      "invalid_fixture": "schemas/fixtures/sse/event-heartbeat.v1.invalid.json",
-      "path": "sse/event-heartbeat.v1.schema.json",
-      "schema_fixture": "schemas/fixtures/sse/event-heartbeat.v1.valid.json",
-      "sha256": "sha256:5281eca45456b996834574eb0974ba749efff900f8fc4d28a9ca9cf8777dd076",
+      "id": "urn:kanban-tool:schema:api:event-data:v1",
+      "invalid_fixture": "schemas/fixtures/api/event-data.v1.invalid.json",
+      "path": "api/event-data.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/event-data.v1.valid.json",
+      "sha256": "sha256:16fe92790bead0cfcd8c20a645e7793b7a9522d578c31c6ce7676de01b4d9814",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -5835,9 +5809,9 @@
       "strictness": "deny_unknown_fields"
     }
   ],
-  "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
-  "surface_catalog": {
-    "path": "surface-operations.json",
-    "sha256": "sha256:f81670bb7282b33ddad301973771c024f4b9ce92db5c2e5668b8d77ac7fd6179"
-  }
+  "rpc_catalog": {
+    "path": "rpc-catalog.json",
+    "sha256": "sha256:6ed57f603434ad9ceb40bfc3ec49f411a4dc8305607786265938bb4b7a642892"
+  },
+  "schema_dialect": "https://json-schema.org/draft/2020-12/schema"
 }

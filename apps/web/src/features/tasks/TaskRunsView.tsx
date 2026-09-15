@@ -23,7 +23,6 @@ export interface TaskRunsPresentationProps {
 export interface TaskRunsViewProps {
   readonly runtime: WebRuntimeConfig
   readonly taskId: string | null
-  readonly invalidationRevision?: number
   readonly online?: boolean
 }
 
@@ -186,15 +185,15 @@ function ReadyRuns({locale,taskId,state,onRetry}: TaskRunsPresentationProps & {s
   )
 }
 
-function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, invalidationRevision: number, online: boolean): TaskRunsReadState & { readonly retry: () => void } {
-  const { loadTaskRuns, querySubscriptions } = useWorkspaceOperations();
+function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, online: boolean): TaskRunsReadState & { readonly retry: () => void } {
+  const { loadTaskRuns } = useWorkspaceOperations();
   return useAsyncRead(Boolean(taskId), runtime.webBuildId + '|' + taskId,
     signal => taskId ? loadTaskRuns(runtime, taskId, { signal }) : Promise.reject(new Error('尚未选择任务。')),
-    querySubscriptions ? 0 : invalidationRevision, online);
+    online);
 }
 
-export function TaskRunsView({ runtime, taskId, invalidationRevision = 0, online = typeof navigator === "undefined" || navigator.onLine }: TaskRunsViewProps) {
+export function TaskRunsView({ runtime, taskId, online = typeof navigator === "undefined" || navigator.onLine }: TaskRunsViewProps) {
   const { locale } = usePreferences()
-  const state = useTaskRunsRead(runtime, taskId, invalidationRevision, online)
+  const state = useTaskRunsRead(runtime, taskId, online)
   return <TaskRunsPresentation locale={locale} taskId={taskId} state={state} onRetry={state.retry} />
 }

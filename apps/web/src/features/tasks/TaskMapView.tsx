@@ -38,7 +38,6 @@ export interface TaskMapViewProps {
   readonly identityLoading?: boolean
   readonly identityError?: ExplorerReadError | Error | null
   readonly onRetryIdentity?: () => void
-  readonly invalidationRevision?: number
   readonly online?: boolean
   readonly taskId: string | null
   readonly onSelectTask: (taskId: string) => void
@@ -249,14 +248,14 @@ function errorReason(error: Error | null): string | null {
 
 function useTaskMapRead(
   runtime: WebRuntimeConfig, board: string, boardIdentity: ExplorerBoardIdentity | null,
-  includeDoneContext: boolean, hideIsolated: boolean, invalidationRevision: number, online: boolean,
+  includeDoneContext: boolean, hideIsolated: boolean, online: boolean,
 ): TaskMapReadState & { readonly retry: () => void } {
-  const { loadTaskMap, querySubscriptions } = useWorkspaceOperations();
+  const { loadTaskMap } = useWorkspaceOperations();
   const key = JSON.stringify([runtime.webBuildId, board, boardIdentity?.id, includeDoneContext, hideIsolated]);
   return useAsyncRead(Boolean(boardIdentity), key, signal => loadTaskMap(runtime, board, {
     ...(boardIdentity ? { boardIdentity } : {}), activeOnly: true, contextDepth: 1,
     includeDoneContext, includeArchivedContext: false, hideIsolated, limitNodes: MAP_LIMIT_NODES, signal,
-  }), querySubscriptions ? 0 : invalidationRevision, online);
+  }), online);
 }
 
 function TaskMapToolbar({
@@ -478,7 +477,6 @@ export function TaskMapView({
   identityLoading = false,
   identityError = null,
   onRetryIdentity,
-  invalidationRevision = 0,
   online = typeof navigator === "undefined" || navigator.onLine,
   taskId,
   onSelectTask,
@@ -487,7 +485,7 @@ export function TaskMapView({
 }: TaskMapViewProps) {
   const { locale } = usePreferences()
   const routeIdentity = boardIdentity && boardIdentity.slug === board ? boardIdentity : null
-  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated, invalidationRevision, online)
+  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated, online)
   const fencedData = fenceTaskMapReadModel(board, routeIdentity, mapRead.data)
   const state = useMemo<TaskMapReadState>(() => {
     if (!routeIdentity) return { data: null, loading: identityLoading, error: identityError }

@@ -15,8 +15,8 @@ use std::{
 use fs4::fs_std::FileExt;
 use kanban_protocol::{
     ContractDirection, ContractStrictness, ContractSurface, EndpointDescriptor, EndpointObligation,
-    HttpMethod, OperationContract, SSE_HEARTBEAT_EVENT, STREAM_EVENT_ENVELOPE_FIELDS,
-    TASK_SCOPED_EVENT_KINDS, endpoint_catalog, operation_inventory,
+    OperationContract, endpoint_catalog, operation_inventory,
+    rpc::catalog::method_for_operation,
     schema::{DRAFT_2020_12, SchemaRoot, canonicalize, schema_document, schema_registry},
 };
 use serde::{Deserialize, Serialize};
@@ -49,8 +49,12 @@ struct ResolvedSelection {
 #[serde(rename_all = "camelCase")]
 struct OperationManifest {
     id: String,
+    service: String,
     method: String,
     path: String,
+    request: String,
+    response: String,
+    server_streaming: bool,
     obligations: OperationObligations,
     shared_components: Vec<String>,
 }
@@ -62,7 +66,6 @@ struct OperationObligations {
     headers: WebObligation,
     body: WebObligation,
     success: WebObligation,
-    sse: WebObligation,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -260,18 +263,30 @@ pub fn expected_files(repo_root: &Path) -> ToolResult<BTreeMap<String, Vec<u8>>>
     let operations = resolved
         .endpoints
         .iter()
-        .map(|endpoint| OperationManifest {
-            id: endpoint.operation_id.to_owned(),
-            method: http_method_name(endpoint.method).to_owned(),
-            path: endpoint.path.to_owned(),
-            obligations: operation_obligations(endpoint),
-            shared_components: endpoint
-                .shared_components
-                .iter()
-                .map(|id| (*id).to_owned())
-                .collect(),
+        .map(|endpoint| {
+            let rpc = method_for_operation(endpoint.operation_id).ok_or_else(|| {
+                failure(format!(
+                    "Web selection missing RPC: {}",
+                    endpoint.operation_id
+                ))
+            })?;
+            Ok(OperationManifest {
+                id: endpoint.operation_id.to_owned(),
+                service: rpc.service.clone(),
+                method: rpc.method.clone(),
+                path: rpc.path(),
+                request: rpc.request.clone(),
+                response: rpc.response.clone(),
+                server_streaming: rpc.server_streaming,
+                obligations: operation_obligations(endpoint),
+                shared_components: endpoint
+                    .shared_components
+                    .iter()
+                    .map(|id| (*id).to_owned())
+                    .collect(),
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<ToolResult<Vec<_>>>()?;
 
     let protocol_schemas_hash = sha256(&schema_hash_material);
     let source_hashes = SourceHashes {
@@ -328,12 +343,6 @@ pub fn expected_files(repo_root: &Path) -> ToolResult<BTreeMap<String, Vec<u8>>>
         "operations.ts".to_owned(),
         operations_module(&operations),
         "operations module",
-    )?;
-    insert_generated_file(
-        &mut files,
-        "sse.ts".to_owned(),
-        sse_module(&resolved)?,
-        "SSE module",
     )?;
     insert_generated_file(
         &mut files,
@@ -411,7 +420,6 @@ fn resolve_selection(repo_root: &Path) -> ToolResult<ResolvedSelection> {
             endpoint.obligations.headers,
             endpoint.obligations.body,
             endpoint.obligations.success,
-            endpoint.obligations.sse,
         ]
         .into_iter()
         .any(|obligation| matches!(obligation, EndpointObligation::Todo))
@@ -485,7 +493,6 @@ fn endpoint_contract_ids(endpoint: &EndpointDescriptor) -> Vec<&'static str> {
         endpoint.obligations.headers,
         endpoint.obligations.body,
         endpoint.obligations.success,
-        endpoint.obligations.sse,
     ] {
         if let EndpointObligation::Contract(id) = obligation
             && !ids.contains(&id)
@@ -508,7 +515,6 @@ fn operation_obligations(endpoint: &EndpointDescriptor) -> OperationObligations 
         headers: web_obligation(endpoint.obligations.headers),
         body: web_obligation(endpoint.obligations.body),
         success: web_obligation(endpoint.obligations.success),
-        sse: web_obligation(endpoint.obligations.sse),
     }
 }
 
@@ -534,7 +540,6 @@ fn generated_source_names(contracts: &[ContractManifest]) -> Vec<String> {
         "operations.json".to_owned(),
         "operations.ts".to_owned(),
         "runtime.ts".to_owned(),
-        "sse.ts".to_owned(),
         "test-only.ts".to_owned(),
     ];
     for contract in contracts {
@@ -738,58 +743,8 @@ fn test_only_module(contracts: &[ContractModule]) -> Vec<u8> {
     output.into_bytes()
 }
 
-fn sse_module(selection: &ResolvedSelection) -> ToolResult<Vec<u8>> {
-    let root = selection
-        .roots
-        .iter()
-        .find(|root| root.contract_id == "sse.event.data")
-        .ok_or_else(|| failure("Web selection missing sse.event.data schema"))?;
-    let schema = schema_document(root);
-    let kinds = known_sse_event_kinds(&schema);
-    let _heartbeat_root = selection
-        .roots
-        .iter()
-        .find(|root| root.contract_id == "sse.event.heartbeat")
-        .ok_or_else(|| failure("Web selection missing sse.event.heartbeat schema"))?;
-    let field_order = serde_json::to_string(STREAM_EVENT_ENVELOPE_FIELDS)?;
-    let task_scoped_kinds = serde_json::to_string(TASK_SCOPED_EVENT_KINDS)?;
-    let mut output = String::from(
-        "// 由 `xtask web-contracts generate` 生成；请勿手工编辑。\nimport type { SseEventDataContract } from \"./contracts/sse-event-data\";\nimport { sseEventDataValidator } from \"./contracts/sse-event-data\";\nimport type { SseEventHeartbeatContract } from \"./contracts/sse-event-heartbeat\";\nimport { parseSseEventHeartbeat, sseEventHeartbeatValidator } from \"./contracts/sse-event-heartbeat\";\n\n",
-    );
-    output.push_str(&format!(
-        "export const sseHeartbeatEventName = {SSE_HEARTBEAT_EVENT:?} as const;\nexport const sseEventEnvelopeFieldOrder = {field_order} as const;\nexport const taskScopedSseEventKinds = {task_scoped_kinds} as const;\n\nexport type SseEventEnvelopeField = (typeof sseEventEnvelopeFieldOrder)[number];\nexport type TaskScopedSseEventKind = (typeof taskScopedSseEventKinds)[number];\nexport type SseHeartbeatDataContract = SseEventHeartbeatContract;\nexport const sseHeartbeatDataValidator = sseEventHeartbeatValidator;\nexport const isSseHeartbeat = sseEventHeartbeatValidator;\nexport function parseSseHeartbeat(value: unknown): SseHeartbeatDataContract {{\n  return parseSseEventHeartbeat(value);\n}}\n\n",
-    ));
-    output.push_str("export const knownSseEventKinds = [\n");
-    for kind in &kinds {
-        output.push_str(&format!("  {kind:?},\n"));
-    }
-    output.push_str("] as const;\n\n");
-    output.push_str("export type KnownSseEventKind = (typeof knownSseEventKinds)[number];\n");
-    output.push_str("export type KnownSseEvent = { [K in KnownSseEventKind]: Extract<SseEventDataContract, { kind: K }> }[KnownSseEventKind];\n\n");
-    output.push_str("export interface UnknownSseEvent {\n  readonly kind: string | null;\n  readonly raw: unknown;\n  readonly envelope: Record<string, unknown> | null;\n  readonly reason: \"unknown_kind\" | \"known_payload_invalid\" | \"invalid_envelope\";\n}\n\n");
-    output.push_str("export type ParsedSseEvent = KnownSseEvent | UnknownSseEvent;\n\n");
-    output.push_str("export function canonicalizeSseEventEnvelope(value: SseEventDataContract): Record<string, unknown> {\n  const result = Object.create(null) as Record<string, unknown>;\n  for (const field of sseEventEnvelopeFieldOrder) Object.defineProperty(result, field, { value: canonicalizeSseValue(value[field]), enumerable: true, writable: true, configurable: true });\n  return result;\n}\n\nexport function canonicalSseEventFingerprint(value: SseEventDataContract): string {\n  return JSON.stringify(canonicalizeSseEventEnvelope(value));\n}\n\nfunction canonicalizeSseValue(value: unknown): unknown {\n  if (Array.isArray(value)) return value.map(canonicalizeSseValue);\n  if (!isRecord(value)) return value;\n  const result = Object.create(null) as Record<string, unknown>;\n  for (const key of Object.keys(value).sort()) Object.defineProperty(result, key, { value: canonicalizeSseValue(value[key]), enumerable: true, writable: true, configurable: true });\n  return result;\n}\n\n");
-    output.push_str("function isRecord(value: unknown): value is Record<string, unknown> {\n  return typeof value === \"object\" && value !== null && !Array.isArray(value);\n}\n\n");
-    output.push_str("export function parseSseEvent(value: unknown): ParsedSseEvent {\n  if (!isRecord(value)) return invalidEnvelope(value, null);\n  const kind = typeof value.kind === \"string\" ? value.kind : null;\n  if (!sseEventDataValidator(value)) {\n    return kind !== null && isKnownKind(kind)\n      ? { kind, raw: value, envelope: value, reason: \"known_payload_invalid\" }\n      : invalidEnvelope(value, value);\n  }\n  if (kind !== null && isKnownSseEvent(value)) return value;\n  if (kind !== null) return { kind, raw: value, envelope: value, reason: \"unknown_kind\" };\n  return invalidEnvelope(value, value);\n}\n\nfunction isKnownSseEvent(value: SseEventDataContract): value is KnownSseEvent {\n  return typeof value.kind === \"string\" && isKnownKind(value.kind);\n}\n\nfunction isKnownKind(value: string): value is KnownSseEventKind {\n  return knownSseEventKinds.some((kind) => kind === value);\n}\n\nfunction invalidEnvelope(raw: unknown, envelope: Record<string, unknown> | null): UnknownSseEvent {\n  return { kind: envelope && typeof envelope.kind === \"string\" ? envelope.kind : null, raw, envelope, reason: \"invalid_envelope\" };\n}\n");
-    Ok(output.into_bytes())
-}
-
-fn known_sse_event_kinds(schema: &Value) -> Vec<&str> {
-    schema
-        .get("oneOf")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|branch| {
-            branch
-                .pointer("/properties/kind/const")
-                .and_then(Value::as_str)
-        })
-        .collect::<Vec<_>>()
-}
-
 fn index_module() -> Vec<u8> {
-    "// 由 `xtask web-contracts generate` 生成；请勿手工编辑。\n// 生产入口保持轻量；按需直接导入 `sse.ts` 或 `contracts/<slug>.ts`。\nexport * from \"./operations\";\n".to_owned().into_bytes()
+    "// 由 `xtask web-contracts generate` 生成；请勿手工编辑。\n// 生产入口保持轻量；按需直接导入 `contracts/<slug>.ts`。\nexport * from \"./operations\";\n".to_owned().into_bytes()
 }
 
 fn json_to_typescript(value: &Value) -> ToolResult<String> {
@@ -1424,16 +1379,6 @@ fn validator_name(contract_id: &str) -> String {
     }
 }
 
-fn http_method_name(method: HttpMethod) -> &'static str {
-    match method {
-        HttpMethod::Get => "GET",
-        HttpMethod::Post => "POST",
-        HttpMethod::Put => "PUT",
-        HttpMethod::Patch => "PATCH",
-        HttpMethod::Delete => "DELETE",
-    }
-}
-
 fn failure(message: impl Into<String>) -> Box<dyn std::error::Error + Send + Sync> {
     std::io::Error::other(message.into()).into()
 }
@@ -1466,7 +1411,7 @@ mod tests {
                 .any(|endpoint| endpoint.operation_id == "api.create-board")
         );
         assert!(
-            !resolved
+            resolved
                 .endpoints
                 .iter()
                 .any(|endpoint| endpoint.operation_id == "api.update-step")
@@ -1499,27 +1444,8 @@ mod tests {
         assert!(first.contains_key("runtime.ts"));
         assert!(first.contains_key("test-only.ts"));
         assert!(first.contains_key("contracts/api-get-task-path.ts"));
-        assert!(first.contains_key("sse.ts"));
-    }
-
-    #[test]
-    fn sse_taxonomy_keeps_unknown_and_invalid_payloads_conservative() {
-        let files = expected_files(&repository_root()).expect("expected files");
-        let sse = String::from_utf8(files["sse.ts"].clone()).expect("generated SSE is UTF-8");
-        assert_eq!(
-            sse.matches("  \"").count(),
-            43,
-            "protocol known SSE kind count must stay 43"
-        );
-        assert!(sse.contains("sseEventDataValidator(value)"));
-        assert!(sse.contains("./contracts/sse-event-data"));
-        assert!(!sse.contains("./schemas"));
-        assert!(!sse.contains("./validators"));
-        assert!(sse.contains("reason: \"unknown_kind\""));
-        assert!(sse.contains("reason: \"known_payload_invalid\""));
-        assert!(sse.contains("reason: \"invalid_envelope\""));
-        assert!(sse.contains("Extract<SseEventDataContract, { kind: K }>"));
-        assert!(!sse.contains("parseSseEventData(value)"));
+        assert!(first.contains_key("contracts/api-event-data.ts"));
+        assert!(!first.contains_key("sse.ts"));
     }
 
     #[test]
@@ -1544,12 +1470,18 @@ mod tests {
             "api.get-task.path"
         );
         assert_eq!(
-            operation("sse.stream-events")["obligations"]["query"]["contractId"],
-            "sse.stream-events.query"
+            operation("api.get-task")["service"],
+            "kanban.v1.KanbanService"
         );
+        assert_eq!(operation("api.get-task")["method"], "GetTask");
         assert_eq!(
-            operation("sse.stream-events")["obligations"]["sse"]["contractId"],
-            "sse.event.data"
+            operation("api.get-task")["path"],
+            "/kanban.v1.KanbanService/GetTask"
+        );
+        assert_eq!(operation("api.get-task")["serverStreaming"], false);
+        assert_eq!(
+            operation("api.list-events")["sharedComponents"],
+            serde_json::json!(["api.event.data"])
         );
         assert!(
             operation("api.list-tasks")["sharedComponents"]

@@ -95,7 +95,7 @@ test.describe("Kanban Settings", () => {
           actor: "local",
           defaultBoard: "",
           serverVersion: "3.0.0",
-          protocolVersion: "v1",
+          protocolVersion: "v2",
           webBuildId: "dev",
         }),
       })

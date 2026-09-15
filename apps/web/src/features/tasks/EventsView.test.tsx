@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
-import { asCanonicalBoardId } from "../../application/sync/contracts"
+import { asCanonicalBoardId } from "../../domain/board-id"
 import { parseCanonicalBoardSlug } from "../../domain/board-slug"
 import type { BoardEventsReadModel, ExplorerEvent } from "../../application/data/explorer-read-model";
 import { EventsPresentation, type EventsReadState } from "./EventsView"

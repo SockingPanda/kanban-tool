@@ -14,6 +14,12 @@ function response(body: string, status = 200) {
 }
 
 describe("Web runtime bootstrap", () => {
+  test('拒绝旧 v1 Host 的 runtime，挂载前报告协议不兼容', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => response(JSON.stringify({ ...validRuntime, protocolVersion: 'v1' })))
+    await expect(loadWebRuntimeConfig({ fetch: fetcher, documentBaseURI: 'https://kanban.test/app/' })).rejects.toMatchObject({ kind: 'invalid_contract' })
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
+
   test("derives same-origin runtime URL from the /app/ base on deep routes", () => {
     expect(runtimeEndpointUrl("https://kanban.test/app/boards/default/board", "/app/")).toBe(
       "https://kanban.test/app/runtime.json",

@@ -20,16 +20,8 @@ fmt-check: fmt
 fmt-full:
     cargo fmt --all -- --check
 
-# 迁移框架先通过真实 workspace 联编，产品路由切换由独立的 Host 验证覆盖。
-grpc-framework-check:
-    scripts/cargo-build-lock.sh -- cargo check --locked -p kanban-server --features grpc-framework --tests
-    scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-live-core -p kanban-rpc-proto -p kanban-rpc-host
-    scripts/cargo-build-lock.sh -- cargo clippy --locked -p kanban-live-core -p kanban-rpc-proto -p kanban-rpc-host --all-targets -- -D warnings
-
 # 独立临时数据库与 listener，使用真实生成客户端和 Node Fetch 验证 Host。
 grpc-fetch-check:
-    pnpm --filter @kanban-tool/grpc-framework build
-    scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server grpc::tests::generated_connect_client_uses_fetch_against_current_host -- --ignored --nocapture
     scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server grpc::tests::business::generated_business_client_fetches_current_host -- --ignored --nocapture
 
 grpc-attachment-check:
@@ -292,7 +284,7 @@ schema-tool:
     scripts/cargo-build-lock.sh -- cargo clippy --locked -p xtask --all-targets -- -D warnings
 
 schema-surface-audit:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog; fi
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-server rpc_routes_match_method_manifest_and_descriptor --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server rpc_routes_match_method_manifest_and_descriptor; fi
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog; fi
 
 schema-contract:

@@ -45,7 +45,7 @@ where
                     tokio::pin!(connection);
                     let result = tokio::select! {
                         result = &mut connection => result,
-                        _ = kanban_rpc_host::wait_stop(&mut stopping) => {
+                        _ = wait_stop(&mut stopping) => {
                             connection.as_mut().graceful_shutdown();
                             connection.await
                         }
@@ -70,4 +70,15 @@ where
         ));
     }
     Ok(())
+}
+
+async fn wait_stop(stopping: &mut watch::Receiver<bool>) {
+    loop {
+        if *stopping.borrow() {
+            return;
+        }
+        if stopping.changed().await.is_err() {
+            return;
+        }
+    }
 }

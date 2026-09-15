@@ -28,9 +28,6 @@ importers:
       '@connectrpc/connect-web':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)))
-      '@kanban-tool/grpc-framework':
-        specifier: workspace:*
-        version: link:../../migration/grpc-framework/web
       ajv:
         specifier: 8.20.0
         version: 8.20.0
@@ -92,25 +89,6 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.20)(vite@8.2.1(@types/node@22.19.20)(jiti@2.7.0)(yaml@2.9.1))
-
-  migration/grpc-framework/web:
-    dependencies:
-      '@bufbuild/protobuf':
-        specifier: 2.15.0
-        version: 2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)
-      '@connectrpc/connect':
-        specifier: 2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))
-      '@connectrpc/connect-web':
-        specifier: 2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)))
-    devDependencies:
-      '@bufbuild/protoc-gen-es':
-        specifier: 2.15.0
-        version: 2.15.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))(supports-color@7.2.0)
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
 
 packages:
 
@@ -1813,11 +1791,6 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  typescript@5.8.3:
-    resolution: {integrity: sha512-p1diW6TqL9L07nNxvRMM7hMMw4c5XOo/1ibL4aAIGmSAt9slTE1Xgw5KWuof2uTOvCg9BY7ZRi+GaF+7sfgPeQ==}
-    engines: {node: '>=14.17'}
-    hasBin: true
-
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
@@ -3489,8 +3462,6 @@ snapshots:
       - supports-color
 
   typescript@5.4.5: {}
-
-  typescript@5.8.3: {}
 
   typescript@5.9.3: {}
 

@@ -2,7 +2,7 @@ import type { RpcCall } from "../../application/data/rpc-transport";
 import { inheritReadScope } from '../../application/query/observe-read';
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
-import { asCanonicalBoardId, type CanonicalBoardId } from "../../application/sync/contracts";
+import { asCanonicalBoardId, type CanonicalBoardId } from "../../domain/board-id";
 
 import { parseApiListBoardsResponse } from "../../lib/api/generated/contracts/api-list-boards-response";
 
@@ -11,7 +11,7 @@ import { parseApiListTasksByStatusResponse } from "../../lib/api/generated/contr
 import { createRpcTransport } from "./rpc-transport";
 import { type RpcTransportResponse } from "../../application/data/rpc-transport";
 
-import { type LinkedAbortSignal, type BoardReadTransport, BoardReadBudget, BoardReadError, wrapTransportError, type ResolvedBoardIdentity, emptyError, parseContract, boardQuery, validateBoardList, type BoardTaskStatus, type WireBoardTask, type BoardReadModelOptions, type BoardTask, tasksPath, DEFAULT_TASK_OFFSET, MAX_TASK_PAGES, tasksQuery, appendTasksQuery, projectTask, type BoardReadModel, validateTaskPageSize, parseColumns, columnsPath, type BoardReadQuery, generationAbortError } from "../../application/data/board-read-model";
+import { type LinkedAbortSignal, type BoardReadTransport, BoardReadBudget, BoardReadError, wrapTransportError, type ResolvedBoardIdentity, emptyError, parseContract, boardQuery, validateBoardList, type BoardTaskStatus, type WireBoardTask, type BoardReadModelOptions, type BoardTask, tasksPath, DEFAULT_TASK_OFFSET, MAX_TASK_PAGES, tasksQuery, appendTasksQuery, projectTask, type BoardReadModel, validateTaskPageSize, parseColumns, columnsPath, generationAbortError } from "../../application/data/board-read-model";
 
 export function linkAbortSignals(signals: readonly (AbortSignal | undefined)[]): LinkedAbortSignal {
   const controller = new AbortController()
@@ -241,62 +241,5 @@ export async function loadBoardReadModel(
     return wrapTransportError(error)
   } finally {
     linked.cleanup()
-  }
-}
-
-export function createBoardReadQuery(
-  runtime: WebRuntimeConfig,
-  selector = runtime.defaultBoard,
-  options: BoardReadModelOptions = {},
-): BoardReadQuery {
-  let generation = 0
-  let cached: BoardReadModel | null = null
-  let generationController: AbortController | null = null
-  let pending: { readonly generation: number; readonly promise: Promise<BoardReadModel> } | null = null
-
-  const load = (signal?: AbortSignal): Promise<BoardReadModel> => {
-    if (cached !== null) return Promise.resolve(cached)
-    if (pending !== null && pending.generation === generation) return pending.promise
-
-    const requestGeneration = generation
-    const controller = new AbortController()
-    const linked = linkAbortSignals([options.signal, signal, controller.signal])
-    generationController = controller
-    const loadOptions = { ...options, signal: linked.signal }
-    const promise = loadBoardReadModel(runtime, selector, loadOptions).then(
-      (model) => {
-        if (requestGeneration !== generation) throw generationAbortError()
-        cached = model
-        pending = null
-        generationController = null
-        return model
-      },
-      (error: unknown) => {
-        if (requestGeneration === generation) {
-          pending = null
-          generationController = null
-        }
-        throw error
-      },
-    ).finally(() => linked.cleanup())
-    pending = { generation: requestGeneration, promise }
-    return promise
-  }
-
-  const invalidate = (): void => {
-    generationController?.abort()
-    generationController = null
-    generation += 1
-    cached = null
-    pending = null
-  }
-
-  return {
-    load,
-    reload(signal) {
-      invalidate()
-      return load(signal)
-    },
-    invalidate,
   }
 }

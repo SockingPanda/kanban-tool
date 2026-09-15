@@ -1,3 +1,4 @@
+import { WEB_PROTOCOL_VERSION } from "./web-protocol"
 import type { RuntimeWebConfigOutputContract } from "./api/generated/contracts/runtime-web-config-output"
 import { parseRuntimeWebConfigOutput } from "./api/generated/contracts/runtime-web-config-output"
 import { ContractValidationError } from "./api/generated/runtime"
@@ -99,8 +100,13 @@ export async function loadWebRuntimeConfig(options: RuntimeBootstrapOptions = {}
   }
 
   try {
-    return parseRuntimeWebConfigOutput(payload)
+    const runtime = parseRuntimeWebConfigOutput(payload)
+    if (runtime.protocolVersion !== WEB_PROTOCOL_VERSION) {
+      throw new RuntimeBootstrapError('invalid_contract', `当前 Web 需要协议 ${WEB_PROTOCOL_VERSION}，Host 提供 ${runtime.protocolVersion}。请使用匹配的 kanban serve 与 Web artifact。`)
+    }
+    return runtime
   } catch (cause) {
+    if (cause instanceof RuntimeBootstrapError) throw cause
     const contractError = cause instanceof ContractValidationError ? cause : null
     throw new RuntimeBootstrapError(
       "invalid_contract",

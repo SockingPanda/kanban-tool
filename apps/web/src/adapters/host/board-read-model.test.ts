@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { BoardReadError } from "../../application/data/board-read-model";
-import { createBoardReadQuery, loadBoardReadModel } from "./board-read-model";
+import { loadBoardReadModel } from "./board-read-model";
 import { RpcTransportError, type RpcTransportResponse, type RpcTransport, type RpcCall } from "../../application/data/rpc-transport";
 
 const runtime = {
@@ -11,7 +11,7 @@ const runtime = {
   actor: "test-actor",
   defaultBoard: "default",
   serverVersion: "3.0.0",
-  protocolVersion: "v1",
+  protocolVersion: "v2",
   webBuildId: "sha256:test",
 } satisfies WebRuntimeConfig
 
@@ -376,26 +376,6 @@ describe("board read model", () => {
 
     await loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } }, includeArchived: true })
     expect(call.mock.calls[0]?.[0].query).toEqual({ include_archived: true })
-  })
-
-  test("deduplicates pending loads and invalidation prevents a stale result from being cached", async () => {
-    let resolveFirst: ((response: RpcTransportResponse) => void) | undefined
-    const firstResponse = new Promise<RpcTransportResponse>((resolve) => { resolveFirst = resolve })
-    const call = vi.fn<RpcTransport["call"]>()
-      .mockReturnValueOnce(firstResponse)
-      .mockImplementation(async (input) => routeResponse(input))
-    const query = createBoardReadQuery(runtime, "default", { dependencies: { transport: { call } } })
-
-    const first = query.load()
-    expect(query.load()).toBe(first)
-    query.invalidate()
-    expect(call.mock.calls[0]?.[0].signal?.aborted).toBe(true)
-    const second = query.load()
-    expect(call).toHaveBeenCalledTimes(2)
-    resolveFirst?.(routeResponse({ method: "ListBoards" }))
-    await expect(second).resolves.toMatchObject({ identity: { canonicalBoardId: "b_default" } })
-    await expect(first).rejects.toMatchObject({ name: "AbortError" })
-    await expect(query.load()).resolves.toMatchObject({ identity: { canonicalBoardId: "b_default" } })
   })
 
   test("exposes an empty-board error for an exact selector miss", async () => {

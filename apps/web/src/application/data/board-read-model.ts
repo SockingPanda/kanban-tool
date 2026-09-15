@@ -1,5 +1,5 @@
 import type { RpcCall } from "./rpc-transport";
-import { type CanonicalBoardId } from "../sync/contracts";
+import { type CanonicalBoardId } from "../../domain/board-id";
 
 import { parseApiListBoardColumnsPath } from "../../lib/api/generated/contracts/api-list-board-columns-path";
 
@@ -143,11 +143,11 @@ export interface BoardReadModelOptions {
 }
 
 export interface BoardReadQuery {
-  observe?(signal: AbortSignal, next: (model: BoardReadModel) => void, failed: (error: unknown) => void): void
-  subscribeConnection?(listener: (state: 'connecting' | 'live' | 'offline') => void): () => void
-  /** Load the cached snapshot or the current generation once. */
+  observe(signal: AbortSignal, next: (model: BoardReadModel) => void, failed: (error: unknown) => void): void
+  subscribeConnection(listener: (state: 'connecting' | 'live' | 'offline') => void): () => void
+  /** 等待当前完整查询结果；不会创建独立缓存。 */
   load(signal?: AbortSignal): Promise<BoardReadModel>
-  /** Abort the current generation, invalidate it, and load a fresh snapshot. */
+  /** 请求 refresh，并等待对应连接的 Ready 屏障。 */
   reload(signal?: AbortSignal): Promise<BoardReadModel>
   /** Abort and discard the current generation without issuing a replacement request. */
   invalidate(): void

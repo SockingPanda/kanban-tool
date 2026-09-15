@@ -3,7 +3,7 @@ import type { WebRuntimeConfig } from "../../lib/runtime";
 
 import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "../../domain/board-slug";
 
-import { asCanonicalBoardId, type CanonicalBoardId } from "../sync/contracts";
+import { asCanonicalBoardId, type CanonicalBoardId } from "../../domain/board-id";
 
 import { parseApiListBoardsQuery } from "../../lib/api/generated/contracts/api-list-boards-query";
 
@@ -59,9 +59,8 @@ import { parseApiListAttachmentsPath } from "../../lib/api/generated/contracts/a
 
 import { type ApiListAttachmentsResponseContract } from "../../lib/api/generated/contracts/api-list-attachments-response";
 
-import { parseApiListEventsQuery } from "../../lib/api/generated/contracts/api-list-events-query";
 
-import { parseApiListEventsResponse, type ApiListEventsResponseContract } from "../../lib/api/generated/contracts/api-list-events-response";
+import { type ApiListEventsResponseContract } from "../../lib/api/generated/contracts/api-list-events-response";
 
 import { ContractValidationError } from "../../lib/api/generated/runtime";
 
@@ -242,8 +241,7 @@ export class ExplorerReadBudget {
 export interface ExplorerReadOptions extends ExplorerReadDependencies {
   readonly signal?: AbortSignal
   readonly includeArchived?: boolean
-  /** Incremental event cursor; zero is reserved for initial/recovery reads. */
-  readonly after?: number
+  /** 同一次展示映射共用的 Protobuf 结果预算。 */
   readonly budget?: ExplorerReadBudget
 }
 
@@ -262,24 +260,7 @@ export interface ExplorerTaskListPage {
 
 export const BOARD_EVENTS_PAGE_LIMIT = 150
 
-export const MAX_BOARD_EVENTS_PAGES = 1_024
-
 export type ExplorerEvent = ApiListEventsResponseContract["data"][number]
-
-export function parseBoardEvent(value: unknown): ExplorerEvent | null {
-  try {
-    const id = typeof value === "object" && value !== null && "id" in value && typeof value.id === "number" ? value.id : -1
-    return parseApiListEventsResponse({ data: [value] as ApiListEventsResponseContract["data"], meta: { next_after: id } }).data[0] ?? null
-  } catch {
-    return null
-  }
-}
-
-export interface BoardEventsBatch {
-  readonly boardId: CanonicalBoardId
-  readonly events: readonly ExplorerEvent[]
-  readonly nextAfter: number
-}
 
 export interface BoardEventsReadModel {
   readonly board: ExplorerBoardIdentity
@@ -389,21 +370,6 @@ export function safeEventCursor(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
 }
 
-export function safeEventId(value: unknown): value is number {
-  return safeEventCursor(value) && value > 0
-}
-
-export function stableEventValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableEventValue)
-  if (typeof value !== "object" || value === null) return value
-  const record = value as Record<string, unknown>
-  return Object.fromEntries(Object.keys(record).sort().map((key) => [key, stableEventValue(record[key])]))
-}
-
-export function eventFingerprint(event: ExplorerEvent): string {
-  return JSON.stringify(stableEventValue(event))
-}
-
 export function validateEventBatch(
   events: readonly ExplorerEvent[],
   board: ExplorerBoardIdentity,
@@ -445,27 +411,6 @@ export function validateEventBatch(
     if (nextAfter !== after) throw new ExplorerReadError("anomaly", "空事件页不得推进 next_after。")
   } else if (nextAfter !== previousId) {
     throw new ExplorerReadError("anomaly", "事件响应的 next_after 必须等于最后一个 event id。")
-  }
-}
-
-export function buildBoardEventsRequest(board: string, taskId: string | null = null, after = 0): RpcCall {
-  try {
-    if (taskId !== null) validateCanonicalTaskSelector(taskId)
-    const query = parseApiListEventsQuery({
-      board,
-      task_id: taskId,
-      after,
-      limit: BOARD_EVENTS_PAGE_LIMIT,
-    })
-    return { method: "ListEvents", query }
-  } catch (error) {
-    if (error instanceof ContractValidationError) {
-      throw new ExplorerReadError("invalid_contract", "Board Events 请求不符合 generated query contract。", {
-        contractId: "api.list-events.query",
-        cause: error,
-      })
-    }
-    throw error
   }
 }
 
@@ -710,16 +655,9 @@ export interface TaskInspectorRequests {
   readonly runs: RpcCall
   readonly comments: RpcCall
   readonly attachments: RpcCall
-  readonly events: RpcCall
 }
 
-export function listEventsRequest(board: string, taskId: string): RpcCall {
-  validateCanonicalTaskSelector(taskId)
-  const query = parseApiListEventsQuery({ board, task_id: taskId, after: 0, limit: 50 })
-  return { method: "ListEvents", query }
-}
-
-export function buildTaskInspectorRequests(board: string, taskId: string): TaskInspectorRequests {
+export function buildTaskInspectorRequests(taskId: string): TaskInspectorRequests {
   try {
     validateCanonicalTaskSelector(taskId)
     const task = parseApiGetTaskPath({ task_id: taskId }).task_id
@@ -734,7 +672,6 @@ export function buildTaskInspectorRequests(board: string, taskId: string): TaskI
       runs: { method: "ListRuns", path: parseApiListRunsPath({ task_id: task }) },
       comments: { method: "ListComments", path: parseApiListCommentsPath({ task_id: task }) },
       attachments: { method: "ListAttachments", path: parseApiListAttachmentsPath({ task_id: task }) },
-      events: listEventsRequest(board, task),
     }
   } catch (error) {
     if (error instanceof ExplorerReadError) throw error
@@ -851,51 +788,4 @@ export function parseTaskListQuery(input: string | URLSearchParams): TaskListQue
     limit: parseInteger(params.get("limit"), defaultTaskListQuery.limit, 1, 1000),
     includeArchived: params.get("include_archived") === "true",
   })
-}
-
-export function mergeBoardEvents(
-  existing: readonly ExplorerEvent[],
-  incoming: readonly ExplorerEvent[],
-  boardId: CanonicalBoardId,
-): readonly ExplorerEvent[] {
-  const byId = new Map<number, ExplorerEvent>()
-  const byEventId = new Map<string, ExplorerEvent>()
-
-  const add = (event: ExplorerEvent): void => {
-    if (!safeEventId(event.id) || event.event_id.trim().length === 0) {
-      throw new ExplorerReadError("anomaly", "事件 batch 含有无效 canonical id。")
-    }
-    if (event.board_id !== boardId) {
-      throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 越过当前 board scope。`)
-    }
-    const byIdMatch = byId.get(event.id)
-    const byEventIdMatch = byEventId.get(event.event_id)
-    if (byIdMatch !== undefined && byIdMatch.event_id !== event.event_id) {
-      throw new ExplorerReadError("anomaly", `事件 id ${String(event.id)} 对应多个 event_id。`)
-    }
-    if (byEventIdMatch !== undefined && byEventIdMatch.id !== event.id) {
-      throw new ExplorerReadError("anomaly", `事件 event_id ${event.event_id} 对应多个数字 id。`)
-    }
-    if (byIdMatch !== undefined || byEventIdMatch !== undefined) {
-      const previous = byIdMatch ?? byEventIdMatch
-      if (previous && eventFingerprint(previous) !== eventFingerprint(event)) {
-        throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 的重复内容不一致。`)
-      }
-      return
-    }
-    byId.set(event.id, event)
-    byEventId.set(event.event_id, event)
-  }
-
-  for (const event of existing) add(event)
-  let previousIncomingId = -1
-  for (const event of incoming) {
-    if (!safeEventId(event.id) || event.id <= previousIncomingId) {
-      throw new ExplorerReadError("anomaly", "事件 batch 的 id 必须严格递增。")
-    }
-    add(event)
-    previousIncomingId = event.id
-  }
-  const sorted = [...byId.values()].sort((left, right) => left.id - right.id)
-  return Object.freeze(sorted.slice(-BOARD_EVENTS_PAGE_LIMIT).map((event) => Object.freeze({ ...event })))
 }

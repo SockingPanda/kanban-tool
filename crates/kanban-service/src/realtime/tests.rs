@@ -22,6 +22,58 @@ use crate::{
 
 mod measurement;
 
+// 测试只投影任务核心字段，用来证明评论、附件、步骤等变化独立触发提示。
+// 生产查询直接使用 with_realtime_read 与完整 application DTO。
+#[derive(Debug, PartialEq, Eq)]
+struct TestTaskSummary {
+    id: String,
+    title: String,
+    status: TaskStatus,
+    priority: i64,
+    position: i64,
+    seq: i64,
+    lock_version: i64,
+}
+struct TestTaskSnapshot {
+    tasks: Vec<TestTaskSummary>,
+}
+impl KanbanService {
+    async fn read_test_task_summary(&self, selector: &str) -> crate::Result<TestTaskSnapshot> {
+        self.with_realtime_read(async {
+            let board = self.get_board(selector).await?;
+            let mut tasks = Vec::new();
+            loop {
+                let page = self
+                    .list_tasks(
+                        &board.slug,
+                        crate::TaskListOptions {
+                            limit: 1_000,
+                            offset: tasks.len(),
+                            ..Default::default()
+                        },
+                    )
+                    .await?;
+                let total = page.total;
+                assert!(!page.tasks.is_empty() || tasks.len() == total);
+                tasks.extend(page.tasks.into_iter().map(|task| TestTaskSummary {
+                    id: task.id,
+                    title: task.title,
+                    status: task.status,
+                    priority: task.priority,
+                    position: task.position,
+                    seq: task.seq,
+                    lock_version: task.lock_version,
+                }));
+                if tasks.len() == total {
+                    break;
+                }
+            }
+            Ok(TestTaskSnapshot { tasks })
+        })
+        .await
+    }
+}
+
 #[tokio::test]
 async fn complete_query_fence_blocks_writes_and_cancelling_it_is_silent() {
     let (_directory, service) = service("complete-query-fence").await;
@@ -155,7 +207,7 @@ async fn canonical_counts(service: &KanbanService) -> Vec<i64> {
 #[tokio::test]
 async fn comments_notify_even_when_realtime_cards_are_identical() {
     let (_directory, service) = service("realtime-comments").await;
-    let before = service.load_realtime_board("default").await.unwrap();
+    let before = service.read_test_task_summary("default").await.unwrap();
     let mut changes = service.subscribe_realtime_changes();
     let comment = service
         .create_comment(comment_command("new-comment"))
@@ -164,7 +216,11 @@ async fn comments_notify_even_when_realtime_cards_are_identical() {
     notified(&mut changes).await;
     assert_eq!(service.list_comments(TASK).await.unwrap(), vec![comment]);
     assert_eq!(
-        service.load_realtime_board("default").await.unwrap().tasks,
+        service
+            .read_test_task_summary("default")
+            .await
+            .unwrap()
+            .tasks,
         before.tasks
     );
     assert!(!changes.has_changed().unwrap(), "快照重读不得触发自身刷新");
@@ -173,7 +229,7 @@ async fn comments_notify_even_when_realtime_cards_are_identical() {
 #[tokio::test]
 async fn label_catalog_and_task_bindings_each_notify_after_commit() {
     let (_directory, service) = service("realtime-labels").await;
-    let before = service.load_realtime_board("default").await.unwrap();
+    let before = service.read_test_task_summary("default").await.unwrap();
     let mut changes = service.subscribe_realtime_changes();
     let label = service
         .create_board_label(CreateBoardLabelCommand {
@@ -189,7 +245,11 @@ async fn label_catalog_and_task_bindings_each_notify_after_commit() {
         vec![label.clone()]
     );
     assert_eq!(
-        service.load_realtime_board("default").await.unwrap().tasks,
+        service
+            .read_test_task_summary("default")
+            .await
+            .unwrap()
+            .tasks,
         before.tasks
     );
     service
@@ -287,7 +347,7 @@ async fn step_create_update_and_remove_each_notify_with_committed_plan() {
 #[tokio::test]
 async fn attachment_create_and_delete_notify_with_file_and_canonical_metadata() {
     let (_directory, service) = service("realtime-attachments").await;
-    let before = service.load_realtime_board("default").await.unwrap();
+    let before = service.read_test_task_summary("default").await.unwrap();
     let mut changes = service.subscribe_realtime_changes();
     let content = b"G06 committed attachment".to_vec();
     let attachment = service
@@ -317,7 +377,11 @@ async fn attachment_create_and_delete_notify_with_file_and_canonical_metadata() 
         content
     );
     assert_eq!(
-        service.load_realtime_board("default").await.unwrap().tasks,
+        service
+            .read_test_task_summary("default")
+            .await
+            .unwrap()
+            .tasks,
         before.tasks
     );
     assert!(
@@ -393,7 +457,11 @@ async fn event_conflict_rolls_back_comment_before_gate_exit_hint() {
         .await
         .unwrap();
     let before = canonical_counts(&service).await;
-    let cards = service.load_realtime_board("default").await.unwrap().tasks;
+    let cards = service
+        .read_test_task_summary("default")
+        .await
+        .unwrap()
+        .tasks;
     let mut changes = service.subscribe_realtime_changes();
     {
         // 复用 store 的 event-id seam，令已插入的 comment 在事件唯一约束失败时回滚。
@@ -423,7 +491,11 @@ async fn event_conflict_rolls_back_comment_before_gate_exit_hint() {
     assert_eq!(canonical_counts(&service).await, before);
     assert!(service.list_comments(TASK).await.unwrap().is_empty());
     assert_eq!(
-        service.load_realtime_board("default").await.unwrap().tasks,
+        service
+            .read_test_task_summary("default")
+            .await
+            .unwrap()
+            .tasks,
         cards
     );
 }
@@ -451,10 +523,8 @@ async fn cancelled_waiter_does_not_write_or_notify_and_store_wrappers_share_gate
     notified(&mut changes).await;
     notified(&mut second_changes).await;
     assert_eq!(first.list_comments(TASK).await.unwrap().len(), 1);
-    first.load_realtime_board("default").await.unwrap();
-    first.check_realtime_board("b_default").await.unwrap();
-    assert!(first.check_realtime_board("default").await.is_err());
-    assert!(first.load_realtime_board("missing").await.is_err());
+    first.read_test_task_summary("default").await.unwrap();
+    assert!(first.read_test_task_summary("missing").await.is_err());
     assert!(
         !changes.has_changed().unwrap(),
         "成功或失败的 read fence 都静默"
@@ -464,7 +534,11 @@ async fn cancelled_waiter_does_not_write_or_notify_and_store_wrappers_share_gate
 #[tokio::test]
 async fn cancelled_transaction_owner_rolls_back_before_consistent_reader_continues() {
     let (_directory, service) = service("realtime-cancel-owner").await;
-    let cards = service.load_realtime_board("default").await.unwrap().tasks;
+    let cards = service
+        .read_test_task_summary("default")
+        .await
+        .unwrap()
+        .tasks;
     let before = canonical_counts(&service).await;
     let writer_service = service.clone();
     let (staged, staged_rx) = oneshot::channel();
@@ -485,7 +559,7 @@ async fn cancelled_transaction_owner_rolls_back_before_consistent_reader_continu
         transaction.commit().await.unwrap();
     });
     staged_rx.await.unwrap();
-    let mut snapshot = Box::pin(service.load_realtime_board("default"));
+    let mut snapshot = Box::pin(service.read_test_task_summary("default"));
     assert_pending(snapshot.as_mut());
     assert!(!changes.has_changed().unwrap());
     writer.abort();
@@ -511,7 +585,7 @@ async fn subscribing_before_snapshot_covers_both_writer_orderings() {
     let fence = service.mutation_gate.read().await;
     let mut writer = Box::pin(service.create_task(task_command("t_before_snapshot")));
     assert_pending(writer.as_mut());
-    let mut snapshot = Box::pin(service.load_realtime_board("default"));
+    let mut snapshot = Box::pin(service.read_test_task_summary("default"));
     assert_pending(snapshot.as_mut());
     drop(fence);
     writer.await.unwrap();
@@ -519,7 +593,7 @@ async fn subscribing_before_snapshot_covers_both_writer_orderings() {
     assert_eq!(snapshot.tasks.len(), 2);
     notified(&mut changes).await;
     let fence = service.mutation_gate.read().await;
-    let mut snapshot = Box::pin(service.load_realtime_board("default"));
+    let mut snapshot = Box::pin(service.read_test_task_summary("default"));
     assert_pending(snapshot.as_mut());
     let mut writer = Box::pin(service.create_task(task_command("t_after_snapshot")));
     assert_pending(writer.as_mut());
@@ -529,7 +603,7 @@ async fn subscribing_before_snapshot_covers_both_writer_orderings() {
     notified(&mut changes).await;
     assert_eq!(
         service
-            .load_realtime_board("default")
+            .read_test_task_summary("default")
             .await
             .unwrap()
             .tasks
@@ -563,7 +637,7 @@ async fn legacy_ontology_and_maintenance_are_blocked_by_the_same_read_fence() {
             .owner
             .is_none()
     );
-    service.load_realtime_board("default").await.unwrap();
+    service.read_test_task_summary("default").await.unwrap();
     assert!(!changes.has_changed().unwrap());
 }
 
@@ -638,8 +712,7 @@ async fn projection_queries_and_consistent_reads_do_not_write_or_notify() {
     let before = projection_rows(&service).await;
     let counts = canonical_counts(&service).await;
     let changes = service.subscribe_realtime_changes();
-    service.load_realtime_board("default").await.unwrap();
-    service.check_realtime_board("b_default").await.unwrap();
+    service.read_test_task_summary("default").await.unwrap();
     service.get_task_details(TASK).await.unwrap();
     service
         .search_tasks(crate::SearchQuery {

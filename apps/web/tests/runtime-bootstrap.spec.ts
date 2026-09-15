@@ -82,4 +82,20 @@ test.describe("同源 Web runtime bootstrap", () => {
     await expect(page.getByTestId("runtime-startup-error")).toContainText("不符合当前协议")
     await expect(page.getByTestId("product-shell")).toHaveCount(0)
   })
+
+  test("旧 v1 Host 在挂载前被拒绝，不发送任何业务 RPC", async ({ page }) => {
+    const businessRequests: string[] = []
+    page.on('request', request => {
+      if (new URL(request.url()).pathname.startsWith('/kanban.')) businessRequests.push(request.url())
+    })
+    await page.route('**/app/runtime.json', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...validRuntime, protocolVersion: 'v1' }),
+    }))
+    await page.goto('/app/', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('runtime-startup-error')).toContainText('当前 Web 需要协议 v2，Host 提供 v1')
+    await expect(page.getByTestId('product-shell')).toHaveCount(0)
+    expect(businessRequests).toEqual([])
+  })
 })

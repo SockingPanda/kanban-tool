@@ -1,4 +1,4 @@
-//! Comments、attachments、runs、events API/SSE family 的唯一 declaration source。
+//! Comments、attachments、runs、events DTO family 的唯一 declaration source。
 
 use crate::{
     ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
@@ -48,16 +48,6 @@ const LIST_EVENTS_QUERY_PARAMETERS: &[WireParameter] = &[
     },
     WireParameter {
         name: "limit",
-        cardinality: Some(crate::WireParameterCardinality::OptionalOne),
-    },
-];
-const SSE_STREAM_EVENTS_HEADER_PARAMETERS: &[WireParameter] = &[
-    WireParameter {
-        name: "Accept-Language",
-        cardinality: Some(crate::WireParameterCardinality::OptionalOne),
-    },
-    WireParameter {
-        name: "Last-Event-ID",
         cardinality: Some(crate::WireParameterCardinality::OptionalOne),
     },
 ];
@@ -139,31 +129,6 @@ macro_rules! header_contract {
                 unreachable!()
             }
         };
-        contract
-    }};
-}
-
-macro_rules! sse_header_contract {
-    () => {{
-        let contract = ContractDeclaration::new(
-            "sse.stream-events.headers",
-            "GET /api/v1/stream/events headers",
-            ContractDirection::Deserialize,
-            Some(HttpTransportLocation::Headers),
-            ContractStrictness::DenyUnknownFields,
-            ContractGranularity::Exact,
-            ContractBinding::ExactSurface,
-        )
-        .with_transport(None, SSE_STREAM_EVENTS_HEADER_PARAMETERS)
-        .with_schema(
-            "urn:kanban-tool:schema:sse:stream-events-headers:v1",
-            "sse/stream-events-headers.v1.schema.json",
-            "Kanban SSE stream events request headers v1",
-            "schemas/fixtures/sse/stream-events-headers.v1.valid.json",
-            "schemas/fixtures/sse/stream-events-headers.v1.invalid.json",
-        );
-        #[cfg(feature = "schema")]
-        let contract = contract.with_schema_type::<crate::StreamEventsHeaders>();
         contract
     }};
 }
@@ -603,55 +568,25 @@ const API_LIST_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-events-response.v1.invalid.json",
         crate::ListEventsResponse
     ),
-];
-
-const SSE_STREAM_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
-    sse_header_contract!(),
-    api_contract!(
-        "sse.stream-events.query",
-        "GET /api/v1/stream/events query",
-        ContractDirection::Deserialize,
-        HttpTransportLocation::Query,
-        LIST_EVENTS_QUERY_PARAMETERS,
-        "urn:kanban-tool:schema:sse:stream-events-query:v1",
-        "sse/stream-events-query.v1.schema.json",
-        "Kanban SSE stream events query v1",
-        "schemas/fixtures/sse/stream-events-query.v1.valid.json",
-        "schemas/fixtures/sse/stream-events-query.v1.invalid.json",
-        crate::StreamEventsQuery
-    ),
-    api_contract!(
-        "sse.event.data",
-        "GET /api/v1/stream/events data",
-        ContractDirection::Serialize,
-        HttpTransportLocation::Sse,
-        &[],
-        "urn:kanban-tool:schema:sse:stream-event-data:v1",
-        "sse/stream-event-data.v1.schema.json",
-        "Kanban SSE stream event data v1",
-        "schemas/fixtures/sse/stream-event-data.v1.valid.json",
-        "schemas/fixtures/sse/stream-event-data.v1.invalid.json",
-        crate::StreamEventData
-    ),
     {
         let contract = ContractDeclaration::new(
-            "sse.event.heartbeat",
-            "GET /api/v1/stream/events heartbeat",
+            "api.event.data",
+            "审计事件数据",
             ContractDirection::Serialize,
-            Some(HttpTransportLocation::Sse),
+            Some(HttpTransportLocation::Success),
             ContractStrictness::DenyUnknownFields,
             ContractGranularity::Exact,
             ContractBinding::SharedComponent,
         )
         .with_schema(
-            "urn:kanban-tool:schema:sse:event-heartbeat:v1",
-            "sse/event-heartbeat.v1.schema.json",
-            "Kanban SSE transport heartbeat v1",
-            "schemas/fixtures/sse/event-heartbeat.v1.valid.json",
-            "schemas/fixtures/sse/event-heartbeat.v1.invalid.json",
+            "urn:kanban-tool:schema:api:event-data:v1",
+            "api/event-data.v1.schema.json",
+            "Kanban 审计事件数据 v1",
+            "schemas/fixtures/api/event-data.v1.valid.json",
+            "schemas/fixtures/api/event-data.v1.invalid.json",
         );
         #[cfg(feature = "schema")]
-        let contract = contract.with_schema_type::<crate::SseHeartbeatData>();
+        let contract = contract.with_schema_type::<crate::StreamEventData>();
         contract
     },
 ];
@@ -769,18 +704,9 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         "GET /api/v1/events",
         API_LIST_EVENTS_CONTRACTS,
     )
+    .with_shared_components(&["api.event.data"])
     .with_header_profile(ApiHeaderProfile::Locale)
     .with_mcp_policy(policy!(EVENT_LIST_BINDING)),
-    OperationDeclaration::new(
-        "sse.stream-events",
-        ContractSurface::Sse,
-        Some(HttpMethod::Get),
-        Some("/api/v1/stream/events"),
-        "GET /api/v1/stream/events",
-        "GET /api/v1/stream/events",
-        SSE_STREAM_EVENTS_CONTRACTS,
-    )
-    .with_shared_components(&["sse.event.heartbeat"]),
 ];
 
 pub const fn operation_declarations() -> &'static [OperationDeclaration] {

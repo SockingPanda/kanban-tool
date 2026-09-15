@@ -8,7 +8,6 @@ pub mod grpc;
 mod http;
 mod router;
 mod state;
-pub(crate) mod vector;
 mod web;
 
 #[cfg(test)]
@@ -23,3 +22,6 @@ pub use router::{
 };
 pub use state::AppState;
 pub use web::WebHostConfig;
+
+#[cfg(test)]
+mod test_support;

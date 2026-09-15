@@ -1,4 +1,6 @@
 //! 通过真实 Host 验证完整业务契约，而非在同一进程绕过 wire 调用 handler。
+mod invariants;
+
 use super::{Host, frame};
 use kanban_protocol::{
     self as dto,

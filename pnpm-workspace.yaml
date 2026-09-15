@@ -1,6 +1,5 @@
 packages:
   - "apps/*"
-  - "migration/grpc-framework/web"
 
 allowBuilds:
   esbuild: true

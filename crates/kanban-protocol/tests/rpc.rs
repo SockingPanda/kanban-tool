@@ -469,3 +469,57 @@ fn task_details_preserve_every_aggregate_section() {
             .unwrap();
     assert_eq!(back, original);
 }
+
+#[test]
+fn active_rpc_catalog_exactly_matches_the_protobuf_descriptor() {
+    let descriptor = prost_types::FileDescriptorSet::decode(rpc::FILE_DESCRIPTOR_SET).unwrap();
+    let actual = descriptor
+        .file
+        .iter()
+        .flat_map(|file| {
+            file.service.iter().flat_map(|service| {
+                service.method.iter().map(|method| {
+                    assert!(!method.client_streaming.unwrap_or_default());
+                    (
+                        format!("{}.{}", file.package(), service.name()),
+                        method.name().to_owned(),
+                        method
+                            .input_type()
+                            .trim_start_matches(".kanban.v1.")
+                            .to_owned(),
+                        method
+                            .output_type()
+                            .trim_start_matches(".kanban.v1.")
+                            .to_owned(),
+                        method.server_streaming.unwrap_or_default(),
+                    )
+                })
+            })
+        })
+        .collect::<BTreeSet<_>>();
+    let expected = rpc::catalog::methods()
+        .iter()
+        .map(|method| {
+            (
+                method.service.clone(),
+                method.method.clone(),
+                method.request.clone(),
+                method.response.clone(),
+                method.server_streaming,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(actual, expected);
+    assert_eq!(
+        expected.len(),
+        rpc::catalog::methods().len(),
+        "duplicate RPC method"
+    );
+    let ids = rpc::catalog::methods()
+        .iter()
+        .map(|method| &method.operation_id)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(ids.len(), expected.len(), "duplicate operation ID");
+    assert_eq!(actual.len(), 120);
+    assert!(!actual.iter().any(|method| method.0.contains("Workspace")));
+}

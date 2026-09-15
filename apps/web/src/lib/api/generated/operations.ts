@@ -2,8 +2,12 @@
 export const operations = [
   {
     "id": "api.health",
-    "method": "GET",
-    "path": "/health",
+    "service": "kanban.v1.KanbanService",
+    "method": "GetHealth",
+    "path": "/kanban.v1.KanbanService/GetHealth",
+    "request": "GetHealthRequest",
+    "response": "GetHealthResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -21,17 +25,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.health.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-boards",
-    "method": "GET",
-    "path": "/api/v1/boards",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListBoards",
+    "path": "/kanban.v1.KanbanService/ListBoards",
+    "request": "ListBoardsRequest",
+    "response": "ListBoardsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -50,17 +55,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-boards.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-board-columns",
-    "method": "GET",
-    "path": "/api/v1/boards/:board/columns",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListBoardColumns",
+    "path": "/kanban.v1.KanbanService/ListBoardColumns",
+    "request": "ListBoardColumnsRequest",
+    "response": "ListBoardColumnsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -79,17 +85,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-board-columns.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.explain-label-atom",
-    "method": "GET",
-    "path": "/api/v1/boards/:board/labels/atoms/:atom_ref/explain",
+    "service": "kanban.v1.KanbanService",
+    "method": "ExplainLabelAtom",
+    "path": "/kanban.v1.KanbanService/ExplainLabelAtom",
+    "request": "ExplainLabelAtomRequest",
+    "response": "ExplainLabelAtomResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -108,17 +115,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.explain-label-atom.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-tasks",
-    "method": "GET",
-    "path": "/api/v1/boards/:board/tasks",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListTasks",
+    "path": "/kanban.v1.KanbanService/ListTasks",
+    "request": "ListTasksRequest",
+    "response": "ListTasksResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -138,9 +146,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-tasks.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": [
@@ -149,8 +154,12 @@ export const operations = [
   },
   {
     "id": "api.list-tasks-by-status",
-    "method": "GET",
-    "path": "/api/v1/boards/:board/tasks/by-status",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListTasksByStatus",
+    "path": "/kanban.v1.KanbanService/ListTasksByStatus",
+    "request": "ListTasksByStatusRequest",
+    "response": "ListTasksByStatusResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -170,9 +179,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-tasks-by-status.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": [
@@ -181,8 +187,12 @@ export const operations = [
   },
   {
     "id": "api.create-task",
-    "method": "POST",
-    "path": "/api/v1/boards/:board/tasks",
+    "service": "kanban.v1.KanbanService",
+    "method": "CreateTask",
+    "path": "/kanban.v1.KanbanService/CreateTask",
+    "request": "CreateTaskRequest",
+    "response": "CreateTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -202,17 +212,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.create-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.review-signals",
-    "method": "GET",
-    "path": "/api/v1/boards/:board/signals/review",
+    "service": "kanban.v1.KanbanService",
+    "method": "ReviewSignals",
+    "path": "/kanban.v1.KanbanService/ReviewSignals",
+    "request": "ReviewSignalsRequest",
+    "response": "ReviewSignalsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -232,17 +243,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.review-signals.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.get-signal",
-    "method": "GET",
-    "path": "/api/v1/signals/:signal_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "GetSignal",
+    "path": "/kanban.v1.KanbanService/GetSignal",
+    "request": "GetSignalRequest",
+    "response": "GetSignalResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -261,17 +273,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.get-signal.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.board-task-map",
-    "method": "GET",
-    "path": "/api/v1/boards/:board/task-map",
+    "service": "kanban.v1.KanbanService",
+    "method": "BoardTaskMap",
+    "path": "/kanban.v1.KanbanService/BoardTaskMap",
+    "request": "BoardTaskMapRequest",
+    "response": "BoardTaskMapResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -291,17 +304,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.board-task-map.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.get-task",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "GetTask",
+    "path": "/kanban.v1.KanbanService/GetTask",
+    "request": "GetTaskRequest",
+    "response": "GetTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -321,17 +335,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.get-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.update-task",
-    "method": "PATCH",
-    "path": "/api/v1/tasks/:task_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "UpdateTask",
+    "path": "/kanban.v1.KanbanService/UpdateTask",
+    "request": "UpdateTaskRequest",
+    "response": "UpdateTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -351,17 +366,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.update-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.task-neighborhood",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/neighborhood",
+    "service": "kanban.v1.KanbanService",
+    "method": "TaskNeighborhood",
+    "path": "/kanban.v1.KanbanService/TaskNeighborhood",
+    "request": "TaskNeighborhoodRequest",
+    "response": "TaskNeighborhoodResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -381,17 +397,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.task-neighborhood.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-task-labels",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/labels",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListTaskLabels",
+    "path": "/kanban.v1.KanbanService/ListTaskLabels",
+    "request": "ListTaskLabelsRequest",
+    "response": "ListTaskLabelsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -410,9 +427,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-task-labels.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": [
@@ -421,8 +435,12 @@ export const operations = [
   },
   {
     "id": "api.add-task-label",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/labels",
+    "service": "kanban.v1.KanbanService",
+    "method": "AddTaskLabel",
+    "path": "/kanban.v1.KanbanService/AddTaskLabel",
+    "request": "AddTaskLabelRequest",
+    "response": "AddTaskLabelResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -442,9 +460,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.add-task-label.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": [
@@ -453,8 +468,12 @@ export const operations = [
   },
   {
     "id": "api.suggest-task-labels",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/labels/suggestions",
+    "service": "kanban.v1.KanbanService",
+    "method": "SuggestTaskLabels",
+    "path": "/kanban.v1.KanbanService/SuggestTaskLabels",
+    "request": "SuggestTaskLabelsRequest",
+    "response": "SuggestTaskLabelsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -474,17 +493,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.suggest-task-labels.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-label-ontology-signals",
-    "method": "GET",
-    "path": "/api/v1/boards/:board/label-ontology/signals",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListLabelOntologySignals",
+    "path": "/kanban.v1.KanbanService/ListLabelOntologySignals",
+    "request": "ListLabelOntologySignalsRequest",
+    "response": "ListLabelOntologySignalsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -504,17 +524,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-label-ontology-signals.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.review-label-ontology",
-    "method": "GET",
-    "path": "/api/v1/boards/:board/label-ontology/review",
+    "service": "kanban.v1.KanbanService",
+    "method": "ReviewLabelOntology",
+    "path": "/kanban.v1.KanbanService/ReviewLabelOntology",
+    "request": "ReviewLabelOntologyRequest",
+    "response": "ReviewLabelOntologyResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -534,17 +555,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.review-label-ontology.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.create-label-ontology-action",
-    "method": "POST",
-    "path": "/api/v1/boards/:board/label-ontology/actions",
+    "service": "kanban.v1.KanbanService",
+    "method": "CreateLabelOntologyAction",
+    "path": "/kanban.v1.KanbanService/CreateLabelOntologyAction",
+    "request": "CreateLabelOntologyActionRequest",
+    "response": "CreateLabelOntologyActionResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -564,17 +586,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.create-label-ontology-action.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.get-label-ontology-signal",
-    "method": "GET",
-    "path": "/api/v1/label-ontology/signals/:signal_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "GetLabelOntologySignal",
+    "path": "/kanban.v1.KanbanService/GetLabelOntologySignal",
+    "request": "GetLabelOntologySignalRequest",
+    "response": "GetLabelOntologySignalResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -593,17 +616,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.get-label-ontology-signal.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.remove-task-label",
-    "method": "DELETE",
-    "path": "/api/v1/tasks/:task_id/labels/:label_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "RemoveTaskLabel",
+    "path": "/kanban.v1.KanbanService/RemoveTaskLabel",
+    "request": "RemoveTaskLabelRequest",
+    "response": "RemoveTaskLabelResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -622,9 +646,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.remove-task-label.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": [
@@ -633,8 +654,12 @@ export const operations = [
   },
   {
     "id": "api.specify-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/specify",
+    "service": "kanban.v1.KanbanService",
+    "method": "SpecifyTask",
+    "path": "/kanban.v1.KanbanService/SpecifyTask",
+    "request": "SpecifyTaskRequest",
+    "response": "SpecifyTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -654,17 +679,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.specify-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.promote-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/promote",
+    "service": "kanban.v1.KanbanService",
+    "method": "PromoteTask",
+    "path": "/kanban.v1.KanbanService/PromoteTask",
+    "request": "PromoteTaskRequest",
+    "response": "PromoteTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -684,17 +710,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.promote-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.claim-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/claim",
+    "service": "kanban.v1.KanbanService",
+    "method": "ClaimTask",
+    "path": "/kanban.v1.KanbanService/ClaimTask",
+    "request": "ClaimTaskRequest",
+    "response": "ClaimTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -714,17 +741,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.claim-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.heartbeat-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/heartbeat",
+    "service": "kanban.v1.KanbanService",
+    "method": "HeartbeatTask",
+    "path": "/kanban.v1.KanbanService/HeartbeatTask",
+    "request": "HeartbeatTaskRequest",
+    "response": "HeartbeatTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -744,17 +772,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.heartbeat-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.complete-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/complete",
+    "service": "kanban.v1.KanbanService",
+    "method": "CompleteTask",
+    "path": "/kanban.v1.KanbanService/CompleteTask",
+    "request": "CompleteTaskRequest",
+    "response": "CompleteTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -774,17 +803,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.complete-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.submit-review-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/submit-review",
+    "service": "kanban.v1.KanbanService",
+    "method": "SubmitReviewTask",
+    "path": "/kanban.v1.KanbanService/SubmitReviewTask",
+    "request": "SubmitReviewTaskRequest",
+    "response": "SubmitReviewTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -804,17 +834,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.submit-review-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.block-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/block",
+    "service": "kanban.v1.KanbanService",
+    "method": "BlockTask",
+    "path": "/kanban.v1.KanbanService/BlockTask",
+    "request": "BlockTaskRequest",
+    "response": "BlockTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -834,17 +865,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.block-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.unblock-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/unblock",
+    "service": "kanban.v1.KanbanService",
+    "method": "UnblockTask",
+    "path": "/kanban.v1.KanbanService/UnblockTask",
+    "request": "UnblockTaskRequest",
+    "response": "UnblockTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -864,17 +896,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.unblock-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.archive-task",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/transitions/archive",
+    "service": "kanban.v1.KanbanService",
+    "method": "ArchiveTask",
+    "path": "/kanban.v1.KanbanService/ArchiveTask",
+    "request": "ArchiveTaskRequest",
+    "response": "ArchiveTaskResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -894,17 +927,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.archive-task.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-dependencies",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/dependencies",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListDependencies",
+    "path": "/kanban.v1.KanbanService/ListDependencies",
+    "request": "ListDependenciesRequest",
+    "response": "ListDependenciesResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -923,17 +957,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-dependencies.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.add-dependency",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/dependencies",
+    "service": "kanban.v1.KanbanService",
+    "method": "AddDependency",
+    "path": "/kanban.v1.KanbanService/AddDependency",
+    "request": "AddDependencyRequest",
+    "response": "AddDependencyResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -953,17 +988,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.add-dependency.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.remove-dependency",
-    "method": "DELETE",
-    "path": "/api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "RemoveDependency",
+    "path": "/kanban.v1.KanbanService/RemoveDependency",
+    "request": "RemoveDependencyRequest",
+    "response": "RemoveDependencyResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -982,17 +1018,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.remove-dependency.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-steps",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/steps",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListSteps",
+    "path": "/kanban.v1.KanbanService/ListSteps",
+    "request": "ListStepsRequest",
+    "response": "ListStepsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1011,17 +1048,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-steps.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.create-step",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/steps",
+    "service": "kanban.v1.KanbanService",
+    "method": "CreateStep",
+    "path": "/kanban.v1.KanbanService/CreateStep",
+    "request": "CreateStepRequest",
+    "response": "CreateStepResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1041,17 +1079,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.create-step.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.update-step",
-    "method": "PATCH",
-    "path": "/api/v1/tasks/:task_id/steps/:step_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "UpdateStep",
+    "path": "/kanban.v1.KanbanService/UpdateStep",
+    "request": "UpdateStepRequest",
+    "response": "UpdateStepResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1071,17 +1110,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.update-step.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.remove-step",
-    "method": "DELETE",
-    "path": "/api/v1/tasks/:task_id/steps/:step_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "RemoveStep",
+    "path": "/kanban.v1.KanbanService/RemoveStep",
+    "request": "RemoveStepRequest",
+    "response": "RemoveStepResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1100,17 +1140,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.remove-step.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.complete-step",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/steps/:step_id/done",
+    "service": "kanban.v1.KanbanService",
+    "method": "CompleteStep",
+    "path": "/kanban.v1.KanbanService/CompleteStep",
+    "request": "CompleteStepRequest",
+    "response": "CompleteStepResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1130,17 +1171,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.complete-step.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.skip-step",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/steps/:step_id/skip",
+    "service": "kanban.v1.KanbanService",
+    "method": "SkipStep",
+    "path": "/kanban.v1.KanbanService/SkipStep",
+    "request": "SkipStepRequest",
+    "response": "SkipStepResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1160,17 +1202,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.skip-step.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.reopen-step",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/steps/:step_id/reopen",
+    "service": "kanban.v1.KanbanService",
+    "method": "ReopenStep",
+    "path": "/kanban.v1.KanbanService/ReopenStep",
+    "request": "ReopenStepRequest",
+    "response": "ReopenStepResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1190,17 +1233,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.reopen-step.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.mark-execution-plan-not-required",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/execution-plan/not-required",
+    "service": "kanban.v1.KanbanService",
+    "method": "MarkExecutionPlanNotRequired",
+    "path": "/kanban.v1.KanbanService/MarkExecutionPlanNotRequired",
+    "request": "MarkExecutionPlanNotRequiredRequest",
+    "response": "MarkExecutionPlanNotRequiredResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1220,17 +1264,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.mark-execution-plan-not-required.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-runs",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/runs",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListRuns",
+    "path": "/kanban.v1.KanbanService/ListRuns",
+    "request": "ListRunsRequest",
+    "response": "ListRunsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1249,9 +1294,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-runs.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": [
@@ -1260,8 +1302,12 @@ export const operations = [
   },
   {
     "id": "api.get-run-log",
-    "method": "GET",
-    "path": "/api/v1/runs/:run_id/log",
+    "service": "kanban.v1.KanbanService",
+    "method": "GetRunLog",
+    "path": "/kanban.v1.KanbanService/GetRunLog",
+    "request": "GetRunLogRequest",
+    "response": "GetRunLogResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1280,17 +1326,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.get-run-log.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-comments",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/comments",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListComments",
+    "path": "/kanban.v1.KanbanService/ListComments",
+    "request": "ListCommentsRequest",
+    "response": "ListCommentsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1309,9 +1356,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-comments.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": [
@@ -1320,8 +1364,12 @@ export const operations = [
   },
   {
     "id": "api.create-comment",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/comments",
+    "service": "kanban.v1.KanbanService",
+    "method": "CreateComment",
+    "path": "/kanban.v1.KanbanService/CreateComment",
+    "request": "CreateCommentRequest",
+    "response": "CreateCommentResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1341,9 +1389,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.create-comment.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": [
@@ -1352,8 +1397,12 @@ export const operations = [
   },
   {
     "id": "api.list-attachments",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/attachments",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListAttachments",
+    "path": "/kanban.v1.KanbanService/ListAttachments",
+    "request": "ListAttachmentsRequest",
+    "response": "ListAttachmentsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1372,17 +1421,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-attachments.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.create-attachment",
-    "method": "POST",
-    "path": "/api/v1/tasks/:task_id/attachments",
+    "service": "kanban.v1.KanbanService",
+    "method": "CreateAttachment",
+    "path": "/kanban.v1.KanbanService/CreateAttachment",
+    "request": "CreateAttachmentRequest",
+    "response": "CreateAttachmentResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1402,17 +1452,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.create-attachment.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.download-attachment",
-    "method": "GET",
-    "path": "/api/v1/tasks/:task_id/attachments/:attachment_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "DownloadAttachment",
+    "path": "/kanban.v1.KanbanService/DownloadAttachment",
+    "request": "DownloadAttachmentRequest",
+    "response": "DownloadAttachmentResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1431,17 +1482,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.download-attachment.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.delete-attachment",
-    "method": "DELETE",
-    "path": "/api/v1/tasks/:task_id/attachments/:attachment_id",
+    "service": "kanban.v1.KanbanService",
+    "method": "DeleteAttachment",
+    "path": "/kanban.v1.KanbanService/DeleteAttachment",
+    "request": "DeleteAttachmentRequest",
+    "response": "DeleteAttachmentResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "contract",
@@ -1460,17 +1512,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.delete-attachment.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.get-stats",
-    "method": "GET",
-    "path": "/api/v1/stats",
+    "service": "kanban.v1.KanbanService",
+    "method": "GetStats",
+    "path": "/kanban.v1.KanbanService/GetStats",
+    "request": "GetStatsRequest",
+    "response": "GetStatsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1489,17 +1542,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.get-stats.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.search-status",
-    "method": "GET",
-    "path": "/api/v1/search/status",
+    "service": "kanban.v1.KanbanService",
+    "method": "SearchStatus",
+    "path": "/kanban.v1.KanbanService/SearchStatus",
+    "request": "SearchStatusRequest",
+    "response": "SearchStatusResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1518,17 +1572,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.search-status.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.list-events",
-    "method": "GET",
-    "path": "/api/v1/events",
+    "service": "kanban.v1.KanbanService",
+    "method": "ListEvents",
+    "path": "/kanban.v1.KanbanService/ListEvents",
+    "request": "ListEventsRequest",
+    "response": "ListEventsResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1547,48 +1602,20 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.list-events.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
-      }
-    },
-    "sharedComponents": []
-  },
-  {
-    "id": "sse.stream-events",
-    "method": "GET",
-    "path": "/api/v1/stream/events",
-    "obligations": {
-      "path": {
-        "kind": "not_applicable"
-      },
-      "query": {
-        "kind": "contract",
-        "contractId": "sse.stream-events.query"
-      },
-      "headers": {
-        "kind": "contract",
-        "contractId": "sse.stream-events.headers"
-      },
-      "body": {
-        "kind": "not_applicable"
-      },
-      "success": {
-        "kind": "not_applicable"
-      },
-      "sse": {
-        "kind": "contract",
-        "contractId": "sse.event.data"
       }
     },
     "sharedComponents": [
-      "sse.event.heartbeat"
+      "api.event.data"
     ]
   },
   {
     "id": "api.doctor",
-    "method": "GET",
-    "path": "/api/v1/maintenance/doctor",
+    "service": "kanban.v1.KanbanService",
+    "method": "Doctor",
+    "path": "/kanban.v1.KanbanService/Doctor",
+    "request": "DoctorRequest",
+    "response": "DoctorResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1606,17 +1633,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.doctor.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.checkpoint",
-    "method": "POST",
-    "path": "/api/v1/maintenance/checkpoint",
+    "service": "kanban.v1.KanbanService",
+    "method": "Checkpoint",
+    "path": "/kanban.v1.KanbanService/Checkpoint",
+    "request": "CheckpointRequest",
+    "response": "CheckpointResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1634,17 +1662,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.checkpoint.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-backup",
-    "method": "POST",
-    "path": "/api/v1/maintenance/backup",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceBackup",
+    "path": "/kanban.v1.KanbanService/MaintenanceBackup",
+    "request": "MaintenanceBackupRequest",
+    "response": "MaintenanceBackupResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1663,17 +1692,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-backup.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-export",
-    "method": "POST",
-    "path": "/api/v1/maintenance/export",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceExport",
+    "path": "/kanban.v1.KanbanService/MaintenanceExport",
+    "request": "MaintenanceExportRequest",
+    "response": "MaintenanceExportResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1692,17 +1722,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-export.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-import",
-    "method": "POST",
-    "path": "/api/v1/maintenance/import",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceImport",
+    "path": "/kanban.v1.KanbanService/MaintenanceImport",
+    "request": "MaintenanceImportRequest",
+    "response": "MaintenanceImportResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1721,17 +1752,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-import.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-vacuum",
-    "method": "POST",
-    "path": "/api/v1/maintenance/vacuum",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceVacuum",
+    "path": "/kanban.v1.KanbanService/MaintenanceVacuum",
+    "request": "MaintenanceVacuumRequest",
+    "response": "MaintenanceVacuumResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1749,17 +1781,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-vacuum.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-status",
-    "method": "GET",
-    "path": "/api/v1/maintenance/status",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceStatus",
+    "path": "/kanban.v1.KanbanService/MaintenanceStatus",
+    "request": "MaintenanceStatusRequest",
+    "response": "MaintenanceStatusResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1777,17 +1810,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-status.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-run",
-    "method": "POST",
-    "path": "/api/v1/maintenance/run",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceRun",
+    "path": "/kanban.v1.KanbanService/MaintenanceRun",
+    "request": "MaintenanceRunRequest",
+    "response": "MaintenanceRunResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1806,17 +1840,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-run.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-rebuild",
-    "method": "POST",
-    "path": "/api/v1/maintenance/rebuild",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceRebuild",
+    "path": "/kanban.v1.KanbanService/MaintenanceRebuild",
+    "request": "MaintenanceRebuildRequest",
+    "response": "MaintenanceRebuildResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1835,17 +1870,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-rebuild.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-cleanup",
-    "method": "POST",
-    "path": "/api/v1/maintenance/cleanup",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceCleanup",
+    "path": "/kanban.v1.KanbanService/MaintenanceCleanup",
+    "request": "MaintenanceCleanupRequest",
+    "response": "MaintenanceCleanupResponse",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1864,17 +1900,18 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-cleanup.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
   },
   {
     "id": "api.maintenance-import-v30",
-    "method": "POST",
-    "path": "/api/v1/maintenance/import-v30",
+    "service": "kanban.v1.KanbanService",
+    "method": "MaintenanceImportV30",
+    "path": "/kanban.v1.KanbanService/MaintenanceImportV30",
+    "request": "MaintenanceImportV30Request",
+    "response": "MaintenanceImportV30Response",
+    "serverStreaming": false,
     "obligations": {
       "path": {
         "kind": "not_applicable"
@@ -1893,9 +1930,6 @@ export const operations = [
       "success": {
         "kind": "contract",
         "contractId": "api.maintenance-import-v30.response"
-      },
-      "sse": {
-        "kind": "not_applicable"
       }
     },
     "sharedComponents": []
@@ -1958,18 +1992,17 @@ export const operationById = {
   "api.get-stats": operations[49],
   "api.search-status": operations[50],
   "api.list-events": operations[51],
-  "sse.stream-events": operations[52],
-  "api.doctor": operations[53],
-  "api.checkpoint": operations[54],
-  "api.maintenance-backup": operations[55],
-  "api.maintenance-export": operations[56],
-  "api.maintenance-import": operations[57],
-  "api.maintenance-vacuum": operations[58],
-  "api.maintenance-status": operations[59],
-  "api.maintenance-run": operations[60],
-  "api.maintenance-rebuild": operations[61],
-  "api.maintenance-cleanup": operations[62],
-  "api.maintenance-import-v30": operations[63],
+  "api.doctor": operations[52],
+  "api.checkpoint": operations[53],
+  "api.maintenance-backup": operations[54],
+  "api.maintenance-export": operations[55],
+  "api.maintenance-import": operations[56],
+  "api.maintenance-vacuum": operations[57],
+  "api.maintenance-status": operations[58],
+  "api.maintenance-run": operations[59],
+  "api.maintenance-rebuild": operations[60],
+  "api.maintenance-cleanup": operations[61],
+  "api.maintenance-import-v30": operations[62],
 } as const;
 
 export function getOperation<K extends WebOperationId>(id: K): (typeof operationById)[K] {

@@ -4,7 +4,7 @@ import type { WebRuntimeConfig } from '../../lib/runtime'
 import attachmentFixture from '../../lib/api/generated/fixtures/api-create-attachment-response.valid.json'
 import { createAttachmentDownloadClient } from './attachment-download'
 
-const runtime = { apiBaseUrl: '/__kb_api__', webBasePath: '/app/', actor: 'web-user', defaultBoard: 'default', serverVersion: '3.1.0', protocolVersion: 'v1', webBuildId: 'sha256:test' } satisfies WebRuntimeConfig
+const runtime = { apiBaseUrl: '/__kb_api__', webBasePath: '/app/', actor: 'web-user', defaultBoard: 'default', serverVersion: '3.1.0', protocolVersion: 'v2', webBuildId: 'sha256:test' } satisfies WebRuntimeConfig
 function setup(id = 'a_%中') {
   const content = new Uint8Array([0, 255, 13])
   const attachment = { ...attachmentFixture.data, id, task_id: 't_1', size_bytes: content.length, content_type: 'application/octet-stream', sha256: 'sha-fixture' }

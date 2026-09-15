@@ -10,8 +10,6 @@ members = [
   "crates/kanban-mcp",
   "crates/kanban-server",
   "crates/kanban-live-core",
-  "crates/kanban-rpc-proto",
-  "crates/kanban-rpc-host",
   "apps/desktop/src-tauri",
 ]
 default-members = [
@@ -72,13 +70,12 @@ rmcp = { version = "=3.1.0", default-features = false }
 tower-http = "0.6"
 proptest = { version = "1.11.0", default-features = false }
 prost = "0.14"
+prost-types = "0.14"
 tonic = { version = "=0.14.6", default-features = false }
 tonic-prost = "=0.14.6"
 tonic-prost-build = "=0.14.6"
 tonic-web = "=0.14.6"
 async-stream = "0.3"
-tokio-stream = { version = "0.1", default-features = false }
-http = "1"
 reqwest = { version = "0.12", default-features = false }
 tauri-build = "2"
 tauri = "2"
@@ -92,5 +89,3 @@ kanban-web-artifact = { path = "crates/kanban-web-artifact", default-features = 
 kanban-client = { path = "crates/kanban-client" }
 kanban-server = { path = "crates/kanban-server" }
 kanban-live-core = { path = "crates/kanban-live-core" }
-kanban-rpc-proto = { path = "crates/kanban-rpc-proto" }
-kanban-rpc-host = { path = "crates/kanban-rpc-host" }

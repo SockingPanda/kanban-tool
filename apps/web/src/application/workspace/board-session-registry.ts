@@ -1,22 +1,11 @@
 import type { BoardReadModel, BoardReadQuery } from "../data/board-read-model";
-import type { BoardRealtimeSource } from "../realtime/source";
-import { bindBoardRealtime } from "../realtime/bind";
-import { type RpcTransport } from "../data/rpc-transport";
-import { createBoardSyncSink } from "../sync/board-sync-sink";
-import { createEventsApiClient } from "../sync/events-api";
-import { WebSyncController, type WebSyncSnapshot } from "../sync/web-sync-controller";
-import { asCanonicalBoardId, type CanonicalBoardId, type SseTransport, type StreamContractAdapter, type SyncTelemetryEntry } from "../sync/contracts";
+import { asCanonicalBoardId, type CanonicalBoardId } from "../../domain/board-id";
 import type { WebRuntimeConfig } from "../../lib/runtime"
-import type { BoardViewModel } from "../../domain/tasks/board"
+import type { BoardSyncStatus, BoardViewModel } from "../../domain/tasks/board"
 
 export interface BoardReadResource {
   readonly selector: string
-  readonly boardRealtime?: BoardRealtimeSource
-  readonly streamTransport?: SseTransport
-  readonly streamUrl?: string
-  readonly transport: RpcTransport
   readonly query: BoardReadQuery
-  readonly adapter: StreamContractAdapter
   readonly runtimeKey: string
   identityKey: string
   canonicalBoardId: CanonicalBoardId | null
@@ -26,22 +15,16 @@ export interface BoardReadResource {
 
 interface BoardSession {
   readonly key: string
-  readonly realtimeKey: string
   readonly generation: number
   readonly query: BoardReadQuery
-  readonly controller: BoardSessionController
-  readonly resource: BoardReadResource
   readonly resources: Set<BoardReadResource>
   readonly listeners: Set<(model: BoardReadModel) => void>
-  readonly telemetryListeners: Set<(entry: SyncTelemetryEntry) => void>
-  refreshPromise: Promise<void> | null
-  refreshRevision: number
+  readonly stateListeners: Set<(state: BoardSyncStatus) => void>
+  readonly abort: AbortController
+  releaseConnection: () => void
+  state: BoardSyncStatus
   refs: number
   disposed: boolean
-}
-
-type BoardSessionController = Pick<WebSyncController, "start" | "stop" | "retry"> & {
-  readonly snapshot?: () => Pick<WebSyncSnapshot, "state">
 }
 
 export type BoardReconnectResult = "reconnecting" | "already-live" | "unavailable"
@@ -56,13 +39,7 @@ export interface BoardSessionHandle {
   readonly generation: number
 }
 
-export interface BoardSessionTestDependencies {
-  readonly streamTransport?: SseTransport
-  readonly createController?: (options: ConstructorParameters<typeof WebSyncController>[0]) => BoardSessionController
-}
-
 const sessions = new Map<string, BoardSession>()
-const sessionTelemetryObservers = new Map<string, Set<(entry: SyncTelemetryEntry) => void>>()
 const sessionListeners = new Set<() => void>()
 let sessionRevision = 0
 
@@ -88,28 +65,25 @@ function sessionKey(runtime: WebRuntimeConfig, canonicalBoardId: CanonicalBoardI
   return `${runtimeIdentityKey(runtime)}\u0000${canonicalBoardId}`
 }
 
-/** 读取期间收到新失效提示时再次读取，避免发布失效提示之前的快照。 */
-function refreshSession(session: BoardSession): Promise<void> {
-  if (session.disposed || sessions.get(session.key) !== session) return Promise.resolve()
-  session.refreshRevision += 1
-  if (session.refreshPromise !== null) return session.refreshPromise
-  const current = (): boolean => !session.disposed && sessions.get(session.key) === session
-  const promise = (async () => {
-    while (current()) {
-      const revision = session.refreshRevision
-      // 下一轮取决于本轮等待期间的失效 revision，不能并发；registry 回归覆盖迟到快照。
-      // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      const nextModel = await session.query.reload()
-      if (!current()) return
-      if (revision !== session.refreshRevision) continue
-      for (const listener of session.listeners) listener(nextModel)
-      return
-    }
-  })()
-  session.refreshPromise = promise
-  const clear = (): void => { if (session.refreshPromise === promise) session.refreshPromise = null }
-  void promise.then(clear, clear)
-  return promise
+/** 写后刷新由 QueryService Ready 确认；会话仅负责把完整模型交给仍挂载的消费者。 */
+async function refreshSession(session: BoardSession): Promise<void> {
+  if (!isCurrent(session)) return
+  const nextModel = await session.query.reload(session.abort.signal)
+  if (isCurrent(session)) for (const listener of session.listeners) listener(nextModel)
+}
+
+function isCurrent(session: BoardSession): boolean {
+  return !session.disposed && sessions.get(session.key) === session
+}
+
+function setConnectionState(session: BoardSession, state: BoardSyncStatus): void {
+  if (!isCurrent(session)) return
+  session.state = state
+  for (const listener of session.stateListeners) listener(state)
+}
+
+function retrySession(session: BoardSession): void {
+  void refreshSession(session).catch(() => setConnectionState(session, 'stale'))
 }
 
 export function routeResourceContextKey(runtime: WebRuntimeConfig, selector: string, routeKind: string, boardSlug = ""): string {
@@ -137,7 +111,7 @@ export function activeBoardSessionCount(): number {
   return sessions.size
 }
 
-/** 会话归属或正式 RPC 失效改变时通知订阅者，目录与重连控件使用同一个会话事实。 */
+/** 会话归属改变时通知订阅者，重连控件使用同一个会话事实。 */
 export function subscribeBoardSessions(listener: () => void): () => void {
   sessionListeners.add(listener)
   return () => sessionListeners.delete(listener)
@@ -167,9 +141,8 @@ export function reconnectActiveBoardSession(runtime: WebRuntimeConfig, boardSlug
       && session.key.startsWith(`${runtimeKey}\u0000`)
       && (boardSlug === undefined || [...session.resources].some((resource) => resource.resolvedSlug === boardSlug))
     ) {
-      const snapshot = session.controller.snapshot?.()
-      if (snapshot?.state === "live") return "already-live"
-      session.controller.retry()
+      if (session.state === "live") return "already-live"
+      retrySession(session)
       return "reconnecting"
     }
   }
@@ -181,39 +154,15 @@ export function resetBoardSessionsForTests(): void {
   for (const session of sessions.values()) {
     session.disposed = true
     session.listeners.clear()
-    session.telemetryListeners.clear()
-    session.controller.stop()
+    session.stateListeners.clear()
+    session.abort.abort()
+    session.releaseConnection()
     for (const resource of session.resources) resource.sessionGeneration += 1
     session.query.invalidate()
   }
   sessions.clear()
-  sessionTelemetryObservers.clear()
   notifySessionListeners()
 }
-/** Subscribe to the already-validated SSE/recovery telemetry of one session. */
-export function subscribeBoardSessionTelemetry(
-  runtime: WebRuntimeConfig,
-  canonicalBoardId: CanonicalBoardId,
-  listener: (entry: SyncTelemetryEntry) => void,
-): () => void {
-  const key = sessionKey(runtime, canonicalBoardId)
-  let observers = sessionTelemetryObservers.get(key)
-  if (observers === undefined) {
-    observers = new Set()
-    sessionTelemetryObservers.set(key, observers)
-  }
-  observers.add(listener)
-  let active = true
-  return () => {
-    if (!active) return
-    active = false
-    const current = sessionTelemetryObservers.get(key)
-    if (current === undefined) return
-    current.delete(listener)
-    if (current.size === 0) sessionTelemetryObservers.delete(key)
-  }
-}
-
 if (import.meta.hot) {
   import.meta.hot.dispose(() => resetBoardSessionsForTests())
 }
@@ -223,8 +172,7 @@ export function acquireBoardSession(
   model: BoardViewModel,
   resource: BoardReadResource,
   onModel: (model: BoardReadModel) => void,
-  onTelemetry: (entry: SyncTelemetryEntry) => void,
-  dependencies: BoardSessionTestDependencies = {},
+  onState: (state: BoardSyncStatus) => void,
 ): BoardSessionHandle {
   const boardId = asCanonicalBoardId(model.board.id)
   const expectedKey = resourceIdentityKey(runtime, resource.selector, boardId)
@@ -242,84 +190,18 @@ export function acquireBoardSession(
     if (sessions.get(key) === session) sessions.delete(key)
     session = undefined
   }
-  const realtimeKey = resource.query.observe ? 'query-subscriptions' : resource.boardRealtime ? `source:${resource.boardRealtime.key}` : "legacy-sse"
-  if (session && session.realtimeKey !== realtimeKey) throw new Error("同一看板仍有其他实时数据源的会话，请先释放旧会话")
   if (session === undefined) {
-    const listeners = new Set<(nextModel: BoardReadModel) => void>()
-    const telemetryListeners = new Set<(entry: SyncTelemetryEntry) => void>()
-    const record = (entry: SyncTelemetryEntry): void => {
-      if (session?.disposed || sessions.get(key) !== session) return
-      for (const listener of telemetryListeners) listener(entry)
-      for (const observer of sessionTelemetryObservers.get(key) ?? []) observer(entry)
-      if (entry.type === "rpc-refresh-required" && session) {
-        notifySessionListeners()
-        void refreshSession(session).catch(() => record({
-          type: "recovery-failure", boardId, cursor: 0,
-          details: { controlOnly: true, realtimeSource: resource.boardRealtime?.key },
-        }))
-      }
-    }
-    let controller: BoardSessionController
-    if (resource.query.observe) {
-      let abort: AbortController | null = null
-      let releaseState: (() => void) | undefined
-      let state: 'live' | 'connecting' = 'connecting'
-      controller = {
-        start: () => {
-          if (abort) return
-          abort = new AbortController()
-          resource.query.observe!(abort.signal,
-            nextModel => { for (const listener of listeners) listener(nextModel) },
-            () => record({ type: 'recovery-failure', boardId, cursor: 0 }))
-          releaseState = resource.query.subscribeConnection?.(next => {
-            state = next === 'live' ? 'live' : 'connecting'
-            record({ type: next === 'live' ? 'connection-live' : next === 'connecting' ? 'rpc-connecting' : 'transport-failure', boardId, cursor: 0 })
-          })
-        },
-        stop: () => { abort?.abort(); abort = null; releaseState?.(); releaseState = undefined },
-        retry: () => { if (session) void refreshSession(session).catch(() => record({ type: 'recovery-failure', boardId, cursor: 0 })) },
-        snapshot: () => ({ state }),
-      }
-    } else if (resource.boardRealtime) {
-      controller = bindBoardRealtime(resource.boardRealtime, {
-        boardId, boardSelector: model.board.slug, record,
-      })
-    } else {
-      // 旧入口显式保留，RPC 失败不会进入这个分支。
-      const eventsApi = createEventsApiClient({ transport: resource.transport })
-      const sink = createBoardSyncSink({
-        identity: { canonicalBoardId: boardId, selector: model.board.slug },
-        query: resource.query,
-        eventsApi,
-        adapter: resource.adapter,
-        publish: (nextModel) => {
-          for (const listener of listeners) listener(nextModel)
-        },
-      })
-      const controllerOptions = {
-        boardSelector: model.board.slug,
-        canonicalBoardId: boardId,
-        streamUrl: resource.streamUrl ?? "/api/v1/stream/events",
-        transport: dependencies.streamTransport ?? resource.streamTransport ?? (() => { throw new Error("Host stream transport 未提供") }),
-        adapter: resource.adapter,
-        sink,
-        telemetry: { record },
-      } satisfies ConstructorParameters<typeof WebSyncController>[0]
-      controller = dependencies.createController?.(controllerOptions) ?? new WebSyncController(controllerOptions)
-    }
     resource.sessionGeneration += 1
     session = {
       key,
-      realtimeKey,
       generation: resource.sessionGeneration,
       query: resource.query,
-      resource,
       resources: new Set([resource]),
-      controller,
-      listeners,
-      telemetryListeners,
-      refreshPromise: null,
-      refreshRevision: 0,
+      listeners: new Set(),
+      stateListeners: new Set(),
+      abort: new AbortController(),
+      releaseConnection: () => undefined,
+      state: 'connecting',
       refs: 0,
       disposed: false,
     }
@@ -333,10 +215,26 @@ export function acquireBoardSession(
   // Each acquire owns a wrapper, so two mounts that happen to pass the same
   // callback cannot remove one another's subscription on first release.
   const modelListener = (nextModel: BoardReadModel) => onModel(nextModel)
-  const telemetryListener = (entry: SyncTelemetryEntry) => onTelemetry(entry)
+  const stateListener = (state: BoardSyncStatus) => onState(state)
   session.listeners.add(modelListener)
-  session.telemetryListeners.add(telemetryListener)
-  session.controller.start()
+  session.stateListeners.add(stateListener)
+  if (session.refs === 1) {
+    const owned = session
+    try {
+      owned.query.observe(owned.abort.signal,
+        nextModel => { if (isCurrent(owned)) for (const listener of owned.listeners) listener(nextModel) },
+        () => setConnectionState(owned, 'stale'))
+      owned.releaseConnection = owned.query.subscribeConnection(next => setConnectionState(owned, next === 'offline' ? 'stale' : next))
+    } catch (error) {
+      owned.disposed = true
+      owned.abort.abort()
+      owned.releaseConnection()
+      owned.query.invalidate()
+      sessions.delete(key)
+      notifySessionListeners()
+      throw error
+    }
+  } else onState(session.state)
 
   let released = false
   const release = () => {
@@ -344,32 +242,30 @@ export function acquireBoardSession(
     released = true
     if (session === undefined || sessions.get(key) !== session || session.key !== key) return
     session.listeners.delete(modelListener)
-    session.telemetryListeners.delete(telemetryListener)
+    session.stateListeners.delete(stateListener)
     session.refs -= 1
     if (session.refs > 0) return
     session.disposed = true
     session.listeners.clear()
-    session.telemetryListeners.clear()
+    session.stateListeners.clear()
     for (const resource of session.resources) resource.sessionGeneration += 1
-    session.controller.stop()
+    session.abort.abort()
+    session.releaseConnection()
     session.query.invalidate()
     if (sessions.get(key) === session) sessions.delete(key)
     if (sessions.get(key) === undefined) notifySessionListeners()
-    const observers = sessionTelemetryObservers.get(key)
-    if (observers?.size === 0) sessionTelemetryObservers.delete(key)
   }
   return {
     release,
     retry: () => {
-      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
+      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) retrySession(session)
     },
     reconnect: () => {
-      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
+      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) retrySession(session)
     },
     refresh: () => {
       if (released || session === undefined || session.disposed || sessions.get(key) !== session) return Promise.resolve()
-      // 多个显式刷新共用当前读取；新的流失效提示由 record 另行推进 revision。
-      return session.refreshPromise ?? refreshSession(session)
+      return refreshSession(session)
     },
     generation: session.generation,
   }

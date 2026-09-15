@@ -6,7 +6,6 @@ export function useAsyncRead<T>(
   enabled: boolean,
   key: string,
   load: (signal: AbortSignal) => Promise<T>,
-  refreshRevision = 0,
   online = true,
   keepErrorWhileLoading = false,
 ): AsyncReadState<T> & { readonly retry: () => void; readonly reload: () => Promise<T> } {
@@ -15,10 +14,7 @@ export function useAsyncRead<T>(
   const reloadWaitersRef = useRef<Array<{ readonly identityKey: string; readonly minimumGeneration: number; readonly resolve: (data: T) => void; readonly reject: (error: unknown) => void }>>([])
   const settledRef = useRef<{ readonly identityKey: string; readonly requestKey: string; readonly generation: number; readonly data: T } | null>(null)
   const [generation, setGeneration] = useState(0)
-  const { identityKey, requestKey: baseRequestKey } = asyncReadToken(enabled, key, generation)
-  // A session event/poll boundary is a new request for the same visible
-  // identity. Keep the last usable data while the coalesced refresh is in flight.
-  const requestKey = `${baseRequestKey}\u0000${refreshRevision}`
+  const { identityKey, requestKey } = asyncReadToken(enabled, key, generation)
   const [state, setState] = useState<AsyncReadInternalState<T>>(() => ({
     data: null,
     error: null,

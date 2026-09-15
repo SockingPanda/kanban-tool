@@ -1,17 +1,17 @@
 import { describe, expect, test, vi } from "vitest"
 
-import type { HttpTransportResponse } from "../../application/data/http-transport";
-import { HttpTransportError } from "../../application/data/http-transport";
+import type { RpcTransportResponse } from "../../application/data/rpc-transport";
+import { RpcTransportError } from "../../application/data/rpc-transport";
 import { readHealth } from "./health-read-model";
 
-function response(payload: unknown): HttpTransportResponse {
+function response(payload: unknown): RpcTransportResponse {
   return { payload, bytes: JSON.stringify(payload).length }
 }
 
 describe("health read model", () => {
   test("loads and projects the generated health report", async () => {
-    const get = vi.fn(async (path: string) => {
-      expect(path).toBe("/health")
+    const call = vi.fn(async (request: { method: string }) => {
+      expect(request.method).toBe("GetHealth")
       return response({
         data: {
           ok: true,
@@ -23,7 +23,7 @@ describe("health read model", () => {
       })
     })
 
-    await expect(readHealth({ transport: { get } })).resolves.toEqual({
+    await expect(readHealth({ transport: { call } })).resolves.toEqual({
       ok: true,
       db: "ok",
       version: "3.0.0",
@@ -33,7 +33,7 @@ describe("health read model", () => {
   })
 
   test("rejects schema drift with a typed local error", async () => {
-    await expect(readHealth({ transport: { get: vi.fn(async () => response({ data: { ok: true } })) } })).rejects.toMatchObject({
+    await expect(readHealth({ transport: { call: vi.fn(async () => response({ data: { ok: true } })) } })).rejects.toMatchObject({
       kind: "invalid_contract",
       contractId: "api.health.response",
     })
@@ -42,8 +42,8 @@ describe("health read model", () => {
   test("keeps typed API code and status without exposing the server message", async () => {
     const serverMessage = "database path /srv/private/kanban.db is unavailable"
     const transport = {
-      get: vi.fn(async () => {
-        throw new HttpTransportError("http", serverMessage, {
+      call: vi.fn(async () => {
+        throw new RpcTransportError("http", serverMessage, {
           status: 503,
           apiError: { code: "server_unavailable", message: serverMessage },
         })

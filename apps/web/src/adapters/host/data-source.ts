@@ -13,7 +13,7 @@ import type { RpcTransport } from '../../application/data/rpc-transport';
 import { loadExplorerBoardIdentity, loadBoardEvents, loadTaskListPage, loadTaskMap, loadTaskRuns, loadTaskInspector, loadTaskInspectorNeighborhood, loadTaskInspectorRuns, loadTaskInspectorEvents, loadTaskInspectorAttachments } from "./explorer-read-model";
 import { createTaskMutationClient } from "./task-mutations";
 import { createAttachmentDownloadClient } from "./attachment-download";
-import { readHealth, readQueryHealth } from "./health-read-model";
+import { readQueryHealth } from "./health-read-model";
 import { createMaintenanceApi } from "./maintenance-api";
 
 export function createHostDataSource(runtime: WebRuntimeConfig, options: RpcTransportOptions = {}): WorkspaceDataSource {
@@ -25,8 +25,6 @@ export function createHostDataSource(runtime: WebRuntimeConfig, options: RpcTran
     recentEvents: (request, signal) => registry.read({ method: 'RecentEvents', query: request, signal }),
   };
   return {
-    querySubscriptions: true,
-    transport,
     readBoardDirectory: signal => readBoardDirectory(transport, signal),
     loadBoardReadModel: (config, selector, readOptions = {}) => loadBoardReadModel(config, selector, {
       ...readOptions, dependencies: { transport, ...readOptions.dependencies },
@@ -46,8 +44,7 @@ export function createHostDataSource(runtime: WebRuntimeConfig, options: RpcTran
     loadTaskInspectorAttachments: (config, selector, taskId, readOptions) => loadTaskInspectorAttachments(config, selector, taskId, { transport, ...readOptions }),
     createTaskMutationClient: (config, board, dependencies) => createTaskMutationClient(config, board, { transport, ...dependencies }),
     createAttachmentDownloadClient: (config, dependencies) => createAttachmentDownloadClient(config, { transport, ...dependencies }),
-    readHealth: readOptions => readOptions?.transport ? readHealth(readOptions)
-      : readQueryHealth(transport, readOptions?.signal),
+    readHealth: readOptions => readQueryHealth(transport, readOptions?.signal),
     createMaintenanceApi: (dependencies, config) => createMaintenanceApi({ transport, ...dependencies }, config ?? runtime),
   };
 }

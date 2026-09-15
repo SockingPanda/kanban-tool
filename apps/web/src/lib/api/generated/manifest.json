@@ -1331,44 +1331,14 @@
       "validFixture": "fixtures/api-list-events-response.valid.json"
     },
     {
-      "direction": "deserialize",
-      "id": "sse.stream-events.headers",
-      "invalidFixture": "fixtures/sse-stream-events-headers.invalid.json",
-      "schemaId": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
-      "schemaPath": "schemas/sse-stream-events-headers.schema.json",
-      "strictness": "deny_unknown_fields",
-      "surface": "sse",
-      "validFixture": "fixtures/sse-stream-events-headers.valid.json"
-    },
-    {
-      "direction": "deserialize",
-      "id": "sse.stream-events.query",
-      "invalidFixture": "fixtures/sse-stream-events-query.invalid.json",
-      "schemaId": "urn:kanban-tool:schema:sse:stream-events-query:v1",
-      "schemaPath": "schemas/sse-stream-events-query.schema.json",
-      "strictness": "deny_unknown_fields",
-      "surface": "sse",
-      "validFixture": "fixtures/sse-stream-events-query.valid.json"
-    },
-    {
       "direction": "serialize",
-      "id": "sse.event.data",
-      "invalidFixture": "fixtures/sse-event-data.invalid.json",
-      "schemaId": "urn:kanban-tool:schema:sse:stream-event-data:v1",
-      "schemaPath": "schemas/sse-event-data.schema.json",
+      "id": "api.event.data",
+      "invalidFixture": "fixtures/api-event-data.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:api:event-data:v1",
+      "schemaPath": "schemas/api-event-data.schema.json",
       "strictness": "deny_unknown_fields",
-      "surface": "sse",
-      "validFixture": "fixtures/sse-event-data.valid.json"
-    },
-    {
-      "direction": "serialize",
-      "id": "sse.event.heartbeat",
-      "invalidFixture": "fixtures/sse-event-heartbeat.invalid.json",
-      "schemaId": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
-      "schemaPath": "schemas/sse-event-heartbeat.schema.json",
-      "strictness": "deny_unknown_fields",
-      "surface": "sse",
-      "validFixture": "fixtures/sse-event-heartbeat.valid.json"
+      "surface": "api",
+      "validFixture": "fixtures/api-event-data.valid.json"
     },
     {
       "direction": "deserialize",
@@ -2276,6 +2246,7 @@
     "contracts/api-download-attachment-path.ts",
     "contracts/api-download-attachment-response.ts",
     "contracts/api-error-response.ts",
+    "contracts/api-event-data.ts",
     "contracts/api-explain-label-atom-headers.ts",
     "contracts/api-explain-label-atom-response.ts",
     "contracts/api-get-label-ontology-signal-headers.ts",
@@ -2430,10 +2401,6 @@
     "contracts/api-update-task-request.ts",
     "contracts/api-update-task-response.ts",
     "contracts/runtime-web-config-output.ts",
-    "contracts/sse-event-data.ts",
-    "contracts/sse-event-heartbeat.ts",
-    "contracts/sse-stream-events-headers.ts",
-    "contracts/sse-stream-events-query.ts",
     "fixtures/api-add-dependency-headers.invalid.json",
     "fixtures/api-add-dependency-headers.valid.json",
     "fixtures/api-add-dependency-path.invalid.json",
@@ -2560,6 +2527,8 @@
     "fixtures/api-download-attachment-response.valid.json",
     "fixtures/api-error-response.invalid.json",
     "fixtures/api-error-response.valid.json",
+    "fixtures/api-event-data.invalid.json",
+    "fixtures/api-event-data.valid.json",
     "fixtures/api-explain-label-atom-headers.invalid.json",
     "fixtures/api-explain-label-atom-headers.valid.json",
     "fixtures/api-explain-label-atom-response.invalid.json",
@@ -2868,14 +2837,6 @@
     "fixtures/api-update-task-response.valid.json",
     "fixtures/runtime-web-config-output.invalid.json",
     "fixtures/runtime-web-config-output.valid.json",
-    "fixtures/sse-event-data.invalid.json",
-    "fixtures/sse-event-data.valid.json",
-    "fixtures/sse-event-heartbeat.invalid.json",
-    "fixtures/sse-event-heartbeat.valid.json",
-    "fixtures/sse-stream-events-headers.invalid.json",
-    "fixtures/sse-stream-events-headers.valid.json",
-    "fixtures/sse-stream-events-query.invalid.json",
-    "fixtures/sse-stream-events-query.valid.json",
     "generated.sha256",
     "index.ts",
     "manifest.json",
@@ -2945,6 +2906,7 @@
     "schemas/api-download-attachment-path.schema.json",
     "schemas/api-download-attachment-response.schema.json",
     "schemas/api-error-response.schema.json",
+    "schemas/api-event-data.schema.json",
     "schemas/api-explain-label-atom-headers.schema.json",
     "schemas/api-explain-label-atom-response.schema.json",
     "schemas/api-get-label-ontology-signal-headers.schema.json",
@@ -3099,11 +3061,6 @@
     "schemas/api-update-task-request.schema.json",
     "schemas/api-update-task-response.schema.json",
     "schemas/runtime-web-config-output.schema.json",
-    "schemas/sse-event-data.schema.json",
-    "schemas/sse-event-heartbeat.schema.json",
-    "schemas/sse-stream-events-headers.schema.json",
-    "schemas/sse-stream-events-query.schema.json",
-    "sse.ts",
     "test-only.ts"
   ],
   "generatorVersion": 1,
@@ -3111,7 +3068,7 @@
   "operations": [
     {
       "id": "api.health",
-      "method": "GET",
+      "method": "GetHealth",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3126,20 +3083,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.health.response",
           "kind": "contract"
         }
       },
-      "path": "/health",
+      "path": "/kanban.v1.KanbanService/GetHealth",
+      "request": "GetHealthRequest",
+      "response": "GetHealthResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-boards",
-      "method": "GET",
+      "method": "ListBoards",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3155,20 +3113,21 @@
           "contractId": "api.list-boards.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-boards.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards",
+      "path": "/kanban.v1.KanbanService/ListBoards",
+      "request": "ListBoardsRequest",
+      "response": "ListBoardsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-board-columns",
-      "method": "GET",
+      "method": "ListBoardColumns",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3184,20 +3143,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-board-columns.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/columns",
+      "path": "/kanban.v1.KanbanService/ListBoardColumns",
+      "request": "ListBoardColumnsRequest",
+      "response": "ListBoardColumnsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.explain-label-atom",
-      "method": "GET",
+      "method": "ExplainLabelAtom",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3213,20 +3173,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.explain-label-atom.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/labels/atoms/:atom_ref/explain",
+      "path": "/kanban.v1.KanbanService/ExplainLabelAtom",
+      "request": "ExplainLabelAtomRequest",
+      "response": "ExplainLabelAtomResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-tasks",
-      "method": "GET",
+      "method": "ListTasks",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3243,22 +3204,23 @@
           "contractId": "api.list-tasks.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-tasks.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/tasks",
+      "path": "/kanban.v1.KanbanService/ListTasks",
+      "request": "ListTasksRequest",
+      "response": "ListTasksResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
         "api.error.response"
       ]
     },
     {
       "id": "api.list-tasks-by-status",
-      "method": "GET",
+      "method": "ListTasksByStatus",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3275,22 +3237,23 @@
           "contractId": "api.list-tasks-by-status.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-tasks-by-status.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/tasks/by-status",
+      "path": "/kanban.v1.KanbanService/ListTasksByStatus",
+      "request": "ListTasksByStatusRequest",
+      "response": "ListTasksByStatusResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
         "api.error.response"
       ]
     },
     {
       "id": "api.create-task",
-      "method": "POST",
+      "method": "CreateTask",
       "obligations": {
         "body": {
           "contractId": "api.create-task.request",
@@ -3307,20 +3270,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.create-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/tasks",
+      "path": "/kanban.v1.KanbanService/CreateTask",
+      "request": "CreateTaskRequest",
+      "response": "CreateTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.review-signals",
-      "method": "GET",
+      "method": "ReviewSignals",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3337,20 +3301,21 @@
           "contractId": "api.review-signals.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.review-signals.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/signals/review",
+      "path": "/kanban.v1.KanbanService/ReviewSignals",
+      "request": "ReviewSignalsRequest",
+      "response": "ReviewSignalsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.get-signal",
-      "method": "GET",
+      "method": "GetSignal",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3366,20 +3331,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.get-signal.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/signals/:signal_id",
+      "path": "/kanban.v1.KanbanService/GetSignal",
+      "request": "GetSignalRequest",
+      "response": "GetSignalResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.board-task-map",
-      "method": "GET",
+      "method": "BoardTaskMap",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3396,20 +3362,21 @@
           "contractId": "api.board-task-map.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.board-task-map.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/task-map",
+      "path": "/kanban.v1.KanbanService/BoardTaskMap",
+      "request": "BoardTaskMapRequest",
+      "response": "BoardTaskMapResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.get-task",
-      "method": "GET",
+      "method": "GetTask",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3426,20 +3393,21 @@
           "contractId": "api.get-task.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.get-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id",
+      "path": "/kanban.v1.KanbanService/GetTask",
+      "request": "GetTaskRequest",
+      "response": "GetTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.update-task",
-      "method": "PATCH",
+      "method": "UpdateTask",
       "obligations": {
         "body": {
           "contractId": "api.update-task.request",
@@ -3456,20 +3424,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.update-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id",
+      "path": "/kanban.v1.KanbanService/UpdateTask",
+      "request": "UpdateTaskRequest",
+      "response": "UpdateTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.task-neighborhood",
-      "method": "GET",
+      "method": "TaskNeighborhood",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3486,20 +3455,21 @@
           "contractId": "api.task-neighborhood.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.task-neighborhood.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/neighborhood",
+      "path": "/kanban.v1.KanbanService/TaskNeighborhood",
+      "request": "TaskNeighborhoodRequest",
+      "response": "TaskNeighborhoodResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-task-labels",
-      "method": "GET",
+      "method": "ListTaskLabels",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3515,22 +3485,23 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-task-labels.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/labels",
+      "path": "/kanban.v1.KanbanService/ListTaskLabels",
+      "request": "ListTaskLabelsRequest",
+      "response": "ListTaskLabelsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
         "api.error.response"
       ]
     },
     {
       "id": "api.add-task-label",
-      "method": "POST",
+      "method": "AddTaskLabel",
       "obligations": {
         "body": {
           "contractId": "api.add-task-label.request",
@@ -3547,22 +3518,23 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.add-task-label.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/labels",
+      "path": "/kanban.v1.KanbanService/AddTaskLabel",
+      "request": "AddTaskLabelRequest",
+      "response": "AddTaskLabelResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
         "api.error.response"
       ]
     },
     {
       "id": "api.suggest-task-labels",
-      "method": "GET",
+      "method": "SuggestTaskLabels",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3579,20 +3551,21 @@
           "contractId": "api.label-suggestion.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.suggest-task-labels.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/labels/suggestions",
+      "path": "/kanban.v1.KanbanService/SuggestTaskLabels",
+      "request": "SuggestTaskLabelsRequest",
+      "response": "SuggestTaskLabelsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-label-ontology-signals",
-      "method": "GET",
+      "method": "ListLabelOntologySignals",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3609,20 +3582,21 @@
           "contractId": "api.label-ontology-signal.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-label-ontology-signals.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/label-ontology/signals",
+      "path": "/kanban.v1.KanbanService/ListLabelOntologySignals",
+      "request": "ListLabelOntologySignalsRequest",
+      "response": "ListLabelOntologySignalsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.review-label-ontology",
-      "method": "GET",
+      "method": "ReviewLabelOntology",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3639,20 +3613,21 @@
           "contractId": "api.label-ontology-review.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.review-label-ontology.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/label-ontology/review",
+      "path": "/kanban.v1.KanbanService/ReviewLabelOntology",
+      "request": "ReviewLabelOntologyRequest",
+      "response": "ReviewLabelOntologyResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.create-label-ontology-action",
-      "method": "POST",
+      "method": "CreateLabelOntologyAction",
       "obligations": {
         "body": {
           "contractId": "api.create-label-ontology-action.request",
@@ -3669,20 +3644,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.create-label-ontology-action.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/boards/:board/label-ontology/actions",
+      "path": "/kanban.v1.KanbanService/CreateLabelOntologyAction",
+      "request": "CreateLabelOntologyActionRequest",
+      "response": "CreateLabelOntologyActionResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.get-label-ontology-signal",
-      "method": "GET",
+      "method": "GetLabelOntologySignal",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3698,20 +3674,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.get-label-ontology-signal.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/label-ontology/signals/:signal_id",
+      "path": "/kanban.v1.KanbanService/GetLabelOntologySignal",
+      "request": "GetLabelOntologySignalRequest",
+      "response": "GetLabelOntologySignalResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.remove-task-label",
-      "method": "DELETE",
+      "method": "RemoveTaskLabel",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -3727,22 +3704,23 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.remove-task-label.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/labels/:label_id",
+      "path": "/kanban.v1.KanbanService/RemoveTaskLabel",
+      "request": "RemoveTaskLabelRequest",
+      "response": "RemoveTaskLabelResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
         "api.error.response"
       ]
     },
     {
       "id": "api.specify-task",
-      "method": "POST",
+      "method": "SpecifyTask",
       "obligations": {
         "body": {
           "contractId": "api.specify-task.request",
@@ -3759,20 +3737,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.specify-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/specify",
+      "path": "/kanban.v1.KanbanService/SpecifyTask",
+      "request": "SpecifyTaskRequest",
+      "response": "SpecifyTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.promote-task",
-      "method": "POST",
+      "method": "PromoteTask",
       "obligations": {
         "body": {
           "contractId": "api.promote-task.request",
@@ -3789,20 +3768,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.promote-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/promote",
+      "path": "/kanban.v1.KanbanService/PromoteTask",
+      "request": "PromoteTaskRequest",
+      "response": "PromoteTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.claim-task",
-      "method": "POST",
+      "method": "ClaimTask",
       "obligations": {
         "body": {
           "contractId": "api.claim-task.request",
@@ -3819,20 +3799,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.claim-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/claim",
+      "path": "/kanban.v1.KanbanService/ClaimTask",
+      "request": "ClaimTaskRequest",
+      "response": "ClaimTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.heartbeat-task",
-      "method": "POST",
+      "method": "HeartbeatTask",
       "obligations": {
         "body": {
           "contractId": "api.heartbeat-task.request",
@@ -3849,20 +3830,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.heartbeat-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/heartbeat",
+      "path": "/kanban.v1.KanbanService/HeartbeatTask",
+      "request": "HeartbeatTaskRequest",
+      "response": "HeartbeatTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.complete-task",
-      "method": "POST",
+      "method": "CompleteTask",
       "obligations": {
         "body": {
           "contractId": "api.complete-task.request",
@@ -3879,20 +3861,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.complete-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/complete",
+      "path": "/kanban.v1.KanbanService/CompleteTask",
+      "request": "CompleteTaskRequest",
+      "response": "CompleteTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.submit-review-task",
-      "method": "POST",
+      "method": "SubmitReviewTask",
       "obligations": {
         "body": {
           "contractId": "api.submit-review-task.request",
@@ -3909,20 +3892,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.submit-review-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/submit-review",
+      "path": "/kanban.v1.KanbanService/SubmitReviewTask",
+      "request": "SubmitReviewTaskRequest",
+      "response": "SubmitReviewTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.block-task",
-      "method": "POST",
+      "method": "BlockTask",
       "obligations": {
         "body": {
           "contractId": "api.block-task.request",
@@ -3939,20 +3923,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.block-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/block",
+      "path": "/kanban.v1.KanbanService/BlockTask",
+      "request": "BlockTaskRequest",
+      "response": "BlockTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.unblock-task",
-      "method": "POST",
+      "method": "UnblockTask",
       "obligations": {
         "body": {
           "contractId": "api.unblock-task.request",
@@ -3969,20 +3954,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.unblock-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/unblock",
+      "path": "/kanban.v1.KanbanService/UnblockTask",
+      "request": "UnblockTaskRequest",
+      "response": "UnblockTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.archive-task",
-      "method": "POST",
+      "method": "ArchiveTask",
       "obligations": {
         "body": {
           "contractId": "api.archive-task.request",
@@ -3999,20 +3985,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.archive-task.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/transitions/archive",
+      "path": "/kanban.v1.KanbanService/ArchiveTask",
+      "request": "ArchiveTaskRequest",
+      "response": "ArchiveTaskResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-dependencies",
-      "method": "GET",
+      "method": "ListDependencies",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4028,20 +4015,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-dependencies.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/dependencies",
+      "path": "/kanban.v1.KanbanService/ListDependencies",
+      "request": "ListDependenciesRequest",
+      "response": "ListDependenciesResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.add-dependency",
-      "method": "POST",
+      "method": "AddDependency",
       "obligations": {
         "body": {
           "contractId": "api.add-dependency.request",
@@ -4058,20 +4046,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.add-dependency.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/dependencies",
+      "path": "/kanban.v1.KanbanService/AddDependency",
+      "request": "AddDependencyRequest",
+      "response": "AddDependencyResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.remove-dependency",
-      "method": "DELETE",
+      "method": "RemoveDependency",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4087,20 +4076,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.remove-dependency.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
+      "path": "/kanban.v1.KanbanService/RemoveDependency",
+      "request": "RemoveDependencyRequest",
+      "response": "RemoveDependencyResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-steps",
-      "method": "GET",
+      "method": "ListSteps",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4116,20 +4106,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-steps.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/steps",
+      "path": "/kanban.v1.KanbanService/ListSteps",
+      "request": "ListStepsRequest",
+      "response": "ListStepsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.create-step",
-      "method": "POST",
+      "method": "CreateStep",
       "obligations": {
         "body": {
           "contractId": "api.create-step.request",
@@ -4146,20 +4137,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.create-step.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/steps",
+      "path": "/kanban.v1.KanbanService/CreateStep",
+      "request": "CreateStepRequest",
+      "response": "CreateStepResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.update-step",
-      "method": "PATCH",
+      "method": "UpdateStep",
       "obligations": {
         "body": {
           "contractId": "api.update-step.request",
@@ -4176,20 +4168,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.update-step.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/steps/:step_id",
+      "path": "/kanban.v1.KanbanService/UpdateStep",
+      "request": "UpdateStepRequest",
+      "response": "UpdateStepResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.remove-step",
-      "method": "DELETE",
+      "method": "RemoveStep",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4205,20 +4198,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.remove-step.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/steps/:step_id",
+      "path": "/kanban.v1.KanbanService/RemoveStep",
+      "request": "RemoveStepRequest",
+      "response": "RemoveStepResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.complete-step",
-      "method": "POST",
+      "method": "CompleteStep",
       "obligations": {
         "body": {
           "contractId": "api.complete-step.request",
@@ -4235,20 +4229,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.complete-step.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/steps/:step_id/done",
+      "path": "/kanban.v1.KanbanService/CompleteStep",
+      "request": "CompleteStepRequest",
+      "response": "CompleteStepResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.skip-step",
-      "method": "POST",
+      "method": "SkipStep",
       "obligations": {
         "body": {
           "contractId": "api.skip-step.request",
@@ -4265,20 +4260,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.skip-step.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/steps/:step_id/skip",
+      "path": "/kanban.v1.KanbanService/SkipStep",
+      "request": "SkipStepRequest",
+      "response": "SkipStepResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.reopen-step",
-      "method": "POST",
+      "method": "ReopenStep",
       "obligations": {
         "body": {
           "contractId": "api.reopen-step.request",
@@ -4295,20 +4291,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.reopen-step.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/steps/:step_id/reopen",
+      "path": "/kanban.v1.KanbanService/ReopenStep",
+      "request": "ReopenStepRequest",
+      "response": "ReopenStepResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.mark-execution-plan-not-required",
-      "method": "POST",
+      "method": "MarkExecutionPlanNotRequired",
       "obligations": {
         "body": {
           "contractId": "api.mark-execution-plan-not-required.request",
@@ -4325,20 +4322,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.mark-execution-plan-not-required.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/execution-plan/not-required",
+      "path": "/kanban.v1.KanbanService/MarkExecutionPlanNotRequired",
+      "request": "MarkExecutionPlanNotRequiredRequest",
+      "response": "MarkExecutionPlanNotRequiredResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-runs",
-      "method": "GET",
+      "method": "ListRuns",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4354,22 +4352,23 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-runs.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/runs",
+      "path": "/kanban.v1.KanbanService/ListRuns",
+      "request": "ListRunsRequest",
+      "response": "ListRunsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
         "api.error.response"
       ]
     },
     {
       "id": "api.get-run-log",
-      "method": "GET",
+      "method": "GetRunLog",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4385,20 +4384,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.get-run-log.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/runs/:run_id/log",
+      "path": "/kanban.v1.KanbanService/GetRunLog",
+      "request": "GetRunLogRequest",
+      "response": "GetRunLogResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-comments",
-      "method": "GET",
+      "method": "ListComments",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4414,22 +4414,23 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-comments.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/comments",
+      "path": "/kanban.v1.KanbanService/ListComments",
+      "request": "ListCommentsRequest",
+      "response": "ListCommentsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
         "api.error.response"
       ]
     },
     {
       "id": "api.create-comment",
-      "method": "POST",
+      "method": "CreateComment",
       "obligations": {
         "body": {
           "contractId": "api.create-comment.request",
@@ -4446,22 +4447,23 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.create-comment.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/comments",
+      "path": "/kanban.v1.KanbanService/CreateComment",
+      "request": "CreateCommentRequest",
+      "response": "CreateCommentResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
         "api.error.response"
       ]
     },
     {
       "id": "api.list-attachments",
-      "method": "GET",
+      "method": "ListAttachments",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4477,20 +4479,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-attachments.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/attachments",
+      "path": "/kanban.v1.KanbanService/ListAttachments",
+      "request": "ListAttachmentsRequest",
+      "response": "ListAttachmentsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.create-attachment",
-      "method": "POST",
+      "method": "CreateAttachment",
       "obligations": {
         "body": {
           "contractId": "api.create-attachment.request",
@@ -4507,20 +4510,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.create-attachment.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/attachments",
+      "path": "/kanban.v1.KanbanService/CreateAttachment",
+      "request": "CreateAttachmentRequest",
+      "response": "CreateAttachmentResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.download-attachment",
-      "method": "GET",
+      "method": "DownloadAttachment",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4536,20 +4540,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.download-attachment.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/attachments/:attachment_id",
+      "path": "/kanban.v1.KanbanService/DownloadAttachment",
+      "request": "DownloadAttachmentRequest",
+      "response": "DownloadAttachmentResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.delete-attachment",
-      "method": "DELETE",
+      "method": "DeleteAttachment",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4565,20 +4570,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.delete-attachment.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/tasks/:task_id/attachments/:attachment_id",
+      "path": "/kanban.v1.KanbanService/DeleteAttachment",
+      "request": "DeleteAttachmentRequest",
+      "response": "DeleteAttachmentResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.get-stats",
-      "method": "GET",
+      "method": "GetStats",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4594,20 +4600,21 @@
           "contractId": "api.get-stats.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.get-stats.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/stats",
+      "path": "/kanban.v1.KanbanService/GetStats",
+      "request": "GetStatsRequest",
+      "response": "GetStatsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.search-status",
-      "method": "GET",
+      "method": "SearchStatus",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4623,20 +4630,21 @@
           "contractId": "api.search-status.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.search-status.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/search/status",
+      "path": "/kanban.v1.KanbanService/SearchStatus",
+      "request": "SearchStatusRequest",
+      "response": "SearchStatusResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.list-events",
-      "method": "GET",
+      "method": "ListEvents",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4652,51 +4660,23 @@
           "contractId": "api.list-events.query",
           "kind": "contract"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.list-events.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/events",
-      "sharedComponents": []
-    },
-    {
-      "id": "sse.stream-events",
-      "method": "GET",
-      "obligations": {
-        "body": {
-          "kind": "not_applicable"
-        },
-        "headers": {
-          "contractId": "sse.stream-events.headers",
-          "kind": "contract"
-        },
-        "path": {
-          "kind": "not_applicable"
-        },
-        "query": {
-          "contractId": "sse.stream-events.query",
-          "kind": "contract"
-        },
-        "sse": {
-          "contractId": "sse.event.data",
-          "kind": "contract"
-        },
-        "success": {
-          "kind": "not_applicable"
-        }
-      },
-      "path": "/api/v1/stream/events",
+      "path": "/kanban.v1.KanbanService/ListEvents",
+      "request": "ListEventsRequest",
+      "response": "ListEventsResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": [
-        "sse.event.heartbeat"
+        "api.event.data"
       ]
     },
     {
       "id": "api.doctor",
-      "method": "GET",
+      "method": "Doctor",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4711,20 +4691,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.doctor.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/doctor",
+      "path": "/kanban.v1.KanbanService/Doctor",
+      "request": "DoctorRequest",
+      "response": "DoctorResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.checkpoint",
-      "method": "POST",
+      "method": "Checkpoint",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4739,20 +4720,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.checkpoint.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/checkpoint",
+      "path": "/kanban.v1.KanbanService/Checkpoint",
+      "request": "CheckpointRequest",
+      "response": "CheckpointResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-backup",
-      "method": "POST",
+      "method": "MaintenanceBackup",
       "obligations": {
         "body": {
           "contractId": "api.maintenance-backup.request",
@@ -4768,20 +4750,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-backup.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/backup",
+      "path": "/kanban.v1.KanbanService/MaintenanceBackup",
+      "request": "MaintenanceBackupRequest",
+      "response": "MaintenanceBackupResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-export",
-      "method": "POST",
+      "method": "MaintenanceExport",
       "obligations": {
         "body": {
           "contractId": "api.maintenance-export.request",
@@ -4797,20 +4780,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-export.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/export",
+      "path": "/kanban.v1.KanbanService/MaintenanceExport",
+      "request": "MaintenanceExportRequest",
+      "response": "MaintenanceExportResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-import",
-      "method": "POST",
+      "method": "MaintenanceImport",
       "obligations": {
         "body": {
           "contractId": "api.maintenance-import.request",
@@ -4826,20 +4810,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-import.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/import",
+      "path": "/kanban.v1.KanbanService/MaintenanceImport",
+      "request": "MaintenanceImportRequest",
+      "response": "MaintenanceImportResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-vacuum",
-      "method": "POST",
+      "method": "MaintenanceVacuum",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4854,20 +4839,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-vacuum.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/vacuum",
+      "path": "/kanban.v1.KanbanService/MaintenanceVacuum",
+      "request": "MaintenanceVacuumRequest",
+      "response": "MaintenanceVacuumResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-status",
-      "method": "GET",
+      "method": "MaintenanceStatus",
       "obligations": {
         "body": {
           "kind": "not_applicable"
@@ -4882,20 +4868,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-status.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/status",
+      "path": "/kanban.v1.KanbanService/MaintenanceStatus",
+      "request": "MaintenanceStatusRequest",
+      "response": "MaintenanceStatusResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-run",
-      "method": "POST",
+      "method": "MaintenanceRun",
       "obligations": {
         "body": {
           "contractId": "api.maintenance-run.request",
@@ -4911,20 +4898,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-run.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/run",
+      "path": "/kanban.v1.KanbanService/MaintenanceRun",
+      "request": "MaintenanceRunRequest",
+      "response": "MaintenanceRunResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-rebuild",
-      "method": "POST",
+      "method": "MaintenanceRebuild",
       "obligations": {
         "body": {
           "contractId": "api.maintenance-rebuild.request",
@@ -4940,20 +4928,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-rebuild.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/rebuild",
+      "path": "/kanban.v1.KanbanService/MaintenanceRebuild",
+      "request": "MaintenanceRebuildRequest",
+      "response": "MaintenanceRebuildResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-cleanup",
-      "method": "POST",
+      "method": "MaintenanceCleanup",
       "obligations": {
         "body": {
           "contractId": "api.maintenance-cleanup.request",
@@ -4969,20 +4958,21 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-cleanup.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/cleanup",
+      "path": "/kanban.v1.KanbanService/MaintenanceCleanup",
+      "request": "MaintenanceCleanupRequest",
+      "response": "MaintenanceCleanupResponse",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     },
     {
       "id": "api.maintenance-import-v30",
-      "method": "POST",
+      "method": "MaintenanceImportV30",
       "obligations": {
         "body": {
           "contractId": "api.maintenance-import-v30.request",
@@ -4998,24 +4988,25 @@
         "query": {
           "kind": "not_applicable"
         },
-        "sse": {
-          "kind": "not_applicable"
-        },
         "success": {
           "contractId": "api.maintenance-import-v30.response",
           "kind": "contract"
         }
       },
-      "path": "/api/v1/maintenance/import-v30",
+      "path": "/kanban.v1.KanbanService/MaintenanceImportV30",
+      "request": "MaintenanceImportV30Request",
+      "response": "MaintenanceImportV30Response",
+      "serverStreaming": false,
+      "service": "kanban.v1.KanbanService",
       "sharedComponents": []
     }
   ],
   "schemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "selectionPath": "apps/web/web-contracts.json",
   "sourceHashes": {
-    "protocolEndpoints": "sha256:36ef263401d037bf5192f7fc65c05239a145bbfb6bddbb1d89dcc4b16c3e8178",
-    "protocolOperations": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5",
-    "protocolSchemas": "sha256:80cf5b99ba67220fb853e370909cea55c67b78ed181f76599426cad6b36702c5",
-    "selection": "sha256:f855f9f84e0dd9c74dce81f74a5fbb7ac368482346c71c6f4ef27279411c7da7"
+    "protocolEndpoints": "sha256:8cfcaeccf1267b2c8925e47eb8373b014e4eea584505f04c6750e28957bb124d",
+    "protocolOperations": "sha256:f167802055e4d950096c1d0c634e7cc3e55da912dce48191bf1c6b8df76672bd",
+    "protocolSchemas": "sha256:cd85e67661043fcd698de56695d823060118c33f8aee7ed36a248f2bfe720460",
+    "selection": "sha256:997f0553d2139e25b3d0afd7a58c4747a6e4cf6d56dd09a78325d2ab8f2fc6be"
   }
 }

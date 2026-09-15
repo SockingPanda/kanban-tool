@@ -1,3 +1,8 @@
+//! 业务 DTO 的字段角色与历史绑定；不注册 HTTP 路由。
+//!
+//! path/query/body 名称保留既有字段拆分、CLI/MCP JSON 与 schema 的语义。
+//! 当前可调用的 service/method 由 `rpc::catalog` 与 Protobuf descriptor 持有。
+
 use serde::Serialize;
 
 use crate::ContractSurface;
@@ -28,7 +33,6 @@ pub struct EndpointObligations {
     pub headers: EndpointObligation,
     pub body: EndpointObligation,
     pub success: EndpointObligation,
-    pub sse: EndpointObligation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -153,7 +157,6 @@ const CANONICAL_OPERATION_ORDER: &[&str] = &[
     "api.vector-query-chunks",
     "api.vector-query-label-atoms",
     "api.list-events",
-    "sse.stream-events",
     "api.doctor",
     "api.checkpoint",
     "api.maintenance-backup",
@@ -248,12 +251,9 @@ pub fn validate_contract_topology(
         if endpoint.operation_id.is_empty() || endpoint.path.is_empty() {
             return Err("endpoint descriptor contains empty operation_id/path".to_owned());
         }
-        if !matches!(
-            endpoint.surface,
-            ContractSurface::Api | ContractSurface::Sse
-        ) {
+        if !matches!(endpoint.surface, ContractSurface::Api) {
             return Err(format!(
-                "endpoint has non-transport surface: endpoint={} expected=api_or_sse actual={}",
+                "endpoint has non-transport surface: endpoint={} expected=api actual={}",
                 endpoint.operation_id,
                 contract_surface_name(endpoint.surface)
             ));
@@ -318,10 +318,7 @@ fn validate_contract_transport(contract: &crate::OperationContract) -> Result<()
 
     let (operation_key, location, parameters) = match contract.transport {
         ContractTransport::NoTransport => {
-            if matches!(
-                contract.surface,
-                ContractSurface::Api | ContractSurface::Sse
-            ) {
+            if matches!(contract.surface, ContractSurface::Api) {
                 return Err(format!(
                     "HTTP contract must declare transport metadata: {}",
                     contract.id
@@ -334,10 +331,7 @@ fn validate_contract_transport(contract: &crate::OperationContract) -> Result<()
             location,
             parameters,
         } => {
-            if !matches!(
-                contract.surface,
-                ContractSurface::Api | ContractSurface::Sse
-            ) {
+            if !matches!(contract.surface, ContractSurface::Api) {
                 return Err(format!(
                     "non-HTTP contract must declare no_transport: {}",
                     contract.id
@@ -347,12 +341,6 @@ fn validate_contract_transport(contract: &crate::OperationContract) -> Result<()
         }
     };
 
-    if contract.surface == ContractSurface::Api && location == HttpTransportLocation::Sse {
-        return Err(format!(
-            "transport location sse is incompatible with api surface: {}",
-            contract.id
-        ));
-    }
     if location == HttpTransportLocation::Error
         && contract.binding != ContractBinding::SharedComponent
     {
@@ -383,9 +371,9 @@ fn validate_contract_transport(contract: &crate::OperationContract) -> Result<()
         | HttpTransportLocation::Query
         | HttpTransportLocation::Headers
         | HttpTransportLocation::Body => ContractDirection::Deserialize,
-        HttpTransportLocation::Success
-        | HttpTransportLocation::Error
-        | HttpTransportLocation::Sse => ContractDirection::Serialize,
+        HttpTransportLocation::Success | HttpTransportLocation::Error => {
+            ContractDirection::Serialize
+        }
     };
     if contract.direction != expected_direction {
         return Err(format!(
@@ -591,35 +579,8 @@ fn validate_obligation(
             if kind == EndpointObligationKind::Path {
                 validate_path_parameter_mapping(endpoint, contract_id, parameters)?;
             }
-            if kind == EndpointObligationKind::Sse && endpoint.surface != ContractSurface::Sse {
-                return Err(format!(
-                    "SSE contract obligation is only valid on SSE endpoint: {}",
-                    endpoint.operation_id
-                ));
-            }
         }
         _ => {}
-    }
-    if kind == EndpointObligationKind::Sse
-        && endpoint.surface != ContractSurface::Sse
-        && !matches!(
-            obligation,
-            EndpointObligation::NotApplicable | EndpointObligation::Excluded { .. }
-        )
-    {
-        return Err(format!(
-            "non-SSE endpoint must mark SSE obligation NotApplicable or Excluded: {}",
-            endpoint.operation_id
-        ));
-    }
-    if kind == EndpointObligationKind::Sse
-        && endpoint.surface == ContractSurface::Sse
-        && matches!(obligation, EndpointObligation::NotApplicable)
-    {
-        return Err(format!(
-            "SSE endpoint must describe SSE obligation: {}",
-            endpoint.operation_id
-        ));
     }
     Ok(())
 }
@@ -714,7 +675,6 @@ fn transport_location_name(location: crate::HttpTransportLocation) -> &'static s
         crate::HttpTransportLocation::Body => "body",
         crate::HttpTransportLocation::Success => "success",
         crate::HttpTransportLocation::Error => "error",
-        crate::HttpTransportLocation::Sse => "sse",
     }
 }
 
@@ -731,7 +691,6 @@ fn contract_surface_name(surface: crate::ContractSurface) -> &'static str {
         crate::ContractSurface::Api => "api",
         crate::ContractSurface::Cli => "cli",
         crate::ContractSurface::Jsonl => "jsonl",
-        crate::ContractSurface::Sse => "sse",
         crate::ContractSurface::Metadata => "metadata",
         crate::ContractSurface::Config => "config",
     }
@@ -766,7 +725,6 @@ pub enum EndpointObligationKind {
     Headers,
     Body,
     Success,
-    Sse,
 }
 
 impl EndpointObligationKind {
@@ -780,7 +738,6 @@ impl EndpointObligationKind {
             Self::Headers => "headers",
             Self::Body => "body",
             Self::Success => "success",
-            Self::Sse => "sse",
         }
     }
     pub(crate) const fn location(self) -> crate::HttpTransportLocation {
@@ -790,20 +747,18 @@ impl EndpointObligationKind {
             Self::Headers => crate::HttpTransportLocation::Headers,
             Self::Body => crate::HttpTransportLocation::Body,
             Self::Success => crate::HttpTransportLocation::Success,
-            Self::Sse => crate::HttpTransportLocation::Sse,
         }
     }
 }
 
 impl EndpointObligations {
-    pub const fn entries(self) -> [(EndpointObligationKind, EndpointObligation); 6] {
+    pub const fn entries(self) -> [(EndpointObligationKind, EndpointObligation); 5] {
         [
             (EndpointObligationKind::Path, self.path),
             (EndpointObligationKind::Query, self.query),
             (EndpointObligationKind::Headers, self.headers),
             (EndpointObligationKind::Body, self.body),
             (EndpointObligationKind::Success, self.success),
-            (EndpointObligationKind::Sse, self.sse),
         ]
     }
 }

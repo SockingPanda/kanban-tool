@@ -1,12 +1,12 @@
-import { mergeBoardEvents, parseTaskListQuery } from "../../application/data/explorer-read-model";
-import { describe, expect, test } from "vitest"
+import { parseTaskListQuery } from "../../application/data/explorer-read-model";
+import { describe, expect, test, vi } from "vitest"
 
-import { BOARD_EVENTS_PAGE_LIMIT, buildBoardEventsRequest, buildTaskListRequest, buildTaskInspectorRequests, buildTaskMapRequest, defaultTaskListQuery, ExplorerReadError, buildRunLogRequest, buildTaskRunsRequest, serializeTaskListQuery } from "../../application/data/explorer-read-model";
+import { buildTaskListRequest, buildTaskInspectorRequests, buildTaskMapRequest, defaultTaskListQuery, ExplorerReadError, buildRunLogRequest, buildTaskRunsRequest, serializeTaskListQuery } from "../../application/data/explorer-read-model";
 import { loadTaskMap, loadTaskRuns, loadBoardEvents, loadExplorerBoardIdentity, loadTaskInspector } from "./explorer-read-model";
 import type { ApiBoardTaskMapResponseContract } from "../../lib/api/generated/contracts/api-board-task-map-response"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { assertCanonicalBoardSlug } from "../../domain/board-slug"
-import { asCanonicalBoardId } from "../../application/sync/contracts"
+import { asCanonicalBoardId } from "../../domain/board-id"
 import type { RpcTransportResponse, RpcCall } from "../../application/data/rpc-transport";
 import { RpcTransportError } from "../../application/data/rpc-transport";
 import type { ApiListEventsResponseContract } from "../../lib/api/generated/contracts/api-list-events-response"
@@ -17,7 +17,7 @@ const runtime = {
   actor: "test",
   defaultBoard: "default",
   serverVersion: "3.0.0",
-  protocolVersion: "v1",
+  protocolVersion: "v2",
   webBuildId: "test",
 } satisfies WebRuntimeConfig
 
@@ -140,7 +140,7 @@ describe("explorer task list URL state", () => {
       hideIsolated: false,
       limitNodes: 240,
     })).toEqual({ method: "BoardTaskMap", path: { board: "default" }, query: { active_only: true, context_depth: 1, include_done_context: true, include_archived_context: false, hide_isolated: false, limit_nodes: 240 } })
-    expect(buildTaskInspectorRequests("default", "t_1")).toEqual({
+    expect(buildTaskInspectorRequests("t_1")).toEqual({
       task: { method: "GetTask", path: { task_id: "t_1" } },
       labels: { method: "ListTaskLabels", path: { task_id: "t_1" } },
       neighborhood: { method: "TaskNeighborhood", path: { task_id: "t_1" }, query: { depth: 1, include_archived_context: false, limit_nodes: 40 } },
@@ -149,7 +149,6 @@ describe("explorer task list URL state", () => {
       runs: { method: "ListRuns", path: { task_id: "t_1" } },
       comments: { method: "ListComments", path: { task_id: "t_1" } },
       attachments: { method: "ListAttachments", path: { task_id: "t_1" } },
-      events: { method: "ListEvents", query: { board: "default", task_id: "t_1", after: 0, limit: 50 } },
     })
   })
 
@@ -205,9 +204,8 @@ describe("explorer task list URL state", () => {
   })
 
   test("rejects non-canonical task deep links before building requests", () => {
-    expect(() => buildTaskInspectorRequests("default", "task-1")).toThrow(/canonical t_ identity/)
+    expect(() => buildTaskInspectorRequests("task-1")).toThrow(/canonical t_ identity/)
     expect(() => buildTaskRunsRequest("task-1")).toThrow(/canonical t_ identity/)
-    expect(() => buildBoardEventsRequest("default", "task-1")).toThrow(/canonical t_ identity/)
     expect(() => buildRunLogRequest("run-1")).toThrow(/canonical r_ identity/)
   })
 
@@ -421,141 +419,69 @@ describe("board events read model", () => {
     created_at: 1_700_000_000 + id,
   })
 
-  test("builds the first board page with ASC cursor order and a typed selector", () => {
-    expect(buildBoardEventsRequest("board slug")).toEqual({ method: "ListEvents", query: { board: "board slug", task_id: null, after: 0, limit: 150 } })
-    expect(buildBoardEventsRequest("default", "t_1")).toEqual({ method: "ListEvents", query: { board: "default", task_id: "t_1", after: 0, limit: 150 } })
-    expect(buildBoardEventsRequest("default", null, 150)).toEqual({ method: "ListEvents", query: { board: "default", task_id: null, after: 150, limit: 150 } })
-    expect(BOARD_EVENTS_PAGE_LIMIT).toBe(150)
-  })
-
-  test("starts a catch-up read from the supplied cursor", async () => {
-    const requests: RpcCall[] = []
-    const transport = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => {
-        requests.push(request)
-        if (request.method === "ListBoards") return { payload: { data: [board()] }, bytes: 1 }
-        expect(request.query).toMatchObject({ after: 42 })
-        return { payload: { data: [event(43)], meta: { next_after: 43 } }, bytes: 1 }
-      },
+  function queryTransport(events: ApiListEventsResponseContract['data'], nextAfter = events.at(-1)?.id ?? 0) {
+    return {
+      call: vi.fn(async (request: RpcCall): Promise<RpcTransportResponse> => {
+        expect(request.method).toBe('ListBoards')
+        return { payload: { data: [board()] }, bytes: 1 }
+      }),
+      recentEvents: vi.fn(async (): Promise<RpcTransportResponse> => ({ payload: { data: events, meta: { next_after: nextAfter } }, bytes: 1 })),
     }
-    await expect(loadBoardEvents(runtime, "default", { transport, after: 42 })).resolves.toMatchObject({ meta: { nextAfter: 43 } })
-    expect(requests.filter(request => request.method === "ListEvents").length).toBe(1)
-  })
+  }
 
-  test("resolves canonical board identity and rejects foreign or non-ascending events", async () => {
-    const transport = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => {
-        if (request.method === "ListBoards") return { payload: { data: [board()] }, bytes: 1 }
-        return { payload: { data: [event(1), event(2)], meta: { next_after: 2 } }, bytes: 1 }
-      },
-    }
-    await expect(loadBoardEvents(runtime, "default", { transport })).resolves.toMatchObject({
-      board: { id: "b_default", slug: "default" },
-      taskId: null,
-      events: [{ id: 1 }, { id: 2 }],
-      meta: { count: 2, nextAfter: 2, limit: 150 },
+  test('请求 canonical board 的完整最近窗口，仅订阅有界 RecentEvents', async () => {
+    const transport = queryTransport([event(1), event(2)])
+    await expect(loadBoardEvents(runtime, 'default', { transport })).resolves.toMatchObject({
+      board: { id: 'b_default', slug: 'default' }, taskId: null, events: [{ id: 1 }, { id: 2 }], meta: { count: 2, nextAfter: 2, limit: 150 },
     })
-
-    const foreign = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => request.method === "ListBoards"
-        ? { payload: { data: [board()] }, bytes: 1 }
-        : { payload: { data: [event(1, "b_other")], meta: { next_after: 1 } }, bytes: 1 },
-    }
-    await expect(loadBoardEvents(runtime, "default", { transport: foreign })).rejects.toMatchObject({ kind: "anomaly" })
-
-    const outOfOrder = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => request.method === "ListBoards"
-        ? { payload: { data: [board()] }, bytes: 1 }
-        : { payload: { data: [event(2), event(1)], meta: { next_after: 1 } }, bytes: 1 },
-    }
-    await expect(loadBoardEvents(runtime, "default", { transport: outOfOrder })).rejects.toMatchObject({ kind: "anomaly" })
+    expect(transport.recentEvents).toHaveBeenCalledExactlyOnceWith({ board: 'b_default', limit: 150 }, undefined)
+    expect(transport.call).toHaveBeenCalledOnce()
   })
 
-  test("merges by numeric id and event_id and retains only the final 150 events", () => {
-    const first = Array.from({ length: 150 }, (_, index) => event(index + 1))
-    const boardId = asCanonicalBoardId("b_default")
-    const merged = mergeBoardEvents(first, [event(150), event(151)], boardId)
-    expect(merged).toHaveLength(150)
-    expect(merged[0]?.id).toBe(2)
-    expect(merged.at(-1)?.id).toBe(151)
-    expect(() => mergeBoardEvents(first, [event(151, "b_other")], boardId)).toThrow(/board scope/)
-    expect(() => mergeBoardEvents(first, [event(151, "b_default", "event-1")], boardId)).toThrow(/多个数字 id/)
-    expect(() => mergeBoardEvents([], [event(0)], boardId)).toThrow(/id 必须严格递增/)
-  })
-
-  test("walks ASC pages to expose the newest 150 events", async () => {
-    const requests: RpcCall[] = []
-    const transport = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => {
-        requests.push(request)
-        if (request.method === "ListBoards") return { payload: { data: [board()] }, bytes: 1 }
-        const after = (request.query as { after: number }).after
-        if (after === 0) {
-          return { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 150 } }, bytes: 1 }
-        }
-        expect(after).toBe(150)
-        return { payload: { data: Array.from({ length: 30 }, (_, index) => event(index + 151)), meta: { next_after: 180 } }, bytes: 1 }
-      },
-    }
-
-    const result = await loadBoardEvents(runtime, "default", { transport })
+  test('服务端给出最新 150 条后不再向前翻页', async () => {
+    const transport = queryTransport(Array.from({ length: 150 }, (_, index) => event(index + 1_000_000)))
+    const result = await loadBoardEvents(runtime, 'default', { transport })
     expect(result.events).toHaveLength(150)
-    expect(result.events[0]?.id).toBe(31)
-    expect(result.events.at(-1)?.id).toBe(180)
-    expect(result.meta.nextAfter).toBe(180)
-    expect(requests).toHaveLength(3)
+    expect(result.events[0]?.id).toBe(1_000_000)
+    expect(result.events.at(-1)?.id).toBe(1_000_149)
+    expect(result.meta.nextAfter).toBe(1_000_149)
+    expect(transport.call).toHaveBeenCalledOnce()
+    expect(transport.recentEvents).toHaveBeenCalledOnce()
   })
 
-  test("rejects any task event that crosses the requested task scope", async () => {
-    const transport = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => request.method === "ListBoards"
-        ? { payload: { data: [board()] }, bytes: 1 }
-        : {
-            payload: {
-              data: [
-                { ...event(1, "b_default", "event-1"), task_id: "t_1" },
-                { ...event(2, "b_default", "event-2"), task_id: "t_other" },
-              ],
-              meta: { next_after: 2 },
-            },
-            bytes: 1,
-          },
+  test('完整窗口拒绝跨看板、倒序、重复 ID 和 event_id', async () => {
+    for (const events of [[event(1, 'b_other')], [event(2), event(1)], [event(1), event(1)], [event(1), event(2, 'b_default', 'event-1')]]) {
+      await expect(loadBoardEvents(runtime, 'default', { transport: queryTransport(events) })).rejects.toMatchObject({ kind: 'anomaly' })
     }
-
-    await expect(loadBoardEvents(runtime, "default", { transport, taskId: "t_1" })).rejects.toMatchObject({ kind: "anomaly" })
   })
 
-  test("rejects a cursor that lags the page or repeats after pagination", async () => {
-    const lagging = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => request.method === "ListBoards"
-        ? { payload: { data: [board()] }, bytes: 1 }
-        : { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 149 } }, bytes: 1 },
-    }
-    await expect(loadBoardEvents(runtime, "default", { transport: lagging })).rejects.toMatchObject({ kind: "anomaly" })
-
-    const repeated = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => {
-        if (request.method === "ListBoards") return { payload: { data: [board()] }, bytes: 1 }
-        const after = (request.query as { after: number }).after
-        return after === 0
-          ? { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 150 } }, bytes: 1 }
-          : { payload: { data: [event(150)], meta: { next_after: 150 } }, bytes: 1 }
-      },
-    }
-    await expect(loadBoardEvents(runtime, "default", { transport: repeated })).rejects.toMatchObject({ kind: "anomaly" })
+  test('任务筛选传入当前 task scope 并拒绝混入其他任务', async () => {
+    const valid = queryTransport([{ ...event(1), task_id: 't_1' }])
+    await loadBoardEvents(runtime, 'default', { transport: valid, taskId: 't_1' })
+    expect(valid.recentEvents).toHaveBeenCalledExactlyOnceWith({ board: 'b_default', task_id: 't_1', limit: 150 }, undefined)
+    const foreign = queryTransport([{ ...event(1), task_id: 't_1' }, { ...event(2), task_id: 't_other' }])
+    await expect(loadBoardEvents(runtime, 'default', { transport: foreign, taskId: 't_1' })).rejects.toMatchObject({ kind: 'anomaly' })
   })
 
-  test("fails fast when an ignored transport resolves after abort", async () => {
-    const controller = new AbortController()
-    const transport = {
-      call: async (request: RpcCall): Promise<RpcTransportResponse> => {
-        if (request.method === "ListBoards") return { payload: { data: [board()] }, bytes: 1 }
-        controller.abort()
-        return { payload: { data: [event(1)], meta: { next_after: 1 } }, bytes: 1 }
-      },
+  test('拒绝超过窗口、落后于内容或空窗口前进的审计游标', async () => {
+    for (const transport of [queryTransport([event(1), event(2)], 1), queryTransport([], 3), queryTransport(Array.from({ length: 151 }, (_, index) => event(index + 1)))]) {
+      await expect(loadBoardEvents(runtime, 'default', { transport })).rejects.toMatchObject({ kind: 'anomaly' })
     }
+  })
 
-    await expect(loadBoardEvents(runtime, "default", { transport, signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" })
+  test('迟到查询结果不越过已中止的读取', async () => {
+    const controller = new AbortController(), transport = queryTransport([event(1)])
+    transport.recentEvents.mockImplementationOnce(async () => {
+      controller.abort()
+      return { payload: { data: [event(1)], meta: { next_after: 1 } }, bytes: 1 }
+    })
+    await expect(loadBoardEvents(runtime, 'default', { transport, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  test('缺少 QueryService 能力时直接报错，不回退审计历史读取', async () => {
+    const transport = queryTransport([])
+    await expect(loadBoardEvents(runtime, 'default', { transport: { call: transport.call } })).rejects.toThrow('QueryService')
+    expect(transport.call).toHaveBeenCalledOnce()
   })
 })
 

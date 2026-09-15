@@ -53,7 +53,7 @@ fn known_vector_freezes_build_id_and_preimage_order() {
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>(),
-        "00000000000000246b616e62616e2d746f6f6c3a7765622d61727469666163742d6275696c642d69643a7631000000000000000100000000000000052f6170702f000000000000000a696e6465782e68746d6c0000000000000005332e302e30000000000000000276310000000000000002000000000000000d6173736574732f6170702e6a730000000000000003aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000a696e6465782e68746d6c0000000000000002bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        "00000000000000246b616e62616e2d746f6f6c3a7765622d61727469666163742d6275696c642d69643a7631000000000000000100000000000000052f6170702f000000000000000a696e6465782e68746d6c0000000000000005332e302e30000000000000000276320000000000000002000000000000000d6173736574732f6170702e6a730000000000000003aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000a696e6465782e68746d6c0000000000000002bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     );
     assert_eq!(
         web_artifact_build_id_for(
@@ -65,7 +65,7 @@ fn known_vector_freezes_build_id_and_preimage_order() {
             &manifest.files,
         )
         .unwrap(),
-        "sha256:ce7b387aff6a614f4e376260a8edbd1341148d932df90db96dd00bce038f44a7",
+        "sha256:25391778f405062df8abee64f99eb0f1a6bd4b6d54fd4ae8c9f11bc0296f792b",
     );
 }
 
@@ -145,7 +145,7 @@ fn serde_shape_is_camel_case_and_strict() {
             "basePath": "/app/",
             "entrypoint": "index.html",
             "serverVersion": "3.0.0",
-            "protocolVersion": "v1",
+            "protocolVersion": "v2",
             "buildId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
             "files": [],
             "extra": true
@@ -156,7 +156,7 @@ fn serde_shape_is_camel_case_and_strict() {
 
 #[test]
 fn protocol_version_is_wire_generation_and_matches_runtime_fixture() {
-    assert_eq!(WEB_PROTOCOL_VERSION, "v1");
+    assert_eq!(WEB_PROTOCOL_VERSION, "v2");
     let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../schemas/fixtures/runtime/web-config.v1.valid.json");
     let fixture: serde_json::Value = serde_json::from_slice(
@@ -164,6 +164,10 @@ fn protocol_version_is_wire_generation_and_matches_runtime_fixture() {
     )
     .expect("runtime fixture should be valid JSON");
     assert_eq!(fixture["protocolVersion"], WEB_PROTOCOL_VERSION);
+
+    let mut legacy = sample_manifest();
+    legacy.protocol_version = "v1".to_owned();
+    assert!(validate_web_artifact_manifest(&legacy).is_err());
 
     let mut manifest = sample_manifest();
     manifest.protocol_version = "3.0.0".to_owned();

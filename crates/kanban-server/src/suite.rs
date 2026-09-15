@@ -151,62 +151,46 @@ mod labels_adoption {
 
     #[tokio::test]
     async fn delete_board_label_response_fixture_is_produced_by_real_router() {
-        use axum::{
-            body::Body,
-            http::{Request, StatusCode},
-        };
-        use http_body_util::BodyExt;
+        use crate::test_support::{decode_response, parts, rpc_request};
+        use kanban_protocol::rpc::v1 as pb;
+        use std::collections::BTreeMap;
         use tower::ServiceExt;
-
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = crate::AppState::open(directory.path().join("kanban.db"), "adoption")
             .await
-            .expect("application state");
+            .unwrap();
         let router = crate::build_router(state);
         let create = router
             .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/boards/default/labels")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"name":"fixture-delete","color":null}"#))
-                    .expect("create request"),
-            )
+            .oneshot(rpc_request(
+                "CreateBoardLabel",
+                pb::CreateBoardLabelRequest::from_parts(
+                    parts(serde_json::json!({"board":"default"})),
+                    (),
+                    parts(serde_json::json!({"name":"fixture-delete","color":null})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
+            ))
             .await
-            .expect("create response");
-        assert_eq!(create.status(), StatusCode::CREATED);
-        let created: CreateBoardLabelResponse = serde_json::from_slice(
-            &create
-                .into_body()
-                .collect()
-                .await
-                .expect("create body")
-                .to_bytes(),
-        )
-        .expect("create DTO");
-
+            .unwrap();
+        let created: CreateBoardLabelResponse =
+            decode_response::<pb::CreateBoardLabelResponse, _>(create).await;
         let response = router
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri(format!("/api/v1/boards/default/labels/{}", created.data.id))
-                    .header("x-kb-actor", "adoption")
-                    .body(Body::empty())
-                    .expect("delete request"),
-            )
+            .oneshot(rpc_request(
+                "DeleteBoardLabel",
+                pb::DeleteBoardLabelRequest::from_parts(
+                    parts(serde_json::json!({"board":"default","label_id":created.data.id})),
+                    DeleteBoardLabelQuery { force: false },
+                    (),
+                )
+                .unwrap(),
+                &BTreeMap::from([("x-kb-actor".into(), "adoption".into())]),
+            ))
             .await
-            .expect("delete response");
-        assert_eq!(response.status(), StatusCode::OK);
-        let deleted: DeleteBoardLabelResponse = serde_json::from_slice(
-            &response
-                .into_body()
-                .collect()
-                .await
-                .expect("delete body")
-                .to_bytes(),
-        )
-        .expect("delete DTO");
+            .unwrap();
+        let deleted: DeleteBoardLabelResponse =
+            decode_response::<pb::DeleteBoardLabelResponse, _>(response).await;
         assert_eq!(deleted.data.label.name, "fixture-delete");
         assert!(!deleted.data.forced);
         assert_eq!(deleted.data.removed_task_bindings, 0);
@@ -335,10 +319,9 @@ mod labels_adoption {
 mod portable_adoption;
 
 mod maintenance_adoption {
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-    };
+    use crate::test_support::{decode_response, parts, rpc_request};
+    use axum::http::StatusCode;
+    use kanban_protocol::rpc::v1 as pb;
     use kanban_protocol::{
         BackupResponse, CheckpointResponse, DoctorResponse, ExportResponse, ImportResponse,
         LegacyImportRequest, LegacyImportResponse, MaintenanceImportRequest,
@@ -347,25 +330,26 @@ mod maintenance_adoption {
     };
     use serde::{Serialize, de::DeserializeOwned};
     use serde_json::Value;
+    use std::collections::BTreeMap;
     use tokio::sync::OnceCell;
     use tower::ServiceExt;
 
-    use super::legacy_adoption::ensure_legacy_http_flow;
+    use super::legacy_adoption::ensure_legacy_rpc_flow;
     use crate::{AppState, build_router};
 
-    static HTTP_FLOW: OnceCell<()> = OnceCell::const_new();
+    static RPC_FLOW: OnceCell<()> = OnceCell::const_new();
 
-    async fn ensure_http_flow() {
-        HTTP_FLOW
+    async fn ensure_rpc_flow() {
+        RPC_FLOW
             .get_or_init(|| async {
-                run_http_flow().await.expect("maintenance HTTP flow");
+                run_rpc_flow().await.expect("maintenance RPC flow");
             })
             .await;
     }
 
-    async fn run_http_flow() -> Result<(), String> {
+    async fn run_rpc_flow() -> Result<(), String> {
         let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
-        let source_path = directory.path().join("http-source.db");
+        let source_path = directory.path().join("rpc-source.db");
         let source = AppState::open(&source_path, "adoption-owner")
             .await
             .map_err(|error| error.to_string())?;
@@ -373,184 +357,224 @@ mod maintenance_adoption {
 
         let doctor = router
             .clone()
-            .oneshot(get_request("/api/v1/maintenance/doctor"))
+            .oneshot(rpc_request(
+                "Doctor",
+                pb::DoctorRequest::from_parts((), (), ()).unwrap(),
+                &BTreeMap::new(),
+            ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(doctor.status(), StatusCode::OK);
-        let doctor: DoctorResponse = decode_json(doctor).await?;
+        let doctor: DoctorResponse = decode_response::<pb::DoctorResponse, _>(doctor).await;
         assert_eq!(doctor.data.integrity_check, "ok");
 
         let checkpoint = router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/checkpoint",
-                serde_json::json!({}),
+            .oneshot(rpc_request(
+                "Checkpoint",
+                pb::CheckpointRequest::from_parts((), (), ()).unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(checkpoint.status(), StatusCode::OK);
-        let checkpoint: CheckpointResponse = decode_json(checkpoint).await?;
+        let checkpoint: CheckpointResponse =
+            decode_response::<pb::CheckpointResponse, _>(checkpoint).await;
         assert!(checkpoint.data.busy >= 0);
         assert!(checkpoint.data.checkpointed_frames <= checkpoint.data.log_frames);
 
-        let backup_path = directory.path().join("http-backup.db");
+        let backup_path = directory.path().join("rpc-backup.db");
         let backup = router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/backup",
-                serde_json::json!({"path": backup_path}),
+            .oneshot(rpc_request(
+                "MaintenanceBackup",
+                pb::MaintenanceBackupRequest::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"path": backup_path})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
-        assert_eq!(backup.status(), StatusCode::CREATED);
-        let backup: BackupResponse = decode_json(backup).await?;
+        assert_eq!(backup.status(), StatusCode::OK);
+        let backup: BackupResponse =
+            decode_response::<pb::MaintenanceBackupResponse, _>(backup).await;
         assert!(backup.data.bytes > 0);
 
-        let export_path = directory.path().join("http-portable.jsonl");
+        let export_path = directory.path().join("rpc-portable.jsonl");
         let export = router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/export",
-                serde_json::json!({"path": export_path}),
+            .oneshot(rpc_request(
+                "MaintenanceExport",
+                pb::MaintenanceExportRequest::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"path": export_path})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
-        assert_eq!(export.status(), StatusCode::CREATED);
-        let export: ExportResponse = decode_json(export).await?;
+        assert_eq!(export.status(), StatusCode::OK);
+        let export: ExportResponse =
+            decode_response::<pb::MaintenanceExportResponse, _>(export).await;
         assert!(export.data.bytes > 0);
 
         let status = router
             .clone()
-            .oneshot(get_request("/api/v1/maintenance/status"))
+            .oneshot(rpc_request(
+                "MaintenanceStatus",
+                pb::MaintenanceStatusRequest::from_parts((), (), ()).unwrap(),
+                &BTreeMap::new(),
+            ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(status.status(), StatusCode::OK);
-        let status: MaintenanceStatusResponse = decode_json(status).await?;
+        let status: MaintenanceStatusResponse =
+            decode_response::<pb::MaintenanceStatusResponse, _>(status).await;
         assert!(!status.data.owner.active);
 
         let run = router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/run",
-                serde_json::json!({"owner":"adoption-owner","action":"run"}),
+            .oneshot(rpc_request(
+                "MaintenanceRun",
+                pb::MaintenanceRunRequest::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"owner":"adoption-owner","action":"run"})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(run.status(), StatusCode::OK);
-        let run: MaintenanceRunResponse = decode_json(run).await?;
+        let run: MaintenanceRunResponse =
+            decode_response::<pb::MaintenanceRunResponse, _>(run).await;
         assert_eq!(run.data.action, "run");
 
         let rebuild = router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/rebuild",
-                serde_json::json!({"owner":"adoption-owner","action":"rebuild"}),
+            .oneshot(rpc_request(
+                "MaintenanceRebuild",
+                pb::MaintenanceRebuildRequest::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"owner":"adoption-owner","action":"rebuild"})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(rebuild.status(), StatusCode::OK);
-        let rebuild: MaintenanceRebuildResponse = decode_json(rebuild).await?;
+        let rebuild: MaintenanceRebuildResponse =
+            decode_response::<pb::MaintenanceRebuildResponse, _>(rebuild).await;
         assert_eq!(rebuild.data.action, "rebuild");
 
         let cleanup = router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/cleanup",
-                serde_json::json!({"owner":"adoption-owner","action":"cleanup"}),
+            .oneshot(rpc_request(
+                "MaintenanceCleanup",
+                pb::MaintenanceCleanupRequest::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"owner":"adoption-owner","action":"cleanup"})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(cleanup.status(), StatusCode::OK);
-        let cleanup: MaintenanceRunResponse = decode_json(cleanup).await?;
+        let cleanup: MaintenanceRunResponse =
+            decode_response::<pb::MaintenanceCleanupResponse, _>(cleanup).await;
         assert_eq!(cleanup.data.action, "cleanup");
 
         let compact = router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/run",
-                serde_json::json!({"owner":"adoption-owner","action":"compact"}),
+            .oneshot(rpc_request(
+                "MaintenanceRun",
+                pb::MaintenanceRunRequest::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"owner":"adoption-owner","action":"compact"})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(compact.status(), StatusCode::OK);
-        let compact: MaintenanceRunResponse = decode_json(compact).await?;
+        let compact: MaintenanceRunResponse =
+            decode_response::<pb::MaintenanceRunResponse, _>(compact).await;
         assert_eq!(compact.data.action, "compact");
 
         let vacuum = router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/vacuum",
-                serde_json::json!({}),
+            .oneshot(rpc_request(
+                "MaintenanceVacuum",
+                pb::MaintenanceVacuumRequest::from_parts((), (), ()).unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(vacuum.status(), StatusCode::OK);
-        let vacuum: VacuumResponse = decode_json(vacuum).await?;
+        let vacuum: VacuumResponse =
+            decode_response::<pb::MaintenanceVacuumResponse, _>(vacuum).await;
         assert!(vacuum.data.ok);
 
-        let target_path = directory.path().join("http-target.db");
+        let target_path = directory.path().join("rpc-target.db");
         let target = AppState::open(&target_path, "adoption-owner")
             .await
             .map_err(|error| error.to_string())?;
         let target_router = build_router(target);
         let import = target_router
             .clone()
-            .oneshot(post_json(
-                "/api/v1/maintenance/import",
-                serde_json::json!({"path": export_path, "replace": false}),
+            .oneshot(rpc_request(
+                "MaintenanceImport",
+                pb::MaintenanceImportRequest::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"path": export_path, "replace": false})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(import.status(), StatusCode::OK);
-        let import: ImportResponse = decode_json(import).await?;
+        let import: ImportResponse =
+            decode_response::<pb::MaintenanceImportResponse, _>(import).await;
         assert_eq!(import.data.phase, "completed");
         assert!(!import.data.restart_required);
 
-        let replace_target_path = directory.path().join("http-replace-target.db");
+        let replace_target_path = directory.path().join("rpc-replace-target.db");
         let replace_target = AppState::open(&replace_target_path, "adoption-owner")
             .await
             .map_err(|error| error.to_string())?;
         let replace_router = build_router(replace_target);
         let replace = replace_router
-            .oneshot(post_json(
-                "/api/v1/maintenance/import",
-                serde_json::json!({"path": export_path, "replace": true}),
+            .oneshot(rpc_request(
+                "MaintenanceImport",
+                pb::MaintenanceImportRequest::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"path": export_path, "replace": true})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
         assert_eq!(replace.status(), StatusCode::OK);
-        let replace: ImportResponse = decode_json(replace).await?;
+        let replace: ImportResponse =
+            decode_response::<pb::MaintenanceImportResponse, _>(replace).await;
         assert_eq!(replace.data.phase, "completed");
         Ok(())
-    }
-
-    fn get_request(uri: &str) -> Request<Body> {
-        Request::builder()
-            .method("GET")
-            .uri(uri)
-            .body(Body::empty())
-            .expect("GET request")
-    }
-
-    fn post_json(uri: &str, value: Value) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri(uri)
-            .header("content-type", "application/json")
-            .body(Body::from(
-                serde_json::to_vec(&value).expect("request JSON"),
-            ))
-            .expect("POST request")
-    }
-
-    async fn decode_json<T: serde::de::DeserializeOwned>(
-        response: axum::response::Response,
-    ) -> Result<T, String> {
-        let bytes = http_body_util::BodyExt::collect(response.into_body())
-            .await
-            .map_err(|error| error.to_string())?
-            .to_bytes();
-        serde_json::from_slice(&bytes).map_err(|error| error.to_string())
     }
 
     fn assert_fixture_roundtrip<T>(raw: &str)
@@ -569,13 +593,13 @@ mod maintenance_adoption {
         ($producer:ident, $consumer:ident, $ty:ty, $fixture:expr) => {
             #[tokio::test]
             async fn $producer() {
-                ensure_http_flow().await;
+                ensure_rpc_flow().await;
                 assert_fixture_roundtrip::<$ty>($fixture);
             }
 
             #[tokio::test]
             async fn $consumer() {
-                ensure_http_flow().await;
+                ensure_rpc_flow().await;
                 let value: $ty = serde_json::from_str($fixture).expect("maintenance fixture DTO");
                 let encoded = serde_json::to_value(value).expect("serialize maintenance DTO");
                 assert!(encoded.is_object());
@@ -587,15 +611,15 @@ mod maintenance_adoption {
         ($producer:ident, $consumer:ident, $ty:ty, $fixture:expr) => {
             #[tokio::test]
             async fn $producer() {
-                ensure_http_flow().await;
-                ensure_legacy_http_flow().await;
+                ensure_rpc_flow().await;
+                ensure_legacy_rpc_flow().await;
                 assert_fixture_roundtrip::<$ty>($fixture);
             }
 
             #[tokio::test]
             async fn $consumer() {
-                ensure_http_flow().await;
-                ensure_legacy_http_flow().await;
+                ensure_rpc_flow().await;
+                ensure_legacy_rpc_flow().await;
                 let value: $ty = serde_json::from_str($fixture).expect("maintenance fixture DTO");
                 let encoded = serde_json::to_value(value).expect("serialize maintenance DTO");
                 assert!(encoded.is_object());
@@ -708,7 +732,7 @@ mod maintenance_adoption {
 
     #[tokio::test]
     async fn checkpoint_response_contract_consumes_producer_fixture() {
-        ensure_http_flow().await;
+        ensure_rpc_flow().await;
         let response: CheckpointResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/checkpoint-response.v1.valid.json"
         ))
@@ -718,7 +742,7 @@ mod maintenance_adoption {
 
     #[tokio::test]
     async fn checkpoint_response_reports_real_wal_field_relationships() {
-        ensure_http_flow().await;
+        ensure_rpc_flow().await;
         let response: CheckpointResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/checkpoint-response.v1.valid.json"
         ))
@@ -729,7 +753,7 @@ mod maintenance_adoption {
 
     #[tokio::test]
     async fn doctor_response_contract_consumes_producer_fixture() {
-        ensure_http_flow().await;
+        ensure_rpc_flow().await;
         let response: DoctorResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/doctor-response.v1.valid.json"
         ))
@@ -740,7 +764,7 @@ mod maintenance_adoption {
 
     #[tokio::test]
     async fn doctor_response_maps_real_non_default_report_before_fixture_normalization() {
-        ensure_http_flow().await;
+        ensure_rpc_flow().await;
         let response: DoctorResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/doctor-response.v1.valid.json"
         ))

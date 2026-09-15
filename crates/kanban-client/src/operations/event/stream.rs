@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use kanban_protocol::{
-    ListEventsQuery, SseHeartbeatData, StreamEventData, StreamEventsQuery,
+    EventHeartbeatData, ListEventsQuery, StreamEventData, StreamEventsQuery,
     rpc::{
         query,
         v1::{self, query_frame::Body},
@@ -22,7 +22,7 @@ const QUERY_ID: &str = "events";
 #[allow(clippy::large_enum_variant)]
 pub enum EventStreamItem {
     Business(StreamEventData),
-    Heartbeat(SseHeartbeatData),
+    Heartbeat(EventHeartbeatData),
 }
 
 /// 在 QueryService 中跟随一页完整事件投影；消费满页后移动查询窗口。
@@ -117,9 +117,9 @@ impl EventStream {
             }
             Body::Heartbeat(_) => {
                 if self.projection.cursor().is_some() {
-                    return Ok(Some(
-                        EventStreamItem::Heartbeat(SseHeartbeatData::default()),
-                    ));
+                    return Ok(Some(EventStreamItem::Heartbeat(
+                        EventHeartbeatData::default(),
+                    )));
                 }
             }
             Body::Failure(failure) => return Err(query_failure(failure)),

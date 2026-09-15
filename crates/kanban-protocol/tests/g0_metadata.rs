@@ -205,7 +205,7 @@ fn web_runtime_config_uses_the_exact_camel_case_host_wire_shape() {
         actor: "local".to_owned(),
         default_board: "default".to_owned(),
         server_version: "2.1.3".to_owned(),
-        protocol_version: "v1".to_owned(),
+        protocol_version: "v2".to_owned(),
         web_build_id: "dev".to_owned(),
     };
     let value = serde_json::to_value(&config).expect("runtime config should serialize");
@@ -217,7 +217,7 @@ fn web_runtime_config_uses_the_exact_camel_case_host_wire_shape() {
             "actor": "local",
             "defaultBoard": "default",
             "serverVersion": "2.1.3",
-            "protocolVersion": "v1",
+            "protocolVersion": "v2",
             "webBuildId": "dev",
         })
     );
@@ -232,7 +232,7 @@ fn web_runtime_config_uses_the_exact_camel_case_host_wire_shape() {
             "actor": "local",
             "default_board": "default",
             "server_version": "2.1.3",
-            "protocol_version": "v1",
+            "protocol_version": "v2",
             "web_build_id": "dev",
         }))
         .is_err()
@@ -244,7 +244,7 @@ fn web_runtime_config_uses_the_exact_camel_case_host_wire_shape() {
             "actor": "local",
             "defaultBoard": "default",
             "serverVersion": "2.1.3",
-            "protocolVersion": "v1",
+            "protocolVersion": "v2",
             "webBuildId": "dev",
             "extra": true,
         }))

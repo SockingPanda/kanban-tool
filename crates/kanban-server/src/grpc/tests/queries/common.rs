@@ -8,9 +8,9 @@ use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tonic::transport::Channel;
 
-pub(super) type Client = pb::kanban_service_client::KanbanServiceClient<Channel>;
+pub(in crate::grpc::tests) type Client = pb::kanban_service_client::KanbanServiceClient<Channel>;
 
-pub(super) async fn client(host: &Host) -> Client {
+pub(in crate::grpc::tests) async fn client(host: &Host) -> Client {
     Client::connect(host.url.clone())
         .await
         .unwrap()
@@ -22,7 +22,7 @@ fn input<T: DeserializeOwned>(value: Value) -> T {
     serde_json::from_value(value).unwrap()
 }
 
-pub(super) async fn task(client: &mut Client, board: &str, title: &str) -> String {
+pub(in crate::grpc::tests) async fn task(client: &mut Client, board: &str, title: &str) -> String {
     let response: dto::CreateTaskResponse = client
         .create_task(
             pb::CreateTaskRequest::from_parts(
@@ -42,7 +42,7 @@ pub(super) async fn task(client: &mut Client, board: &str, title: &str) -> Strin
     response.data.id
 }
 
-pub(super) async fn title(client: &mut Client, task: &str, title: &str) {
+pub(in crate::grpc::tests) async fn title(client: &mut Client, task: &str, title: &str) {
     client
         .update_task(
             pb::UpdateTaskRequest::from_parts(
@@ -58,7 +58,7 @@ pub(super) async fn title(client: &mut Client, task: &str, title: &str) {
         .unwrap();
 }
 
-pub(super) async fn comment(client: &mut Client, task: &str, body: &str) {
+pub(in crate::grpc::tests) async fn comment(client: &mut Client, task: &str, body: &str) {
     client
         .create_comment(
             pb::CreateCommentRequest::from_parts(
@@ -74,20 +74,20 @@ pub(super) async fn comment(client: &mut Client, task: &str, body: &str) {
         .unwrap();
 }
 
-pub(super) fn task_query(task: &str) -> Query {
+pub(in crate::grpc::tests) fn task_query(task: &str) -> Query {
     Query::GetTask(pb::GetTaskRequest {
         task_id: Some(task.into()),
         ..Default::default()
     })
 }
 
-pub(super) fn comments_query(task: &str) -> Query {
+pub(in crate::grpc::tests) fn comments_query(task: &str) -> Query {
     Query::ListComments(pb::ListCommentsRequest {
         task_id: Some(task.into()),
     })
 }
 
-pub(super) async fn authoritative(client: &mut Client, query: &Query) -> Vec<u8> {
+pub(in crate::grpc::tests) async fn authoritative(client: &mut Client, query: &Query) -> Vec<u8> {
     use pb::query_result::Result;
     let result = match query {
         Query::GetTask(request) => {
@@ -111,7 +111,10 @@ pub(super) async fn authoritative(client: &mut Client, query: &Query) -> Vec<u8>
     .encode_to_vec()
 }
 
-pub(super) fn request(query: Query, resume: Option<pb::QueryCursor>) -> pb::WatchQueriesRequest {
+pub(in crate::grpc::tests) fn request(
+    query: Query,
+    resume: Option<pb::QueryCursor>,
+) -> pb::WatchQueriesRequest {
     pb::WatchQueriesRequest {
         protocol_version: kanban_protocol::rpc::query::PROTOCOL_VERSION,
         queries: vec![pb::QueryDefinition {
@@ -125,13 +128,13 @@ pub(super) fn request(query: Query, resume: Option<pb::QueryCursor>) -> pb::Watc
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) enum Transport {
+pub(in crate::grpc::tests) enum Transport {
     Native,
     Web,
 }
 
 impl Transport {
-    pub(super) async fn watch(
+    pub(in crate::grpc::tests) async fn watch(
         self,
         host: &Host,
         query: Query,
@@ -170,7 +173,7 @@ impl Transport {
     }
 }
 
-pub(super) enum Wire {
+pub(in crate::grpc::tests) enum Wire {
     Native(Box<tonic::Streaming<pb::QueryFrame>>),
     Web {
         response: Box<reqwest::Response>,
@@ -179,7 +182,7 @@ pub(super) enum Wire {
 }
 
 impl Wire {
-    pub(super) async fn next(&mut self) -> pb::QueryFrame {
+    pub(in crate::grpc::tests) async fn next(&mut self) -> pb::QueryFrame {
         let frame = tokio::time::timeout(Duration::from_secs(5), async {
             match self {
                 Self::Native(stream) => stream.message().await.unwrap().expect("意外 EOF"),
@@ -208,18 +211,21 @@ impl Wire {
 }
 
 #[derive(Clone, Default)]
-pub(super) struct Projection {
+pub(in crate::grpc::tests) struct Projection {
     pub bytes: Vec<u8>,
     pub cursor: Option<pb::QueryCursor>,
     pending: Option<(pb::QueryBegin, Vec<u8>, u32)>,
 }
 
 impl Projection {
-    pub(super) fn discard_partial(&mut self) {
+    pub(in crate::grpc::tests) fn discard_partial(&mut self) {
         self.pending = None;
     }
 
-    pub(super) fn apply(&mut self, frame: pb::QueryFrame) -> Option<pb::QueryBegin> {
+    pub(in crate::grpc::tests) fn apply(
+        &mut self,
+        frame: pb::QueryFrame,
+    ) -> Option<pb::QueryBegin> {
         match frame.body.unwrap() {
             Body::Begin(begin) => {
                 assert!(self.pending.is_none());
@@ -288,7 +294,7 @@ impl Projection {
         None
     }
 
-    pub(super) async fn transaction(&mut self, wire: &mut Wire) -> pb::QueryBegin {
+    pub(in crate::grpc::tests) async fn transaction(&mut self, wire: &mut Wire) -> pb::QueryBegin {
         loop {
             if let Some(begin) = self.apply(wire.next().await) {
                 return begin;
@@ -297,7 +303,7 @@ impl Projection {
     }
 }
 
-pub(super) async fn idle(host: &Host) {
+pub(in crate::grpc::tests) async fn idle(host: &Host) {
     tokio::time::timeout(Duration::from_secs(2), async {
         while host.state.grpc_probe.query_resources() != Some((0, 16, 0)) {
             tokio::time::sleep(Duration::from_millis(5)).await;

@@ -2114,6 +2114,18 @@ mod tests {
     use super::*;
 
     static NEXT_FIXTURE_ID: AtomicUsize = AtomicUsize::new(0);
+    const TEST_SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    #[cfg(unix)]
+    fn trusted_resource_root() -> tempfile::TempDir {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().expect("resource root");
+        // 正例必须显式满足生产权限约束，不能继承运行测试的 umask。
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("resource root permissions");
+        root
+    }
 
     fn compatible_values() -> (WebRuntimeConfig, WebArtifactManifest) {
         let payload = WebArtifactFile {
@@ -2126,7 +2138,7 @@ mod tests {
             WEB_ARTIFACT_FORMAT_VERSION,
             WEB_ARTIFACT_BASE_PATH,
             WEB_ARTIFACT_ENTRYPOINT,
-            "3.0.0",
+            TEST_SERVER_VERSION,
             WEB_PROTOCOL_VERSION,
             std::slice::from_ref(&payload),
         )
@@ -2135,7 +2147,7 @@ mod tests {
             format_version: WEB_ARTIFACT_FORMAT_VERSION,
             base_path: WEB_ARTIFACT_BASE_PATH.to_owned(),
             entrypoint: WEB_ARTIFACT_ENTRYPOINT.to_owned(),
-            server_version: "3.0.0".to_owned(),
+            server_version: TEST_SERVER_VERSION.to_owned(),
             protocol_version: WEB_PROTOCOL_VERSION.to_owned(),
             build_id: build_id.clone(),
             files: vec![payload],
@@ -2145,7 +2157,7 @@ mod tests {
             web_base_path: WEB_ARTIFACT_BASE_PATH.to_owned(),
             actor: "local".to_owned(),
             default_board: "default".to_owned(),
-            server_version: "3.0.0".to_owned(),
+            server_version: TEST_SERVER_VERSION.to_owned(),
             protocol_version: WEB_PROTOCOL_VERSION.to_owned(),
             web_build_id: build_id,
         };
@@ -2155,7 +2167,7 @@ mod tests {
     #[test]
     fn compatible_host_requires_matching_protocol_and_artifact_build() {
         let (runtime, manifest) = compatible_values();
-        let compatibility = HostCompatibility::verify(runtime, manifest, "3.0.0")
+        let compatibility = HostCompatibility::verify(runtime, manifest, TEST_SERVER_VERSION)
             .expect("same-version host should attach");
         assert_eq!(compatibility.runtime.default_board, "default");
     }
@@ -2163,8 +2175,8 @@ mod tests {
     #[test]
     fn stale_protocol_is_not_an_attachable_host() {
         let (mut runtime, manifest) = compatible_values();
-        runtime.protocol_version = "v0".to_owned();
-        let error = HostCompatibility::verify(runtime, manifest, "3.0.0")
+        runtime.protocol_version = "v1".to_owned();
+        let error = HostCompatibility::verify(runtime, manifest, TEST_SERVER_VERSION)
             .expect_err("stale protocol must not attach");
         assert!(error.to_string().contains("protocolVersion"));
     }
@@ -2174,7 +2186,7 @@ mod tests {
         let (mut runtime, manifest) = compatible_values();
         runtime.web_build_id =
             "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_owned();
-        let error = HostCompatibility::verify(runtime, manifest, "3.0.0")
+        let error = HostCompatibility::verify(runtime, manifest, TEST_SERVER_VERSION)
             .expect_err("different web artifact must not attach");
         assert!(error.to_string().contains("webBuildId"));
     }
@@ -2184,7 +2196,7 @@ mod tests {
     fn sidecar_trust_accepts_valid_direct_resource_child() {
         use std::os::unix::fs::PermissionsExt;
 
-        let root = tempfile::tempdir().expect("resource root");
+        let root = trusted_resource_root();
         let sidecar = root.path().join("kanban");
         std::fs::write(&sidecar, b"#!/bin/sh\nexit 0\n").expect("sidecar fixture");
         std::fs::set_permissions(&sidecar, std::fs::Permissions::from_mode(0o755))
@@ -2203,7 +2215,7 @@ mod tests {
     fn sidecar_trust_rejects_symlink_writable_and_escape_paths() {
         use std::os::unix::fs::PermissionsExt;
 
-        let root = tempfile::tempdir().expect("resource root");
+        let root = trusted_resource_root();
         let target = root.path().join("target");
         std::fs::write(&target, b"#!/bin/sh\nexit 0\n").expect("target fixture");
         std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755))
@@ -2241,6 +2253,14 @@ mod tests {
             Err("sidecar 必须位于资源根目录的直接子项")
         );
         let _ = std::fs::remove_file(outside);
+
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o775))
+            .expect("writable resource root");
+        let writable_root_config = HostLaunchConfig::new(&target, "web", "db", "actor", "board");
+        assert_eq!(
+            trusted_sidecar_path(&writable_root_config),
+            Err("sidecar 资源根目录不得允许 group/world 写入")
+        );
     }
 
     #[cfg(unix)]
@@ -2610,7 +2630,7 @@ mod tests {
     #[test]
     fn startup_timeout_handoffs_owned_sidecar_to_reaper() {
         let _reaper_guard = reaper_test_guard();
-        let resource_root = tempfile::tempdir().expect("startup resource root");
+        let resource_root = trusted_resource_root();
         let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
         let leader_marker = std::env::temp_dir().join(format!(
             "kanban-desktop-startup-exit-marker-{}-{id}",
@@ -2713,7 +2733,7 @@ mod tests {
     #[test]
     fn cancelled_startup_reaps_sidecar_descendants_before_returning_control() {
         let _reaper_guard = reaper_test_guard();
-        let resource_root = tempfile::tempdir().expect("cancel resource root");
+        let resource_root = trusted_resource_root();
         let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
         let leader_marker = std::env::temp_dir().join(format!(
             "kanban-desktop-cancel-leader-{}-{id}",

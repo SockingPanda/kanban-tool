@@ -6171,7 +6171,7 @@ export const DtoStatusCountSchema: GenMessage<DtoStatusCount> = /*@__PURE__*/
   messageDesc(file_kanban_v1_dto, 142);
 
 /**
- * crate::sse::StreamEventData
+ * crate::event_stream::StreamEventData
  *
  * @generated from message kanban.v1.DtoStreamEventData
  */

@@ -605,7 +605,7 @@ pub fn header_contract(operation_id: &str) -> Option<OperationContract> {
         .map(|contract| contract.operation_contract(parent))
 }
 
-/// 返回 source 中 API/SSE endpoint projection。
+/// 返回 source 中 业务 DTO binding projection。
 pub fn endpoint_catalog() -> Vec<EndpointDescriptor> {
     crate::CatalogProjection::new(BOARD_OPERATIONS).endpoints()
 }

@@ -26,7 +26,12 @@ const JSONSCHEMA_PACKAGE: &str = "jsonschema";
 const SCHEMARS_PACKAGE: &str = "schemars";
 const FS4_PACKAGE: &str = "fs4";
 
-const RETIRED_PACKAGES: &[&str] = &["kanban-sqlite", "kanban-local"];
+const RETIRED_PACKAGES: &[&str] = &[
+    "kanban-sqlite",
+    "kanban-local",
+    "kanban-rpc-proto",
+    "kanban-rpc-host",
+];
 
 #[derive(Clone, Copy)]
 struct DependencyPolicy {
@@ -100,6 +105,7 @@ const CONTRACT_DEPENDENCIES: &[&str] = &[
     "serde_json",
     "sha2",
     "prost",
+    "prost-types",
     "tonic",
     "tonic-prost",
     "tonic-prost-build",
@@ -1223,7 +1229,9 @@ fn validate_tool_and_contract(
             "serde" => check_registry_declaration(dependency, "^1.0", true, &["derive"], &context)?,
             "serde_json" => check_registry_declaration(dependency, "^1.0", true, &[], &context)?,
             "sha2" => check_registry_declaration(dependency, "^0.10", true, &[], &context)?,
-            "prost" => check_registry_declaration(dependency, "^0.14", true, &[], &context)?,
+            "prost" | "prost-types" => {
+                check_registry_declaration(dependency, "^0.14", true, &[], &context)?
+            }
             "tonic" => check_registry_declaration(
                 dependency,
                 "=0.14.6",
@@ -1237,10 +1245,10 @@ fn validate_tool_and_contract(
             _ => unreachable!("exact contract dependency list already checked"),
         }
         let actual_kind = optional_string_field(dependency, "kind", &context)?;
-        let expected_kind = if name == "tonic-prost-build" {
-            Some("build")
-        } else {
-            None
+        let expected_kind = match name {
+            "tonic-prost-build" => Some("build"),
+            "prost-types" => Some("dev"),
+            _ => None,
         };
         if (normal_kind(actual_kind) && expected_kind.is_some())
             || (!normal_kind(actual_kind) && actual_kind != expected_kind)
@@ -1281,7 +1289,9 @@ fn validate_tool_and_contract(
             &dependency_name.replace('-', "_"),
             CONTRACT_PACKAGE,
         )?;
-        if *dependency_name == "tonic-prost-build" {
+        if *dependency_name == "prost-types" {
+            dev_edge(edge, "kanban-protocol -> prost-types descriptor tests")?;
+        } else if *dependency_name == "tonic-prost-build" {
             let kinds = edge
                 .get("dep_kinds")
                 .and_then(Value::as_array)
@@ -1653,7 +1663,7 @@ mod tests {
             "syn" => "2.0.117",
             "quote" => "1.0.45",
             "prettyplease" => "0.2.37",
-            "prost" => "0.14.4",
+            "prost" | "prost-types" => "0.14.4",
             "tonic" | "tonic-prost" | "tonic-prost-build" => "0.14.6",
             _ => "1.0.0",
         }
@@ -1988,6 +1998,11 @@ mod tests {
                 CONTRACT_PACKAGE,
                 vec![
                     registry_dependency("prost", "^0.14", true, &[]),
+                    {
+                        let mut dep = registry_dependency("prost-types", "^0.14", true, &[]);
+                        dep["kind"] = json!("dev");
+                        dep
+                    },
                     registry_dependency("tonic", "=0.14.6", false, &["codegen", "transport"]),
                     registry_dependency("tonic-prost", "=0.14.6", true, &[]),
                     {
@@ -2029,6 +2044,7 @@ mod tests {
             "quote",
             "prettyplease",
             "prost",
+            "prost-types",
             "tonic",
             "tonic-prost",
             "tonic-prost-build",
@@ -2143,6 +2159,17 @@ mod tests {
 
     #[test]
     fn web_artifact_and_protocol_dependency_boundaries_are_frozen() {
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, CONTRACT_PACKAGE, "prost-types")["kind"] = Value::Null;
+        });
+        assert_reject(fixture(), |metadata| {
+            node_record(metadata, CONTRACT_PACKAGE)["deps"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|edge| edge["name"] == "prost_types")
+                .unwrap()["dep_kinds"][0]["kind"] = Value::Null;
+        });
         assert_reject(fixture(), |metadata| {
             package_record(metadata, WEB_ARTIFACT_PACKAGE)["dependencies"]
                 .as_array_mut()

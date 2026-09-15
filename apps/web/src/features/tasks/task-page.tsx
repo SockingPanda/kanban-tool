@@ -23,9 +23,9 @@ const sorts = [{value:'updated_at',label:'最近更新'}, {value:'-updated_at',l
 function rowsFor(workspace: TaskWorkspaceState): TaskListRow[] { return (workspace.listRead.data?.tasks ?? []).map(task => ({ id: task.id, ref: task.ref, title: task.title, status: task.status, priority: task.priority, assignee: task.assignee, executionPlanState: task.execution_plan_state, dependencyBlocked: task.dependency_blocked, requiredStepCount: task.required_step_count, completedRequiredStepCount: task.completed_required_step_count, optionalStepCount: task.optional_step_count, updatedAt: task.updated_at })); }
 function TaskStats({ workspace }: { workspace: TaskWorkspaceState }) {
   const { createMaintenanceApi } = useWorkspaceOperations();
-  const { runtime, route, boardRevision, online } = workspace;
+  const { runtime, route, online } = workspace;
   const api = useMemo(() => createMaintenanceApi(undefined, runtime), [createMaintenanceApi, runtime]);
-  const counts = useAsyncRead(true, route.boardSlug, signal => api.stats(route.boardSlug, signal), boardRevision, online !== false);
+  const counts = useAsyncRead(true, route.boardSlug, signal => api.stats(route.boardSlug, signal), online !== false);
   const count = (status: string) => counts.data ? counts.data.status_counts.find(item => item.status === status)?.count ?? 0 : "—";
   return <div className="page-inline-stats"><span><b>{counts.data?.status_counts.reduce((total,item)=>total+item.count,0) ?? '—'}</b> 个任务</span><span><i className="state-dot green" /><b>{count('done')}</b> 已完成</span><span><i className="state-dot blue" /><b>{count('running')}</b> 进行中</span><span><i className="state-dot amber" /><b>{count('blocked')}</b> 已阻塞</span></div>;
 }

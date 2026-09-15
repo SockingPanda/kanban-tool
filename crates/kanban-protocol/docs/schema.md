@@ -1,6 +1,6 @@
 # Schema 与 wire 契约
 
-本页解释 `kanban-protocol` 的机器契约边界。DTO、schema registry、endpoint/surface catalog 和生成
+本页解释 `kanban-protocol` 的机器契约边界。Protobuf、DTO、schema registry、RPC/CLI/MCP catalog 和生成
 artifact 是精确事实源；本页只保留语义和维护规则。
 
 ## 源码与 artifact
@@ -9,7 +9,7 @@ artifact 是精确事实源；本页只保留语义和维护规则。
 - `schemas/` 中的 JSON Schema 与 fixture 由 `xtask` 生成或校验，不能手工维护第二份 inventory。
 - schema 使用 JSON Schema Draft 2020-12，root 必须自包含，局部引用只能指向 `#/$defs/...`。
 - `/app/runtime.json` 的 `WebRuntimeConfig` 由 `runtime_catalog` 以 `Config` surface 声明；它是
-  host metadata，不是 `/api/v1` endpoint，因此不会出现在 HTTP endpoint catalog 中。
+  host metadata，由其独立 DTO 契约持有，不属于业务 RPC。
 
 ## 契约边界
 
@@ -18,16 +18,19 @@ wrapper 保留空集合，PATCH nullable 字段使用 oneof 保留清空语义�
 JSON 的 signed/unsigned integer 分支保持整数精度。业务错误通过标准 `google.rpc.Status`
 中的 `kanban.v1.ErrorDetail` 传递，原生 tonic 和浏览器 Connect 客户端共享稳定业务错误码。
 
-精确 RPC 清单、原 DTO parts 和字段映射分别位于 `proto/rpc-operations.json`、
-`proto/rpc-methods.json`，字段编号保存在 `proto/rpc-field-numbers.json`。生成实现由 `xtask`
-持有，protocol 的 build script 只编译 owner 下的 Protobuf source。
+`rpc::catalog::methods()` 给出当前可调用的 service、method、输入输出及 streaming 标记，
+与正式 Protobuf descriptor 精确核对；生成 artifact 是 `schemas/json-schema/draft-2020-12/rpc-catalog.json`。
+业务输入来源和 DTO parts 映射分别位于 `proto/rpc-operations.json`、`proto/rpc-methods.json`，
+字段编号保存在 `proto/rpc-field-numbers.json`。生成实现由 `xtask` 持有，build script 只编译
+本 owner 下的 Protobuf source。
 
 schema 描述序列化形状、字段可选性和 transport envelope；状态 transition、claim token、board
 isolation、依赖环、idempotency 和事务原子性由 service/server/client 测试与领域规则证明，不能从
 JSON Schema 推断。
 
-HTTP 精确 method/path 来自 protocol/server catalog，CLI 精确 flag 来自 Clap，MCP 精确 tool 来自
-MCP catalog。文档示例只能使用这些当前 source 可核对的字段，不复制完整清单。
+`dto-contracts.json` 与 `dto-bindings.json` 描述复用的 DTO/schema 绑定；其中历史 method/path
+只标识 DTO 的来源与字段角色，不代表可调用路由。业务请求只使用正式 RPC catalog。CLI 精确
+flag 来自 Clap，MCP 精确 tool 来自 MCP catalog。文档示例只能使用这些当前 source 可核对的字段，不复制完整清单。
 
 label proposal 有 task-scoped 与 board-wide 两种独立的 typed contract；board-wide contract 使用
 `ListBoardLabelProposalsQuery` 的可选 `status` query，响应为 `ListBoardLabelProposalsResponse`。两者都经

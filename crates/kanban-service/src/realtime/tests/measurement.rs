@@ -56,7 +56,7 @@ async fn actual_service_gate_wait_and_consistent_read_measurement() {
         let started = Instant::now();
         assert_eq!(
             service
-                .load_realtime_board("default")
+                .read_test_task_summary("default")
                 .await
                 .unwrap()
                 .tasks
@@ -102,7 +102,7 @@ async fn actual_service_gate_wait_and_consistent_read_measurement() {
             let mut samples = Vec::new();
             for _ in 0..READS_PER_WORKER {
                 let started = Instant::now();
-                let snapshot = service.load_realtime_board("default").await.unwrap();
+                let snapshot = service.read_test_task_summary("default").await.unwrap();
                 samples.push(started.elapsed());
                 assert!(snapshot.tasks.len() >= INITIAL_TASKS);
                 let ids = snapshot
@@ -141,7 +141,7 @@ async fn actual_service_gate_wait_and_consistent_read_measurement() {
         waits.into_iter().partition(|sample| sample.read);
     assert_eq!(read_waits.len(), READERS * READS_PER_WORKER);
     assert_eq!(write_waits.len(), WRITERS * WRITES_PER_WORKER);
-    let final_snapshot = service.load_realtime_board("default").await.unwrap();
+    let final_snapshot = service.read_test_task_summary("default").await.unwrap();
     assert_eq!(
         final_snapshot.tasks.len(),
         INITIAL_TASKS + WRITERS * WRITES_PER_WORKER / 8
@@ -151,7 +151,6 @@ async fn actual_service_gate_wait_and_consistent_read_measurement() {
         WRITERS * WRITES_PER_WORKER * 7 / 8
     );
     let memory_after_full_snapshot = process_memory();
-    let active_scope_checks = measure_active_scope_checks(&service).await;
     println!(
         "G06_SERVICE_MEASUREMENT {}",
         json!({
@@ -173,84 +172,6 @@ async fn actual_service_gate_wait_and_consistent_read_measurement() {
             "write_gate_wait": distribution(write_waits.into_iter().map(|sample| sample.elapsed).collect()),
             "memory_before": memory_before,
             "memory_after_full_snapshot": memory_after_full_snapshot,
-            "active_watch_changes_scope_checks": active_scope_checks,
         })
     );
-}
-
-// 当前 WatchChanges 只调用 check_realtime_board；与整板快照分别计量。
-async fn measure_active_scope_checks(service: &KanbanService) -> Value {
-    const WRITERS: usize = 4;
-    const READERS: usize = 4;
-    const WRITES_PER_WORKER: usize = 32;
-    const READS_PER_WORKER: usize = 64;
-    let memory_before = process_memory();
-    let barrier = Arc::new(Barrier::new(WRITERS + READERS));
-    let mut workers = tokio::task::JoinSet::new();
-    service.mutation_gate.start_wait_measurement();
-    let started = Instant::now();
-    for worker in 0..WRITERS {
-        let service = service.clone();
-        let barrier = barrier.clone();
-        workers.spawn(async move {
-            barrier.wait().await;
-            let mut samples = Vec::new();
-            for index in 0..WRITES_PER_WORKER {
-                let started = Instant::now();
-                service
-                    .create_comment(comment_command(&format!("scope-{worker}-{index}")))
-                    .await
-                    .unwrap();
-                samples.push(started.elapsed());
-            }
-            (false, samples)
-        });
-    }
-    for _ in 0..READERS {
-        let service = service.clone();
-        let barrier = barrier.clone();
-        workers.spawn(async move {
-            barrier.wait().await;
-            let mut samples = Vec::new();
-            for _ in 0..READS_PER_WORKER {
-                let started = Instant::now();
-                service.check_realtime_board("b_default").await.unwrap();
-                samples.push(started.elapsed());
-            }
-            (true, samples)
-        });
-    }
-    let mut reads = Vec::new();
-    let mut writes = Vec::new();
-    while let Some(result) = workers.join_next().await {
-        let (read, samples) = result.unwrap();
-        if read {
-            reads.extend(samples);
-        } else {
-            writes.extend(samples);
-        }
-    }
-    let elapsed = started.elapsed();
-    let (read_waits, write_waits): (Vec<_>, Vec<_>) = service
-        .mutation_gate
-        .take_wait_measurement()
-        .into_iter()
-        .partition(|sample| sample.read);
-    assert_eq!(read_waits.len(), READERS * READS_PER_WORKER);
-    assert_eq!(write_waits.len(), WRITERS * WRITES_PER_WORKER);
-    json!({
-        "api": "check_realtime_board",
-        "concurrency": WRITERS + READERS,
-        "writers": WRITERS,
-        "readers": READERS,
-        "comment_creates": WRITERS * WRITES_PER_WORKER,
-        "scope_checks": READERS * READS_PER_WORKER,
-        "wall_ms": elapsed.as_secs_f64() * 1_000.0,
-        "read_including_gate_wait": distribution(reads),
-        "write_including_gate_wait": distribution(writes),
-        "read_gate_wait": distribution(read_waits.into_iter().map(|sample| sample.elapsed).collect()),
-        "write_gate_wait": distribution(write_waits.into_iter().map(|sample| sample.elapsed).collect()),
-        "memory_before": memory_before,
-        "memory_after": process_memory(),
-    })
 }

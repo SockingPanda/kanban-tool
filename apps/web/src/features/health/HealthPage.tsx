@@ -1,11 +1,9 @@
 import { useAsyncRead } from '../../application/query/use-async-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
-import { useEffect, useLayoutEffect, useRef } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { type HealthReadError, type HealthReport } from "../../application/data/health-read-model";
 import { createTranslator } from "../../application/i18n"
-import { HEALTH_REFRESH_EVENT } from "../../application/workspace/health-refresh"
 import { usePreferences } from "../../platform/preferences/use-preferences"
 import { presentHealthError } from "../../application/health/health-error"
 import { healthMetricTone } from "./health-metrics"
@@ -33,19 +31,12 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
   const { locale } = usePreferences()
   const t = createTranslator(locale)
   const result = useAsyncRead(true, runtime.apiBaseUrl + '|' + runtime.webBuildId,
-    signal => read ? read(signal) : readHealth({ runtime, signal }), 0, true, true);
+    signal => read ? read(signal) : readHealth({ runtime, signal }), true, true);
   const report = result.data ?? initialReport;
   const state: HealthState = report ? { kind: 'ready', report, staleError: result.error }
     : result.error ? { kind: 'error', error: result.error } : { kind: 'loading' };
   const pending = result.loading;
   const refresh = result.retry;
-  const refreshRef = useRef(refresh);
-  useLayoutEffect(() => { refreshRef.current = refresh });
-  useEffect(() => {
-    const listener = () => refreshRef.current();
-    window.addEventListener(HEALTH_REFRESH_EVENT, listener);
-    return () => window.removeEventListener(HEALTH_REFRESH_EVENT, listener);
-  }, []);
 
   return (
     <section className={styles.page} aria-labelledby="health-heading" data-testid="health-page">

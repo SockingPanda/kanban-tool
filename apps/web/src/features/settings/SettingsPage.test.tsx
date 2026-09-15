@@ -14,7 +14,7 @@ const runtime = {
   actor: "local",
   defaultBoard: "default",
   serverVersion: "3.0.0",
-  protocolVersion: "v1",
+  protocolVersion: "v2",
   webBuildId: "build-test",
 } satisfies WebRuntimeConfig
 

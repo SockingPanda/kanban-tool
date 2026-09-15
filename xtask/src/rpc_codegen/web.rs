@@ -233,7 +233,7 @@ impl WebEmitter<'_> {
         if fields.is_empty() {
             decode_body.insert_str(0, "  void _wire\n");
         }
-        if ty.rust() == "crate::sse::StreamEventData" {
+        if ty.rust() == "crate::event_stream::StreamEventData" {
             setup.push_str("  validateStreamEvent(dto)\n");
             decode_body = format!(
                 "  const value = c.omitUndefined({{\n{decode}  }})\n  validateStreamEvent(value)\n  return value\n"

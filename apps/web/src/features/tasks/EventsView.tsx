@@ -8,7 +8,7 @@ import { Tabs } from '../../components/ui/tabs';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 import { useEffect, useState, type ReactNode } from "react"
 
-import { ExplorerReadError, type BoardEventsBatch, type BoardEventsReadModel, type ExplorerEvent } from "../../application/data/explorer-read-model";
+import { ExplorerReadError, type BoardEventsReadModel, type ExplorerEvent } from "../../application/data/explorer-read-model";
 import type { Locale } from "../../platform/preferences/preferences"
 import { taskOpenerKey } from "../../platform/focus/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
@@ -41,12 +41,6 @@ export interface EventsViewProps {
   /** Explorer 已有的 task query；同时作为可选的看板事件筛选。 */
   readonly taskId?: string | null
   readonly kindFilter?: string
-  /** 由现有 persistent sync owner 递增，用于触发 catch-up read。 */
-  readonly invalidationRevision?: number
-  /** 仅 recovery/gap/poll boundaries 递增；普通 SSE event 通过 batch 进入。 */
-  readonly eventsRefreshRevision?: number
-  /** 该 sync owner 提供的可选已校验 batch；本组件不会打开 stream。 */
-  readonly batch?: BoardEventsBatch | null
   readonly online?: boolean
   readonly onKindFilterChange?: (value: string) => void
   readonly onSelectTask?: (taskId: string) => void
@@ -254,12 +248,12 @@ function FilterBar({ copy, value, onChange }: { readonly copy: EventsCopy; reado
 
 function useBoardEventsRead(
   runtime: WebRuntimeConfig, boardSelector: string, taskId: string | null,
-  eventsRefreshRevision: number, online: boolean,
+  online: boolean,
 ): EventsReadState & { readonly refresh: () => void } {
-  const { loadBoardEvents, querySubscriptions } = useWorkspaceOperations();
+  const { loadBoardEvents } = useWorkspaceOperations();
   const key = JSON.stringify([runtime.apiBaseUrl, runtime.webBuildId, boardSelector, taskId]);
   const read = useAsyncRead(true, key, signal => loadBoardEvents(runtime, boardSelector, { taskId, signal }),
-    querySubscriptions ? 0 : eventsRefreshRevision, online);
+    online);
   return { ...read, stale: Boolean(read.data && (read.error || !online)), refresh: read.retry };
 }
 
@@ -269,8 +263,6 @@ export function EventsView({
   boardSelector,
   taskId = null,
   kindFilter: kindFilterProp = "",
-  invalidationRevision = 0,
-  eventsRefreshRevision = invalidationRevision,
   online = typeof navigator === "undefined" || navigator.onLine,
   onKindFilterChange,
   onSelectTask,
@@ -278,7 +270,7 @@ export function EventsView({
   const { locale } = usePreferences()
   const [localKindFilter, setLocalKindFilter] = useState(kindFilterProp)
   const kindFilter = onKindFilterChange ? kindFilterProp : localKindFilter
-  const state = useBoardEventsRead(runtime, boardSelector, taskId, eventsRefreshRevision, online)
+  const state = useBoardEventsRead(runtime, boardSelector, taskId, online)
   useEffect(() => {
     if (taskId === null && !state.loading) onReadSettled?.()
   }, [onReadSettled, state.loading, taskId])

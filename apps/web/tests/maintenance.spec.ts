@@ -61,17 +61,16 @@ test.describe("Maintenance operator workflow", () => {
   })
 
   test("confirms backup with keyboard and renders server path plus checksum", async ({ page }) => {
+    let healthRequests = 0
+    ;(await installRpcFixture(page)).handle('GetHealth', () => {
+      healthRequests += 1
+      return { data: { ok: true, db: 'ok', version: '3.0.0', db_path: '/server/kanban.db', db_fingerprint: 'sha256:after-backup' } }
+    })
     ;(await installRpcFixture(page)).handle("MaintenanceBackup", async () => {
       return { data: { out_path: "/server/backup.sqlite", checksum_sha256: "sha256:backup", bytes: 12, source_fingerprint: "sha256:source" } }
     })
     await page.goto("/app/boards/default/maintenance", { waitUntil: "domcontentloaded" })
 
-    await page.evaluate(() => {
-      document.body.dataset.maintenanceHealthRefreshCount = "0"
-      window.addEventListener("kanban:health-refresh", () => {
-        document.body.dataset.maintenanceHealthRefreshCount = String(Number(document.body.dataset.maintenanceHealthRefreshCount ?? "0") + 1)
-      }, { once: false })
-    })
     await page.getByTestId("maintenance-backup-path").fill("/requested/backup.sqlite")
     await page.getByTestId("maintenance-backup-submit").click()
     const dialog = page.getByRole("alertdialog")
@@ -86,8 +85,12 @@ test.describe("Maintenance operator workflow", () => {
     await expect.poll(() => statusRequests).toBeGreaterThan(1)
     await expect.poll(() => statsRequests).toBeGreaterThan(1)
     await expect.poll(() => searchRequests).toBeGreaterThan(1)
-    await expect.poll(() => page.evaluate(() => Number(document.body.dataset.maintenanceHealthRefreshCount ?? "0"))).toBe(1)
+    await expect(page.getByTestId("maintenance-backup-submit")).toBeEnabled()
     await page.screenshot({ path: "test-results/maintenance-backup.png", fullPage: true })
+    expect(healthRequests).toBe(0)
+    await page.goto('/app/boards/default/health', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('health-metric-db-fingerprint')).toContainText('sha256:after-backup')
+    expect(healthRequests).toBeGreaterThan(0)
   })
 
   test("freezes the confirmed maintenance owner before the request is sent", async ({ page }) => {
@@ -241,25 +244,23 @@ test.describe("Maintenance operator workflow", () => {
       }
     })
     await page.goto("/app/boards/default/maintenance", { waitUntil: "domcontentloaded" })
-    await page.evaluate(() => {
-      document.body.dataset.maintenanceHealthRefreshCount = "0"
-      window.addEventListener("kanban:health-refresh", () => {
-        document.body.dataset.maintenanceHealthRefreshCount = String(Number(document.body.dataset.maintenanceHealthRefreshCount ?? "0") + 1)
-      })
-    })
     const submit = page.getByTestId("maintenance-backup-submit")
     await page.getByTestId("maintenance-backup-path").fill("/requested/backup.sqlite")
     await submit.click()
     await page.getByRole("alertdialog").getByRole("button", { name: "继续" }).click()
     await expect(page.getByTestId("maintenance-backup-result")).toBeVisible()
-    await expect.poll(() => page.evaluate(() => Number(document.body.dataset.maintenanceHealthRefreshCount ?? "0"))).toBe(1)
+    await expect(page.getByTestId("maintenance-backup-submit")).toBeEnabled()
+    const freshStatus = statusRequests, freshStats = statsRequests, freshSearch = searchRequests
     await submit.click()
     await page.getByRole("alertdialog").getByRole("button", { name: "继续" }).click()
     const error = page.getByTestId("maintenance-backup-error")
     await expect(error).toContainText("维护操作失败")
     await expect(error).not.toContainText("SECRET_BACKEND_ERROR")
     await expect(page.getByTestId("maintenance-backup-result")).toHaveCount(0)
-    await expect.poll(() => page.evaluate(() => Number(document.body.dataset.maintenanceHealthRefreshCount ?? "0"))).toBe(1)
+    await expect.poll(() => statusRequests).toBeGreaterThan(freshStatus)
+    await expect.poll(() => statsRequests).toBeGreaterThan(freshStats)
+    await expect.poll(() => searchRequests).toBeGreaterThan(freshSearch)
+    await expect(page.getByTestId("maintenance-backup-submit")).toBeEnabled()
   })
 
   test("returns focus to the triggering action when confirmation is escaped", async ({ page }) => {

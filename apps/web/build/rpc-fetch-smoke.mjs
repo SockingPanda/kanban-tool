@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
 import { fileURLToPath, URL } from 'node:url'
 import process from 'node:process'
+import { fromBinary } from '@bufbuild/protobuf'
 import { Code, ConnectError } from '@connectrpc/connect'
 import { createServer } from 'vite'
 
@@ -13,10 +15,11 @@ const server = await createServer({
   logLevel: 'error',
 })
 try {
-  const [{ createRpcClients }, { ErrorDetailSchema }, { DtoApiErrorCode }] = await Promise.all([
+  const [{ createRpcClients }, { ErrorDetailSchema }, { DtoApiErrorCode }, { QueryResultSchema }] = await Promise.all([
     server.ssrLoadModule('/src/lib/rpc/client.ts'),
     server.ssrLoadModule('/src/generated/rpc/kanban/v1/kanban_pb.ts'),
     server.ssrLoadModule('/src/generated/rpc/kanban/v1/dto_pb.ts'),
+    server.ssrLoadModule('/src/generated/rpc/kanban/v1/query_pb.ts'),
   ])
   const requests = []
   const rpc = createRpcClients(baseUrl, (input, init) => {
@@ -40,21 +43,32 @@ try {
     return true
   })
   const abort = new globalThis.AbortController()
-  let attached = false
+  let completed = false
+  const chunks = []
   try {
-    for await (const frame of rpc.workspace.watchChanges({ boardId: board, protocolVersion: 1 }, { signal: abort.signal })) {
-      assert.equal(frame.boardId, board)
-      assert.equal(frame.sequence, 1n)
-      attached = true
-      abort.abort()
+    for await (const frame of rpc.query.watchQueries({ protocolVersion: 1, queries: [{
+      clientQueryId: 'smoke', projectionVersion: 1, query: { case: 'getTaskDetails', value: { taskId: created.data.id } },
+    }] }, { signal: abort.signal })) {
+      const body = frame.body
+      if (body.case === 'heartbeat') continue
+      assert.equal(frame.clientQueryId, 'smoke')
+      if (body.case === 'begin') assert(body.value.snapshot)
+      if (body.case === 'chunk') chunks.push(body.value.data)
+      if (body.case === 'end') {
+        const snapshot = fromBinary(QueryResultSchema, Buffer.concat(chunks))
+        assert.equal(snapshot.result.case, 'getTaskDetails')
+        assert.equal(snapshot.result.value.data.task.description, '保留正文')
+        completed = true
+        abort.abort()
+      }
     }
   } catch (error) {
     assert.equal(ConnectError.from(error).code, Code.Canceled)
   }
-  assert(attached)
+  assert(completed)
   assert(requests.every(request => request.contentType === 'application/grpc-web+proto'))
   assert(requests.every(request => new URL(request.url).pathname.startsWith('/kanban.v1.')))
-  globalThis.console.log('正式生成客户端：binary Fetch、完整详情、bigint、标准错误详情、WatchChanges 及取消通过')
+  globalThis.console.log('正式生成客户端：binary Fetch、完整详情、bigint、标准错误详情、完整 QueryService 及取消通过')
 } finally {
   await server.close()
 }

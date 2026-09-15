@@ -12,8 +12,8 @@ mutation 会产生第二套状态机、并发和迁移语义。
 ## 决策
 
 `kanban serve` 是唯一允许打开 canonical Turso 的进程；`kanban-service` 是唯一直接依赖并持有
-Turso persistence 的 crate。`kanban-server` 负责 host 生命周期与装配，其他入口通过 typed localhost
-HTTP/SSE 调用共享 application service；service 负责事务、migration、repository 和 projection。
+Turso persistence 的 crate。`kanban-server` 负责 host 生命周期与装配，其他入口通过本机 gRPC
+调用共享 application service；service 负责事务、migration、repository 和 projection。
 
 ## 影响
 

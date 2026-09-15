@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import type { Locale } from "../../platform/preferences/preferences"
 import { createTranslator } from "../../application/i18n"
-import { requestHealthRefresh } from "../../application/workspace/health-refresh"
 import { usePreferences } from "../../platform/preferences/use-preferences"
 import { MaintenanceApiError, type BackupReport, type CheckpointReport, type DoctorReport, type ExportReport, type ImportReport, type MaintenanceApi, type MaintenanceRunReport, type MaintenanceStatus, type QueueStats, type SearchStatus, type VacuumReport } from "../../application/data/maintenance-api";
 import { maintenanceOwnerForAction } from "./maintenance-intents"
@@ -49,7 +48,6 @@ export type MaintenancePageProps = {
   readonly api?: MaintenanceApi
   readonly initial?: MaintenanceInitialState
   /** Integration seam used to refresh the health query after a successful host mutation. */
-  readonly onHealthRefresh?: () => void
 }
 
 type ConfirmAction =
@@ -124,7 +122,7 @@ function statusTone(status: { dirty: boolean; degraded: boolean; failed: number;
     : styles.ready
 }
 
-function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial, onHealthRefresh }: MaintenancePageProps) {
+function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial }: MaintenancePageProps) {
   const { createMaintenanceApi } = useWorkspaceOperations();
   const { locale, actor } = usePreferences()
   const t = createTranslator(locale)
@@ -282,15 +280,13 @@ function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial
         if (isMutationCurrent()) {
           if (committed) {
             if (!statusFresh || !diagnosticsFresh) setSyncNotice("mutation")
-            const refreshHealth = onHealthRefresh ?? requestHealthRefresh
-            refreshHealth()
           }
           setPendingAction(null)
           if (pendingActionRef.current === action) pendingActionRef.current = null
         }
       }
     }
-  }, [abortRequests, isCurrent, loadBoardDiagnostics, loadStatus, onHealthRefresh, pendingAction])
+  }, [abortRequests, isCurrent, loadBoardDiagnostics, loadStatus, pendingAction])
 
   const runDoctor = () => {
     if (pendingActionRef.current !== null || pendingAction !== null) return

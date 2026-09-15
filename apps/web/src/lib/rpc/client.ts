@@ -1,7 +1,6 @@
 import { createClient } from '@connectrpc/connect'
 import { createGrpcWebTransport } from '@connectrpc/connect-web'
 import { KanbanService } from '../../generated/rpc/kanban/v1/kanban_pb'
-import { WorkspaceService } from '../../generated/rpc/kanban/v1/workspace_pb'
 import { QueryService } from '../../generated/rpc/kanban/v1/query_pb'
 import { createRpcFetch } from './endpoint'
 
@@ -14,7 +13,6 @@ export function createRpcClients(baseUrl: string, fetcher?: typeof globalThis.fe
   })
   return {
     business: createClient(KanbanService, transport),
-    workspace: createClient(WorkspaceService, transport),
     query: createClient(QueryService, transport),
   }
 }

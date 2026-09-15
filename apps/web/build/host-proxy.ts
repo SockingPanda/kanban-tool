@@ -59,9 +59,8 @@ export function createKanbanHostProxy(input?: string): Record<string, ProxyOptio
     },
   }
   return {
-    "^/kanban(?:\\.framework)?\\.v1\\.": options,
+    "^/kanban\\.v1\\.(?:KanbanService|QueryService)/": options,
     "^/app/(?:runtime|manifest)\\.json(?:\\?|$)": options,
-    "^/api/v1(?:/|\\?|$)": options,
     "^/health(?:\\?|$)": options,
   }
 }

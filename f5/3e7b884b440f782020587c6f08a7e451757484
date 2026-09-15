@@ -1,0 +1,38 @@
+apps/web/src/application/query/use-async-read.ts
+  s_9155b83c287f17::t_bc840047df049a 13-14,28-39,41-43,70,75,89,99,101
+apps/web/src/app/shell/project-picker.tsx
+  s_9155b83c287f17::t_e4a1409189055f 16
+apps/web/tests/release-consistency.spec.ts
+  s_9155b83c287f17::t_e619265208be0e 209-229
+  s_9155b83c287f17::t_d9dece98133bbd 123,125-126
+apps/web/src/features/tasks/use-task-workspace.ts
+  s_9155b83c287f17::t_29a48a6d017c60 304,308-310
+apps/web/tests/release-paper.spec.ts
+  s_9155b83c287f17::t_4b9ed0368d7dbc 35
+  s_9155b83c287f17::t_3b3228c88b8292 9,21,25,31-34,37,48,59
+  s_9155b83c287f17::t_a26ecb1f101eb0 36
+apps/web/src/application/workspace/use-board-session.tsx
+  s_9155b83c287f17::t_82a8f8d211c10e 326-331
+apps/web/tests/inspector-integration.spec.ts
+  s_9155b83c287f17::t_351150962fdf67 9-64
+  s_9155b83c287f17::t_82a8f8d211c10e 65-81,83-84,87-96
+  s_9155b83c287f17::t_3d9ee14f69cf8d 82,85-86
+apps/web/src/features/tasks/task-field.tsx
+  s_9155b83c287f17::t_bc840047df049a 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f53e7b884b440f782020587c6f08a7e451757484",
+  "prompts": {},
+  "sessions": {
+    "s_9155b83c287f17": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a337-3cb1-7fb3-8ea9-7968548c84e5",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

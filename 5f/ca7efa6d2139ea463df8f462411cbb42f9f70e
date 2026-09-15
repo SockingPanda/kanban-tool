@@ -1,0 +1,31 @@
+scripts/prepare-desktop-sidecar.sh
+  s_5b054b517a26b6::t_6cb978b060e929 34-35
+crates/kanban-server/src/grpc/query.rs
+  s_5b054b517a26b6::t_cab1649e5b5435 36-38,227
+crates/kanban-server/src/grpc/query/tests.rs
+  s_5b054b517a26b6::t_a5ba2ecd034074 207-269
+crates/kanban-server/src/grpc/tests/queries.rs
+  s_5b054b517a26b6::t_acb2cb86670b9a 1,3-4
+crates/kanban-server/src/grpc/tests/queries/common.rs
+  s_5b054b517a26b6::t_c385db4a58505e 1-308
+crates/kanban-server/src/grpc/tests/queries/lifecycle.rs
+  s_5b054b517a26b6::t_750410f64f0cec 1-102
+crates/kanban-server/src/grpc/tests/queries/recovery.rs
+  s_5b054b517a26b6::t_2e6277033f1063 1-234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5fca7efa6d2139ea463df8f462411cbb42f9f70e",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

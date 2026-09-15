@@ -1,0 +1,503 @@
+apps/web/tests/foundation.spec.ts
+  s_9155b83c287f17::t_35b1c2c3b55528 101-102,107-108
+  s_9155b83c287f17::t_95f0d24d32cb81 25,34,37,40,43,54,75-77
+apps/web/src/lib/api/generated/fixtures/api-reopen-step-response.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-32
+apps/web/src/lib/api/generated/contracts/api-remove-step-headers.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/features/tasks/ExplorerPage.tsx
+  s_9155b83c287f17::t_c6e86c5081d520 7,17
+  s_9155b83c287f17::t_8a198f559fbc69 18
+  s_9155b83c287f17::t_0a4202c9d21d95 1-6,8-16,19-20
+apps/web/tests/inspector-integration.spec.ts
+  s_9155b83c287f17::t_35b1c2c3b55528 60
+  s_9155b83c287f17::t_95f0d24d32cb81 13,22,24,42,44,54,68,82,88,92
+apps/web/src/lib/api/generated/fixtures/api-complete-step-path.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/fixtures/api-skip-step-headers.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-4
+apps/web/src/lib/api/generated/fixtures/api-reopen-step-request.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/tests/runtime-fixture.ts
+  s_9155b83c287f17::t_95f0d24d32cb81 228-232
+apps/web/src/lib/api/generated/contracts/api-complete-step-headers.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/schemas/api-complete-step-headers.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-27
+apps/web/src/components/ui/select.tsx
+  s_9155b83c287f17::t_5ca6bf67c30596 20,54,83,98,108,158-162,183-189,192
+  s_9155b83c287f17::t_9281368dc5e036 3-4,53
+  s_9155b83c287f17::t_c8a95f550e9680 211
+apps/web/src/lib/api/generated/contracts/api-complete-step-response.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/index.html
+  s_9155b83c287f17::t_8cd126b21f3851 8,13
+apps/web/src/lib/api/generated/contracts/api-update-step-path.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/fixtures/api-update-step-request.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/fixtures/api-update-step-path.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/application/tasks/task-mutation-controller.ts
+  s_9155b83c287f17::t_5ca6bf67c30596 32-34,56-58,76,108,132,350-352,369-371,783
+  s_9155b83c287f17::t_6602c9fc053e17 409-412,600
+  s_9155b83c287f17::t_d82990f60e53de 669
+apps/web/src/features/tasks/task-step-editor.tsx
+  s_9155b83c287f17::t_a482387f40da60 20
+  s_9155b83c287f17::t_53847ba613bb02 1-19,21-35
+apps/web/build/fixtures/react-doctor/Events.tsx.txt
+  s_9155b83c287f17::t_4d59da922050ef 1-9
+apps/web/src/lib/api/generated/contracts/api-reopen-step-request.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/schemas/api-remove-step-response.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-455
+apps/web/src/lib/api/generated/contracts/api-update-step-response.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/application/tasks/task-mutation-state.ts
+  s_9155b83c287f17::t_0e1b0f0911c040 49,145-152
+apps/web/src/lib/api/generated/fixtures/api-remove-step-response.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/features/tasks/task-dependencies.tsx
+  s_9155b83c287f17::t_7ba2d5be43482a 2-13,15-23,26,31
+  s_9155b83c287f17::t_788d9eb36cd00b 25,27-30
+  s_9155b83c287f17::t_5ca6bf67c30596 1,14,24
+apps/web/src/lib/api/generated/contracts/api-complete-step-request.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/components/ui/input.tsx
+  s_9155b83c287f17::t_00b5bb6e924458 3,5
+apps/web/src/platform/preferences/use-resolved-theme.ts
+  s_9155b83c287f17::t_a482387f40da60 1-14
+apps/web/src/app/shell/app-shell.tsx
+  s_9155b83c287f17::t_a482387f40da60 1-2,4-5,14,19,24-40,53-56
+apps/web/src/features/health/HealthPage.tsx
+  s_9155b83c287f17::t_4d59da922050ef 57-58
+apps/web/src/domain/tasks/presentation.ts
+  s_9155b83c287f17::t_9281368dc5e036 1-9
+apps/web/src/lib/api/generated/schemas/api-remove-step-headers.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-21
+apps/web/playwright.config.ts
+  s_9155b83c287f17::t_dc9821f84d65b9 25
+  s_9155b83c287f17::t_0417771cf27212 26
+apps/web/src/lib/api/generated/schemas/api-remove-step-path.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-19
+apps/web/src/app/shell/app-shell.test.tsx
+  s_9155b83c287f17::t_a482387f40da60 72,74-76,120,131
+apps/web/src/lib/api/generated/fixtures/api-remove-step-path.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/fixtures/api-update-step-request.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/features/tasks/TaskRunsView.tsx
+  s_9155b83c287f17::t_788d9eb36cd00b 152-156,161,164
+  s_9155b83c287f17::t_d06af9caaf3da7 157-160,162-163,165-168
+apps/web/src/features/tasks/ExplorerPage.module.css
+  s_9155b83c287f17::t_412ffa9dbe36f9 4,172-178
+  s_9155b83c287f17::t_e4fdeacf97de1c 179-180
+apps/web/src/lib/api/generated/schemas/api-complete-step-path.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-19
+apps/web/src/components/domain/domain-ui.css
+  s_9155b83c287f17::t_9281368dc5e036 1-107
+apps/web/src/lib/api/generated/contracts/api-reopen-step-headers.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/build/react-doctor-regressions.test.ts
+  s_9155b83c287f17::t_4d59da922050ef 1-28,31-48
+  s_9155b83c287f17::t_f4ab50ceb46ae1 29-30
+apps/web/src/features/tasks/task-form.tsx
+  s_9155b83c287f17::t_0417771cf27212 1-34
+apps/web/build/boundaries.ts
+  s_9155b83c287f17::t_f830223c48cb94 28,57-59
+  s_9155b83c287f17::t_0417771cf27212 39,42,68
+apps/web/src/features/tasks/BoardTaskMutations.tsx
+  s_9155b83c287f17::t_5ca6bf67c30596 1-2,12-13,16,20,96,99
+  s_9155b83c287f17::t_a482387f40da60 5,23,32,48,64,80,94,111
+apps/web/src/features/tasks/task-properties.tsx
+  s_9155b83c287f17::t_7ba2d5be43482a 1-2,4-26
+  s_9155b83c287f17::t_55424770a72b54 3
+apps/web/src/features/tasks/BoardLive.tsx
+  s_9155b83c287f17::t_a482387f40da60 2,5-7
+apps/web/src/lib/api/generated/fixtures/api-remove-step-response.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-14
+apps/web/src/lib/api/generated/schemas/api-skip-step-request.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-21
+apps/web/src/lib/api/generated/contracts/api-remove-step-path.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/fixtures/api-update-step-headers.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-4
+apps/web/src/lib/api/generated/fixtures/api-update-step-path.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/fixtures/api-reopen-step-response.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/schemas/api-complete-step-response.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-455
+apps/web/README.md
+  s_9155b83c287f17::t_35e0ed90d1f1e2 68
+  s_9155b83c287f17::t_275bab7b0a1f09 18-21,23
+docs/adr/0006_browser_first_web_ui.md
+  s_9155b83c287f17::t_275bab7b0a1f09 51
+apps/web/src/features/tasks/task-table.tsx
+  s_9155b83c287f17::t_9281368dc5e036 1-11,17-18,24-29,34
+  s_9155b83c287f17::t_bf96ef1c76c567 12-16,19-23,30-33
+apps/web/src/lib/api/generated/schemas/api-update-step-request.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-50
+apps/web/src/application/sync/web-sync-controller.ts
+  s_9155b83c287f17::t_0c2b68f002890b 1116,1243-1244
+  s_9155b83c287f17::t_4d59da922050ef 1051-1052,1058-1059,1072-1073,1093-1094,1308-1309,1313-1315,1318,1343-1344
+  s_9155b83c287f17::t_1b6479814f84e9 1100-1101,1108-1109,1115
+apps/web/tests/a11y-keyboard.spec.ts
+  s_9155b83c287f17::t_dc9821f84d65b9 138
+  s_9155b83c287f17::t_138e2c8eeda226 41,43-44
+  s_9155b83c287f17::t_789ea862dd0206 60,131-133,136,147,176,186,191,231
+apps/web/src/app/styles.css
+  s_9155b83c287f17::t_9281368dc5e036 4
+  s_9155b83c287f17::t_7ce1d2845153c8 38,48-49
+apps/web/src/lib/api/generated/fixtures/api-skip-step-path.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/build/boundaries.test.ts
+  s_9155b83c287f17::t_f830223c48cb94 27-34
+apps/web/src/features/settings/SettingsPage.tsx
+  s_9155b83c287f17::t_a482387f40da60 1,269-274
+  s_9155b83c287f17::t_4d59da922050ef 125-126
+  s_9155b83c287f17::t_55f7d317ee6fd3 2-5,27,60-61,207-208,275-280,282-283,320-321,323-324,364-365,367-368,389-390,392-393,426
+apps/web/tests/board-task-mutations.spec.ts
+  s_9155b83c287f17::t_0417771cf27212 29
+  s_9155b83c287f17::t_a0c957994d41a3 1-2,4-6,8-28,30-42,44-77
+  s_9155b83c287f17::t_3b8b7d58f7b16b 43
+apps/web/src/lib/api/generated/operations.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1050-1198
+apps/web/tests/explorer-inspector.spec.ts
+  s_9155b83c287f17::t_0417771cf27212 8
+  s_9155b83c287f17::t_35b1c2c3b55528 1-7,9-38
+apps/web/src/lib/api/generated/contracts/api-skip-step-headers.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/features/tasks/task-runs-page.tsx
+  s_9155b83c287f17::t_c6e86c5081d520 1-12
+apps/web/src/lib/api/generated/fixtures/api-complete-step-response.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-32
+apps/web/src/lib/api/generated/fixtures/api-reopen-step-path.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/fixtures/api-reopen-step-request.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/schemas/api-update-step-response.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-455
+apps/web/tests/explorer-fixture.ts
+  s_9155b83c287f17::t_a0c957994d41a3 29-30,32,156,178,219,571-573
+  s_9155b83c287f17::t_412ffa9dbe36f9 517-521
+apps/web/src/features/tasks/tasks.css
+  s_9155b83c287f17::t_507ab0ebec33d3 154
+  s_9155b83c287f17::t_768b80637ea174 760-805
+apps/web/src/lib/api/generated/schemas/api-skip-step-headers.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-27
+apps/web/src/application/data/board-read-model.ts
+  s_9155b83c287f17::t_0e1b0f0911c040 136-137
+apps/web/src/lib/api/generated/fixtures/api-complete-step-headers.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-4
+apps/web/src/lib/api/generated/fixtures/api-skip-step-path.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/contracts/api-skip-step-response.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/features/tasks/task-discussion.tsx
+  s_9155b83c287f17::t_7ba2d5be43482a 1-5,48
+  s_9155b83c287f17::t_c6e86c5081d520 6-47
+apps/web/src/lib/api/generated/fixtures/api-remove-step-headers.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-4
+apps/web/src/lib/api/generated/fixtures/api-complete-step-path.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/schemas/api-reopen-step-request.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-21
+apps/web/src/lib/api/generated/fixtures/api-skip-step-request.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/adapters/host/board-read-model.ts
+  s_9155b83c287f17::t_0e1b0f0911c040 216
+apps/web/src/lib/api/generated/fixtures/api-complete-step-request.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/tests/release-proof.spec.ts
+  s_9155b83c287f17::t_507ab0ebec33d3 259,266,268-269,271-272,274,309-312
+  s_9155b83c287f17::t_275bab7b0a1f09 154
+  s_9155b83c287f17::t_dc9821f84d65b9 335
+  s_9155b83c287f17::t_ceadc707c185c0 324-325,337
+  s_9155b83c287f17::t_c16612fee9b8ff 239-241,246
+  s_9155b83c287f17::t_2859d8d94c01cc 153,155,178,182,236,254-255,257
+apps/web/src/application/tasks/task-inspector-mutation-state.test.ts
+  s_9155b83c287f17::t_4f4c4b5e4ddf7d 57,72
+apps/web/src/lib/api/generated/generated.sha256
+  s_9155b83c287f17::t_c8d55a28858e7f 1,28-31,167-169,173-176,187-190,210-213,275-282,553-558,565-572,593-600,639-646,666-668,696-699,835-837,841-844,855-858,878-881,892
+apps/web/src/components/ui/dialog.tsx
+  s_9155b83c287f17::t_00b5bb6e924458 26,28-30
+  s_9155b83c287f17::t_1d8c2b4c5d0ecc 39-45
+  s_9155b83c287f17::t_99214380647c18 5-6,61,69-70
+apps/web/src/lib/api/generated/schemas/api-reopen-step-headers.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-27
+apps/web/src/lib/api/generated/test-only.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 76-94,301-319,525-543,759-777
+apps/web/src/lib/api/generated/schemas/api-complete-step-request.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-21
+apps/web/docs/capability-ledger.release.json
+  s_9155b83c287f17::t_ceadc707c185c0 6-181
+apps/web/src/app/shell/route-content.tsx
+  s_9155b83c287f17::t_4d59da922050ef 6-7
+  s_9155b83c287f17::t_fbff6e2143fb69 1-5,8-13,15-26,28-61
+apps/web/src/lib/api/generated/fixtures/api-reopen-step-path.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/features/tasks/task-page.tsx
+  s_9155b83c287f17::t_efb1d4b0affb7b 3-24,26,31-36,38-41,43-44,46-47,49-52,56,62-66,72-75,84
+  s_9155b83c287f17::t_35e0ed90d1f1e2 1,53-55,68-70,76-83
+  s_9155b83c287f17::t_8a198f559fbc69 37
+  s_9155b83c287f17::t_5ca6bf67c30596 2,42,48,60,71
+  s_9155b83c287f17::t_d375e771f10e3c 25,27-30,45,57-59,61,67
+apps/web/src/application/query/use-async-read.ts
+  s_9155b83c287f17::t_0e1b0f0911c040 10,13,29-30,64,94
+apps/web/src/lib/api/generated/manifest.json
+  s_9155b83c287f17::t_c8d55a28858e7f 723-912,2242-2245,2381-2383,2387-2390,2401-2404,2424-2427,2489-2496,2767-2772,2779-2786,2807-2814,2853-2860,2911-2914,3050-3052,3056-3059,3070-3073,3093-3096,4160-4308,5016,5018-5019
+apps/web/src/lib/api/generated/fixtures/api-update-step-response.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/features/tasks/EventsView.test.tsx
+  s_9155b83c287f17::t_a482387f40da60 44,47-48
+apps/web/src/lib/api/generated/fixtures/api-complete-step-response.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/features/tasks/task-board.tsx
+  s_9155b83c287f17::t_5ca6bf67c30596 22,28
+  s_9155b83c287f17::t_efb1d4b0affb7b 1-15,17-21,23-27,29,32-35,37-40
+  s_9155b83c287f17::t_7c418596c9011a 16,30-31,36
+apps/web/src/lib/api/generated/fixtures/api-skip-step-response.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/application/tasks/use-bulk-completion.ts
+  s_9155b83c287f17::t_4827e13f8c6f33 1-19,35-47,49-50,52-59
+  s_9155b83c287f17::t_327ab32575b06d 20-34,48,51
+apps/web/src/lib/api/generated/schemas/api-update-step-headers.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-27
+apps/web/src/features/tasks/use-task-detail-state.ts
+  s_9155b83c287f17::t_2aa7b09b7f5748 475,598-614,616
+  s_9155b83c287f17::t_923798f534ace9 1-2,6-10,27-31,199-218,246-255
+apps/web/tests/a11y-visual.spec.ts
+  s_9155b83c287f17::t_759518a164d77f 122
+  s_9155b83c287f17::t_dc9821f84d65b9 155
+  s_9155b83c287f17::t_3f6435bc0b9213 35,74
+apps/web/docs/sse-invalidation.md
+  s_9155b83c287f17::t_ceadc707c185c0 1,3-6,8,10-14,16,18-20,22-24,26-30,32,34-35,37-39
+apps/web/src/lib/api/generated/fixtures/api-update-step-headers.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-5
+apps/web/src/lib/api/generated/schemas/api-reopen-step-path.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-19
+apps/web/src/domain/tasks/board.ts
+  s_9155b83c287f17::t_0417771cf27212 328,439
+  s_9155b83c287f17::t_201d7db2a83407 28-29
+apps/web/src/lib/api/generated/schemas/api-skip-step-path.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-19
+apps/web/src/lib/api/generated/fixtures/api-reopen-step-headers.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-5
+apps/web/src/features/tasks/task-detail.tsx
+  s_9155b83c287f17::t_507ab0ebec33d3 41
+  s_9155b83c287f17::t_b3de5f34c523d5 10,22,27-32,45,48,53
+  s_9155b83c287f17::t_31ddb420f9102c 17-21
+  s_9155b83c287f17::t_fde4906110baab 1-9,11-16,23-26,33-40,42-44,46-47,49-52
+apps/web/src/lib/api/generated/schemas/api-skip-step-response.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-455
+apps/web/src/adapters/host/http-transport.test.ts
+  s_9155b83c287f17::t_6e9d0d5297e183 77,83,87
+apps/web/src/app/shell/shell.css
+  s_9155b83c287f17::t_507ab0ebec33d3 222
+  s_9155b83c287f17::t_412ffa9dbe36f9 1086
+  s_9155b83c287f17::t_3e81feb8c10b81 1546-1547
+apps/web/src/lib/api/generated/fixtures/api-skip-step-request.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/build/fixtures/react-doctor/App.tsx.txt
+  s_9155b83c287f17::t_4d59da922050ef 1-46
+apps/web/src/app/app.tsx
+  s_9155b83c287f17::t_4d59da922050ef 5-6
+  s_9155b83c287f17::t_5fb5cb48caf907 148
+  s_9155b83c287f17::t_0e1b0f0911c040 151
+apps/web/src/lib/api/generated/contracts/api-remove-step-response.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/fixtures/api-remove-step-path.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/contracts/api-update-step-headers.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/tests/release-paper.spec.ts
+  s_9155b83c287f17::t_9f4f4ae539d158 75-119
+  s_9155b83c287f17::t_b3de5f34c523d5 169-187
+  s_9155b83c287f17::t_a1dc9b92c30a95 1-74,120-168,188-215
+apps/web/src/components/ui/tabs.tsx
+  s_9155b83c287f17::t_507ab0ebec33d3 17
+  s_9155b83c287f17::t_a681bd61042f51 12,18
+apps/web/src/features/tasks/use-task-workspace.ts
+  s_9155b83c287f17::t_9281368dc5e036 1-6,8-23,25-53,55-80,83,86,88-108,111-155,158-159,162-163,166-173,176-178,181-182,185-186,189-190,193-226,228-235,237,239-243,245-254,256-263,265-271,274-286,289-300,307,309-313,315-359,361-380,382-389,391-397,399-419,422-434,436-540
+  s_9155b83c287f17::t_a9a030d0771a9f 227
+  s_9155b83c287f17::t_5ca6bf67c30596 244,287,360,398
+  s_9155b83c287f17::t_f12052336c77c9 7,24,288,301-306,308,314,542-543
+apps/web/src/application/workspace/use-board-session.tsx
+  s_9155b83c287f17::t_5fb5cb48caf907 326
+  s_9155b83c287f17::t_4d59da922050ef 337-338
+  s_9155b83c287f17::t_0e1b0f0911c040 60,327
+  s_9155b83c287f17::t_4c6d528ebb54ac 24,55,151-152,156-158,162,277,349,423,440
+apps/web/tests/release-consistency.spec.ts
+  s_9155b83c287f17::t_a7831f68012b8f 156-199,201,203-205
+  s_9155b83c287f17::t_ca2af3ff72425e 20-26
+  s_9155b83c287f17::t_dc9821f84d65b9 114
+  s_9155b83c287f17::t_bb6b5a2f1ffb34 200,202
+  s_9155b83c287f17::t_26a08230bcb861 1-19,27-46,48-56,58-62,64-113,115-139,155
+  s_9155b83c287f17::t_35b1c2c3b55528 47,57,63,140-154
+apps/web/src/features/tasks/inspector-model.ts
+  s_9155b83c287f17::t_a9a030d0771a9f 50
+apps/web/src/features/tasks/task-field.tsx
+  s_9155b83c287f17::t_7ba2d5be43482a 1-18
+apps/web/tests/board-live.spec.ts
+  s_9155b83c287f17::t_35b1c2c3b55528 28
+  s_9155b83c287f17::t_95f0d24d32cb81 1-4,6-10,12-27,29-31,35-37
+  s_9155b83c287f17::t_ca2af3ff72425e 5,11
+  s_9155b83c287f17::t_0417771cf27212 32
+  s_9155b83c287f17::t_3b8b7d58f7b16b 33-34
+apps/web/src/lib/api/generated/contracts/api-skip-step-request.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/features/tasks/task-select.tsx
+  s_9155b83c287f17::t_4161a85a13c65f 1-18,21-26
+  s_9155b83c287f17::t_e65d5ba597f5ee 19-20
+apps/web/docs/capability-ledger.md
+  s_9155b83c287f17::t_ceadc707c185c0 1-39
+apps/web/src/features/tasks/EventsView.tsx
+  s_9155b83c287f17::t_788d9eb36cd00b 1-7,166-172,190-200,203,212,221,223,386
+  s_9155b83c287f17::t_4d59da922050ef 384-385
+  s_9155b83c287f17::t_a5c5816f66105f 224-233
+apps/web/web-contracts.json
+  s_9155b83c287f17::t_c8d55a28858e7f 30
+  s_9155b83c287f17::t_8a198f559fbc69 29,31-33
+apps/web/src/lib/api/generated/contracts/api-complete-step-path.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/fixtures/api-complete-step-request.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1
+apps/web/src/lib/api/generated/operations.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1051-1199,1944-1972
+apps/web/src/features/tasks/TaskInspectorAssetsPanel.tsx
+  s_9155b83c287f17::t_788d9eb36cd00b 765-775,777-785
+  s_9155b83c287f17::t_0ed59dbe1a15f2 550
+  s_9155b83c287f17::t_eb687a5a563a8d 294-311,457,463,713-721,739-741,743-744,754-764
+apps/web/src/lib/api/generated/fixtures/api-remove-step-headers.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-4
+apps/web/src/lib/api/generated/schemas/api-update-step-path.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-19
+apps/web/tests/maintenance.spec.ts
+  s_9155b83c287f17::t_95f0d24d32cb81 54
+  s_9155b83c287f17::t_35b1c2c3b55528 78
+apps/web/src/lib/api/generated/contracts.json
+  s_9155b83c287f17::t_c8d55a28858e7f 722-911
+apps/web/src/app/shell/project-navigation.tsx
+  s_9155b83c287f17::t_a482387f40da60 1-10,12-13,15-30
+  s_9155b83c287f17::t_1d72c856e11101 31-33,35-37
+apps/web/tests/health.spec.ts
+  s_9155b83c287f17::t_35b1c2c3b55528 50,126,139
+apps/web/src/components/domain/status.tsx
+  s_9155b83c287f17::t_9281368dc5e036 1-12
+apps/web/src/lib/api/generated/fixtures/api-skip-step-headers.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-5
+apps/web/src/features/tasks/ExplorerPage.logic.ts
+  s_9155b83c287f17::t_a482387f40da60 9
+apps/web/src/lib/api/generated/schemas/api-reopen-step-response.schema.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-455
+apps/web/src/lib/api/generated/fixtures/api-reopen-step-headers.invalid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-4
+apps/web/src/features/tasks/TaskInspectorRelationsPanel.test.tsx
+  s_9155b83c287f17::t_a482387f40da60 2
+  s_9155b83c287f17::t_9972ef8eeb54c9 1
+apps/web/src/lib/api/generated/contracts/api-reopen-step-path.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/contracts/api-skip-step-path.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/fixtures/api-skip-step-response.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-32
+apps/web/src/lib/api/generated/contracts/api-update-step-request.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/fixtures/api-update-step-response.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-32
+apps/web/tests/settings.spec.ts
+  s_9155b83c287f17::t_95f0d24d32cb81 34,74,89,109,153,158,164-165
+  s_9155b83c287f17::t_9525f38b9ad066 15
+apps/web/src/features/tasks/TaskMapView.tsx
+  s_9155b83c287f17::t_1884567aad6503 393,396
+  s_9155b83c287f17::t_788d9eb36cd00b 539,549-553,555
+  s_9155b83c287f17::t_2aa7b09b7f5748 548
+  s_9155b83c287f17::t_972dcb1b35a963 554
+  s_9155b83c287f17::t_4fb65fd356f7b3 556-557
+  s_9155b83c287f17::t_f4a65b056e9bf2 448-484,542,605-608
+apps/web/AGENTS.md
+  s_9155b83c287f17::t_275bab7b0a1f09 26
+apps/web/src/application/query/merge-event-batch.ts
+  s_9155b83c287f17::t_788d9eb36cd00b 1-52
+apps/web/src/lib/api/generated/contracts/api-reopen-step-response.ts
+  s_9155b83c287f17::t_c8d55a28858e7f 1-17
+apps/web/src/lib/api/generated/fixtures/api-complete-step-headers.valid.json
+  s_9155b83c287f17::t_c8d55a28858e7f 1-5
+apps/web/src/adapters/host/explorer-read-model.ts
+  s_9155b83c287f17::t_76141984af2395 122-123,126,129,132
+apps/web/src/adapters/host/generated-contracts.test.ts
+  s_9155b83c287f17::t_d3a42d2677cfcb 75
+apps/web/src/adapters/host/task-mutations.ts
+  s_9155b83c287f17::t_1205c89f37632b 1-20,319-343,394
+apps/web/src/application/data/explorer-read-model.ts
+  s_9155b83c287f17::t_c061bd49af446e 871-876
+apps/web/src/application/data/task-mutations.ts
+  s_9155b83c287f17::t_f970f604892040 166,278-290
+apps/web/src/application/i18n.ts
+  s_9155b83c287f17::t_205cdcf6946626 71,346
+apps/web/src/application/query/use-deferred-read.ts
+  s_9155b83c287f17::t_bb36cf79c8f3c8 1-40
+apps/web/src/application/tasks/board-model.ts
+  s_9155b83c287f17::t_8e9137d216120f 56
+apps/web/src/application/tasks/task-inspector-mutation-controller.ts
+  s_9155b83c287f17::t_75c97f8081503d 1,206,273,668-672,794
+apps/web/src/application/tasks/task-inspector-mutation-state.ts
+  s_9155b83c287f17::t_7f1088f6b4c73c 1,26,69,150,180
+apps/web/src/application/tasks/use-bulk-completion.test.ts
+  s_9155b83c287f17::t_4b151f73764681 1-29
+apps/web/src/bootstrap.tsx
+  s_9155b83c287f17::t_b6d5246cca5ed3 7
+apps/web/src/components/layout/detail-sheet.tsx
+  s_9155b83c287f17::t_fe89d891571c27 11-13,28-29,42,66,74,88,97
+apps/web/src/components/layout/overlays.css
+  s_9155b83c287f17::t_76f223ef9a741a 177-179
+apps/web/src/features/maintenance/MaintenancePage.tsx
+  s_9155b83c287f17::t_4ec12cafafd178 483,487,626-708
+apps/web/src/features/settings/settings.css
+  s_9155b83c287f17::t_cccdde007c7f5b 1-74
+apps/web/src/features/tasks/BoardTaskMutations.test.tsx
+  s_9155b83c287f17::t_cd711300f1829d 5-6,56-69
+apps/web/src/features/tasks/TaskInspectorEditActions.tsx
+  s_9155b83c287f17::t_5bad6eb6466471 1,188,190,192,198,200,204,207-217
+apps/web/src/features/tasks/TaskMapChunkBoundary.tsx
+  s_9155b83c287f17::t_b391704161ff4c 1-10
+apps/web/src/features/tasks/TaskMapView.logic.ts
+  s_9155b83c287f17::t_5dd05a4ad79121 88
+apps/web/src/features/tasks/activity.css
+  s_9155b83c287f17::t_e66a183aac778a 1-130
+apps/web/src/features/tasks/task-list-model.ts
+  s_9155b83c287f17::t_b96738faf088e0 1-2,36
+apps/web/src/features/tasks/task-table.test.tsx
+  s_9155b83c287f17::t_1515be3536ffee 1-24
+apps/web/src/features/tasks/task-work-content.tsx
+  s_9155b83c287f17::t_bbf23ee46790c7 1-30
+apps/web/src/platform/preferences/preferences.ts
+  s_9155b83c287f17::t_e6c5ef54814f03 127
+apps/web/src/styles/paper.tokens.css
+  s_9155b83c287f17::t_56be26ec440703 99-100
+apps/web/tests/a11y-proof-support.ts
+  s_9155b83c287f17::t_3d7f3541a51b72 74,147
+apps/web/tests/paper-workspace.spec.ts
+  s_9155b83c287f17::t_a849681fa11b30 1-37
+apps/web/tests/runtime-bootstrap.spec.ts
+  s_9155b83c287f17::t_aa9102914ec031 34
+scripts/a11y-visual-proof-09c.sh
+  s_9155b83c287f17::t_702d92440e75ae 475,507
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8602d1fc5e8504e1bdc6fb5d95a2285ca63cc2a9",
+  "prompts": {},
+  "sessions": {
+    "s_9155b83c287f17": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a337-3cb1-7fb3-8ea9-7968548c84e5",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

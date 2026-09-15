@@ -4,7 +4,7 @@ import { StrictMode, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 
 import App from "./app/app"
-import styles from "./app/shell/boundary.module.css"
+import styles from "./components/layout/boundary.module.css"
 import { WebRuntimeProvider } from "./lib/runtime-provider"
 import {
   loadWebRuntimeConfig,

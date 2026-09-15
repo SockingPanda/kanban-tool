@@ -38,20 +38,10 @@ const expectedKeyboardLabels = [
 ] as const
 
 const manualAxeDispositions: Record<string, AxeIncompleteDisposition> = {
-  "shell.board-ready:color-contrast": {
+  'map.ready:color-contrast': {
     reviewed: true,
-    result: "manual-pass",
-    rationale: "Axe 4.12 reports a geometry-only elmPartiallyObscured check; observed board headings/count/empty status nodes have computed foreground #171717 or #525252 on opaque #ffffff, ratios 17.93:1 or 7.81:1, and no computed error.",
-  },
-  "board.ready:color-contrast": {
-    reviewed: true,
-    result: "manual-pass",
-    rationale: "Axe 4.12 reports a geometry-only elmPartiallyObscured check; observed board headings/count/empty status nodes have computed foreground #171717 or #525252 on opaque #ffffff, ratios 17.93:1 or 7.81:1, and no computed error.",
-  },
-  "map.ready:color-contrast": {
-    reviewed: true,
-    result: "manual-pass",
-    rationale: "Axe 4.12 classifies the visible − and ↺ glyphs as nonBmp; both enabled buttons expose the exact accessible names 缩小关系图 and 重置关系图缩放, with computed #171717 on opaque #ffffff at 12.16px/400 and a 17.93:1 ratio.",
+    result: 'manual-pass',
+    rationale: 'Axe 将缩放控件的 −、↺ 判为 nonBmp。两个按钮分别具有“缩小关系图”和“重置关系图缩放”的可访问名称；Chromium/Firefox 实测文字 #39342d、背景 #fffcf5、13px/400、对比度 12.03:1、opacity 1。下方证据 gate 继续逐节点校验计算结果与至少 4.5:1，不豁免其他规则或页面。',
   },
 }
 
@@ -67,7 +57,7 @@ function browserContextMatchesExpected(context: BrowserContextObservation): bool
     && !context.color_scheme_dark
     && context.reduced_motion_reduce
     && context.theme_state === "system"
-    && context.astryx_theme === "neutral"
+    && context.resolved_theme === "light"
 }
 
 async function goto(page: Page, path: string, ready: string): Promise<void> {
@@ -138,13 +128,14 @@ test.afterAll(async ({ browser }, testInfo) => {
 test("shell, board and settings keep landmarks and visible keyboard focus", async ({ page }) => {
   await goto(page, "/app/boards/default/board", "board-view")
   await audit(page, "shell.board-ready")
-  await expectFocusVisible(page, "shell.skip-link", keyboardEvidence, page.getByRole("link", { name: "跳转到主要内容" }))
-  await page.getByRole("link", { name: "跳转到主要内容" }).press("Enter")
-  await expect(page.locator("#astryx-app-shell-main")).toBeFocused()
+  await expectFocusVisible(page, "shell.skip-link", keyboardEvidence, page.getByRole("link", { name: "跳到主要内容" }))
+  await page.getByRole("link", { name: "跳到主要内容" }).press("Enter")
+  await expect(page.locator("#main-content")).toBeFocused()
   await expectFocusVisible(page, "shell.settings-nav", keyboardEvidence, page.getByTestId("nav-settings"))
   await page.getByTestId("nav-settings").click()
-  await expect(page).toHaveURL(/\/app\/settings$/)
+  await expect(page.getByRole("dialog", { name: "设置", exact: true })).toBeVisible()
   await expect(page.getByTestId("settings-page")).toBeVisible()
+  await page.getByText("外观与语言", { exact: true }).click()
   await audit(page, "settings.ready")
   await expectFocusVisible(page, "settings.theme", keyboardEvidence, page.getByTestId("appearance-theme"))
   await expectFocusVisible(page, "settings.actor", keyboardEvidence, page.getByTestId("identity-actor"))
@@ -153,7 +144,7 @@ test("shell, board and settings keep landmarks and visible keyboard focus", asyn
 test("board list and map routes expose keyboard-reachable task surfaces", async ({ page }) => {
   await goto(page, "/app/boards/default/board", "board-view")
   await audit(page, "board.ready")
-  const seedTitle = page.getByRole("button", { name: "A11y Seed Task", exact: true }).first()
+  const seedTitle = page.getByRole("button", { name: /A11y Seed Task/ }).first()
   await expect(seedTitle).toBeVisible()
   await expectFocusVisible(page, "board.seed-title", keyboardEvidence, seedTitle)
   await seedTitle.press("Enter")
@@ -182,7 +173,7 @@ test("board list and map routes expose keyboard-reachable task surfaces", async 
   await page.goto("/app/boards/default/list", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("task-list")).toBeVisible()
   await audit(page, "list.ready")
-  await expectFocusVisible(page, "list.seed-title", keyboardEvidence, page.getByRole("button", { name: "A11y Seed Task", exact: true }).first())
+  await expectFocusVisible(page, "list.seed-title", keyboardEvidence, page.getByRole("button", { name: /A11y Seed Task/ }).first())
 
   await page.goto("/app/boards/default/map?filter=all", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("task-map")).toBeVisible()
@@ -192,16 +183,13 @@ test("board list and map routes expose keyboard-reachable task surfaces", async 
 
 test("inspector close returns focus and events recover after offline without refresh", async ({ page, browser }) => {
   await goto(page, "/app/boards/default/list", "task-list")
-  const seedOpener = page.getByRole("button", { name: "A11y Seed Task", exact: true })
+  const seedOpener = page.getByRole("button", { name: /A11y Seed Task/ })
   await expectFocusVisible(page, "inspector.opener", keyboardEvidence, seedOpener)
   await seedOpener.click()
   await expect(page.getByTestId("task-inspector")).toBeVisible()
   await audit(page, "inspector.ready")
-  await page.getByTestId("task-inspector").getByRole("button", { name: "编辑任务" }).click()
-  await expect(page.getByTestId("inspector-edit-form")).toBeVisible()
+  await page.getByRole("textbox", { name: "任务标题", exact: true }).focus()
   await audit(page, "inspector.edit")
-  await page.getByTestId("inspector-edit-form").getByRole("button", { name: "取消" }).click()
-  await expect(page.getByTestId("inspector-edit-form")).toHaveCount(0)
   await page.getByRole("button", { name: "关闭任务检查器" }).click()
   await expect(seedOpener).toBeFocused()
 
@@ -240,7 +228,7 @@ test("health and maintenance confirmation remain accessible with keyboard", asyn
   const confirmation = page.getByRole("alertdialog")
   await expect(confirmation).toBeVisible()
   await audit(page, "maintenance.confirm")
-  await expect(confirmation.getByRole("button", { name: "取消" })).toBeFocused()
+  await expectFocusVisible(page, "maintenance.cancel", [], confirmation.getByRole("button", { name: "取消" }))
   await page.keyboard.press("Escape")
   await expect(confirmation).toHaveCount(0)
   await expect(opener).toBeFocused()

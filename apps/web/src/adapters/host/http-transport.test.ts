@@ -74,17 +74,17 @@ describe("same-origin Web HTTP transport", () => {
     const fetcher = vi.fn<typeof fetch>(async () => sameOriginResponse(JSON.stringify({ data: { ok: true } }), {
       status: 200,
       headers: { "content-type": "application/json" },
-    }, "https://kanban.test/api/v1/boards/b_1/label-ontology/actions"))
+    }, "https://kanban.test/api/v1/tasks/t_1/transitions/block"))
     const transport = createHttpTransport(runtime, {
       fetcher,
       documentBaseURI: "https://kanban.test/app/",
     })
 
-    await expect(transport.request({ method: "POST", path: "/api/v1/boards/b_1/label-ontology/actions", body: { reason: "keep" } })).resolves.toMatchObject({
+    await expect(transport.request({ method: "POST", path: "/api/v1/tasks/t_1/transitions/block", body: { reason: "keep" } })).resolves.toMatchObject({
       payload: { data: { ok: true } },
     })
     expect(fetcher).toHaveBeenCalledWith(
-      "https://kanban.test/__kb_api__/api/v1/boards/b_1/label-ontology/actions",
+      "https://kanban.test/__kb_api__/api/v1/tasks/t_1/transitions/block",
       expect.objectContaining({
         body: JSON.stringify({ reason: "keep" }),
         headers: { Accept: "application/json", "Content-Type": "application/json" },

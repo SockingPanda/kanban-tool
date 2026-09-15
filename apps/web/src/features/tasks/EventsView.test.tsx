@@ -41,11 +41,11 @@ describe("EventsView", () => {
     expect(error).toContain('data-testid="events-error"')
     expect(offline).toContain('data-testid="events-offline"')
     expect(stale).toContain('data-testid="events-degraded-stale"')
-    expect(empty).toContain("<h2")
+    expect(empty).toContain("<h1")
     expect(error).toContain("<h2")
     expect(offline).toContain("<h2")
-    expect(empty).not.toContain("<h1")
-    expect(stale).not.toContain("<h1")
+    expect(empty).toContain("项目动态")
+    expect(stale).toContain("项目动态")
   })
 
   test("renders machine tokens, accessible ISO time, and keyboard task links", () => {

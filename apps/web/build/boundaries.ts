@@ -25,6 +25,7 @@ const allowed: Record<string, readonly string[]> = {
   domain: ['domain', 'lib'],
   components: ['components', 'platform', 'domain'],
   platform: ['platform', 'domain', 'lib'],
+  adapters: ['adapters', 'application', 'domain', 'platform', 'lib'],
 };
 
 export function checkBoundaries(sources: ReadonlyMap<string, string>): string[] {
@@ -35,8 +36,10 @@ export function checkBoundaries(sources: ReadonlyMap<string, string>): string[] 
     const base = specifier.startsWith('@/') ? specifier.slice(2) : path.posix.normalize(path.posix.join(path.posix.dirname(from), specifier));
     return [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`].find(file => sources.has(file));
   }
+  const permitted = new Map(Object.entries(allowed).map(([layer, targets]) => [layer, new Set(targets)]));
   for (const [file, source] of sources) {
     const layer = file.split('/')[0];
+    const targetLayers = permitted.get(layer);
     const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const dependencies = new Set<string>();
     function visit(node: ts.Node) {
@@ -51,8 +54,9 @@ export function checkBoundaries(sources: ReadonlyMap<string, string>): string[] 
         }
       }
       if (['features', 'domain', 'components'].includes(layer)) {
-        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ['fetch', 'WebSocket', 'EventSource', 'XMLHttpRequest'].includes(node.expression.text)
-          || ts.isNewExpression(node) && ts.isIdentifier(node.expression) && ['WebSocket', 'EventSource', 'XMLHttpRequest'].includes(node.expression.text)
+        const expression = ts.isCallExpression(node) || ts.isNewExpression(node) ? node.expression : undefined;
+        const operation = expression && (ts.isIdentifier(expression) ? expression.text : ts.isPropertyAccessExpression(expression) ? expression.name.text : undefined);
+        if (operation && ['fetch', 'WebSocket', 'EventSource', 'XMLHttpRequest', 'sendBeacon'].includes(operation)
           || ts.isIdentifier(node) && ['localStorage', 'sessionStorage', 'indexedDB'].includes(node.text)) violations.push(`${file}: 功能和展示层不能直接读写网络或存储`);
       }
       ts.forEachChild(node, visit);
@@ -61,7 +65,7 @@ export function checkBoundaries(sources: ReadonlyMap<string, string>): string[] 
     graph.set(file, [...dependencies]);
     for (const target of dependencies) {
       const targetLayer = target.split('/')[0];
-      if (allowed[layer] && !allowed[layer].includes(targetLayer)) violations.push(`${file} -> ${target}: 反向依赖`);
+      if (targetLayers && !targetLayers.has(targetLayer)) violations.push(`${file} -> ${target}: 反向依赖`);
       if (targetLayer === 'features' && (layer !== 'features' || target.split('/')[1] !== file.split('/')[1]) && !/^features\/[^/]+\/index\.tsx?$/.test(target)) violations.push(`${file} -> ${target}: 跨功能必须通过公开出口`);
     }
   }

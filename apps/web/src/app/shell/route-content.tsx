@@ -1,111 +1,62 @@
-import { useEffect, useState } from 'react';
-import { Button } from "../../components/ui/button";
-import { usePreferences } from "../../platform/preferences/use-preferences";
-import { createTranslator } from "../../application/i18n";
-import { BrowserConnectivityProvider } from "../../platform/connectivity/browser-connectivity-provider";
-import { ExplorerPage } from "../../features/tasks/index";
-import { HealthPage } from "../../features/health/index";
-import { MaintenancePage } from "../../features/maintenance/index";
-import { SettingsPage as OperatorSettingsPage } from "../../features/settings/index";
-import type { ProductShellProps } from "./shell-contract";
-import styles from "./boundary.module.css";
-export function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onReconnect, onRetry, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ProductShellProps) {
-  const preferences = usePreferences()
-  const t = createTranslator(preferences.locale)
-  const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
-  const effectiveBoundary = boundary ?? (isOnline ? "ready" : "offline")
+import { useEffect, useState, type ReactNode } from 'react';
+import { Button } from '../../components/ui/button';
+import { usePreferences } from '../../platform/preferences/use-preferences';
+import { createTranslator, type MessageKey } from '../../application/i18n';
+import { BrowserConnectivityProvider } from '../../platform/connectivity/browser-connectivity-provider';
+// 应用组合通过功能公共接口，避免依赖私有实现；最小复现见 build/react-doctor-regressions.test.ts。
+// react-doctor-disable-next-line react-doctor/no-barrel-import
+import { ExplorerPage } from '../../features/tasks/index';
+import { HealthPage } from '../../features/health/index';
+import { MaintenancePage } from '../../features/maintenance/index';
+import { SettingsPage } from '../../features/settings/index';
+import type { ProductShellProps, ShellBoundary } from './shell-contract';
+import styles from '../../components/layout/boundary.module.css';
 
+type Boundary = { id: string; title: MessageKey; description?: MessageKey; detail?: ReactNode; path?: string; alert?: boolean; retry?: boolean };
+function routeBoundary(route: ProductShellProps['route'], boundary: ShellBoundary, error: ReactNode): Boundary | null {
+  if (boundary === 'loading') return { id: 'shell-loading', title: 'loading' };
+  if (boundary === 'error') return { id: 'shell-error', title: 'error', description: 'errorDescription', detail: error, alert: true, retry: true };
+  if (boundary === 'offline' && !['board', 'health', 'maintenance', 'settings'].includes(route.kind)) return { id: 'shell-offline', title: 'offline', description: 'offlineDescription' };
+  if (route.kind === 'home') return { id: 'shell-home-loading', title: 'homeLoading', description: 'homeLoadingDescription' };
+  if (route.kind === 'not-found') return { id: 'shell-not-found', title: 'notFound', description: 'notFoundDescription', path: route.pathname, alert: true };
+  if (route.kind === 'error') return { id: 'shell-route-error', title: 'invalidBoardSlug', description: 'invalidBoardSlugDescription', path: route.pathname, alert: true };
+  return null;
+}
+function useOnline() {
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true)
-    const handleOffline = () => setIsOnline(false)
-    window.addEventListener("online", handleOnline)
-    window.addEventListener("offline", handleOffline)
-    return () => {
-      window.removeEventListener("online", handleOnline)
-      window.removeEventListener("offline", handleOffline)
-    }
-  }, [])
-
-  const ownsLiveBoardRoute = route.kind === "home"
-  // BoardLive owns loading, empty, stale and offline presentation. Keep the
-  // child mounted before generic boundaries; for board routes it remains a
-  // hidden session owner and Explorer owns the visible route content below.
-  if (ownsLiveBoardRoute && children) {
-    return <BrowserConnectivityProvider online={isOnline}>{children}</BrowserConnectivityProvider>
-  }
-
-  if (effectiveBoundary === "loading") {
-    return (
-      <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-loading">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
-        <h1>{t("loading")}</h1>
-      </section>
-    )
-  }
-  if (effectiveBoundary === "error") {
-    return (
-      <section className={styles.boundary} role="alert" data-testid="shell-error">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
-        <h1>{t("error")}</h1>
-        <p>{error ?? t("errorDescription")}</p>
-        {onRetry ? <Button label={t("retry")} variant="secondary" onClick={onRetry} /> : null}
-      </section>
-    )
-  }
-  // Explorer owns stale/offline presentation for every board view so a last
-  // usable snapshot and the current route remain mounted while connectivity
-  // drops. The hidden BoardLive session still owns recovery and retry.
-  // Operator pages retain their own stale/error/retry state while offline; a
-  // generic shell boundary would unmount their last snapshot.
-  if (effectiveBoundary === "offline" && route.kind !== "board" && route.kind !== "health" && route.kind !== "maintenance" && route.kind !== "settings") {
-    return (
-      <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
-        <h1>{t("offline")}</h1>
-        <p>{t("offlineDescription")}</p>
-      </section>
-    )
-  }
-
-  if (route.kind === "home") {
-    return (
-      <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-home-loading">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
-        <h1>{t("homeLoading")}</h1>
-        <p>{t("homeLoadingDescription")}</p>
-      </section>
-    )
-  }
-  if (route.kind === "not-found") {
-    return (
-      <section className={styles.boundary} role="alert" data-testid="shell-not-found">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
-        <h1>{t("notFound")}</h1>
-        <p>{t("notFoundDescription")}</p>
-        <code translate="no">{route.pathname}</code>
-      </section>
-    )
-  }
-  if (route.kind === "error") {
-    return (
-      <section className={styles.boundary} role="alert" data-testid="shell-route-error">
-        <p className={styles.eyebrow}>{t("routeBoundary")}</p>
-        <h1>{t("invalidBoardSlug")}</h1>
-        <p>{t("invalidBoardSlugDescription")}</p>
-        <code translate="no">{route.pathname}</code>
-      </section>
-    )
-  }
-  const hiddenSession = children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null
-  if (route.kind === "settings") return <>{hiddenSession}<OperatorSettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} /></>
-  if (route.kind === "health") return <>{hiddenSession}<HealthPage runtime={runtime} /></>
-  if (route.kind === "maintenance") return <>{hiddenSession}<MaintenancePage runtime={runtime} boardSlug={route.boardSlug} /></>
-  if (route.kind === "board") return (
-    <>
-      {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
-      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} boardRevision={boardRevision} inspectorRevision={inspectorRevision} runsRevision={runsRevision} eventsRefreshRevision={eventsRefreshRevision} eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />
-    </>
-  )
-
-  return null
+    const connected = () => setOnline(true), disconnected = () => setOnline(false);
+    window.addEventListener('online', connected);
+    window.addEventListener('offline', disconnected);
+    return () => { window.removeEventListener('online', connected); window.removeEventListener('offline', disconnected); };
+  }, []);
+  return online;
+}
+function BoundaryPanel({ boundary, onRetry }: { boundary: Boundary; onRetry?: () => void }) {
+  const { locale } = usePreferences();
+  const t = createTranslator(locale);
+  const description = boundary.detail ?? (boundary.description ? t(boundary.description) : undefined);
+  return <section className={styles.boundary} role={boundary.alert ? 'alert' : 'status'} aria-live="polite" data-testid={boundary.id}>
+    <p className={styles.eyebrow}>{t('routeBoundary')}</p><h1>{t(boundary.title)}</h1>
+    {description && <p>{description}</p>}{boundary.path && <code translate="no">{boundary.path}</code>}
+    {boundary.retry && onRetry && <Button label={t('retry')} variant="secondary" onClick={onRetry} />}
+  </section>;
+}
+function CurrentRoute({ props, online }: { props: ProductShellProps; online: boolean }) {
+  const { route, runtime, canonicalBoardSlug, onNavigate, onReconnect, taskMutations, onVisibleCanonicalReloadChange, syncStatus, eventsBatch, invalidationRevision = 0 } = props;
+  if (route.kind === 'settings') return <SettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} />;
+  if (route.kind === 'health') return <HealthPage runtime={runtime} />;
+  if (route.kind === 'maintenance') return <MaintenancePage runtime={runtime} boardSlug={route.boardSlug} />;
+  if (route.kind !== 'board') return null;
+  return <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={online} invalidationRevision={invalidationRevision}
+    boardRevision={props.boardRevision ?? invalidationRevision} inspectorRevision={props.inspectorRevision ?? invalidationRevision}
+    runsRevision={props.runsRevision ?? invalidationRevision} eventsRefreshRevision={props.eventsRefreshRevision ?? invalidationRevision}
+    eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />;
+}
+export function RouteContent(props: ProductShellProps) {
+  const online = useOnline();
+  if (props.route.kind === 'home' && props.children) return <BrowserConnectivityProvider online={online}>{props.children}</BrowserConnectivityProvider>;
+  const boundary = routeBoundary(props.route, props.boundary ?? (online ? 'ready' : 'offline'), props.error);
+  if (boundary) return <BoundaryPanel boundary={boundary} onRetry={props.onRetry} />;
+  return <>{props.children && <div hidden aria-hidden="true" data-testid="board-live-session">{props.children}</div>}<CurrentRoute props={props} online={online} /></>;
 }

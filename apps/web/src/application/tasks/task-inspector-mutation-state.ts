@@ -1,3 +1,4 @@
+import type { StepMutationIntent } from '../data/task-mutations';
 import type { AddTaskLabelIntent, CreateAttachmentIntent, CreateCommentIntent, CreateStepIntent, MarkExecutionPlanNotRequiredIntent, MutationRequestOptions, TaskMutationClient, TaskTransitionIntent, UpdateTaskIntent } from "../data/task-mutations";
 import type { AttachmentDownloadClient, DownloadedAttachment } from "../data/attachment-download";
 import type { ApiLabelSuggestionQueryContract } from "../../lib/api/generated/contracts/api-label-suggestion-query"
@@ -22,6 +23,7 @@ export type InspectorMutationOperation =
   | "transition"
   | "addDependency"
   | "removeDependency"
+  | "mutateStep"
   | "createStep"
   | "linkStep"
   | "markPlanNotRequired"
@@ -64,6 +66,7 @@ export function createTaskClaimTokenStore(initial?: Readonly<Record<string, stri
 /** The generated TaskMutationClient subset needed by the rendered Inspector writes. */
 export type InspectorTaskMutationClient = Pick<
   TaskMutationClient,
+  | "mutateStep"
   | "updateTask"
   | "transitionTask"
   | "addDependency"
@@ -144,6 +147,7 @@ export interface InspectorMutationOutcome {
 }
 
 export interface TaskInspectorMutationHandlers {
+  mutateStep(stepId: string, command: StepMutationIntent): Promise<InspectorMutationOutcome>
   saveTask(input: InspectorSaveTaskInput): Promise<InspectorMutationOutcome>
   transition(command: InspectorTransitionCommand): Promise<InspectorMutationOutcome>
   addDependency(parentTaskId: string): Promise<InspectorMutationOutcome>
@@ -173,6 +177,7 @@ export interface TaskInspectorMutationError {
 }
 
 export type TaskInspectorMutationRetryIntent =
+  | { readonly operation: "mutateStep"; readonly taskId: string; readonly stepId: string; readonly command: StepMutationIntent }
   | { readonly operation: "reload"; readonly taskId: string; readonly event?: TaskInspectorMutationCommitted }
   | { readonly operation: "saveTask"; readonly taskId: string; readonly input: InspectorSaveTaskInput }
   | { readonly operation: "transition"; readonly taskId: string; readonly command: InspectorTransitionCommand }

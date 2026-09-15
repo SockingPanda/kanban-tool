@@ -151,6 +151,7 @@
   border-top: 0
 }
 .task-group-heading>span {
+  color: var(--foreground);
   font-size: 9px;
   background: var(--border);
   border-radius: 4px;
@@ -756,3 +757,49 @@
 [data-mode=dark] .task-title-input {
   color: var(--foreground)
 }
+
+/* 列表保留原生表格语义，任务标题与状态使用共享领域控件。 */
+.paper-task-table { overflow-x: auto; border-radius: 6px; }
+.paper-task-table table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.paper-task-table th { color: var(--muted-foreground); background: var(--muted); font-size: 10px; text-align: left; font-weight: 500; white-space: nowrap; }
+.paper-task-table td, .paper-task-table th { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.paper-task-table tr:last-child td { border-bottom: 0; }
+.paper-task-table td:nth-child(2) { width: 100%; min-width: 180px; }
+.paper-task-row:hover { background: var(--muted); }
+.paper-task-row .task-main { width: 100%; min-height: 28px; }
+.paper-task-row td:not(:nth-child(2)) { white-space: nowrap; }
+.priority { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 10px; color: var(--muted-foreground); }
+.priority-bars { display: flex; align-items: end; gap: 2px; height: 12px; }
+.priority-bars i { width: 3px; background: currentColor; border-radius: 1px; }
+.priority-bars i:nth-child(1) { height: 4px; }
+.priority-bars i:nth-child(2) { height: 8px; }
+.priority-bars i:nth-child(3) { height: 12px; }
+.priority-p0 { color: var(--destructive); }
+.priority-p1 { color: var(--primary); }
+.priority-p2 .priority-bars i:last-child, .priority-p3 .priority-bars i:not(:first-child) { opacity: .2; }
+.status-icon { flex-shrink: 0; color: var(--muted-foreground); }
+.status-running { color: var(--primary); }
+.status-blocked { color: var(--destructive); }
+.status-done { color: var(--success, var(--primary)); }
+@media (max-width: 1100px) { .paper-task-table :is(td, th):nth-child(8) { display: none; } }
+@media (max-width: 760px) {
+  .paper-task-table :is(td, th):nth-child(n+3) { display: none; }
+  .paper-task-table td:nth-child(2) { min-width: 0; }
+  .paper-task-table .task-title-text { white-space: normal; }
+}
+
+.paper-pagination { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--muted-foreground); }
+.paper-pagination > span:first-of-type { flex: 1; }
+.task-extra-filters > summary, .paper-detail-options > summary { cursor: pointer; color: var(--muted-foreground); font-size: 11px; }
+.task-extra-filters > .form-grid { position: absolute; z-index: 5; background: var(--card); border: 1px solid var(--border); border-radius: var(--control-radius); padding: 16px; box-shadow: var(--shadow-overlay); max-width: calc(100vw - 40px); }
+.paper-detail-options { margin: 16px 0; }
+.paper-detail-options[open] > summary { margin-bottom: 12px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* 原生表格保留分组行的弹性布局与窄屏列隐藏规则。 */
+table.task-table { display:block; border-spacing:0; width:100%; }
+.task-table thead, .task-table tbody { display:block; }
+.task-table tr { width:100%; }
+.task-table th, .task-table td { padding:0; text-align:left; }
+.task-table tr > td[colspan] { display:block; }
+.step-title { flex:1; border:0; background:none; color:inherit; text-align:left; cursor:pointer; }

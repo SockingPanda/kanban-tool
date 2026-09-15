@@ -21,7 +21,7 @@ import { toBoardViewModel } from "../tasks/board-model"
 import { boardSyncStatusForTelemetry, subscribeBrowserConnectivity } from "./board-live-state"
 import {
   createBoardTaskClaimTokenStore,
-  type BoardTaskCanonicalReloadOptions,
+  type BoardTaskCanonicalReloadHandler,
   type BoardTaskMutationCommitted,
   type BoardTaskMutationSurface,
 } from "../tasks/task-mutation-state"
@@ -52,12 +52,12 @@ export interface BoardLiveProps {
   /** Report a committed mutation so the App can invalidate Explorer readers/navigation. */
   readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void
   /** Await visible Explorer readers after the canonical session has reloaded. */
-  readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => Promise<void> | void
+  readonly onCanonicalReload?: BoardTaskCanonicalReloadHandler
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string, source: WorkspaceDataSource): BoardReadResource {
   const transport = source.transport
-  const query = source.createBoardReadQuery(runtime, selector, { dependencies: { transport } })
+  const query = source.createBoardReadQuery(runtime, selector, { includeTasks: false, dependencies: { transport } })
   return {
     selector,
     transport,
@@ -148,15 +148,18 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
   const redirectedBoardRef = useRef<string | null>(null)
   const sessionHandleRef = useRef<BoardSessionHandle | null>(null)
   const sessionRetryRef = useRef<(() => void) | null>(null)
-  const claimTokenStoreRef = useRef(createBoardTaskClaimTokenStore())
+  const [claimTokenStore] = useState(createBoardTaskClaimTokenStore)
+  const claimTokenStoreRef = useRef(claimTokenStore)
   const claimTokenBoardRef = useRef<string | null>(null)
   const [retryVersion, setRetryVersion] = useState(0)
   const [state, setState] = useState<BoardViewState>({ kind: "loading" })
-  const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
+  const [syncSnapshot, setSyncSnapshot] = useState({ contextKey, status: 'connecting' as BoardSyncStatus })
+  const syncStatus = syncSnapshot.contextKey === contextKey ? syncSnapshot.status : 'connecting'
+  const setSyncStatus = useCallback((status: BoardSyncStatus) => setSyncSnapshot({ contextKey: activeContextRef.current, status }), [])
   const reportSyncStatus = useCallback((status: BoardSyncStatus) => {
     setSyncStatus(status)
     onSyncStatusChange?.(status)
-  }, [onSyncStatusChange])
+  }, [onSyncStatusChange, setSyncStatus])
 
   // This render-time fence closes the A → B gap before effects have a chance to run.
   useLayoutEffect(() => { activeContextRef.current = contextKey });
@@ -271,11 +274,8 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
       abort.abort()
       if (loadAbortRef.current === abort) loadAbortRef.current = null
     }
-  }, [contextKey, retryVersion, route.kind, routeBoardSlug, runtime, selector, source, translator])
+  }, [contextKey, retryVersion, route.kind, routeBoardSlug, runtime, selector, source, translator, setSyncStatus])
 
-  useEffect(() => {
-    setSyncStatus("connecting")
-  }, [contextKey])
 
   const contextState = stateContextKeyRef.current === contextKey ? state : null
   const visibleState = useMemo<BoardViewState>(() => {
@@ -323,9 +323,8 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
           return null
         },
         onCanonicalReload: async (options) => {
-          const canonical = await refreshCanonical()
-          await onCanonicalReload?.(options)
-          return canonical
+          const [canonical, visible] = await Promise.all([refreshCanonical(), onCanonicalReload?.(options)])
+          return visible ?? canonical
         },
         onMutationCommitted: (event) => onMutationCommitted?.({ ...event, boardSlug: mutationBoardSlug }),
       }
@@ -335,6 +334,8 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
   }, [createTaskMutationClient, mutationBoardSlug, onCanonicalReload, onMutationCommitted, preferences.actor, refreshCanonical, runtime])
 
   useEffect(() => {
+// 注册可释放的操作能力，cleanup 仅注销自己的实例；最小复现见 build/react-doctor-regressions.test.ts。
+// react-doctor-disable-next-line react-doctor/no-pass-live-state-to-parent
     onTaskMutationsChange?.(taskMutations)
     return () => onTaskMutationsChange?.(undefined, taskMutations)
   }, [onTaskMutationsChange, taskMutations])
@@ -345,7 +346,7 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
     if (slug === null) return
     if (redirectedBoardRef.current === slug) return
     redirectedBoardRef.current = slug
-    void Promise.resolve(onNavigate({ kind: "board", boardSlug: slug }, { replace: true })).catch(() => {
+    void Promise.resolve(onNavigate({ kind: "board", boardSlug: slug, view: "list" }, { replace: true })).catch(() => {
       redirectedBoardRef.current = null
     })
   }, [contextKey, onNavigate, route.kind, visibleBoardSlug, visibleStateKind])
@@ -419,7 +420,7 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
         sessionRetryRef.current = null
       }
     }
-  }, [canonicalBoardId, contextKey, onSessionTelemetry, route.kind, routeBoardSlug, runtime, selector, visibleStateKind])
+  }, [canonicalBoardId, contextKey, onSessionTelemetry, route.kind, routeBoardSlug, runtime, selector, setSyncStatus, visibleStateKind])
 
   useEffect(() => {
     const onOffline = () => reportSyncStatus("offline")
@@ -436,7 +437,7 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
     sessionRetryRef.current?.()
     retryRequestedRef.current = true
     setRetryVersion((version) => version + 1)
-  }, [])
+  }, [setSyncStatus])
 
   return { state: visibleState, messages: boardMessages, syncStatus: visibleState.kind === "ready" ? syncStatus : undefined, onRetry: retry, taskMutations }
 }

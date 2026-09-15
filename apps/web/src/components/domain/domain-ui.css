@@ -1,0 +1,107 @@
+/* Owned by components/domain. Paper light/dark only. */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px
+}
+.status-todo {
+  color: var(--muted-foreground)
+}
+.status-running {
+  color: var(--blue)
+}
+.status-blocked {
+  color: var(--amber)
+}
+.status-review {
+  color: var(--violet)
+}
+.status-done {
+  color: var(--green)
+}
+.status-cancelled {
+  color: var(--subtle)
+}
+.priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted-foreground)
+}
+.priority-bars {
+  height: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px
+}
+.priority-bars i {
+  width: 2px;
+  background: currentColor;
+  border-radius: 1px
+}
+.priority-bars i:nth-child(1) {
+  height: 4px
+}
+.priority-bars i:nth-child(2) {
+  height: 7px
+}
+.priority-bars i:nth-child(3) {
+  height: 10px
+}
+.priority-low .priority-bars i:not(:first-child) {
+  opacity: .2
+}
+.priority-medium .priority-bars i:last-child {
+  opacity: .2
+}
+.priority-high {
+  color: var(--amber)
+}
+.priority-urgent {
+  color: var(--red)
+}
+.module-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+  flex-shrink: 0
+}
+.color-emerald {
+  --item-color: var(--green);
+  --item-tint: var(--green-soft);
+  color: var(--green)
+}
+.color-violet {
+  --item-color: var(--violet);
+  --item-tint: var(--violet-soft);
+  color: var(--violet)
+}
+.color-amber {
+  --item-color: var(--amber);
+  --item-tint: var(--amber-soft);
+  color: var(--amber)
+}
+.color-slate {
+  --item-color: var(--muted-foreground);
+  --item-tint: var(--muted);
+  color: var(--muted-foreground)
+}
+.color-blue {
+  --item-color: var(--blue);
+  --item-tint: var(--blue-soft);
+  color: var(--blue)
+}
+.status-language {
+  font: 8px var(--mono);
+  letter-spacing: 1.8px
+}
+@media(max-width:950px) {
+.status-language {
+  display: none
+}
+}

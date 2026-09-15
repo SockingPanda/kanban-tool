@@ -1,0 +1,32 @@
+{
+  "data": {
+    "task_id": "t_project_parent",
+    "steps": [
+      {
+        "id": "st_fixture",
+        "parent_task_id": "t_project_parent",
+        "title": "Verify checks",
+        "body": "Cover plan guards",
+        "linked_task": null,
+        "position": 4096,
+        "required": false,
+        "status": "skipped",
+        "resolution_note": "not needed",
+        "resolved_by": "reviewer",
+        "resolved_at": 2,
+        "created_by": "codex",
+        "created_at": 1,
+        "updated_by": "reviewer",
+        "updated_at": 1
+      }
+    ],
+    "execution_plan": {
+      "board_id": "b_project",
+      "task_id": "t_project_parent",
+      "state": "planned",
+      "reason": null,
+      "updated_by": "system",
+      "updated_at": 0
+    }
+  }
+}

@@ -1,3 +1,10 @@
+import { mergeEventBatch } from '../../application/query/merge-event-batch';
+import './activity.css';
+import { PageHeader } from '../../components/layout/page-header';
+import { Button } from '../../components/ui/button';
+import { Icon } from '../../components/ui/icon';
+import { Badge } from '../../components/ui/badge';
+import { Tabs } from '../../components/ui/tabs';
 import { useLayoutEffect } from "react";
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 import { useEffect, useRef, useState, type ReactNode } from "react"
@@ -156,23 +163,13 @@ function machineToken(value: string | null | undefined, fallback: string): React
 
 function EventRow({ event, copy, locale, onSelectTask }: { readonly event: ExplorerEvent; readonly copy: EventsCopy; readonly locale: Locale; readonly onSelectTask?: (taskId: string) => void }) {
   const time = eventTimestamp(event.created_at, locale)
-  return (
-    <tr data-testid="event-row" data-event-id={event.event_id}>
-      <td>{machineToken(event.kind, copy.unknown)}</td>
-      <td>
-        {event.task_id && onSelectTask ? (
-          <button type="button" className={styles.tokenButton} data-task-opener={taskOpenerKey(event.task_id as string)} onClick={() => onSelectTask(event.task_id as string)}>
-            {machineToken(event.task_id, copy.unknown)}
-          </button>
-        ) : machineToken(event.task_id, copy.unknown)}
-      </td>
-      <td>{machineToken(event.run_id, copy.unknown)}</td>
-      <td>
-        <time dateTime={time.iso} title={time.iso}>{time.display}</time>
-      </td>
-      <td>{machineToken(event.actor, copy.unknown)}</td>
-    </tr>
-  )
+  return <article className="activity-feed-row activity-kind-task" data-testid="event-row" data-event-id={event.event_id}>
+    <span className="activity-icon"><Icon name={event.run_id ? 'play' : 'task'} size={18} /></span>
+    <div><div className="activity-feed-heading"><strong>{machineToken(event.kind, copy.unknown)}</strong><time dateTime={time.iso} title={time.iso}>{time.display}</time></div>
+      <p>{event.actor || copy.unknown}{event.run_id && <> · {machineToken(event.run_id, copy.unknown)}</>}</p>
+      {event.task_id && onSelectTask ? <Button size="sm" variant="ghost" icon="arrowUp" data-task-opener={taskOpenerKey(event.task_id)} onClick={()=>onSelectTask(event.task_id!)}>查看任务 {event.task_id}</Button> : machineToken(event.task_id, copy.unknown)}
+    </div>
+  </article>;
 }
 
 export function EventsPresentation({
@@ -190,10 +187,20 @@ export function EventsPresentation({
   const offline = !online || errorKind(error) === "offline"
   const scopedData = state.data && (taskId === null || state.data.taskId === taskId) ? state.data : null
 
-  if (!scopedData && (state.loading || !state.error) && !offline) {
+  if (!scopedData) return <EventsBoundary state={state} offline={offline} error={error} copy={copy} onRefresh={onRefresh} />;
+
+  const visibleEvents = kindFilter.trim().length === 0
+    ? scopedData.events
+    : scopedData.events.filter((event) => event.kind.toLocaleLowerCase().includes(kindFilter.trim().toLocaleLowerCase()))
+  const degraded = state.stale || Boolean(state.error) || offline
+
+  return <ActivityFeed locale={locale} kindFilter={kindFilter} loading={state.loading} error={state.error} degraded={degraded} offline={offline} scopedData={scopedData} visibleEvents={visibleEvents} onRefresh={onRefresh} onKindFilterChange={onKindFilterChange} onSelectTask={onSelectTask} />;
+}
+function EventsBoundary({state,offline,error,copy,onRefresh}:{state:EventsReadState;offline:boolean;error:Error|null;copy:EventsCopy;onRefresh:()=>void}) {
+  if ((state.loading || !state.error) && !offline) {
     return <section className={styles.state} data-testid="events-loading" role="status" aria-labelledby="events-loading-heading"><h2 id="events-loading-heading">{copy.title}</h2><p>{copy.loading}</p></section>
   }
-  if (!scopedData && offline) {
+  if (offline) {
     return (
       <section className={styles.state} data-testid="events-offline" role="status">
         <h2>{copy.offline}</h2>
@@ -202,7 +209,7 @@ export function EventsPresentation({
       </section>
     )
   }
-  if (!scopedData && error) {
+  if (error) {
     return (
       <section className={styles.state} data-testid="events-error" role="alert">
         <h2>{copy.error}</h2>
@@ -211,71 +218,19 @@ export function EventsPresentation({
       </section>
     )
   }
-  if (!scopedData) return null
+  return null
 
-  const visibleEvents = kindFilter.trim().length === 0
-    ? scopedData.events
-    : scopedData.events.filter((event) => event.kind.toLocaleLowerCase().includes(kindFilter.trim().toLocaleLowerCase()))
-  const degraded = state.stale || Boolean(state.error) || offline
-
-  if (scopedData.events.length === 0 && !state.error) {
-    return (
-      <section className={styles.events} data-testid="events-empty" aria-labelledby="events-heading">
-        <header className={styles.heading}>
-          <p className={styles.kicker}>{copy.kicker}</p>
-          <h2 id="events-heading">{copy.title}</h2>
-          <p className={styles.boardContext}>{copy.board} · {machineToken(scopedData.board.slug, copy.unknown)}</p>
-          <button type="button" onClick={onRefresh}>{copy.refresh}</button>
-        </header>
-        <FilterBar key={kindFilter} copy={copy} value={kindFilter} onChange={onKindFilterChange} />
-        <p className={styles.empty} role="status">{copy.empty}</p>
-      </section>
-    )
-  }
-
-  return (
-    <section className={styles.events} data-testid={degraded ? "events-degraded-stale" : "events-ready"} aria-labelledby="events-heading">
-      <header className={styles.heading}>
-        <div>
-          <p className={styles.kicker}>{copy.kicker}</p>
-          <h2 id="events-heading">{copy.title}</h2>
-          <p className={styles.boardContext}>{copy.board} · {machineToken(scopedData.board.slug, copy.unknown)}</p>
-          {taskId ? <p className={styles.boardContext}>{copy.task} · {machineToken(taskId, copy.unknown)}</p> : null}
-        </div>
-        <button type="button" data-testid="events-refresh" onClick={onRefresh} disabled={state.loading}>{copy.refresh}</button>
-      </header>
-      {degraded ? (
-        <div className={styles.notice} role={offline ? "status" : "alert"} data-testid="events-stale-notice">
-          <strong>{offline ? copy.offline : copy.degraded}</strong>
-          <span>{offline ? copy.offlineDescription : state.error ? copy.refreshError : copy.degradedDescription}</span>
-        </div>
-      ) : null}
-      {state.error && !offline ? <p className={styles.errorDetail} role="alert">{state.error.message}</p> : null}
-      <FilterBar copy={copy} value={kindFilter} onChange={onKindFilterChange} />
-      {visibleEvents.length === 0 ? (
-        <p className={styles.empty} role="status" data-testid="events-filter-empty">{copy.noMatches}</p>
-      ) : (
-        <div className={styles.tableRegion} role="region" aria-label={copy.title} tabIndex={0}>
-          <table className={styles.table}>
-            <caption className={styles.visuallyHidden}>{copy.title}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{copy.kind}</th>
-                <th scope="col">{copy.task}</th>
-                <th scope="col">{copy.run}</th>
-                <th scope="col">{copy.time}</th>
-                <th scope="col">{copy.actor}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleEvents.map((event) => <EventRow key={`${event.id}:${event.event_id}`} event={event} copy={copy} locale={locale} onSelectTask={onSelectTask} />)}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <p className={styles.count} aria-live="polite">{copy.count(visibleEvents.length)}</p>
-    </section>
-  )
+}
+function ActivityFeed({locale,kindFilter,loading,error,degraded,offline,scopedData,visibleEvents,onRefresh,onKindFilterChange,onSelectTask}: Pick<EventsPresentationProps,'locale'|'kindFilter'|'onRefresh'|'onKindFilterChange'|'onSelectTask'> & {loading:boolean;error:EventsReadState['error'];degraded:boolean;offline:boolean;scopedData:BoardEventsReadModel;visibleEvents:readonly ExplorerEvent[]}) {
+  const copy=copies[locale];
+  return <section className="activity-page" data-testid={degraded ? 'events-degraded-stale' : scopedData.events.length ? 'events-ready' : 'events-empty'}>
+    <PageHeader eyebrow="PROJECT ACTIVITY" title="项目动态" description="保留结构调整、任务变化与验证结论的来由。" actions={<Button size="sm" icon="reset" disabled={loading} data-testid="events-refresh" onClick={onRefresh}>{copy.refresh}</Button>} />
+    <div className="page-toolbar"><Tabs value={kindFilter === 'task.' ? 'task.' : ''} onChange={value=>onKindFilterChange?.(value)} items={[{value:'',label:'全部'},{value:'map.',label:'地图结构',disabled:true},{value:'task.',label:'任务'},{value:'cycle.',label:'迭代',disabled:true},{value:'module.',label:'模块',disabled:true},{value:'evidence.',label:'验证证据',disabled:true}]} /><Badge>{visibleEvents.length} 条记录</Badge></div>
+    {degraded && <div className="paper-banner" role={offline ? 'status' : 'alert'} data-testid="events-stale-notice"><strong>{offline ? copy.offline : copy.degraded}</strong><span>{offline ? copy.offlineDescription : error ? copy.refreshError : copy.degradedDescription}</span></div>}
+    <div className="activity-feed">{visibleEvents.map(event=><EventRow key={event.event_id} event={event} copy={copy} locale={locale} onSelectTask={onSelectTask} />)}</div>
+    {!visibleEvents.length && <p className="muted" role="status" data-testid={scopedData.events.length ? 'events-filter-empty' : undefined}>{scopedData.events.length ? copy.noMatches : copy.empty}</p>}
+    <details className="paper-detail-options"><summary>事件类型筛选</summary><FilterBar key={kindFilter} copy={copy} value={kindFilter} onChange={onKindFilterChange} /></details>
+  </section>;
 }
 
 function FilterBar({ copy, value, onChange }: { readonly copy: EventsCopy; readonly value: string; readonly onChange?: (value: string) => void }) {
@@ -426,56 +381,9 @@ function useBoardEventsRead(
 
   useEffect(() => {
     if (!batch) return
-    setState((current) => {
-      if (current.identityKey !== identityKey || !current.data || current.data.board.id !== batch.boardId || (taskId !== null && current.data.taskId !== taskId)) return current
-      try {
-        if (!Number.isSafeInteger(batch.nextAfter) || batch.nextAfter < 0) {
-          throw new ExplorerReadError("anomaly", "事件 batch 的 nextAfter 不是非负安全整数。")
-        }
-        let previousId = -1
-        let maxIncomingId = -1
-        for (const event of batch.events) {
-          if (!Number.isSafeInteger(event.id) || event.id <= 0 || event.id <= previousId) {
-            throw new ExplorerReadError("anomaly", "事件 batch 的 id 必须严格递增。")
-          }
-          if (event.board_id !== batch.boardId) {
-            throw new ExplorerReadError("anomaly", "事件 batch 越过当前 board scope。")
-          }
-          if (event.event_id.trim().length === 0) {
-            throw new ExplorerReadError("anomaly", "事件 batch 缺少 event_id。")
-          }
-          if (event.id > batch.nextAfter) {
-            throw new ExplorerReadError("anomaly", "事件 batch 的 id 不得超过 nextAfter。")
-          }
-          previousId = event.id
-          maxIncomingId = event.id
-        }
-        // A delayed batch can legitimately be older than the initial read;
-        // it is already covered by that snapshot and must be ignored.
-        if (batch.nextAfter <= current.data.meta.nextAfter) return current
-        if (batch.events.length === 0) {
-          if (batch.nextAfter !== current.data.meta.nextAfter) {
-            throw new ExplorerReadError("anomaly", "空事件 batch 不得推进 nextAfter。")
-          }
-        } else if (batch.nextAfter !== maxIncomingId) {
-          throw new ExplorerReadError("anomaly", "事件 batch 的 nextAfter 必须等于最后一个事件 id。")
-        }
-        // A batch may arrive while the initial read is still in flight. The
-        // effect is retried when that read installs its snapshot below.
-        const incoming = taskId === null ? batch.events : batch.events.filter((event) => event.task_id === taskId)
-        const events = mergeBoardEvents(current.data.events, incoming, batch.boardId)
-
-
-        return {
-          ...current,
-          data: { ...current.data, events, meta: { ...current.data.meta, count: events.length, nextAfter: Math.max(current.data.meta.nextAfter, batch.nextAfter) } },
-          error: null,
-          stale: false,
-        }
-      } catch (error) {
-        return { ...current, error: error instanceof Error ? error : new Error(String(error)), stale: true }
-      }
-    })
+// 合并 SSE 增量到异步快照，含单调游标和作用域校验，不能以最新 batch 替代历史快照；最小复现见 build/react-doctor-regressions.test.ts。
+// react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+    setState(current => mergeEventBatch(current, batch, identityKey, taskId));
   }, [batch, identityKey, state.data?.meta.nextAfter, taskId])
 
   const visibleState: EventsReadState = state.identityKey !== identityKey

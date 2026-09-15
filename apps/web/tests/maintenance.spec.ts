@@ -51,7 +51,7 @@ test.describe("Maintenance operator workflow", () => {
     await expect(page.getByTestId("maintenance-status")).toContainText("db_fixture")
     await expect(page.getByTestId("maintenance-legacy-import-unsupported")).toContainText("legacy")
     await expect(page.getByTestId("maintenance-doctor-submit")).toBeEnabled()
-    await expect(page.getByTestId("nav-maintenance")).toHaveAttribute("aria-current", "page")
+    await expect(page.getByTestId("nav-settings")).toHaveAttribute("aria-current", "page")
   })
 
   test("confirms backup with keyboard and renders server path plus checksum", async ({ page }) => {
@@ -75,6 +75,7 @@ test.describe("Maintenance operator workflow", () => {
     const dialog = page.getByRole("alertdialog")
     await expect(dialog).toBeVisible()
     await expect(dialog).toContainText("/requested/backup.sqlite")
+    await dialog.getByRole("button", { name: "取消", exact: true }).focus()
     await page.keyboard.press("Tab")
     await page.keyboard.press("Enter")
 

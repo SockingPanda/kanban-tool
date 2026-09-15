@@ -26,7 +26,10 @@ export type ExplorerFixtureOptions = {
 }
 
 export type ExplorerFixture = {
+  readonly readyTask: () => Record<string, unknown>
+  readonly setReadyTaskStatus: (status: TaskStatus) => void
   readonly apiRequests: string[]
+  readonly writeRequests: string[]
   readonly getSseConnectionCount: () => Promise<number>
   readonly waitForSseConnection: (afterCount: number) => Promise<void>
   readonly emitHeartbeat: () => Promise<void>
@@ -150,6 +153,7 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
   await installRuntimeFixture(page)
   await installPersistentSse(page)
   const apiRequests: string[] = []
+  const writeRequests: string[] = []
   const readyTask = fixtureTask("ready", 1, "Ready task", TASK_ID)
   const listTasks = [readyTask, fixtureTask("todo", 2, "Todo task")]
   const attachments: Record<string, unknown>[] = options.withAssets
@@ -171,6 +175,7 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
 
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url())
+    if (!["GET", "HEAD"].includes(route.request().method())) writeRequests.push(url.pathname);
     apiRequests.push(`${url.pathname}${url.search}`)
 
     if (url.pathname === "/api/v1/boards") {
@@ -211,7 +216,7 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       const offset = Number(url.searchParams.get("offset") ?? 0)
       const validStatus = status !== null && TASK_STATUSES.includes(status)
       const tasks = validStatus && offset === 0
-        ? [status === "ready" ? readyTask : fixtureTask(status, TASK_STATUSES.indexOf(status) + 1, `${status} task`)]
+        ? [...(status===readyTask.status?[readyTask]:[]),...(status!=="ready"?[fixtureTask(status,TASK_STATUSES.indexOf(status)+1,`${status} task`)]:[])]
         : []
       await fulfillJson(route, {
         data: { statuses: [{ status: validStatus ? status : "ready", tasks, page: { limit, offset, total: tasks.length } }] },
@@ -509,6 +514,11 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       return
     }
 
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/labels` && route.request().method() === "GET") {
+      await fulfillJson(route, { data: readyTask.labels });
+      return;
+    }
+
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/labels` && route.request().method() === "POST") {
       if (labelAddFailuresRemaining > 0) {
         labelAddFailuresRemaining -= 1
@@ -558,6 +568,9 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
 
   return {
     apiRequests,
+    writeRequests,
+    readyTask: () => ({...readyTask}),
+    setReadyTaskStatus: status => {Object.assign(readyTask,{status});},
     getSseConnectionCount: () => page.evaluate(() => (window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0),
     waitForSseConnection: (afterCount) => page.waitForFunction((count) => ((window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0) > count, afterCount),
     releaseList: () => releaseList(),

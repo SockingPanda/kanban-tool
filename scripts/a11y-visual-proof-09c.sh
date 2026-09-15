@@ -472,7 +472,7 @@ if [[ "$MODE" == "formal" ]]; then
       and .context.color_scheme_dark == false
       and .context.reduced_motion_reduce == true
       and .context.theme_state == "system"
-      and .context.astryx_theme == "neutral"
+      and .context.resolved_theme == "light"
     )
     and all(.keyboard[]; .focusVisible == true)
     and (.page_errors | length) == 0
@@ -504,7 +504,7 @@ if [[ "$MODE" == "formal" ]]; then
       and .context.color_scheme_dark == false
       and .context.reduced_motion_reduce == true
       and .context.theme_state == "system"
-      and .context.astryx_theme == "neutral"
+      and .context.resolved_theme == "light"
     )
     and (.failures | length) == 0
     and (.page_errors | length) == 0

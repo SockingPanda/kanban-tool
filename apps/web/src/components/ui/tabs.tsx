@@ -9,12 +9,13 @@ export function Tabs({ value, onChange, items, variant = 'line', label = '视图
     label: string;
     count?: number;
     icon?: IconName;
+    disabled?: boolean;
   }[];
   variant?: 'line' | 'segment';
   label?: string;
 }) {
-  return <div className={cn('ui-tabs', 'tabs-' + variant)} aria-label={label}>
-    {items.map(item => <button key={item.value} type="button" aria-pressed={value === item.value} className={value === item.value ? 'active' : ''} onClick={() => onChange(item.value)}>
+  return <div className={cn('ui-tabs', 'tabs-' + variant)} role="group" aria-label={label}>
+    {items.map(item => <button key={item.value} type="button" disabled={item.disabled} title={item.disabled ? "尚未接入" : undefined} aria-pressed={value === item.value} className={value === item.value ? 'active' : ''} onClick={() => onChange(item.value)}>
       {item.icon && <Icon name={item.icon} size={15} />}
       <span>
         {item.label}

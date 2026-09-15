@@ -2,8 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
 import type { BoardTaskMutationClient, BoardTaskMutationSurface } from "../../application/tasks/task-mutation-state"
-import { BoardView } from "./BoardView"
-import { englishBoardMessages, type BoardViewModel } from "../../domain/tasks/board"
+import { TaskBoard } from "./task-board"
+import { type BoardViewModel } from "../../domain/tasks/board"
 
 const model: BoardViewModel = {
   board: { id: "b_default", slug: "default", name: "Default" },
@@ -53,35 +53,17 @@ function surface(): BoardTaskMutationSurface {
   return { client, onCanonicalReload: vi.fn() }
 }
 
-describe("Board task mutation surface", () => {
-  test("renders create/edit affordances and legal transition actions", () => {
-    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} taskMutations={surface()} />)
-
-    expect(markup).toContain("新建任务")
-    expect(markup).toContain('data-testid="task-edit-t_1"')
-    expect(markup).toContain('data-testid="task-transition-promote-t_1"')
-    expect(markup).toContain('data-testid="task-transition-block-t_1"')
-    expect(markup).not.toContain('data-testid="task-transition-claim-t_1"')
-  })
-
-  test("exposes pointer and keyboard drag semantics without inline style", () => {
-    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} taskMutations={surface()} />)
-
-    expect(markup).toContain('draggable="true"')
-    expect(markup).toContain('aria-grabbed="false"')
-    expect(markup).toContain('aria-roledescription="可拖动任务卡片"')
-    expect(markup).toContain('data-testid="board-drop-target-ready"')
-    expect(markup).not.toContain("style=")
-  })
-
-  test("supports English mutation copy", () => {
-    const markup = renderToStaticMarkup(
-      <BoardView state={{ kind: "ready", model }} messages={englishBoardMessages} taskMutations={surface()} />,
-    )
-
-    expect(markup).toContain("Create task")
-    expect(markup).toContain("Edit task")
-    expect(markup).toContain("Grab task")
-    expect(markup).toContain('aria-roledescription="Draggable task card"')
-  })
-})
+describe('TaskBoard', () => {
+  test('使用四个展示列，保留每张卡片的真实状态', () => {
+    const markup = renderToStaticMarkup(<TaskBoard model={model} mutations={surface()} visibleIds={['t_1']} onSelectTask={vi.fn()} />);
+    for (const label of ['待开始','进行中','待验收','已完成']) expect(markup).toContain('aria-label="'+label+'"');
+    expect(markup).toContain('data-status="todo"');
+    expect(markup).toContain('draggable="true"');
+    expect(markup).toContain('aria-keyshortcuts="Space Escape ArrowLeft ArrowRight Enter"');
+    expect(markup).not.toContain('style=');
+  });
+  test('只展示当前查询页的任务', () => {
+    const markup = renderToStaticMarkup(<TaskBoard model={model} mutations={surface()} visibleIds={[]} onSelectTask={vi.fn()} />);
+    expect(markup).not.toContain('data-task-id="t_1"');
+  });
+});

@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useResolvedTheme } from '../../platform/preferences/use-resolved-theme';
+import { useEffect, useState } from 'react';
 import { Dialog } from "../../components/ui/dialog";
-import { IconButton } from "../../components/ui/button";
+import { Button, IconButton } from "../../components/ui/button";
+import { Icon } from '../../components/ui/icon';
 import { cn } from "../../components/ui/classes";
 import { usePreferences } from "../../platform/preferences/use-preferences";
 import { createTranslator } from "../../application/i18n";
@@ -9,15 +11,33 @@ import { RouteContent } from "./route-content";
 import type { ProductShellProps } from "./shell-contract";
 export type { ProductShellProps, ShellBoundary } from './shell-contract';
 
-const pageLabels: Record<string, string> = { board: '看板', list: '任务列表', map: '依赖图', runs: '运行记录', events: '项目动态', health: '健康', maintenance: '维护', settings: '设置' };
+const pageLabels: Record<string, string> = { board: '任务', list: '任务', map: '依赖图', runs: '运行记录', events: '项目动态', health: '健康', maintenance: '维护', settings: '设置' };
 
 export function ProductShell(props: ProductShellProps) {
   const { runtime, route, canonicalBoardSlug, onNavigate, syncStatus } = props;
   const preferences = usePreferences();
+  const resolvedTheme = useResolvedTheme();
   const t = createTranslator(preferences.locale);
   const [mobileNav, setMobileNav] = useState(false);
   const board = canonicalBoardSlug ?? ('boardSlug' in route ? route.boardSlug : undefined);
   const page = route.kind === 'board' ? route.view ?? 'board' : route.kind;
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (!board || event.defaultPrevented || document.querySelector('dialog:modal')) return;
+      const editing = event.target instanceof HTMLElement && (event.target.matches('input, textarea, select') || event.target.isContentEditable);
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        const input = document.querySelector<HTMLInputElement>('[data-testid="list-search"]');
+        if (input) input.focus();
+        else void onNavigate?.({kind:'board',boardSlug:board,view:'list',query:'focus=search'});
+      } else if (!editing && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        void onNavigate?.({kind:'board',boardSlug:board,view:'list',query:'create=1'});
+      }
+    };
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
+  }, [board, onNavigate]);
   return <div className={cn('app-shell paper-visual-shell', !preferences.sidebarExpanded && 'is-sidebar-collapsed')} data-testid="product-shell">
     <a href="#main-content" className="skip-link">跳到主要内容</a>
     <aside className="desktop-sidebar" id="desktop-project-navigation" data-testid="persistent-sidebar">
@@ -30,8 +50,10 @@ export function ProductShell(props: ProductShellProps) {
           <span className="breadcrumb-project">{board ?? 'Kanban Tool'}</span><span className="breadcrumb-separator">/</span>
           <strong>{pageLabels[page] ?? t('productName')}</strong>
         </div>
-        <div className="workspace-actions"><span className="project-privacy">个人工作空间</span>
-          <IconButton icon={preferences.theme === 'dark' ? 'sun' : 'moon'} label="切换浅色与深色" onClick={() => preferences.setTheme(preferences.theme === 'dark' ? 'light' : 'dark')} />
+        <div className="workspace-actions"><span className="project-privacy"><Icon name="lock" size={12} />个人项目</span>
+          <IconButton icon="search" label="搜索任务与能力" onClick={() => { if (board) void onNavigate?.({ kind: "board", boardSlug: board, view: "list", query: "focus=search" }); }} />
+          <Button variant="default" size="sm" icon="plus" disabled={!board} onClick={() => { if (board) void onNavigate?.({ kind: "board", boardSlug: board, view: "list", query: "create=1" }); }}>新建任务</Button>
+          <IconButton className="mobile-appearance" icon={resolvedTheme === 'dark' ? 'sun' : 'moon'} label="切换浅色与深色" onClick={() => preferences.setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')} />
         </div>
       </header>
       <main className="main-content" id="main-content" tabIndex={-1} aria-label={t('productName')}

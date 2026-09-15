@@ -23,7 +23,7 @@
 
 - `src/lib/api/generated/` 只由 `xtask web-contracts generate` 写入；手写 transport 从 `unknown` 经
   generated validator 得到 typed value，不使用 unchecked generic request 或 wire type assertion。
-- Map/ELK、Markdown 和其他重依赖按 route 或 inspector section lazy-load；共享模块使用直接 import，
+- Map/ELK 等重依赖按 route lazy-load；共享模块使用直接 import，
   不通过宽泛 barrel 扩大 bundle。
 - 每项功能的迁移包含状态、错误、键盘操作、浏览器测试及刷新证据。实现进度和审查发现写入
   Kanban task；功能边界和使用方式见本应用 README。

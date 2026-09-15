@@ -22,7 +22,7 @@ function expectStrictCsp(response: Pick<Response, "headers"> | null) {
   for (const directive of strictCspDirectives) expect(csp).toContain(directive)
 }
 
-test.describe("Astryx product shell", () => {
+test.describe("纸本应用壳层", () => {
   test.beforeEach(async ({ page }) => {
     await installExplorerFixture(page)
   })
@@ -31,16 +31,16 @@ test.describe("Astryx product shell", () => {
     const response = await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     expectStrictCsp(response)
 
-    await expect(page).toHaveTitle("Astryx Kanban · Workspace")
+    await expect(page).toHaveTitle("Kanban Tool · Workspace")
     await expect(page.getByTestId("product-shell")).toBeVisible()
     await expect(page.getByTestId("board-view")).toBeVisible()
-    await expect(page.getByRole("navigation", { name: "侧栏导航" })).toBeVisible()
+    await expect(page.getByRole("navigation", { name: "项目页面" })).toBeVisible()
     await expect(page.locator("main:visible")).toHaveCount(1)
 
-    const skipLink = page.getByRole("link", { name: "跳转到主要内容" })
+    const skipLink = page.getByRole("link", { name: "跳到主要内容" })
     await skipLink.focus()
     await skipLink.press("Enter")
-    await expect(page.locator("#astryx-app-shell-main")).toBeFocused()
+    await expect(page.locator("#main-content")).toBeFocused()
     await expect(page.locator("[style]")).toHaveCount(0)
     await expect(page.locator("style")).toHaveCount(0)
   })
@@ -51,6 +51,7 @@ test.describe("Astryx product shell", () => {
     await expect(page.getByTestId("settings-page")).toBeVisible()
     await expect(page.locator("html")).not.toHaveAttribute("data-theme")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
+    await page.getByText("外观与语言", { exact: true }).click()
     await page.getByTestId("appearance-theme").selectOption("dark")
     await page.getByTestId("appearance-density").selectOption("compact")
     await page.getByTestId("settings-locale").selectOption("en")
@@ -71,9 +72,9 @@ test.describe("Astryx product shell", () => {
     await page.getByTestId("nav-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
     await expect(page.getByTestId("nav-board")).toBeEnabled()
-    await page.getByTestId("nav-board").click()
-    await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
-    await expect(page.getByTestId("board-view")).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page).toHaveURL(/\/app\/boards\/default\/list$/)
+    await expect(page.getByTestId("task-list")).toBeVisible()
     await page.goBack()
     await expect(page).toHaveURL(/\/app\/settings$/)
   })
@@ -97,14 +98,14 @@ test.describe("Astryx product shell", () => {
   test("keeps board and settings entries available in collapsed desktop navigation", async ({ page }) => {
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("board-view")).toBeVisible()
-    await page.getByRole("button", { name: "收起侧栏" }).click()
-    await expect(page.getByRole("button", { name: "展开侧栏" })).toBeVisible()
+    await page.getByRole("button", { name: "收起侧边栏" }).click()
+    await expect(page.getByRole("button", { name: "展开侧边栏" })).toBeVisible()
     await expect(page.getByTestId("nav-board")).toBeVisible()
     await expect(page.getByTestId("nav-settings")).toBeVisible()
     await page.getByTestId("nav-board").hover()
     await page.getByTestId("nav-settings").focus()
-    await page.getByRole("button", { name: "展开侧栏" }).click()
-    await page.getByRole("button", { name: "收起侧栏" }).click()
+    await page.getByRole("button", { name: "展开侧边栏" }).click()
+    await page.getByRole("button", { name: "收起侧边栏" }).click()
     await expect(page.locator("[style]")).toHaveCount(0)
   })
 

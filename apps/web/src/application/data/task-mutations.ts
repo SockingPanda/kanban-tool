@@ -163,6 +163,7 @@ export interface TaskMutationDependencies extends HttpTransportOptions {
 }
 
 export interface TaskMutationClient {
+  mutateStep(taskId: string, stepId: string, command: StepMutationIntent, options?: MutationRequestOptions): Promise<StepMutationResponse>
   createTask(input: CreateTaskIntent, options?: MutationRequestOptions): Promise<ApiCreateTaskResponseContract>
   updateTask(taskId: string, input: UpdateTaskIntent, options?: MutationRequestOptions): Promise<ApiUpdateTaskResponseContract>
   addTaskLabel(taskId: string, input: AddTaskLabelIntent, options?: MutationRequestOptions): Promise<ApiAddTaskLabelResponseContract>
@@ -274,3 +275,16 @@ export function transitionPath(taskId: string, action: TaskTransitionAction): st
   const parsed = pathByAction[action]({ task_id: taskId })
   return `/api/v1/tasks/${taskPath(parsed.task_id)}/transitions/${action}`
 }
+
+export type StepMutationIntent =
+  | { readonly action: 'update'; readonly input: Omit<import('../../lib/api/generated/contracts/api-update-step-request').ApiUpdateStepRequestContract, 'actor'> }
+  | { readonly action: 'remove' }
+  | { readonly action: 'complete'; readonly input: Omit<import('../../lib/api/generated/contracts/api-complete-step-request').ApiCompleteStepRequestContract, 'actor'> }
+  | { readonly action: 'skip'; readonly input: Omit<import('../../lib/api/generated/contracts/api-skip-step-request').ApiSkipStepRequestContract, 'actor'> }
+  | { readonly action: 'reopen'; readonly input: Omit<import('../../lib/api/generated/contracts/api-reopen-step-request').ApiReopenStepRequestContract, 'actor'> };
+export type StepMutationResponse =
+  | import('../../lib/api/generated/contracts/api-update-step-response').ApiUpdateStepResponseContract
+  | import('../../lib/api/generated/contracts/api-remove-step-response').ApiRemoveStepResponseContract
+  | import('../../lib/api/generated/contracts/api-complete-step-response').ApiCompleteStepResponseContract
+  | import('../../lib/api/generated/contracts/api-skip-step-response').ApiSkipStepResponseContract
+  | import('../../lib/api/generated/contracts/api-reopen-step-response').ApiReopenStepResponseContract;

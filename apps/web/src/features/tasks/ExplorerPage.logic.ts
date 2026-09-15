@@ -6,7 +6,7 @@ import type {
   TaskInspectorDependenciesView,
   TaskInspectorRelationTaskView,
   TaskInspectorStepView,
-} from "./TaskInspectorRelationsPanel"
+} from "./inspector-relations-model"
 
 export function shouldClearMapTaskFromInspector(
   view: BoardRouteView,

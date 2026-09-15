@@ -133,6 +133,8 @@ export interface BoardReadDependencies extends HttpTransportOptions {
 
 export interface BoardReadModelOptions {
   readonly signal?: AbortSignal
+  /** 会话只需项目身份和列；展示任务使用独立分页查询。 */
+  readonly includeTasks?: boolean
   readonly includeArchived?: boolean
   readonly taskPageSize?: number
   readonly taskSort?: BoardTaskSort

@@ -29,6 +29,9 @@ export type MutationDialog =
       readonly title: string
       readonly description: string
       readonly firstStepTitle: string
+      readonly priority?: number
+      readonly status?: "triage" | "todo" | "scheduled"
+      readonly scheduledAt?: string
       readonly taskId: string
       readonly idempotencyKey: string
       readonly taskCreated: boolean
@@ -50,6 +53,9 @@ export type RetryIntent =
       readonly title: string
       readonly description: string
       readonly firstStepTitle: string
+      readonly priority?: number
+      readonly status?: "triage" | "todo" | "scheduled"
+      readonly scheduledAt?: string
       readonly taskId: string
       readonly idempotencyKey: string
       readonly taskCreated: boolean
@@ -67,7 +73,7 @@ export type RetryIntent =
 /** Rebase a retry intent on values still present in its open dialog. */
 export function retryIntentWithCurrentDialog(retry: RetryIntent, dialog: MutationDialog | null): RetryIntent {
   if (retry.kind === "create" && dialog?.kind === "create" && dialog.taskId === retry.taskId) {
-    return { ...retry, title: dialog.title, description: dialog.description, firstStepTitle: dialog.firstStepTitle }
+    return { ...retry, title: dialog.title, description: dialog.description, firstStepTitle: dialog.firstStepTitle, priority: dialog.priority, status: dialog.status, scheduledAt: dialog.scheduledAt }
   }
   if (retry.kind === "edit" && dialog?.kind === "edit" && dialog.taskId === retry.taskId) {
     return { ...retry, title: dialog.title }
@@ -99,6 +105,7 @@ export interface BoardTaskMutationController {
   readonly setDialogTitle: (title: string) => void
   readonly setDialogReason: (reason: string) => void
   readonly setDialogDescription: (description: string) => void
+  readonly setDialogCreateOptions: (options: { priority?: number; status?: "triage" | "todo" | "scheduled"; scheduledAt?: string }) => void
   readonly setDialogFirstStepTitle: (title: string) => void
   readonly setDialogConfirmed: (confirmed: boolean) => void
   readonly submitDialog: () => void
@@ -122,7 +129,7 @@ export function keyboardTransitionForDirection(
     .filter((column) => !column.hidden)
     .slice()
     .sort((left, right) => left.position - right.position)
-  const currentIndex = visibleColumns.findIndex((column) => column.status === taskStatus)
+  const currentIndex = visibleColumns.findIndex((column) => column.status === taskStatus || column.representedStatuses?.includes(taskStatus))
   if (currentIndex < 0) return null
   const targetIndex = currentIndex + (direction === "next" ? 1 : -1)
   const target = visibleColumns[targetIndex]
@@ -340,6 +347,9 @@ export function useBoardTaskMutationController(
       readonly title: string
       readonly description: string
       readonly firstStepTitle: string
+      readonly priority?: number
+      readonly status?: "triage" | "todo" | "scheduled"
+      readonly scheduledAt?: string
       readonly taskId: string
       readonly idempotencyKey: string
       readonly taskCreated: boolean
@@ -356,6 +366,9 @@ export function useBoardTaskMutationController(
         await surface.client.createTask({
           title: attempt.title.trim(),
           description: attempt.description.trim() || null,
+          ...(attempt.priority === undefined ? {} : { priority: attempt.priority }),
+          ...(attempt.status === undefined ? {} : { status: attempt.status }),
+          ...(attempt.scheduledAt ? { scheduled_at: new Date(attempt.scheduledAt).getTime() } : {}),
           task_id: attempt.taskId,
           idempotency_key: attempt.idempotencyKey,
         })
@@ -393,7 +406,10 @@ export function useBoardTaskMutationController(
           setNotice({ kind: "error", message: mutationMessage(error, copy, copy.mutationError) })
           setRetryIntent({ kind: "create", ...attempt, taskCreated: false })
         }
-        closeDialogState()
+        // 创建失败保留草稿；任务已创建时仅重试首个步骤，不能再次创建任务。
+        setDialog(current => current?.kind === "create" && current.taskId === attempt.taskId
+          ? { ...current, taskCreated }
+          : current)
       }
       if (isCurrentMutation(generation)) setPending("create", false)
       return
@@ -581,7 +597,7 @@ export function useBoardTaskMutationController(
     setNotice(null)
     setRetryIntent(null)
     const taskId = clientUuid("t_")
-    setDialog({ kind: "create", title: "", description: "", firstStepTitle: "", taskId, idempotencyKey: `task.create:${taskId}`, taskCreated: false })
+    setDialog({ kind: "create", title: "", description: "", firstStepTitle: "", status: "todo", priority: 1, taskId, idempotencyKey: `task.create:${taskId}`, taskCreated: false })
   }
   const openEdit = (task: BoardTaskViewModel, trigger?: HTMLElement | null) => {
     if (pendingRef.current.size > 0) return
@@ -650,7 +666,7 @@ export function useBoardTaskMutationController(
       event.preventDefault()
       return
     }
-    const token = typeof globalThis.crypto?.randomUUID === "function" ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+    const token = globalThis.crypto.randomUUID()
     dragStateRef.current = { taskId, token }
     event.dataTransfer?.setData(internalDragMime, token)
     if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
@@ -764,6 +780,7 @@ export function useBoardTaskMutationController(
     setDialogTitle: (title) => setDialog((current) => current === null || current.kind === "transition" ? current : { ...current, title }),
     setDialogReason: (reason) => setDialog((current) => current?.kind === "transition" ? { ...current, reason } : current),
     setDialogDescription: (description) => setDialog((current) => current === null || current.kind === "edit" ? current : { ...current, description }),
+    setDialogCreateOptions: (options) => setDialog(current => current?.kind === "create" ? { ...current, ...options } : current),
     setDialogFirstStepTitle: (firstStepTitle) => setDialog((current) => current?.kind === "create" ? { ...current, firstStepTitle } : current),
     setDialogConfirmed: (confirmed) => setDialog((current) => current?.kind === "transition" ? { ...current, confirmed } : current),
     submitDialog,

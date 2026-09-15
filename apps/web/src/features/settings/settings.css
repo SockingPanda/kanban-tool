@@ -1,0 +1,74 @@
+/* Owned by features/settings. Paper light/dark only. */
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px
+}
+.settings-stack>section {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 21px
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px
+}
+.settings-icon {
+  width: 35px;
+  height: 35px;
+  background: var(--muted);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0
+}
+.settings-row>div {
+  flex: 1
+}
+.settings-row strong {
+  font-size: 12px;
+  font-weight: 500
+}
+.settings-row p {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  line-height: 1.8;
+  margin-top: 5px
+}
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  padding-left: 47px;
+  margin-top: 16px
+}
+.settings-stack>.subtle-note {
+  font-size: 10px
+}
+@media(max-width:600px) {
+.settings-row {
+  gap: 9px;
+  align-items: flex-start
+}
+.settings-icon {
+  width: 30px;
+  height: 30px
+}
+.settings-icon>svg {
+  width: 17px
+}
+.settings-row strong {
+  font-size: 11px
+}
+.settings-row p {
+  font-size: 9px
+}
+.settings-actions {
+  padding-left: 39px;
+  gap: 8px
+}
+.settings-actions .ui-button {
+  font-size: 10px
+}
+}

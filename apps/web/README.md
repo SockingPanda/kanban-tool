@@ -15,7 +15,12 @@
 - 模块、迭代、项目能力地图和 Git AI 追溯入口标记为“尚未接入”。
 - 已移除页面的旧链接会回到同项目任务列表并显示提示。
 
+看板按“待开始、进行中、待验收、已完成”分组显示；各任务仍保留服务的真实状态，详情和筛选可以
+区分待分诊、已排期、已就绪、已阻塞与已归档。标题与说明在失去焦点时保存。`C` 打开创建表单，
+`Ctrl/Cmd + K` 聚焦搜索，`Escape` 关闭浮层并恢复触发位置的焦点。
+
 服务连接失败时，页面显示连接错误和重试入口。保存操作等待服务确认；失败时保留表单草稿。
+任务创建成功而首个步骤失败时，表单只重试步骤；已提交的任务不会重复创建。
 `tasks.status`、字段版本、claim token 和执行计划约束由服务决定，看板拖动与详情按钮使用同一套
 合法动作。
 
@@ -60,7 +65,7 @@ React Doctor 固定为 `0.9.13`，完整扫描与增量扫描都以 warning 阻�
 
 `src/lib/api/generated` 由 `kanban-protocol` 生成，类型和运行时 validator 保持同源；手写 adapter
 在 `unknown` 边界完成验证。基础控件使用 React 和静态 CSS，浅色、深色与响应式布局共享主题
-token；不在运行时注入样式。依赖图、Markdown 等重模块按需加载。
+token；不在运行时注入样式。依赖图按需加载。
 
 Web artifact manifest、runtime 身份与 strict CSP 是 Browser/Desktop 共用的启动边界，详见
 [架构决策](../../docs/adr/0006_browser_first_web_ui.md)。

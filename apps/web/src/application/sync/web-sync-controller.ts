@@ -1048,11 +1048,15 @@ export class WebSyncController {
       if (!this.isRecoveryCurrent(token)) return replayed
       replayed.add(event.eventId)
       if (this.recoveryPreApplied.get(event.eventId) === event.canonicalFingerprint) continue
+      // 游标与恢复状态按事件顺序推进；并发执行会越过确认边界。最小复现见 build/react-doctor-regressions.test.ts。
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       await this.invokeEffect(event, token, "recovery")
       if (!this.isRecoveryCurrent(token)) return replayed
       this.recoveryAppliedEvents.set(event.eventId, event)
       this.recoveryPreApplied.set(event.eventId, event.canonicalFingerprint)
       if (!event.known) {
+        // 依赖前一事件已经应用的恢复状态，必须顺序等待；复现见 build/react-doctor-regressions.test.ts。
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
         await this.restartUnknownRecovery(token, event)
         return replayed
       }
@@ -1065,6 +1069,8 @@ export class WebSyncController {
     for (;;) {
       // Let the concurrently opened SSE/poll transport deliver frames that
       // arrived immediately after the boundary response settled.
+      // 游标与恢复状态按事件顺序推进；并发执行会越过确认边界。最小复现见 build/react-doctor-regressions.test.ts。
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       await Promise.resolve()
       if (this.recoveryBuffer.length === 0) break
       const buffered = this.recoveryBuffer.splice(0).sort((left, right) => left.id - right.id)
@@ -1084,22 +1090,30 @@ export class WebSyncController {
         if (!this.isRecoveryCurrent(token)) return boundary
         if (event.id <= boundary.highWatermark) {
           if (this.recoveryPreApplied.get(event.eventId) === event.canonicalFingerprint || replayedBoundaryEvents.has(event.eventId)) continue
+      // 游标与恢复状态按事件顺序推进；并发执行会越过确认边界。最小复现见 build/react-doctor-regressions.test.ts。
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
           await this.invokeEffect(event, token, "recovery")
           if (!this.isRecoveryCurrent(token)) return boundary
           this.recoveryAppliedEvents.set(event.eventId, event)
           this.recoveryPreApplied.set(event.eventId, event.canonicalFingerprint)
           if (!event.known) {
+            // 依赖前一事件已经应用的恢复状态，必须顺序等待；复现见 build/react-doctor-regressions.test.ts。
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop
             await this.restartUnknownRecovery(token, event)
             return boundary
           }
           continue
         }
         if (this.recoveryPreApplied.get(event.eventId) === event.canonicalFingerprint) continue
+        // 依赖前一事件已经应用的恢复状态，必须顺序等待；复现见 build/react-doctor-regressions.test.ts。
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
         await this.invokeEffect(event, token, "recovery")
         if (!this.isRecoveryCurrent(token)) return boundary
         this.recoveryAppliedEvents.set(event.eventId, event)
         this.recoveryPreApplied.set(event.eventId, event.canonicalFingerprint)
         if (!event.known) {
+          // 依赖前一事件已经应用的恢复状态，必须顺序等待；复现见 build/react-doctor-regressions.test.ts。
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           await this.restartUnknownRecovery(token, event)
           return boundary
         }
@@ -1226,6 +1240,8 @@ export class WebSyncController {
       for (const event of eligible) {
         if (signal.aborted || !this.running || !this.isCurrent(token) || this.state !== "circuit-open") return false
         try {
+          // 边界重放逐项确认，失败后停止；最小复现见 build/react-doctor-regressions.test.ts。
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           await this.invokeEffect(event, token, "poll-boundary", true)
         } catch (error) {
           if (signal.aborted || !this.running || !this.isCurrent(token) || this.state !== "circuit-open") return false
@@ -1289,14 +1305,17 @@ export class WebSyncController {
         for (const rawEvent of page.events) {
           const parsed = this.adapter.parsePollingEnvelope(rawEvent)
           if (parsed.status === "invalid") {
+      // 游标与恢复状态按事件顺序推进；并发执行会越过确认边界。最小复现见 build/react-doctor-regressions.test.ts。
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
             await this.handlePollProtocolFailure("poll-invalid-envelope", parsed.code, token)
             return
           }
-          if (parsed.envelope.id <= previousEventId) {
-            await this.handlePollProtocolFailure("poll-events-out-of-order", String(parsed.envelope.id), token)
+          const eventId = parsed.envelope.id
+          if (eventId <= previousEventId) {
+            await this.handlePollProtocolFailure("poll-events-out-of-order", String(eventId), token)
             return
           }
-          previousEventId = parsed.envelope.id
+          previousEventId = eventId
           parsedEvents.push(parsed.envelope)
         }
         const publishedBoundaryPage = this.state === "circuit-open" && page.boundary !== undefined
@@ -1321,6 +1340,8 @@ export class WebSyncController {
         }
         if (this.state === "circuit-open" && !(await this.applyPollingBoundary(page, token, abort.signal))) return
         for (const envelope of parsedEvents) {
+      // 游标与恢复状态按事件顺序推进；并发执行会越过确认边界。最小复现见 build/react-doctor-regressions.test.ts。
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
           await this.enqueueIngest(() => this.ingestEnvelope(envelope, token, "poll"))
           if (abort.signal.aborted || !this.running || !this.isCurrent(token)) return
         }

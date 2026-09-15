@@ -1048,6 +1048,155 @@
     "sharedComponents": []
   },
   {
+    "id": "api.update-step",
+    "method": "PATCH",
+    "obligations": {
+      "body": {
+        "contractId": "api.update-step.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.update-step.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.update-step.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.update-step.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/steps/:step_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.remove-step",
+    "method": "DELETE",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.remove-step.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.remove-step.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.remove-step.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/steps/:step_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.complete-step",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.complete-step.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.complete-step.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.complete-step.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.complete-step.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/steps/:step_id/done",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.skip-step",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.skip-step.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.skip-step.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.skip-step.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.skip-step.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/steps/:step_id/skip",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.reopen-step",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.reopen-step.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.reopen-step.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.reopen-step.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.reopen-step.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/steps/:step_id/reopen",
+    "sharedComponents": []
+  },
+  {
     "id": "api.mark-execution-plan-not-required",
     "method": "POST",
     "obligations": {

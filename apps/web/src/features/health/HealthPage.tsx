@@ -54,6 +54,8 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
     } finally {
       if (requestControllerRef.current === controller) {
         requestControllerRef.current = null
+// 该语句位于 finally，身份判断防止旧请求清除新请求的 pending；最小复现见 build/react-doctor-regressions.test.ts。
+// react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
         setPending(false)
       }
     }

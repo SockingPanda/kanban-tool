@@ -1,3 +1,4 @@
+import type { StepMutationIntent } from '../data/task-mutations';
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 
 import type { DownloadedAttachment } from "../data/attachment-download";
@@ -202,7 +203,7 @@ function normalizedLabelInput(input: InspectorAddLabelInput): InspectorAddLabelI
   return omitUndefined({
     ...omitUndefined(input),
     ...(input.name === undefined || input.name === null ? {} : { name: normalizedText(input.name) || null }),
-    ...(input.names === undefined || input.names === null ? {} : { names: input.names.map(normalizedText).filter((name) => name.length > 0) }),
+    ...(input.names === undefined || input.names === null ? {} : { names: input.names.flatMap(value => { const name = normalizedText(value); return name.length > 0 ? [name] : [] }) }),
   })
 }
 
@@ -269,6 +270,7 @@ function operationKind(operation: InspectorMutationOperation): InspectorMutation
     case "transition": return "transition"
     case "addDependency":
     case "removeDependency": return "dependency"
+    case "mutateStep":
     case "createStep":
     case "linkStep":
     case "markPlanNotRequired": return "step"
@@ -663,6 +665,11 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     return (await this.runWrite("removeDependency", { operation: "removeDependency", taskId: this.surface?.scope.taskId ?? "", parentTaskId: parent }, (surface, taskId, signal) => surface.client.removeDependency(taskId, parent, { signal }))).outcome
   }
 
+  async mutateStep(stepId: string, command: StepMutationIntent): Promise<InspectorMutationOutcome> {
+    if (!stepId.trim()) return notCommittedOutcome;
+    return (await this.runWrite('mutateStep', { operation: 'mutateStep', taskId: this.surface?.scope.taskId ?? '', stepId, command }, (surface, taskId, signal) => surface.client.mutateStep(taskId, stepId, command, { signal }))).outcome;
+  }
+
   async createStep(input: InspectorCreateStepInput): Promise<InspectorMutationOutcome> {
     const normalized = {
       ...normalizedStepInput(input),
@@ -784,6 +791,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
       case "transition": return this.transition(candidate.command)
       case "addDependency": return this.addDependency(candidate.parentTaskId)
       case "removeDependency": return this.removeDependency(candidate.parentTaskId)
+      case "mutateStep": return this.mutateStep(candidate.stepId, candidate.command)
       case "createStep": return this.createStep(candidate.input)
       case "linkStep": return this.linkStep(candidate.input)
       case "markPlanNotRequired": return this.markPlanNotRequired(candidate.input)

@@ -2,6 +2,8 @@ import { useLayoutEffect } from "react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 
 import { ProductShell } from "./shell/app-shell"
+// 功能只公开显式出口；Vite 静态树摇保留所用导出；最小复现见 build/react-doctor-regressions.test.ts。
+// react-doctor-disable-next-line react-doctor/no-barrel-import
 import { BoardLive } from "../features/tasks/index"
 import { boardSyncStatusForTelemetry } from "../application/workspace/board-live-state"
 import type { BoardTaskCanonicalReloadHandler, BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "../application/tasks/task-mutation-state"
@@ -143,12 +145,10 @@ function useRuntimeThemedShellState() {
 
   const onCanonicalReload = useCallback(async (options?: BoardTaskCanonicalReloadOptions) => {
     if (sessionKeyRef.current !== sessionKey) return
-    // BoardLive has already awaited the canonical session refresh. Refresh the
-    // visible board projection and await the currently mounted Inspector reads
-    // through the shared useAsyncRead reload seam.
+    // 项目会话与当前页独立回读，返回当前分页模型供看板拖动协调结果。
     bumpExplorerRevision({ board: true, runs: options?.mutationKind === "transition" })
     const reloadVisibleCanonical = visibleCanonicalReloadRef.current
-    if (reloadVisibleCanonical !== null) await reloadVisibleCanonical(options)
+    if (reloadVisibleCanonical !== null) return await reloadVisibleCanonical(options)
   }, [bumpExplorerRevision, sessionKey])
 
   const flushEventBatch = useCallback(() => {

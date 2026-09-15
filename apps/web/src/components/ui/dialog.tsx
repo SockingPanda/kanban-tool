@@ -2,7 +2,8 @@ import React, { useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, IconButton } from "./button";
 import { cn } from "./classes";
-export function Dialog({ open, onClose, title, description, children, footer, side = false, className = '', role = 'dialog', testId, dismissDisabled = false }: {
+export function Dialog({ open, onClose, title, description, children, footer, side = false, className = '', role = 'dialog', testId, dismissDisabled = false, closeLabel = '关闭对话框' }: {
+  closeLabel?: string;
   open: boolean;
   onClose: () => void;
   title: string;
@@ -22,8 +23,11 @@ export function Dialog({ open, onClose, title, description, children, footer, si
       return;
     const previous = document.activeElement as HTMLElement | null;
     const d = ref.current;
-    if (d && !d.open)
+    if (d && !d.open) {
       d.showModal();
+      // React 的 autoFocus 早于 showModal；打开后再落实表单指定的初始焦点。
+      d.querySelector<HTMLElement>('[data-dialog-autofocus="true"]')?.focus();
+    }
     return () => {
       d?.close();
       if (previous?.isConnected)
@@ -32,7 +36,13 @@ export function Dialog({ open, onClose, title, description, children, footer, si
   }, [open]);
   if (!open)
     return null;
-  return createPortal(<dialog ref={ref} role={role} data-testid={testId} className={cn('ui-dialog', side && 'dialog-side', className)} aria-labelledby={titleId} aria-describedby={description ? descId : undefined} onCancel={e => { e.preventDefault(); if (!dismissDisabled) onClose(); }} onClick={e => {
+  const content = <dialog ref={ref} role={role} data-testid={testId} className={cn('ui-dialog', side && 'dialog-side', className)} aria-labelledby={titleId} aria-describedby={description ? descId : undefined} onKeyDown={event => {
+    if (event.key !== 'Tab' || event.defaultPrevented) return;
+    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), a[href], summary, [tabindex="0"]')).filter(element => element.getClientRects().length > 0);
+    const target = event.shiftKey && document.activeElement === controls[0] ? controls.at(-1)
+      : !event.shiftKey && document.activeElement === controls.at(-1) ? controls[0] : null;
+    if (target) { event.preventDefault(); target.focus(); }
+  }} onCancel={e => { e.preventDefault(); if (!dismissDisabled) onClose(); }} onClick={e => {
     if (!dismissDisabled && e.target === e.currentTarget) {
       const r = e.currentTarget.getBoundingClientRect();
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)
@@ -48,7 +58,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
           {description}
         </p>}
       </div>
-      <IconButton icon="close" label="关闭对话框" disabled={dismissDisabled} onClick={onClose} />
+      <IconButton icon="close" label={closeLabel} disabled={dismissDisabled} onClick={onClose} />
     </div>
     <div className="dialog-body">
       {children}
@@ -56,7 +66,8 @@ export function Dialog({ open, onClose, title, description, children, footer, si
     {footer && <div className="dialog-footer">
       {footer}
     </div>}
-  </dialog>, document.body);
+  </dialog>;
+  return typeof document === "undefined" ? content : createPortal(content, document.body);
 }
 export function ConfirmDialog({ open, title, description, onClose, onConfirm, confirmLabel = '确认', danger = false }: {
   open: boolean;

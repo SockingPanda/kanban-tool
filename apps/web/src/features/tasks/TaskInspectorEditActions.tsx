@@ -1,3 +1,4 @@
+import { Dialog } from '../../components/ui/dialog';
 import { useEffect, useRef, type FormEvent, type ReactNode } from "react"
 
 import type { Locale } from "../../platform/preferences/preferences"
@@ -184,30 +185,33 @@ export function TaskInspectorActionDialog({
     const target = dialogInputRef.current ?? dialogConfirmRef.current
     target?.focus()
   }, [])
-  const title = dialog.kind === "description" ? copy.actionDescriptionTitle : dialog.kind === "reason" ? copy.actionReasonTitle : copy.actionConfirmTitle
+  const { title, description, validationError } = actionDialogCopy(dialog, copy)
   const submitLabel = actionLabel(dialog.action, locale)
-  const invalid = dialog.kind === "description"
-    ? dialog.description.trim().length === 0
-    : dialog.kind === "reason"
-      ? dialog.reason.trim().length === 0 || (dialog.requiresConfirmation && !dialog.confirmed)
-      : false
+  const invalid = validationError !== null
   return (
-    <div className={styles.dialogBackdrop} role="presentation">
-      <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="inspector-action-dialog-title" aria-describedby="inspector-action-dialog-description">
+    <Dialog open title={title} onClose={onCancel} dismissDisabled={pending} description={description}>
         <form onSubmit={onSubmit}>
-          <h2 id="inspector-action-dialog-title">{title}</h2>
-          <p id="inspector-action-dialog-description">{dialog.kind === "description" ? copy.actionDescriptionHint : dialog.kind === "reason" ? copy.actionReasonHint : copy.actionConfirmDescription}</p>
           {error ? <div className={styles.mutationError} role="alert" aria-live="polite"><span>{error}</span>{onRetry ? <button type="button" onClick={onRetry}>{copy.retryAction}</button> : null}</div> : null}
           {dialog.kind === "description" ? <label><span>{copy.editDescription}</span><textarea ref={dialogInputRef} name="action-description" value={dialog.description} onChange={(event) => onDescriptionChange(event.target.value)} rows={5} required /></label> : null}
           {dialog.kind === "reason" ? <label><span>{copy.actionReasonTitle}</span><textarea ref={dialogInputRef} name="action-reason" value={dialog.reason} onChange={(event) => onReasonChange(event.target.value)} rows={4} required /></label> : null}
           {dialog.kind === "reason" && dialog.requiresConfirmation ? <label className={styles.confirmation}><input type="checkbox" name="action-force-confirmation" checked={dialog.confirmed} onChange={(event) => onConfirmationChange(event.target.checked)} required /><span>{copy.actionForceConfirmation}</span></label> : null}
-          {invalid ? <p className={styles.error} role="status">{dialog.kind === "description" ? copy.descriptionRequired : dialog.kind === "reason" && dialog.requiresConfirmation && dialog.reason.trim().length > 0 && !dialog.confirmed ? copy.confirmationRequired : copy.reasonRequired}</p> : null}
+          {invalid ? <p className={styles.error} role="status">{validationError}</p> : null}
           <div className={styles.dialogActions}>
-            <button type="button" className={styles.secondaryButton} onClick={onCancel}>{copy.cancel}</button>
+            <button type="button" className={styles.secondaryButton} disabled={pending} onClick={onCancel}>{copy.cancel}</button>
             <button ref={dialogConfirmRef} type="submit" disabled={invalid || retryBlocksSubmit || pending} aria-busy={pending || undefined}>{submitLabel}</button>
           </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   )
+}
+
+function actionDialogCopy(dialog: InspectorActionDialogState, copy: InspectorCopy) {
+ if (dialog.kind === 'description') return { title: copy.actionDescriptionTitle, description: copy.actionDescriptionHint, validationError: dialog.description.trim() ? null : copy.descriptionRequired };
+ if (dialog.kind === 'reason') {
+   let validationError: string | null = null;
+   if (!dialog.reason.trim()) validationError = copy.reasonRequired;
+   else if (dialog.requiresConfirmation && !dialog.confirmed) validationError = copy.confirmationRequired;
+   return { title: copy.actionReasonTitle, description: copy.actionReasonHint, validationError };
+ }
+ return { title: copy.actionConfirmTitle, description: copy.actionConfirmDescription, validationError: null };
 }

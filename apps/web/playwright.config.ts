@@ -22,8 +22,8 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  testMatch: releaseProof ? ["**/release-proof.spec.ts"] : undefined,
-  testIgnore: releaseProof ? undefined : ["**/release-proof.spec.ts"],
+  testMatch: releaseProof ? (process.env.KANBAN_RELEASE_EXTENDED === "1" ? ["**/release-*.spec.ts"] : ["**/release-proof.spec.ts"]) : undefined,
+  testIgnore: releaseProof ? undefined : ["**/release-*.spec.ts", "**/a11y-keyboard.spec.ts", "**/a11y-visual.spec.ts"],
   webServer: releaseProof ? undefined : {
     command: "pnpm vite-build && pnpm preview",
     cwd: ".",

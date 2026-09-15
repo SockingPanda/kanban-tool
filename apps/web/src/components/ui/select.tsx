@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Icon, type IconName } from "./icon";
-import { cn } from "./classes";
+import { Icon, type IconName } from './icon';
+import { cn } from './classes';
 export type ChoiceOption = {
   value: string;
   label: string;
@@ -17,6 +17,7 @@ export interface SelectProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonE
   children?: React.ReactNode;
   options?: ChoiceOption[];
   searchable?: boolean;
+  onSearchChange?: (value: string) => void;
   placeholder?: string;
   name?: string;
   required?: boolean;
@@ -49,11 +50,8 @@ function readOptions(children: React.ReactNode): ChoiceOption[] {
   });
   return found;
 }
-/** A source-owned, searchable choice control with the shadcn value/onValueChange API.
- * No native select menu, external services or runtime UI dependencies.
- * Browser Popover API is progressive enhancement; dialog-scoped portal is the fallback.
- */
-export function Select({ children, options: explicit, value, defaultValue = '', onValueChange, className, searchable, placeholder = '请选择', name, required, disabled, id, ...buttonProps }: SelectProps) {
+/** 可搜索的选择控件；弹出层优先使用 Popover，并保持对话框内的焦点归属。 */
+function useSelect({ children, options: explicit, value, defaultValue = '', onValueChange, className, searchable, onSearchChange, placeholder = '请选择', name, required, disabled, id, ...buttonProps }: SelectProps) {
   const options = useMemo(() => explicit ?? readOptions(children), [explicit, children]);
   const [localValue, setLocalValue] = useState(defaultValue);
   const selected = value ?? localValue;
@@ -82,7 +80,7 @@ export function Select({ children, options: explicit, value, defaultValue = '', 
   }, []);
   const show = (initial = '') => {
     if (disabled)
-      return; setHost(trigger.current?.closest('dialog[open]') as HTMLElement ?? document.body); setQuery(initial); const index = options.findIndex(o => o.value === selected && !o.disabled); setActive(Math.max(0, index)); updatePosition(); setOpen(true);
+      return; setHost(trigger.current?.closest('dialog[open]') as HTMLElement ?? document.body); setQuery(initial); onSearchChange?.(initial); const index = options.findIndex(o => o.value === selected && !o.disabled); setActive(Math.max(0, index)); updatePosition(); setOpen(true);
   };
   useLayoutEffect(() => {
     if (!open || !host)
@@ -97,7 +95,7 @@ export function Select({ children, options: explicit, value, defaultValue = '', 
           showPopover: () => void;
         }).showPopover();
       }
-      catch { /* CSS-positioned portal remains usable. */ }
+      catch { /* 不支持 Popover 时保留定位弹层。 */ }
     }
     (canSearch ? input.current : list.current)?.focus({ preventScroll: true });
     return () => {
@@ -107,7 +105,7 @@ export function Select({ children, options: explicit, value, defaultValue = '', 
             hidePopover: () => void;
           }).hidePopover();
         }
-        catch { /* Already removed. */ }
+        catch { /* 弹层可能已被浏览器移除。 */ }
     };
   }, [open, host, canSearch]);
   useEffect(() => {
@@ -157,6 +155,11 @@ export function Select({ children, options: explicit, value, defaultValue = '', 
         choose(option);
     }
   };
+  return {buttonProps,id,trigger,open,listId,required,disabled,className,close,show,label,placeholder,name,selected,host,popup,pos,handleKey,canSearch,input,query,filtered,active,setQuery,setActive,list,choose};
+}
+export function Select(props:SelectProps) {
+  const state=useSelect(props);
+  const {buttonProps,id,trigger,open,listId,required,disabled,className,close,show,label,placeholder,name,selected,host}=state;
   const icon = label?.icon;
   const tone = label?.tone ?? statusTones[selected];
   return <>
@@ -177,10 +180,16 @@ export function Select({ children, options: explicit, value, defaultValue = '', 
       <Icon name="down" size={13} className="choice-chevron" />
     </button>
     {name && <input type="hidden" name={name} value={selected} />}
-    {open && host && createPortal(<div ref={popup} data-choice-popup="true" className="choice-popup" style={{ left: pos.left, top: pos.top, width: pos.width, maxHeight: pos.maxHeight, transform: pos.above ? 'translateY(-100%)' : undefined }} onKeyDown={handleKey}>
+    {open && host && createPortal(<ChoicePopup state={state} onSearchChange={props.onSearchChange} />, host)}
+  </>;
+}
+
+function ChoicePopup({state,onSearchChange}:{state:ReturnType<typeof useSelect>;onSearchChange?:SelectProps['onSearchChange']}) {
+  const {popup,pos,handleKey,canSearch,input,buttonProps,query,listId,filtered,active,setQuery,setActive,list,selected,choose}=state;
+  return (<div ref={popup} data-choice-popup="true" className="choice-popup" style={{ left: pos.left, top: pos.top, width: pos.width, maxHeight: pos.maxHeight, transform: pos.above ? 'translateY(-100%)' : undefined }} onKeyDown={handleKey}>
       {canSearch && <div className="choice-search">
         <Icon name="search" size={15} />
-        <input ref={input} aria-label={'搜索' + (buttonProps['aria-label'] ?? '选项')} placeholder="搜索选项…" value={query} role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls={listId} aria-activedescendant={filtered[active] ? `${listId}-${active}` : undefined} onChange={e => { setQuery(e.target.value); setActive(0); }} />
+        <input ref={input} aria-label={'搜索' + (buttonProps['aria-label'] ?? '选项')} placeholder="搜索选项…" value={query} role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls={listId} aria-activedescendant={filtered[active] ? `${listId}-${active}` : undefined} onChange={e => { setQuery(e.target.value); onSearchChange?.(e.target.value); setActive(0); }} />
       </div>}
       <div ref={list} className="choice-list" id={listId} role="listbox" aria-label={buttonProps['aria-label'] ?? '可选项目'} aria-activedescendant={!canSearch && filtered[active] ? `${listId}-${active}` : undefined} tabIndex={canSearch ? -1 : 0}>
         {filtered.map((option, i) => <div id={`${listId}-${i}`} key={option.value} role="option" aria-selected={selected === option.value} aria-disabled={option.disabled || undefined} data-option-index={i} className={cn('choice-option', active === i && 'choice-highlight', selected === option.value && 'choice-selected', option.disabled && 'choice-disabled')} onPointerMove={() => !option.disabled && setActive(i)} onMouseDown={e => e.preventDefault()} onClick={() => choose(option)}>
@@ -199,7 +208,6 @@ export function Select({ children, options: explicit, value, defaultValue = '', 
         <span>{filtered.length} 个选项</span>
         <span>↑ ↓ 选择 <kbd>↵</kbd> 确认</span>
       </div>
-    </div>, host)}
-  </>;
+    </div>);
 }
 export const Combobox = (props: SelectProps) => <Select {...props} searchable />;

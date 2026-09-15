@@ -47,6 +47,7 @@ export interface TaskInspectorViewModel {
     readonly kind: "note" | "decision" | "signal"
     readonly body: string
     readonly createdAt: number
+    readonly metadata?: Readonly<Record<string, unknown>>
   }[]
   readonly runs: readonly {
     readonly id: string

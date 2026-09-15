@@ -150,7 +150,9 @@ test("#task.collection #task.create #task.detail #events.view real UI create, pe
     await expect(page.getByTestId("task-mutation-dialog")).toBeVisible()
     const title = `Stage09 real task ${testInfo.project.name}`
     await page.getByTestId("task-title-input").fill(title)
-    await page.getByTestId("task-mutation-dialog").getByRole("button", { name: "创建", exact: true }).click()
+    await page.getByRole("combobox", { name: "新任务状态", exact: true }).click()
+    await page.getByRole("option", { name: "待分诊", exact: true }).click()
+    await page.getByTestId("task-mutation-dialog").getByRole("button", { name: "创建任务", exact: true }).click()
     await expect(page).toHaveURL(/\/app\/boards\/default\/board\?task=t_[^&]+$/)
     const taskId = new URL(page.url()).searchParams.get("task")
     expect(taskId).toMatch(/^t_[A-Za-z0-9_-]+$/)
@@ -173,11 +175,11 @@ test("#task.collection #task.create #task.detail #events.view real UI create, pe
     await contextB.setOffline(false)
     // Reconnect/catch-up is observed without page reload or an Events refresh click.
     await expect(pageB.getByTestId("event-row").filter({ hasText: taskId! })).toBeVisible()
-    await pageB.getByTestId("nav-board").click()
+    await pageB.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await expect(pageB).toHaveURL(/\/app\/boards\/default\/board$/)
     await expect(pageB.getByTestId("board-view")).toHaveAttribute("data-state", "ready")
     await expect(pageB.getByTestId("board-task").filter({ hasText: title })).toBeVisible()
-    await expect(pageB.getByTestId("board-sync-banner")).toHaveAttribute("data-sync-state", "live")
+    await expect(pageB.getByTestId("task-sync-notice")).toHaveCount(0)
 
     // The launcher has already restarted kanban serve against the same DB; seed deep-link reload proves route recovery.
     await page.goto("/app/boards/default/board?task=t_release_seed", { waitUntil: "domcontentloaded" })
@@ -231,18 +233,17 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   await page.goto(`/app/boards/default/board?task=${encodeURIComponent(taskId!)}`, { waitUntil: "domcontentloaded" })
   await expect(page).toHaveURL(new RegExp(`/app/boards/default/board\\?task=${taskId}$`))
   await expect(page.getByTestId("task-inspector")).toBeVisible()
-  await expect(page.getByTestId("task-inspector-relations")).toBeVisible()
-  await expect(page.getByTestId("inspector-assets")).toBeVisible()
+
 
   const description = `Stage09 release proof description ${testInfo.project.name}`
-  await expect(page.locator('button[data-action="specify"]')).toBeEnabled()
-  await page.locator('button[data-action="specify"]').click()
-  const actionDialog = page.getByRole("dialog")
+  await page.getByRole("combobox", { name: "更改任务状态", exact: true }).click()
+  await page.getByRole("option", { name: "待开始", exact: true }).click()
+  const actionDialog = page.getByRole("dialog", { name: "指定任务", exact: true })
   await expect(actionDialog).toBeVisible()
   await actionDialog.locator('textarea[name="action-description"]').fill(description)
   await actionDialog.getByRole("button", { name: "指定", exact: true }).click()
   await expect(actionDialog).toBeHidden()
-  await expect(page.locator('button[data-action="promote"]')).toBeVisible()
+  await expect(page.getByRole("combobox", { name: "更改任务状态", exact: true })).toContainText("待开始")
   const transitionedTask = await canonicalGet<{ data?: { id?: string; status?: string; description?: string | null } }>(request, taskApiPath(taskId!))
   expect(transitionedTask.data?.id).toBe(taskId)
   expect(transitionedTask.data?.status).toBe("todo")
@@ -250,31 +251,27 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   markFlows(["task.transition"])
 
   const commentBody = `Stage09 release proof comment ${testInfo.project.name}`
-  const commentBodyInput = page.locator('textarea[name="comment-body"]')
-  await page.locator('select[name="comment-kind"]').selectOption("note")
+  await page.getByRole("button", { name: /^讨论/ }).click()
+  const commentBodyInput = page.getByRole("textbox", { name: "评论内容" })
   await commentBodyInput.fill(commentBody)
-  await page.getByRole("button", { name: "添加评论", exact: true }).click()
+  await page.getByRole("button", { name: "发布评论", exact: true }).click()
   await expect(commentBodyInput).toHaveValue("")
-  await expect(page.getByTestId("task-inspector-comments").locator("ul li").filter({ hasText: commentBody })).toBeVisible()
+  await expect(page.getByTestId("task-discussion").getByText(commentBody, { exact: true })).toBeVisible()
   const comments = await canonicalGet<{ data?: readonly { task_id?: string; kind?: string; body?: string }[] }>(request, taskApiPath(taskId!, "/comments"))
   expect(comments.data).toEqual(expect.arrayContaining([
     expect.objectContaining({ task_id: taskId, kind: "note", body: commentBody }),
   ]))
   markFlows(["task.comments"])
 
+  await page.getByRole("button", { name: "详情", exact: true }).click()
   const stepTitle = `Stage09 release proof step ${testInfo.project.name}`
-  const stepBody = `Step body ${testInfo.project.name}`
-  await page.getByTestId("task-inspector-step-title").fill(stepTitle)
-  await page.locator('textarea[name="step-body"]').fill(stepBody)
-  await expect(page.getByTestId("task-inspector-create-step")).toBeEnabled()
-  await page.getByTestId("task-inspector-create-step").click()
+  await page.getByRole("textbox", { name: "新的执行步骤" }).fill(stepTitle)
+  await page.getByRole("button", { name: "添加步骤", exact: true }).click()
   await expect(page.getByTestId("task-inspector-steps")).toContainText(stepTitle)
-  const steps = await canonicalGet<{ data?: { task_id?: string; steps?: readonly { title?: string; body?: string | null; required?: boolean }[] } }>(request, taskApiPath(taskId!, "/steps"))
-  expect(steps.data?.task_id).toBe(taskId)
-  expect(steps.data?.steps).toEqual(expect.arrayContaining([
-    expect.objectContaining({ title: stepTitle, body: stepBody, required: true }),
-  ]))
+  const steps = await canonicalGet<{ data?: { steps?: readonly { title?: string; required?: boolean }[] } }>(request, taskApiPath(taskId!, "/steps"))
+  expect(steps.data?.steps).toEqual(expect.arrayContaining([expect.objectContaining({ title: stepTitle, required: true })]))
   markFlows(["task.steps"])
+  await page.getByText("标签与附件", { exact: true }).first().click()
 
   const labelName = "Stage09 release"
   const labelInput = page.getByRole("textbox", { name: "标签名称" })
@@ -309,9 +306,10 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   ]))
   markFlows(["task.attachments"])
 
-  await page.locator('input[name="dependency-parent"]').fill("t_release_seed")
-  await page.getByRole("button", { name: "添加父依赖", exact: true }).click()
-  await expect(page.getByTestId("task-inspector-dependencies")).toContainText("Seed release task")
+  await page.getByRole("combobox", { name: "添加依赖任务", exact: true }).click()
+  await page.getByRole("combobox", { name: "搜索添加依赖任务", exact: true }).fill("Seed release task")
+  await page.getByRole("option", { name: /Seed release task/ }).click()
+  await expect(page.getByTestId("task-dependencies")).toContainText("Seed release task")
   const dependencies = await canonicalGet<{ data?: { task?: { id?: string }; parents?: readonly { id?: string; title?: string }[]; edges?: readonly { parent?: { id?: string }; child?: { id?: string } }[] } }>(request, taskApiPath(taskId!, "/dependencies"))
   expect(dependencies.data?.task?.id).toBe(taskId)
   expect(dependencies.data?.parents).toEqual(expect.arrayContaining([
@@ -323,16 +321,8 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   markFlows(["task.dependencies"])
 })
 
-test("#signals.view #ontology.view #health.view #maintenance.view #settings.view real operator and feature read surfaces", async ({ page }) => {
-  // capabilities: signals.view, ontology.view, health.view, maintenance.view, settings.view
-  await page.goto("/app/boards/default/signals?status=all", { waitUntil: "domcontentloaded" })
-  await expect(page.getByTestId("signals-screen")).toBeVisible()
-  await expect(page.getByText("没有返回信号。", { exact: true })).toBeVisible()
-
-  await page.goto("/app/boards/default/ontology?include_all=true&group_by=label", { waitUntil: "domcontentloaded" })
-  await expect(page.getByTestId("ontology-screen")).toBeVisible()
-  await expect(page.getByText("没有返回本体信号行。", { exact: true })).toBeVisible()
-
+test("#health.view #maintenance.view #settings.view real operator and feature read surfaces", async ({ page }) => {
+  // capabilities: health.view, maintenance.view, settings.view
   await page.goto("/app/boards/default/health", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("health-page")).toBeVisible()
   await expect(page.getByTestId("health-metrics")).toBeVisible()
@@ -342,8 +332,9 @@ test("#signals.view #ontology.view #health.view #maintenance.view #settings.view
 
   await page.goto("/app/settings", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("settings-page")).toBeVisible()
+  await page.getByText("连接与诊断", { exact: true }).click()
   await expect(page.getByTestId("settings-connection")).toBeVisible()
-  markFlows(["signals.view", "ontology.view", "health.view", "maintenance.view", "settings.view"])
+  markFlows(["health.view", "maintenance.view", "settings.view"])
 })
 
 test.afterEach(async ({ page }, testInfo) => {

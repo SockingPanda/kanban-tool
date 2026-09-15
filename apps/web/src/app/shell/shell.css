@@ -219,7 +219,7 @@
   height: 29px;
   border-radius: 50%;
   background: #ede2cf;
-  color: #927442;
+  color: #785c32;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1083,6 +1083,7 @@
 }
 .paper-visual-shell .detail-sheet {
   position: absolute;
+  left: auto;
   top: 12px;
   right: 12px;
   bottom: 12px;
@@ -1542,3 +1543,5 @@
 
 .runtime-state { padding: 56px; color: var(--foreground); background: var(--background); min-height: 260px; }
 .runtime-state h1 { font-family: var(--font-display); margin-bottom: 16px; }
+.sidebar-brand { color: var(--foreground); }
+button.project-identity { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--foreground); text-align: left; }

@@ -1,3 +1,23 @@
+import { parseApiUpdateStepPath } from '../../lib/api/generated/contracts/api-update-step-path';
+import { parseApiUpdateStepHeaders } from '../../lib/api/generated/contracts/api-update-step-headers';
+import { parseApiUpdateStepRequest } from '../../lib/api/generated/contracts/api-update-step-request';
+import { parseApiUpdateStepResponse } from '../../lib/api/generated/contracts/api-update-step-response';
+import { parseApiRemoveStepPath } from '../../lib/api/generated/contracts/api-remove-step-path';
+import { parseApiRemoveStepHeaders } from '../../lib/api/generated/contracts/api-remove-step-headers';
+import { parseApiRemoveStepResponse } from '../../lib/api/generated/contracts/api-remove-step-response';
+import { parseApiCompleteStepPath } from '../../lib/api/generated/contracts/api-complete-step-path';
+import { parseApiCompleteStepHeaders } from '../../lib/api/generated/contracts/api-complete-step-headers';
+import { parseApiCompleteStepRequest } from '../../lib/api/generated/contracts/api-complete-step-request';
+import { parseApiCompleteStepResponse } from '../../lib/api/generated/contracts/api-complete-step-response';
+import { parseApiSkipStepPath } from '../../lib/api/generated/contracts/api-skip-step-path';
+import { parseApiSkipStepHeaders } from '../../lib/api/generated/contracts/api-skip-step-headers';
+import { parseApiSkipStepRequest } from '../../lib/api/generated/contracts/api-skip-step-request';
+import { parseApiSkipStepResponse } from '../../lib/api/generated/contracts/api-skip-step-response';
+import { parseApiReopenStepPath } from '../../lib/api/generated/contracts/api-reopen-step-path';
+import { parseApiReopenStepHeaders } from '../../lib/api/generated/contracts/api-reopen-step-headers';
+import { parseApiReopenStepRequest } from '../../lib/api/generated/contracts/api-reopen-step-request';
+import { parseApiReopenStepResponse } from '../../lib/api/generated/contracts/api-reopen-step-response';
+import type { StepMutationIntent } from '../../application/data/task-mutations';
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
 import type { CanonicalBoardSlug } from "../../domain/board-slug";
@@ -296,6 +316,31 @@ export function createClient(
     return requestContract(transport, "GET", `/api/v1/tasks/${taskPath(path.task_id)}/steps`, undefined, readHeaders(parseApiListStepsHeaders), parseApiListStepsResponse, options.signal)
   }
 
+  const mutateStep = (taskId: string, stepId: string, command: StepMutationIntent, options: MutationRequestOptions = {}) => {
+    switch (command.action) {
+      case 'update': {
+        const path = parseApiUpdateStepPath({ task_id: taskId, step_id: stepId });
+        return requestContract(transport, 'PATCH', `/api/v1/tasks/${taskPath(path.task_id)}/steps/${taskPath(path.step_id)}`, parseApiUpdateStepRequest(mergeActor(actor, command.input)), jsonHeaders(parseApiUpdateStepHeaders, actor), parseApiUpdateStepResponse, options.signal);
+      }
+      case 'remove': {
+        const path = parseApiRemoveStepPath({ task_id: taskId, step_id: stepId });
+        return requestContract(transport, 'DELETE', `/api/v1/tasks/${taskPath(path.task_id)}/steps/${taskPath(path.step_id)}`, undefined, actorHeaders(parseApiRemoveStepHeaders, actor), parseApiRemoveStepResponse, options.signal);
+      }
+      case 'complete': {
+        const path = parseApiCompleteStepPath({ task_id: taskId, step_id: stepId });
+        return requestContract(transport, 'POST', `/api/v1/tasks/${taskPath(path.task_id)}/steps/${taskPath(path.step_id)}/done`, parseApiCompleteStepRequest(mergeActor(actor, command.input)), jsonHeaders(parseApiCompleteStepHeaders, actor), parseApiCompleteStepResponse, options.signal);
+      }
+      case 'skip': {
+        const path = parseApiSkipStepPath({ task_id: taskId, step_id: stepId });
+        return requestContract(transport, 'POST', `/api/v1/tasks/${taskPath(path.task_id)}/steps/${taskPath(path.step_id)}/skip`, parseApiSkipStepRequest(mergeActor(actor, command.input)), jsonHeaders(parseApiSkipStepHeaders, actor), parseApiSkipStepResponse, options.signal);
+      }
+      case 'reopen': {
+        const path = parseApiReopenStepPath({ task_id: taskId, step_id: stepId });
+        return requestContract(transport, 'POST', `/api/v1/tasks/${taskPath(path.task_id)}/steps/${taskPath(path.step_id)}/reopen`, parseApiReopenStepRequest(mergeActor(actor, command.input)), jsonHeaders(parseApiReopenStepHeaders, actor), parseApiReopenStepResponse, options.signal);
+      }
+    }
+  };
+
   const createStep = (taskId: string, input: CreateStepIntent, options: MutationRequestOptions = {}) => {
     const path = parseApiCreateStepPath({ task_id: taskId })
     const body = parseApiCreateStepRequest(mergeActor(actor, input))
@@ -346,6 +391,7 @@ export function createClient(
     addDependency,
     removeDependency,
     listSteps,
+    mutateStep,
     createStep,
     markExecutionPlanNotRequired,
     listComments,

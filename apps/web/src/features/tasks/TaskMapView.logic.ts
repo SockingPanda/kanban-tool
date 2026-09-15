@@ -85,7 +85,7 @@ export function filterTaskMap(
   filter: BoardMapFilter,
   hideIsolated: boolean,
 ): Pick<ExplorerTaskMap, "nodes" | "edges"> {
-  const matchingIds = new Set(graph.nodes.filter((node) => nodeMatchesFilter(node, filter)).map((node) => node.task.id))
+  const matchingIds = new Set(graph.nodes.flatMap(node => nodeMatchesFilter(node, filter) ? [node.task.id] : []))
   const edges = graph.edges.filter((edge) => matchingIds.has(edge.source_task_id) && matchingIds.has(edge.target_task_id))
   if (!hideIsolated) {
     return {

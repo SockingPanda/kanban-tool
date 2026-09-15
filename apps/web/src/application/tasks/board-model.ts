@@ -53,7 +53,7 @@ export function toBoardViewModel(readModel: BoardReadModel): BoardViewModel {
   })
 }
 
-function projectTask(task: BoardTask, groupedStatus: BoardTaskStatus): BoardTaskViewModel {
+export function projectTask(task: BoardTask, groupedStatus: BoardTaskStatus): BoardTaskViewModel {
   const status = parseStatus(task.status)
   if (status !== groupedStatus) {
     throw new BoardAdapterError(`任务 ${task.ref} 的状态分组与任务事实不一致。`)

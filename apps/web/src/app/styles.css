@@ -1,6 +1,7 @@
 @import "../styles/paper.tokens.css";
 @import "../styles/base.css";
 @import "../components/ui/primitives.css";
+@import "../components/domain/domain-ui.css";
 @import "../components/layout/overlays.css";
 @import "./shell/shell.css";
 @import "../features/tasks/tasks.css";
@@ -27,7 +28,6 @@
 }
 body { min-width: 320px; }
 .sidebar-brand, .sidebar-nav-item { text-decoration: none; }
-.sidebar-wordmark { font-size: 28px; }
 .sidebar-nav-item:disabled { opacity: .6; }
 .connection-pending { background: var(--amber); }
 .main-content > section { padding: 28px 32px; }
@@ -35,10 +35,7 @@ body { min-width: 320px; }
 .paper-banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 1px solid var(--border); padding: 12px; background: var(--muted); }
 .banner-error { background: var(--red-soft); color: var(--red); }
 .banner-warning { background: var(--amber-soft); }
-.main-content button:not(.ui-button):not(.sidebar-nav-item), .detail-sheet-body button:not(.ui-button) { border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--card); color: var(--foreground); padding: 6px 10px; }
-.main-content input, .main-content select, .main-content textarea, .detail-sheet-body input, .detail-sheet-body select, .detail-sheet-body textarea { border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--card); color: var(--foreground); padding: 7px 9px; max-width: 100%; }
-.main-content h1 { font-family: var(--font-display); font-size: 28px; font-weight: 500; }
-.detail-sheet-body h2 { font-family: var(--font-display); }
+@layer product { :where(.main-content, .detail-sheet-body) :where(button:not(.ui-button):not(.sidebar-nav-item)) { border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--card); color: var(--foreground); padding: 6px 10px; } }
 .removed-page-notice { margin: 16px 32px 0; padding: 12px; border: 1px solid var(--border); color: var(--muted-foreground); }
 @media (max-width: 760px) {
   .main-content > section { padding: 18px 16px; }
@@ -48,3 +45,5 @@ body { min-width: 320px; }
 .project-picker label { font-size: 10px; color: var(--muted-foreground); }
 .project-picker select { min-width: 0; width: 100%; padding: 7px; border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--card); color: var(--foreground); }
 .navigation-compact .project-picker { display: none; }
+
+.detail-sheet { padding: 0; }

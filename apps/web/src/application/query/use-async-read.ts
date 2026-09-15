@@ -7,10 +7,10 @@ export function useAsyncRead<T>(
   load: (signal: AbortSignal) => Promise<T>,
   refreshRevision = 0,
   online = true,
-): AsyncReadState<T> & { readonly retry: () => void; readonly reload: () => Promise<void> } {
+): AsyncReadState<T> & { readonly retry: () => void; readonly reload: () => Promise<T> } {
   const loadRef = useRef(load)
   useLayoutEffect(() => { loadRef.current = load });
-  const reloadWaitersRef = useRef<Array<{ readonly resolve: () => void; readonly reject: (error: unknown) => void }>>([])
+  const reloadWaitersRef = useRef<Array<{ readonly resolve: (data: T) => void; readonly reject: (error: unknown) => void }>>([])
   const [generation, setGeneration] = useState(0)
   const { identityKey, requestKey: baseRequestKey } = asyncReadToken(enabled, key, generation)
   // A session event/poll boundary is a new request for the same visible
@@ -26,8 +26,8 @@ export function useAsyncRead<T>(
 
   useEffect(() => {
     const reloadWaiters = reloadWaitersRef.current.splice(0)
-    const resolveReload = () => {
-      for (const waiter of reloadWaiters) waiter.resolve()
+    const resolveReload = (data: T) => {
+      for (const waiter of reloadWaiters) waiter.resolve(data)
     }
     const rejectReload = (error: unknown) => {
       for (const waiter of reloadWaiters) waiter.reject(error)
@@ -61,7 +61,7 @@ export function useAsyncRead<T>(
       (data) => {
         if (active) {
           setState({ data, error: null, loading: false, identityKey, requestKey })
-          resolveReload()
+          resolveReload(data)
         }
       },
       (error: unknown) => {
@@ -91,7 +91,7 @@ export function useAsyncRead<T>(
     for (const waiter of pending) waiter.reject(new ExplorerReadError("anomaly", "读取在当前 identity 下被卸载。"))
   }, [])
 
-  const reload = useCallback(() => new Promise<void>((resolve, reject) => {
+  const reload = useCallback(() => new Promise<T>((resolve, reject) => {
     reloadWaitersRef.current.push({ resolve, reject })
     setGeneration((current) => current + 1)
   }), [])

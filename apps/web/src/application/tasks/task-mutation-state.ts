@@ -46,7 +46,7 @@ export interface BoardTaskCanonicalReloadOptions {
   readonly mutationKind?: BoardTaskMutationCommitted["kind"]
 }
 
-export type BoardTaskCanonicalReloadHandler = (options?: BoardTaskCanonicalReloadOptions) => Promise<void> | void
+export type BoardTaskCanonicalReloadHandler = (options?: BoardTaskCanonicalReloadOptions) => Promise<BoardViewModel | null | void> | BoardViewModel | null | void
 
 export interface BoardTaskMutationSurface {
   readonly client: BoardTaskMutationClient
@@ -142,12 +142,14 @@ function withContext(task: BoardTaskViewModel, option: BoardTaskTransitionOption
 
 /** Return actions legal for this task, including claim-token/force requirements. */
 export function transitionOptionsForTask(task: BoardTaskViewModel, claimToken: string | null = null): readonly BoardTaskTransitionOption[] {
-  return transitionOptionsForStatus(task.status)
-    .filter((option) => option.action !== "submit-review" || claimToken !== null)
-    .filter((option) => option.action !== "heartbeat" || claimToken !== null)
-    .filter((option) => option.action !== "promote" || canPromoteTask(task))
-    .filter((option) => option.action !== "complete" || canCompleteTask(task))
-    .map((option) => withContext(task, option, claimToken))
+  const options: BoardTaskTransitionOption[] = []
+  for (const option of transitionOptionsForStatus(task.status)) {
+    if ((option.action === 'submit-review' || option.action === 'heartbeat') && claimToken === null) continue
+    if (option.action === 'promote' && !canPromoteTask(task)) continue
+    if (option.action === 'complete' && !canCompleteTask(task)) continue
+    options.push(withContext(task, option, claimToken))
+  }
+  return options
 }
 
 /** Resolve a target column using the task's current claim context. */

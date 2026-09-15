@@ -225,6 +225,11 @@ export async function installBoardFixture(page: Page, options: BoardFixtureOptio
       return
     }
 
+    if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/tasks`) {
+      const tasks = TASK_STATUSES.filter(status=>status!=='archived').map((status,index)=>task(status,index+1,status==='ready'?readyTaskTitle:`${status} task`));
+      await fulfillJSON(route,{data:tasks,meta:{limit:Number(url.searchParams.get('limit')??100),offset:0,total:tasks.length}});
+      return;
+    }
     if (url.pathname === "/api/v1/events") {
       const after = Number(url.searchParams.get("after") ?? 0)
       await fulfillJSON(route, { data: [], meta: { next_after: Number.isSafeInteger(after) ? after : 0 } })

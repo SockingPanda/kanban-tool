@@ -868,12 +868,12 @@ export function validateInspectorScope(
 export function parseTaskListQuery(input: string | URLSearchParams): TaskListQueryState {
   const params = typeof input === "string" ? new URLSearchParams(input.startsWith("?") ? input.slice(1) : input) : input
   const status = unique(params.getAll("status").filter((value): value is TaskListStatus => taskStatuses.has(value as TaskListStatus)))
-  const priority = unique(
-    params
-      .getAll("priority")
-      .map((value) => Number(value))
-      .filter((value) => Number.isSafeInteger(value) && value >= 0 && value <= 3),
-  )
+  const priorityValues: number[] = []
+  for (const raw of params.getAll('priority')) {
+    const value = Number(raw)
+    if (Number.isSafeInteger(value) && value >= 0 && value <= 3) priorityValues.push(value)
+  }
+  const priority = unique(priorityValues)
   const plan = unique(params.getAll("plan").filter((value): value is TaskListPlanFilter => taskPlanFilters.has(value as TaskListPlanFilter)))
   const sortValue = params.get("sort")
   const sort = sortValue && taskSorts.has(sortValue as TaskListSort) ? sortValue as TaskListSort : defaultTaskListQuery.sort

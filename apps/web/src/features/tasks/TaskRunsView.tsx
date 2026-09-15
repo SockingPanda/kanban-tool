@@ -149,23 +149,23 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
     return <section className={styles.state} data-testid="runs-no-task" role="status"><p>{copy.selectTask}</p></section>
   }
   const kind = errorKind(state.error instanceof Error ? state.error : null)
-  if (state.error && !state.data) {
-    const offline = kind === "offline"
-    return (
-      <section className={styles.state} data-testid={offline ? "runs-offline" : "runs-error"} role={offline ? "status" : "alert"}>
-        <h2>{offline ? copy.offline : copy.error}</h2>
-        {!offline ? <p>{state.error.message}</p> : null}
-        {onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}
-      </section>
-    )
-  }
-  if (state.loading && !state.data) {
-    return <section className={styles.state} data-testid="runs-loading" role="status"><p>{copy.loading}</p></section>
-  }
-  if (!state.data || state.data.runs.length === 0) {
-    if (kind === "offline") return <section className={styles.state} data-testid="runs-offline" role="status"><p>{copy.offline}</p>{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</section>
-    return <section className={styles.state} data-testid="runs-empty" role="status"><p>{copy.empty}</p></section>
-  }
+  if (!state.data || !state.data.runs.length) return <RunsBoundary state={state} copy={copy} kind={kind} onRetry={onRetry} />;
+  return <ReadyRuns locale={locale} taskId={taskId} state={{...state,data:state.data}} onRetry={onRetry} />;
+}
+
+function RunsBoundary({state,copy,kind,onRetry}:{state:TaskRunsReadState;copy:RunsCopy;kind:ReturnType<typeof errorKind>;onRetry?:()=>void}) {
+  if (state.error && !state.data) return <RunsError error={state.error} offline={kind==='offline'} copy={copy} onRetry={onRetry} />;
+  if (state.loading && !state.data) return <section className={styles.state} data-testid="runs-loading" role="status"><p>{copy.loading}</p></section>;
+  if (kind==='offline') return <section className={styles.state} data-testid="runs-offline" role="status"><p>{copy.offline}</p>{onRetry && <button type="button" onClick={onRetry}>{copy.retry}</button>}</section>;
+  return <section className={styles.state} data-testid="runs-empty" role="status"><p>{copy.empty}</p></section>;
+}
+function RunsError({error,offline,copy,onRetry}:{error:Error;offline:boolean;copy:RunsCopy;onRetry?:()=>void}) {
+ return <section className={styles.state} data-testid={offline?'runs-offline':'runs-error'} role={offline?'status':'alert'}><h2>{offline?copy.offline:copy.error}</h2>{!offline && <p>{error.message}</p>}{onRetry && <button type="button" onClick={onRetry}>{copy.retry}</button>}</section>;
+}
+
+function ReadyRuns({locale,taskId,state,onRetry}: TaskRunsPresentationProps & {state: TaskRunsReadState & {data:TaskRunsReadModel}}) {
+  const copy=copies[locale];
+  const kind=errorKind(state.error instanceof Error ? state.error : null);
   return (
     <section className={styles.runs} data-testid="runs-ready" aria-labelledby="runs-heading">
       <header className={styles.heading}>

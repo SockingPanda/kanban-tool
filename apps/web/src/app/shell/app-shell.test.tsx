@@ -69,11 +69,11 @@ describe("ProductShell route offline boundary", () => {
     const markup = renderWithLiveChild(parseAppRoute("http://kanban.test/app/boards/default"))
 
     expect(markup).toContain('data-testid="explorer-page"')
-    expect(markup).toContain('aria-label="看板浏览视图"')
+    expect(markup).toContain('aria-label="视图选项"')
     expect(markup).toContain('href="/app/boards/default/list"')
-    expect(markup).toContain('href="/app/boards/default/map"')
-    expect(markup).toContain('href="/app/boards/default/runs"')
-    expect(markup).toContain('href="/app/boards/default/events"')
+    expect(markup).toContain("依赖图")
+    expect(markup).toContain('data-testid="nav-runs"')
+    expect(markup).toContain('data-testid="nav-events"')
     expect(markup).toContain('data-testid="board-live-session"')
     expect(markup).toContain('data-testid="live-board-child"')
   })
@@ -117,7 +117,7 @@ describe("ProductShell route offline boundary", () => {
         <ProductShell runtime={runtime} canonicalBoardSlug={assertCanonicalBoardSlug("default")} route={parseAppRoute("http://kanban.test/app/boards/default/board")} />
       </PreferencesContext.Provider>,
     )
-    const positions = ["nav-board", "nav-map", "nav-runs", "nav-events", "nav-health", "nav-maintenance", "nav-settings"].map((testId) => markup.indexOf(`data-testid="${testId}"`))
+    const positions = ["nav-map-pending", "nav-board", "nav-cycles", "nav-modules", "nav-provenance", "nav-events", "nav-runs", "nav-settings"].map((testId) => markup.indexOf(`data-testid="${testId}"`))
     expect(positions.every((position) => position >= 0)).toBe(true)
     expect(positions).toEqual([...positions].sort((left, right) => left - right))
   })
@@ -128,7 +128,7 @@ describe("ProductShell route offline boundary", () => {
         <ProductShell runtime={runtime} canonicalBoardSlug={assertCanonicalBoardSlug("default")} route={parseAppRoute("http://kanban.test/app/boards/default/maintenance")} />
       </PreferencesProvider>,
     )
-    const nav = markup.slice(markup.indexOf('data-testid="nav-maintenance"') - 240, markup.indexOf('data-testid="nav-maintenance"') + 80)
+    const nav = markup.slice(markup.indexOf('data-testid="nav-settings"') - 240, markup.indexOf('data-testid="nav-settings"') + 80)
     expect(nav).toContain('aria-current="page"')
   })
 })

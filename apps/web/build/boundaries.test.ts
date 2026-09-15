@@ -24,4 +24,12 @@ describe('前端分层边界', () => {
       ['features/tasks/view.ts', 'export const View = {};'],
     ]))).toEqual([]);
   });
+  test('Host adapter 不能反向组合界面，限定名网络访问也要被拒绝', () => {
+    const issues = checkBoundaries(new Map([
+      ['adapters/host/source.ts', "import '../../features/tasks';"],
+      ['features/tasks/index.ts', "window.fetch('/api/tasks'); new globalThis.EventSource('/events');"],
+    ])).join('\n');
+    expect(issues).toContain('反向依赖');
+    expect(issues).toContain('直接读写网络或存储');
+  });
 });

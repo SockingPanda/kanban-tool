@@ -390,10 +390,10 @@ function TaskMapToolbar({
         {showDoneContext ? copy.hideDone : copy.showDone}
       </button>
       <div className={styles.zoomGroup} role="group" aria-label={copy.zoom}>
-        <button type="button" aria-label={copy.zoomOut} onClick={() => onZoomChange(-1)} disabled={zoom <= MIN_MAP_ZOOM}>−</button>
+        <button type="button" aria-label={copy.zoomOut} onClick={() => onZoomChange(-1)} disabled={zoom <= MIN_MAP_ZOOM}><span aria-hidden="true">−</span></button>
         <output data-testid="task-map-zoom" aria-live="polite">{Math.round(zoom * 100)}%</output>
         <button type="button" aria-label={copy.zoomIn} onClick={() => onZoomChange(1)} disabled={zoom >= MAX_MAP_ZOOM}>＋</button>
-        <button type="button" aria-label={copy.zoomReset} onClick={() => onZoomChange(0)}>↺</button>
+        <button type="button" aria-label={copy.zoomReset} onClick={() => onZoomChange(0)}><span aria-hidden="true">↺</span></button>
       </div>
       {onRetry ? <button type="button" className={styles.refreshButton} onClick={onRetry} disabled={loading}>{loading ? copy.refreshing : copy.refresh}</button> : null}
     </div>
@@ -445,69 +445,8 @@ function TaskMapInspector({
   )
 }
 
-export function TaskMapPresentation({
-  board,
-  locale = "zh",
-  taskId,
-  state,
-  onSelectTask,
-  selectedTaskId,
-  onInspectTask,
-  filter = "all",
-  hideIsolated = false,
-  showDoneContext = false,
-  zoom = 1,
-  onFilterChange,
-  onHideIsolatedChange,
-  onShowDoneContextChange,
-  onZoomChange,
-  onRetry,
-}: TaskMapPresentationProps) {
-  const copy = copies[locale]
-  const sourceGraph = state.data?.map ?? null
-  const visibleGraph = sourceGraph ? filterTaskMap(sourceGraph, filter, hideIsolated) : null
-  const selectedNode = resolveSelectedNode(sourceGraph, selectedTaskId ?? null, taskId)
-  const hiddenSelection = Boolean(selectedNode && visibleGraph && !visibleGraph.nodes.some((node) => node.task.id === selectedNode.task.id))
-  const inspect = onInspectTask ?? onSelectTask
-  const updateFilter = onFilterChange ?? (() => undefined)
-  const updateHideIsolated = onHideIsolatedChange ?? (() => undefined)
-  const updateDoneContext = onShowDoneContextChange ?? (() => undefined)
-  const updateZoom = onZoomChange ?? (() => undefined)
-  const mapMeta = sourceGraph?.meta
-  const offline = state.error instanceof ExplorerReadError && state.error.kind === "offline"
-
+function TaskMapGraph({copy,visibleGraph,selectedNode,hiddenSelection,zoom,inspect,onSelectTask}: {copy:typeof copies.zh;visibleGraph:ReturnType<typeof filterTaskMap>;selectedNode:ReturnType<typeof resolveSelectedNode>;hiddenSelection:boolean;zoom:number;inspect:(id:string)=>void;onSelectTask:(id:string)=>void}) {
   return (
-    <section className={styles.map} data-testid="task-map" aria-labelledby="task-map-heading">
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow} translate="no">{copy.kicker}</p>
-          <h2 id="task-map-heading">{copy.title}</h2>
-          <p className={styles.muted}><span translate="no">{board}</span>{mapMeta ? <> · {mapMeta.node_count} {copy.nodes} · {mapMeta.edge_count} {copy.edges}</> : null}</p>
-        </div>
-      </header>
-
-      <TaskMapToolbar
-        copy={copy}
-        filter={filter}
-        hideIsolated={hideIsolated}
-        showDoneContext={showDoneContext}
-        zoom={zoom}
-        loading={state.loading}
-        onFilterChange={updateFilter}
-        onHideIsolatedChange={updateHideIsolated}
-        onShowDoneContextChange={updateDoneContext}
-        onZoomChange={updateZoom}
-        onRetry={onRetry}
-      />
-
-      {state.error && sourceGraph ? <div className={styles.inlineError} role={offline ? "status" : "alert"} data-testid={offline ? "task-map-offline" : "task-map-refresh-error"}><strong>{offline ? copy.offline : copy.refreshError}</strong>{!offline ? <span>{state.error.message}</span> : null}</div> : null}
-      {mapMeta?.truncated ? <div className={styles.truncated} role="alert" data-testid="task-map-truncated"><strong>{copy.truncated}</strong><span>{copy.limit} {mapMeta.limit_nodes}{locale === "zh" ? "。" : "./index"}</span></div> : null}
-
-      {state.error && !sourceGraph ? <TaskMapError copy={copy} error={state.error} onRetry={onRetry} /> : null}
-      {!state.error && state.loading && !sourceGraph ? <section className={styles.state} data-testid="task-map-loading" role="status"><h2>{copy.loading}</h2><p>{copy.loadingDescription}</p></section> : null}
-      {!state.error && !state.loading && sourceGraph && (!visibleGraph || visibleGraph.nodes.length === 0) ? <section className={styles.state} data-testid="task-map-empty" role="status"><h2>{copy.empty}</h2><p>{sourceGraph.nodes.length === 0 ? copy.emptyDescription : copy.filteredEmpty}</p></section> : null}
-
-      {visibleGraph && visibleGraph.nodes.length > 0 ? (
         <div className={styles.layout}>
           <section className={styles.graphPanel} aria-labelledby="task-map-graph-heading">
             <h3 id="task-map-graph-heading" className={styles.visuallyHidden}>{copy.graphHeading}</h3>
@@ -540,9 +479,80 @@ export function TaskMapPresentation({
           </section>
           <TaskMapInspector copy={copy} node={selectedNode} hiddenSelection={hiddenSelection} onSelectTask={onSelectTask} />
         </div>
+  );
+}
+
+export function TaskMapPresentation({
+  board,
+  locale = "zh",
+  taskId,
+  state,
+  onSelectTask,
+  selectedTaskId,
+  onInspectTask,
+  filter = "all",
+  hideIsolated = false,
+  showDoneContext = false,
+  zoom = 1,
+  onFilterChange,
+  onHideIsolatedChange,
+  onShowDoneContextChange,
+  onZoomChange,
+  onRetry,
+}: TaskMapPresentationProps) {
+  const copy = copies[locale]
+  const sourceGraph = state.data?.map ?? null
+  const visibleGraph = sourceGraph ? filterTaskMap(sourceGraph, filter, hideIsolated) : null
+  const selectedNode = resolveSelectedNode(sourceGraph, selectedTaskId ?? null, taskId)
+  const hiddenSelection = Boolean(selectedNode && visibleGraph && !visibleGraph.nodes.some((node) => node.task.id === selectedNode.task.id))
+  const inspect = onInspectTask ?? onSelectTask
+  const updateFilter = onFilterChange ?? (() => undefined)
+  const updateHideIsolated = onHideIsolatedChange ?? (() => undefined)
+  const updateDoneContext = onShowDoneContextChange ?? (() => undefined)
+  const updateZoom = onZoomChange ?? (() => undefined)
+  const mapMeta = sourceGraph?.meta
+
+  return (
+    <section className={styles.map} data-testid="task-map" aria-labelledby="task-map-heading">
+      <header className={styles.header}>
+        <div>
+          <p className={styles.eyebrow} translate="no">{copy.kicker}</p>
+          <h2 id="task-map-heading">{copy.title}</h2>
+          <p className={styles.muted}><span translate="no">{board}</span>{mapMeta ? <> · {mapMeta.node_count} {copy.nodes} · {mapMeta.edge_count} {copy.edges}</> : null}</p>
+        </div>
+      </header>
+
+      <TaskMapToolbar
+        copy={copy}
+        filter={filter}
+        hideIsolated={hideIsolated}
+        showDoneContext={showDoneContext}
+        zoom={zoom}
+        loading={state.loading}
+        onFilterChange={updateFilter}
+        onHideIsolatedChange={updateHideIsolated}
+        onShowDoneContextChange={updateDoneContext}
+        onZoomChange={updateZoom}
+        onRetry={onRetry}
+      />
+
+      <TaskMapNotices state={state} sourceGraph={sourceGraph} visibleGraph={visibleGraph} copy={copy} locale={locale} onRetry={onRetry} />
+
+      {visibleGraph && visibleGraph.nodes.length > 0 ? (
+        <TaskMapGraph copy={copy} visibleGraph={visibleGraph} selectedNode={selectedNode} hiddenSelection={hiddenSelection} zoom={zoom} inspect={inspect} onSelectTask={onSelectTask} />
       ) : null}
     </section>
   )
+}
+
+function TaskMapNotices({state,sourceGraph,visibleGraph,copy,locale,onRetry}:{state:TaskMapReadState;sourceGraph:ExplorerTaskMapReadModel['map']|null;visibleGraph:ReturnType<typeof filterTaskMap>|null;copy:MapCopy;locale:Locale;onRetry?:()=>void}) {
+ const mapMeta=sourceGraph?.meta;
+ const offline=state.error instanceof ExplorerReadError && state.error.kind==='offline';
+ return <>      {state.error && sourceGraph ? <div className={styles.inlineError} role={offline ? "status" : "alert"} data-testid={offline ? "task-map-offline" : "task-map-refresh-error"}><strong>{offline ? copy.offline : copy.refreshError}</strong>{!offline ? <span>{state.error.message}</span> : null}</div> : null}
+      {mapMeta?.truncated ? <div className={styles.truncated} role="alert" data-testid="task-map-truncated"><strong>{copy.truncated}</strong><span>{copy.limit} {mapMeta.limit_nodes}{locale === "zh" ? "。" : "."}</span></div> : null}
+
+      <TaskMapLoadState state={state} sourceGraph={sourceGraph} visibleGraph={visibleGraph} copy={copy} onRetry={onRetry} />
+</>;
 }
 
 export function TaskMapView({
@@ -592,3 +602,7 @@ export function TaskMapView({
     />
   )
 }
+
+function TaskMapLoadState({state,sourceGraph,visibleGraph,copy,onRetry}:Pick<Parameters<typeof TaskMapNotices>[0],'state'|'sourceGraph'|'visibleGraph'|'copy'|'onRetry'>) {return <>      {state.error && !sourceGraph ? <TaskMapError copy={copy} error={state.error} onRetry={onRetry} /> : null}
+      {!state.error && state.loading && !sourceGraph ? <section className={styles.state} data-testid="task-map-loading" role="status"><h2>{copy.loading}</h2><p>{copy.loadingDescription}</p></section> : null}
+      {!state.error && !state.loading && sourceGraph && (!visibleGraph || visibleGraph.nodes.length === 0) ? <section className={styles.state} data-testid="task-map-empty" role="status"><h2>{copy.empty}</h2><p>{sourceGraph.nodes.length === 0 ? copy.emptyDescription : copy.filteredEmpty}</p></section> : null}</>;}

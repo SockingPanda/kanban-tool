@@ -25,6 +25,8 @@ export interface BoardIdentity {
 }
 
 export interface BoardColumnViewModel {
+  /** 仅控制纸本分组和键盘目的列；任务状态仍由 service 持有。 */
+  readonly representedStatuses?: readonly BoardTaskStatus[]
   readonly id: string
   readonly status: BoardTaskStatus
   readonly title: string
@@ -323,7 +325,7 @@ export type BoardMessagesOverrides = Omit<Partial<BoardMessages>, "planState"> &
 }
 
 export const defaultBoardMessages: BoardMessages = {
-  boardEyebrow: "ASTRYX BOARD",
+  boardEyebrow: "TASK BOARD",
   boardTitle: "看板",
   boardIdentityLabel: "看板标识",
   boardColumnsLabel: "看板列内容",
@@ -434,7 +436,7 @@ export const defaultBoardMessages: BoardMessages = {
 }
 
 export const englishBoardMessages: BoardMessages = {
-  boardEyebrow: "ASTRYX BOARD",
+  boardEyebrow: "TASK BOARD",
   boardTitle: "Board",
   boardIdentityLabel: "Board identity",
   boardColumnsLabel: "Board columns",

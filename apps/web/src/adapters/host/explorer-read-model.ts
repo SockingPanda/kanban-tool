@@ -119,16 +119,17 @@ export async function loadBoardEvents(
         parseApiListEventsResponse,
         payload,
       )
-      validateEventBatch(response.data, board, taskId, after, response.meta.next_after, BOARD_EVENTS_PAGE_LIMIT)
+      const nextAfter = response.meta.next_after
+      validateEventBatch(response.data, board, taskId, after, nextAfter, BOARD_EVENTS_PAGE_LIMIT)
       events = mergeBoardEvents(events, response.data, board.id)
       if (response.data.length < BOARD_EVENTS_PAGE_LIMIT) {
-        after = response.meta.next_after
+        after = nextAfter
         break
       }
-      if (response.meta.next_after <= after) {
+      if (nextAfter <= after) {
         throw new ExplorerReadError("anomaly", "事件响应的 next_after 必须在完整 page 后前进。")
       }
-      after = response.meta.next_after
+      after = nextAfter
     }
     return Object.freeze({
       board,

@@ -213,7 +213,7 @@ export async function loadBoardReadModel(
       await get(transport, columnsPath(identity.slug), linked.signal, budget),
       identity,
     )
-    const statuses = columns.map((column) => column.status)
+    const statuses = options.includeTasks === false ? [] : columns.map((column) => column.status)
     const windows = await Promise.all(
       statuses.map(async (status) => ({
         status,

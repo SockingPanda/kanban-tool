@@ -6,7 +6,7 @@ import AxeBuilder from '@axe-core/playwright';
 const baseURL = process.env.KANBAN_RELEASE_BASE_URL!;
 const evidence = process.env.KANBAN_RELEASE_EVIDENCE_DIR ?? '../../output/atlas-paper/host';
 const runId = process.env.KANBAN_RELEASE_RUN_ID!;
-let taskId = '', title = '', parentId = '', buildId = '';
+let taskId = '', title = '', parentId = '', buildId = '', boardSlug = '';
 const errors: string[] = [], completed: string[] = [];
 async function choose(page: Page, label: string, value: string) {
   await page.getByRole('combobox', { name: label, exact: true }).click();
@@ -18,16 +18,23 @@ async function read(request: APIRequestContext, suffix = '') {
   return (await response.json()).data;
 }
 async function detail(page: Page) {
-  await page.goto(`/app/boards/default/list?task=${taskId}`);
+  await page.goto(`/app/boards/${boardSlug}/list?task=${taskId}`);
   await expect(page.getByTestId('task-inspector')).toBeVisible();
 }
 async function apiCreate(request: APIRequestContext, taskTitle: string) {
-  const response = await request.post(`${baseURL}/api/v1/boards/default/tasks`, { data: { title: taskTitle, description: '验收所需的隔离任务', actor: 'v4-proof' } });
+  const response = await request.post(`${baseURL}/api/v1/boards/${boardSlug}/tasks`, { data: { title: taskTitle, description: '验收所需的隔离任务', actor: 'v4-proof' } });
   expect(response.ok(), await response.text()).toBe(true);
   return (await response.json()).data;
 }
 
 test.describe.configure({ mode: 'serial' });
+test.beforeAll(async ({ request }, info) => {
+  boardSlug = `paper-${info.project.name}-${Date.now()}`;
+  const response = await request.post(`${baseURL}/api/v1/boards`, { data: { slug: boardSlug, name: '纸本界面验收', actor: 'v4-proof' } });
+  expect(response.ok(), await response.text()).toBe(true);
+  const label = await request.post(`${baseURL}/api/v1/boards/${boardSlug}/labels`, { data: { name: 'Stage09 release', color: '#4F46E5' } });
+  expect(label.ok(), await label.text()).toBe(true);
+});
 test.beforeEach(async ({ page }) => {
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
@@ -38,7 +45,7 @@ test.beforeEach(async ({ page }) => {
 test.afterAll(async ({ request }, info) => {
   void request;
   await mkdir(evidence, { recursive: true });
-  await writeFile(`${evidence}/paper-${info.project.name}-${runId}.json`, JSON.stringify({ runId, browser: info.project.name, baseURL, buildId, taskId, parentId, completed, errors }, null, 2));
+  await writeFile(`${evidence}/paper-${info.project.name}-${runId}.json`, JSON.stringify({ runId, browser: info.project.name, baseURL, buildId, boardSlug, taskId, parentId, completed, errors }, null, 2));
 });
 
 test('真实产物身份、创建任务、标题和说明保存', async ({ page, request }, info) => {
@@ -49,7 +56,7 @@ test('真实产物身份、创建任务、标题和说明保存', async ({ page,
   expect(health.data.version).toBe(runtime.serverVersion);
   expect(runtime.webBuildId).toBe(manifest.buildId);
   buildId = runtime.webBuildId;
-  const response = await page.goto('/app/boards/default/list');
+  const response = await page.goto(`/app/boards/${boardSlug}/list`);
   expect(response?.headers()['content-security-policy']).toContain("style-src 'self'");
   await expect(page.locator('main')).toHaveAttribute('data-runtime-web-build-id', buildId);
   await expect(page.getByTestId('task-create')).toBeEnabled();

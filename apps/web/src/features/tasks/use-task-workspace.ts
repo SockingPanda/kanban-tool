@@ -301,11 +301,13 @@ export function useTaskWorkspace({ runtime, route, onNavigate, online, invalidat
   const reloadAttachments = attachmentsRead.reload
   const reloadList = listRead.reload
   const reloadVisibleInspector = useCallback(async () => {
-    const [page] = await Promise.all([
+    const [page, ...details] = await Promise.allSettled([
       collectionVisible ? reloadList() : Promise.resolve(null),
       ...(showInspector ? [reloadInspector(), reloadAttachments()] : []),
     ])
-    return taskPageMutationModel(page)
+    if (page.status === "rejected") throw page.reason
+    for (const detail of details) if (detail.status === "rejected") throw detail.reason
+    return taskPageMutationModel(page.value)
   }, [collectionVisible, reloadList, reloadAttachments, reloadInspector, showInspector])
   useLayoutEffect(() => {
     if (!collectionVisible && !showInspector) {

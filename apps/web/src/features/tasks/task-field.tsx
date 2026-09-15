@@ -11,7 +11,7 @@ export function TaskTextField({ value, save, ...props }: Omit<ComponentProps<typ
     submitting.current = true;
     try {
       const result = await save(submitted);
-      if (result.reconciled) setDraft(current => current === submitted ? null : current);
+      if (result.committed && result.reconciled) setDraft(current => current === submitted ? null : current);
     } finally { submitting.current = false; }
   };
   return <Textarea {...props} value={draft ?? value} onChange={event => setDraft(event.target.value)} onBlur={() => { void submit(); }} />;

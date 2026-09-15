@@ -120,7 +120,10 @@ test('设置、健康及维护确认与取消',async({page})=>{
   await dialog.getByRole('button',{name:'取消',exact:true}).click();
   expect(backupRequests).toBe(0);
   await page.getByTestId('maintenance-backup-submit').click();
+  const backupResponse=page.waitForResponse(response=>response.url().endsWith('/maintenance/backup')&&response.request().method()==='POST');
   await dialog.getByRole('button',{name:'继续',exact:true}).click();
+  const backup=await backupResponse;
+  expect(backup.ok(),await backup.text()).toBe(true);
   await expect(page.getByTestId('maintenance-backup-result')).toContainText(path);
   expect(backupRequests).toBe(1);
   completed.push('settings','health','maintenance-doctor','maintenance-confirm-cancel');
@@ -202,4 +205,25 @@ test('真实看板键盘和指针拖动都经过原子 claim',async({page,reques
     expect(saved.data.current_run_id).toMatch(/^r_/);
   }
   completed.push('keyboard-claim','pointer-drag-claim');
+});
+
+test('归档任务可筛选查看，归档项目不提供失效的实时入口',async({page,request})=>{
+  const task=await create(request,beta,`已归档任务 ${prefix}`);
+  const archivedTask=await request.post(`${baseURL}/api/v1/tasks/${task.id}/transitions/archive`,{data:{actor:'v4-proof',force:false}});
+  expect(archivedTask.ok(),await archivedTask.text()).toBe(true);
+  const archivedBoard=`archived-${Date.now()}`;
+  const createdBoard=await request.post(`${baseURL}/api/v1/boards`,{data:{slug:archivedBoard,name:archivedBoard,actor:'v4-proof'}});
+  expect(createdBoard.ok(),await createdBoard.text()).toBe(true);
+  const archived=await request.post(`${baseURL}/api/v1/boards/${archivedBoard}/archive`,{data:{actor:'v4-proof'}});
+  expect(archived.ok(),await archived.text()).toBe(true);
+  await page.goto(`/app/boards/${beta}/list?q=${encodeURIComponent(task.title)}`);
+  await expect(page.getByTestId('task-row')).toHaveCount(0);
+  await page.getByText('筛选与排序',{exact:true}).click();
+  await page.getByRole('checkbox',{name:'包含已归档'}).check();
+  await expect(page.getByTestId('task-row')).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByTestId('task-row')).toHaveCount(1);
+  await page.getByRole('button',{name:'选择项目',exact:true}).click();
+  await expect(page.getByRole('option',{name:`${archivedBoard} · 已归档`,exact:true})).toBeDisabled();
+  completed.push('archived-task-filter','archived-project-disabled');
 });

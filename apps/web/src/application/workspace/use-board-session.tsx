@@ -323,8 +323,12 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
           return null
         },
         onCanonicalReload: async (options) => {
-          const [canonical, visible] = await Promise.all([refreshCanonical(), onCanonicalReload?.(options)])
-          return visible ?? canonical
+          // 会话元数据被 SSE 替换时，仍须等可见任务完成回读才能释放写入状态。
+          const [canonical, visible] = await Promise.allSettled([refreshCanonical(), onCanonicalReload?.(options)])
+          if (visible.status === "rejected") throw visible.reason
+          if (visible.value != null) return visible.value
+          if (canonical.status === "rejected") throw canonical.reason
+          return canonical.value
         },
         onMutationCommitted: (event) => onMutationCommitted?.({ ...event, boardSlug: mutationBoardSlug }),
       }

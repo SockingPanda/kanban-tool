@@ -6,6 +6,94 @@ const boardPath = "/app/boards/default"
 const taskId = "t_ready"
 
 test.describe("Inspector integration seam", () => {
+  test("keeps the draft after a version conflict has refreshed canonical data", async ({ page }) => {
+    const fixture = await installExplorerFixture(page)
+    let conflict = true
+    await page.route(`**/api/v1/tasks/${taskId}`, async route => {
+      if (route.request().method() === "PATCH" && conflict) {
+        conflict = false
+        await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: { code: "claim_conflict", message: "lock_version 不匹配" } }) })
+      } else await route.fallback()
+    })
+    await page.goto(`${boardPath}/list?task=${taskId}`)
+    const title = page.getByRole("textbox", { name: "任务标题", exact: true })
+    await title.fill("冲突后仍保留的标题")
+    await title.press("Tab")
+    await expect(page.getByTestId("inspector-mutation-error")).toBeVisible()
+    await expect(title).toBeEnabled()
+    await expect(title).toHaveValue("冲突后仍保留的标题")
+    expect(fixture.readyTask().title).not.toBe("冲突后仍保留的标题")
+    await title.focus()
+    await title.press("Tab")
+    await expect.poll(() => fixture.readyTask().title).toBe("冲突后仍保留的标题")
+  })
+
+  test("an SSE refresh carries the write reload forward before the next field can save", async ({ page }) => {
+    const fixture = await installExplorerFixture(page)
+    await page.goto(`${boardPath}/list?task=${taskId}`)
+    await fixture.waitForSseConnection(0)
+    await expect(page.getByTestId("task-inspector")).toBeVisible()
+    let heldReads = 0
+    let release!: () => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    const versions: number[] = []
+    await page.route(`**/api/v1/tasks/${taskId}`, async route => {
+      if (route.request().method() === "PATCH") versions.push(route.request().postDataJSON().expected_lock_version)
+      else if (versions.length === 1) {
+        heldReads += 1
+        await held
+      }
+      try { await route.fallback() } catch { /* 同一项目的更新会中止被替换的读取。 */ }
+    })
+    const title = page.getByRole("textbox", { name: "任务标题", exact: true })
+    const description = page.getByRole("textbox", { name: "编辑任务说明" })
+    await title.fill("标题先保存")
+    await title.press("Tab")
+    await expect.poll(() => heldReads).toBeGreaterThan(0)
+    await fixture.emitTaskUpdated()
+    await expect.poll(() => heldReads).toBeGreaterThan(1)
+    await expect(description).toBeDisabled()
+    release()
+    await expect(description).toBeEnabled()
+    await description.fill("使用回读后的版本继续保存说明")
+    await description.press("Tab")
+    await expect.poll(() => fixture.readyTask().description).toBe("使用回读后的版本继续保存说明")
+    expect(versions).toEqual([1, 2])
+    await expect(page.getByTestId("inspector-mutation-error")).toHaveCount(0)
+  })
+
+  test("a failed metadata refresh does not release a still-running task reload", async ({ page }) => {
+    const fixture = await installExplorerFixture(page)
+    await page.goto(`${boardPath}/list?task=${taskId}`)
+    await expect(page.getByTestId("task-inspector")).toBeVisible()
+    let release!: () => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    const versions: number[] = []
+    await page.route(`**/api/v1/boards/default/columns`, async route => {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "internal_error", message: "metadata refresh unavailable" } }) })
+    })
+    await page.route(`**/api/v1/tasks/${taskId}`, async route => {
+      if (route.request().method() === "PATCH") versions.push(route.request().postDataJSON().expected_lock_version)
+      else if (versions.length === 1) await held
+      try { await route.fallback() } catch { /* 卸载或同项目刷新可能中止旧请求。 */ }
+    })
+    const title = page.getByRole("textbox", { name: "任务标题", exact: true })
+    const description = page.getByRole("textbox", { name: "编辑任务说明" })
+    const metadataFailure = page.waitForResponse(response => response.url().endsWith("/boards/default/columns") && response.status() === 503)
+    await title.fill("元数据失败仍等待任务")
+    await title.press("Tab")
+    await (await metadataFailure).finished()
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+    await expect(description).toBeDisabled()
+    release()
+    await expect(description).toBeEnabled()
+    await description.fill("继续使用最新任务版本")
+    await description.press("Tab")
+    await expect.poll(() => fixture.readyTask().description).toBe("继续使用最新任务版本")
+    expect(versions).toEqual([1, 2])
+    await expect(page.getByTestId("inspector-mutation-error")).toHaveCount(0)
+  })
+
   test("keeps detail writes scoped, and defers suggestions/attachment bytes until requested", async ({ page }) => {
     const fixture = await installExplorerFixture(page, { withAssets: true })
     await page.goto(`${boardPath}/list?task=${taskId}`, { waitUntil: "domcontentloaded" })

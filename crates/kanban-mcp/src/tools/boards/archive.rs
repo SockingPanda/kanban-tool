@@ -25,11 +25,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<BoardArchiveArgs>,
     ) -> Result<Json<ArchiveBoardResponse>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let result =
-            call_client(move || client.archive_board(&board, &ArchiveBoardRequest::default()))
-                .await?;
+            call_client(client.archive_board(&board, &ArchiveBoardRequest::default())).await?;
         Ok(Json(ArchiveBoardResponse { data: result }))
     }
 }

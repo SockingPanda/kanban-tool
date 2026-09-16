@@ -12,20 +12,22 @@ pub(crate) struct SkipArgs {
     pub(crate) reason: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &SkipArgs,
 ) -> Result<(), CliFailure> {
-    let step = client.skip_step_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &args.step_ref,
-        &SkipStepRequest {
-            reason: args.reason.clone(),
-            actor: None,
-        },
-    )?;
+    let step = client
+        .skip_step_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &args.step_ref,
+            &SkipStepRequest {
+                reason: args.reason.clone(),
+                actor: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CliTaskStepSkipOutput::new(step));
     } else {

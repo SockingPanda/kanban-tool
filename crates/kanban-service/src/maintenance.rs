@@ -1699,8 +1699,10 @@ impl Drop for MaintenanceLease {
         let token = self.token.clone();
         let fence_epoch = self.fence_epoch;
         // Drop 不能 await；在 panic/unwind 或任意 `?` 提前返回时，仍异步补偿
-        // 清除 owner。SQL 使用 lease_token 条件，旧 token 不会误清新 owner。
+        // 清除 owner。原命令可能已经释放 gate；补偿必须重新进入同一临界区，
+        // 并在最终 owner 写入完成后提示重读。SQL 的 token/fence 防止误清新 owner。
         handle.spawn(async move {
+            let _mutation = store.mutation_gate.lock().await;
             let lease = MaintenanceLease {
                 store: store.clone(),
                 token,
@@ -3427,6 +3429,50 @@ mod tests {
         };
         assert!(matches!(competing, StoreError::MaintenanceBusy(_)));
         lease.release().await.expect("release heartbeat lease");
+    }
+
+    #[tokio::test]
+    async fn dropped_maintenance_lease_cleanup_waits_for_gate_and_notifies_after_release() {
+        let (_directory, store, _path) = store("maintenance-drop-shared-gate").await;
+        store.initialize().await.expect("initialize");
+        let lease = store
+            .acquire_maintenance_lease("rebuild", "cancelled-owner")
+            .await
+            .expect("acquire lease");
+        let service = crate::KanbanService::new(store.clone());
+        let mut changes = service.subscribe_realtime_changes();
+        // 模拟原命令已退出、下一次一致读取先取得 gate 的合法调度顺序。
+        let fence = store.mutation_gate.read().await;
+        drop(lease);
+        let released_while_reading = tokio::time::timeout(Duration::from_millis(50), async {
+            loop {
+                if !store.maintenance_status().await.unwrap().owner.active {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await;
+        assert!(
+            released_while_reading.is_err(),
+            "Drop 补偿写入不得绕过一致读取的 gate"
+        );
+        assert!(!changes.has_changed().unwrap());
+        drop(fence);
+        tokio::time::timeout(Duration::from_secs(2), changes.changed())
+            .await
+            .expect("最终 owner 清理也必须提示重读")
+            .expect("service remains alive");
+        changes.borrow_and_update();
+        let status = service.maintenance_status().await.unwrap();
+        assert!(!status.owner.active);
+        assert!(status.owner.owner.is_none());
+        assert!(!changes.has_changed().unwrap());
+        let next = store
+            .acquire_maintenance_lease("rebuild", "next-owner")
+            .await
+            .expect("清理完成后可以获取新 lease");
+        next.release().await.expect("release next lease");
     }
 
     #[tokio::test]

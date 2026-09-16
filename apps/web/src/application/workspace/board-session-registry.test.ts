@@ -1,374 +1,189 @@
-import { createHostDataSource } from "../../adapters/host/data-source";
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { createHostDataSource } from '../../adapters/host/data-source'
+import type { BoardReadModel, BoardReadQuery } from '../data/board-read-model'
+import { asCanonicalBoardId } from '../../domain/board-id'
+import type { WebRuntimeConfig } from '../../lib/runtime'
+import type { BoardViewModel } from '../../domain/tasks/board'
+import { acquireBoardSession, activeBoardSessionCount, bindBoardResourceIdentity, boardSessionRevision, hasActiveBoardSession, reconnectActiveBoardSession, resourceIdentityKey, resetBoardSessionsForTests, runtimeIdentityKey, subscribeBoardSessions, type BoardReadResource } from './board-session-registry'
 
-import type { BoardReadModel, BoardReadQuery } from "../data/board-read-model";
-import { asCanonicalBoardId, type StreamContractAdapter, type SyncTelemetryEntry } from "../sync/contracts";
-import type { WebRuntimeConfig } from "../../lib/runtime"
-import type { BoardViewModel } from "../../domain/tasks/board"
-import {
-  acquireBoardSession,
-  activeBoardSessionCount,
-  hasActiveBoardSession,
-  reconnectActiveBoardSession,
-  resourceIdentityKey,
-  resetBoardSessionsForTests,
-  runtimeIdentityKey,
-  subscribeBoardSessionTelemetry,
-  type BoardReadResource,
-} from "./board-session-registry"
+const runtime: WebRuntimeConfig = { apiBaseUrl: '', webBasePath: '/app/', actor: 'test', defaultBoard: 'default', serverVersion: '3.0.0', protocolVersion: 'v2', webBuildId: 'test' }
+const model: BoardViewModel = { board: { id: 'b_default', slug: 'default', name: 'Default' }, columns: [], tasksByStatus: {} }
+const readModel: BoardReadModel = { identity: { selector: 'default', canonicalBoardId: asCanonicalBoardId('b_default'), slug: 'default', name: 'Default' }, columns: [], tasksByStatus: {} }
 
-const runtime: WebRuntimeConfig = {
-  apiBaseUrl: "",
-  webBasePath: "/app/",
-  actor: "test",
-  defaultBoard: "default",
-  serverVersion: "3.0.0",
-  protocolVersion: "v1",
-  webBuildId: "test",
+function controlledQuery() {
+  let next!: (model: BoardReadModel) => void
+  let failed!: (error: unknown) => void
+  let state!: (state: 'connecting' | 'live' | 'offline') => void
+  let signal!: AbortSignal
+  const releaseConnection = vi.fn()
+  const query = {
+    load: vi.fn(async () => readModel), reload: vi.fn<BoardReadQuery['reload']>(async () => readModel), invalidate: vi.fn(),
+    observe: vi.fn<BoardReadQuery['observe']>((abort, onNext, onError) => { signal = abort; next = onNext; failed = onError }),
+    subscribeConnection: vi.fn<BoardReadQuery['subscribeConnection']>(listener => { state = listener; return releaseConnection }),
+  } satisfies BoardReadQuery
+  return { query, next: (value = readModel) => next(value), fail: () => failed(new Error('断线')), state: (value: 'connecting' | 'live' | 'offline') => state(value), get signal() { return signal }, releaseConnection }
 }
-
-const model: BoardViewModel = {
-  board: { id: "b_default", slug: "default", name: "Default" },
-  columns: [],
-  tasksByStatus: {},
+function resource(query: BoardReadQuery, config = runtime, selector = 'default', id = 'b_default', slug = 'default'): BoardReadResource {
+  const boardId = asCanonicalBoardId(id)
+  return { selector, query, runtimeKey: runtimeIdentityKey(config), identityKey: resourceIdentityKey(config, selector, boardId), canonicalBoardId: boardId, resolvedSlug: slug, sessionGeneration: 0 }
 }
-
-const readModel = {
-  identity: {
-    selector: "default",
-    canonicalBoardId: asCanonicalBoardId("b_default"),
-    slug: "default",
-    name: "Default",
-  },
-  columns: [],
-  tasksByStatus: {},
-} satisfies BoardReadModel
-
-function resource(
-  query: BoardReadQuery,
-  resourceRuntime: WebRuntimeConfig = runtime,
-  selector = "default",
-  boardId = asCanonicalBoardId("b_default"),
-): BoardReadResource {
-  const adapter = {
-    parseEnvelope: () => ({ status: "invalid", code: "test" }),
-    parsePollingEnvelope: () => ({ status: "invalid", code: "test" }),
-    validateBusiness: () => ({ status: "invalid", code: "test" }),
-    isControlFrame: () => false,
-    validateControl: () => ({ status: "invalid", code: "test" }),
-  } satisfies StreamContractAdapter
-  return {
-    selector,
-    streamUrl: createHostDataSource(resourceRuntime).streamUrl,
-    transport: { get: vi.fn(), request: vi.fn(), requestBytes: vi.fn() },
-    query,
-    adapter,
-    runtimeKey: runtimeIdentityKey(resourceRuntime),
-    identityKey: resourceIdentityKey(resourceRuntime, selector, boardId),
-    canonicalBoardId: boardId,
-    resolvedSlug: "default",
-    sessionGeneration: 0,
-  }
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail })
+  return { promise, resolve, reject }
 }
+afterEach(resetBoardSessionsForTests)
 
-describe("Board canonical session registry", () => {
-  afterEach(() => resetBoardSessionsForTests())
+describe('完整查询的 canonical 看板会话', () => {
+  test('Host 仅提供业务操作与完整查询，不向页面暴露 transport', () => {
+    const source = createHostDataSource(runtime, { documentBaseURI: 'http://127.0.0.1/app/' })
+    expect(source.createBoardReadQuery(runtime, 'default')).toHaveProperty('observe')
+    expect(source).not.toHaveProperty('transport')
+  })
 
-  test("shares one controller per runtime and canonical board, then stops on last release", () => {
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const start = vi.fn()
-    const stop = vi.fn()
-    const retry = vi.fn()
-    const createController = vi.fn(() => ({ start, stop, retry }))
-    const listener = vi.fn()
-    const telemetry = vi.fn()
-
-    const first = acquireBoardSession(runtime, model, resource(query), listener, telemetry, { createController })
-    const second = acquireBoardSession(runtime, model, resource(query), listener, telemetry, { createController })
-
-    expect(createController).toHaveBeenCalledTimes(1)
+  test('同 canonical ID 的 slug/ID selector 共用一个 observer，最后卸载才释放', () => {
+    const h = controlledQuery(), other = controlledQuery(), publish = vi.fn()
+    const a = acquireBoardSession(runtime, model, resource(h.query), publish, vi.fn())
+    const b = acquireBoardSession(runtime, model, resource(other.query, runtime, 'b_default'), publish, vi.fn())
     expect(activeBoardSessionCount()).toBe(1)
-    expect(start).toHaveBeenCalledTimes(2)
-
-    first.release()
-    expect(activeBoardSessionCount()).toBe(1)
-    expect(stop).not.toHaveBeenCalled()
-    expect(listener).not.toHaveBeenCalled()
-    first.retry()
-    expect(retry).not.toHaveBeenCalled()
-    second.retry()
-    expect(retry).toHaveBeenCalledTimes(1)
-    second.release()
-    expect(activeBoardSessionCount()).toBe(0)
-    expect(stop).toHaveBeenCalledTimes(1)
-    expect(query.invalidate).toHaveBeenCalledTimes(1)
-  })
-
-  test("reconnects the retained session without creating a second controller", () => {
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const retry = vi.fn()
-    let state: "live" | "circuit-open" = "live"
-    const createController = vi.fn(() => ({
-      start: vi.fn(),
-      stop: vi.fn(),
-      retry,
-      snapshot: () => ({ state }),
-    }))
-    const handle = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
-    expect(hasActiveBoardSession(runtime, "default")).toBe(true)
-    expect(reconnectActiveBoardSession(runtime, "default")).toBe("already-live")
-    expect(retry).not.toHaveBeenCalled()
-    state = "circuit-open"
-    expect(reconnectActiveBoardSession(runtime, "default")).toBe("reconnecting")
-    expect(retry).toHaveBeenCalledTimes(1)
-    expect(createController).toHaveBeenCalledTimes(1)
-    handle.release()
-    expect(hasActiveBoardSession(runtime, "default")).toBe(false)
-    expect(reconnectActiveBoardSession(runtime, "default")).toBe("unavailable")
-  })
-
-  test("preserves a mounted telemetry observer across release/reacquire and drops it after unsubscribe", () => {
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const createController = vi.fn((options: ConstructorParameters<typeof import("../sync/index").WebSyncController>[0]) => ({
-      start: vi.fn(),
-      stop: vi.fn(),
-      retry: vi.fn(),
-      options,
-    }))
-    const observer = vi.fn()
-    const unsubscribe = subscribeBoardSessionTelemetry(runtime, asCanonicalBoardId("b_default"), observer)
-    const first = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
-    const firstRecord = createController.mock.calls[0]?.[0]?.telemetry?.record
-    const entry = { type: "event", cursor: 1, details: {} } as SyncTelemetryEntry
-    firstRecord?.(entry)
-    expect(observer).toHaveBeenCalledTimes(1)
-
-    first.release()
-    const second = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
-    const secondRecord = createController.mock.calls[1]?.[0]?.telemetry?.record
-    secondRecord?.({ ...entry, cursor: 2 })
-    expect(observer).toHaveBeenCalledTimes(2)
-
-    unsubscribe()
-    second.release()
-    const third = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
-    const thirdRecord = createController.mock.calls[2]?.[0]?.telemetry?.record
-    thirdRecord?.({ ...entry, cursor: 3 })
-    expect(observer).toHaveBeenCalledTimes(2)
-    third.release()
-  })
-
-  test("refreshes the existing canonical query and publishes without creating another stream", async () => {
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
-    const listener = vi.fn()
-    const handle = acquireBoardSession(runtime, model, resource(query), listener, vi.fn(), { createController })
-
-    await handle.refresh()
-
-    expect(query.reload).toHaveBeenCalledTimes(1)
-    expect(listener).toHaveBeenCalledWith(readModel)
-    expect(createController).toHaveBeenCalledTimes(1)
-    handle.release()
-  })
-
-  test("coalesces concurrent refresh calls so mutations cannot abort one another", async () => {
-    let resolveReload: (value: BoardReadModel) => void = () => undefined
-    const reload = vi.fn(() => new Promise<BoardReadModel>((resolve) => { resolveReload = resolve }))
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload,
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const handle = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), {
-      createController: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() })),
-    })
-    const first = handle.refresh()
-    const second = handle.refresh()
-    expect(second).toBe(first)
-    expect(reload).toHaveBeenCalledTimes(1)
-    resolveReload(readModel)
-    await Promise.all([first, second])
-    handle.release()
-  })
-
-  test("publishes a refresh started by a released owner to a retained session owner", async () => {
-    let resolveReload: (value: BoardReadModel) => void = () => undefined
-    const reload = vi.fn(() => new Promise<BoardReadModel>((resolve) => { resolveReload = resolve }))
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload,
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
-    const firstListener = vi.fn()
-    const secondListener = vi.fn()
-    const first = acquireBoardSession(runtime, model, resource(query), firstListener, vi.fn(), { createController })
-    const second = acquireBoardSession(runtime, model, resource(query), secondListener, vi.fn(), { createController })
-
-    const refresh = first.refresh()
-    first.release()
-    expect(activeBoardSessionCount()).toBe(1)
-    resolveReload(readModel)
-    await refresh
-
-    expect(firstListener).not.toHaveBeenCalled()
-    expect(secondListener).toHaveBeenCalledWith(readModel)
-    second.release()
-  })
-
-  test("does not leak a session across runtime/build identity changes", () => {
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
-    const otherRuntime = { ...runtime, webBuildId: "other" }
-
-    const first = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
-    const second = acquireBoardSession(otherRuntime, model, resource(query, otherRuntime), vi.fn(), vi.fn(), { createController })
-
-    expect(activeBoardSessionCount()).toBe(2)
-    expect(createController).toHaveBeenCalledTimes(2)
-    first.release()
-    second.release()
+    expect(h.query.observe).toHaveBeenCalledOnce()
+    expect(other.query.observe).not.toHaveBeenCalled()
+    h.next()
+    expect(publish).toHaveBeenCalledTimes(2)
+    a.release(); a.release()
+    expect(h.signal.aborted).toBe(false)
+    publish.mockClear(); h.next()
+    expect(publish).toHaveBeenCalledOnce()
+    b.release()
+    expect(h.signal.aborted).toBe(true)
+    expect(h.releaseConnection).toHaveBeenCalledOnce()
+    expect(h.query.invalidate).toHaveBeenCalledOnce()
+    expect(other.query.invalidate).not.toHaveBeenCalled()
     expect(activeBoardSessionCount()).toBe(0)
   })
 
-  test("keeps a registry query alive until the last release across distinct resources", () => {
-    const queryOne = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const queryTwo = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const stop = vi.fn()
-    const createController = vi.fn(() => ({ start: vi.fn(), stop, retry: vi.fn() }))
-
-    const first = acquireBoardSession(runtime, model, resource(queryOne), vi.fn(), vi.fn(), { createController })
-    const second = acquireBoardSession(runtime, model, resource(queryTwo), vi.fn(), vi.fn(), { createController })
-
-    first.release()
-    expect(stop).not.toHaveBeenCalled()
-    expect(queryOne.invalidate).not.toHaveBeenCalled()
-    expect(queryTwo.invalidate).not.toHaveBeenCalled()
-
-    second.release()
-    expect(stop).toHaveBeenCalledTimes(1)
-    expect(queryOne.invalidate).toHaveBeenCalledTimes(1)
-    expect(queryTwo.invalidate).not.toHaveBeenCalled()
+  test('请求期间释放一个 owner，完整结果仍交给另一个挂载者', async () => {
+    const h = controlledQuery(), pending = deferred<BoardReadModel>()
+    h.query.reload.mockReturnValueOnce(pending.promise)
+    const first = vi.fn(), retained = vi.fn()
+    const a = acquireBoardSession(runtime, model, resource(h.query), first, vi.fn())
+    const b = acquireBoardSession(runtime, model, resource(h.query), retained, vi.fn())
+    const wait = a.refresh(); a.release()
+    expect(h.signal.aborted).toBe(false)
+    pending.resolve(readModel); await wait
+    expect(first).not.toHaveBeenCalled()
+    expect(retained).toHaveBeenCalledWith(readModel)
+    b.release()
   })
 
-  test("shares one canonical session across slug and canonical-id selectors", () => {
-    const queryBySlug = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const queryById = {
-      load: vi.fn(async () => ({ ...readModel, identity: { ...readModel.identity, selector: "b_default" } })),
-      reload: vi.fn(async () => ({ ...readModel, identity: { ...readModel.identity, selector: "b_default" } })),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const start = vi.fn()
-    const stop = vi.fn()
-    const createController = vi.fn(() => ({ start, stop, retry: vi.fn() }))
-    const idResource = resource(queryById, runtime, "b_default")
-    const idModel = { ...model, board: { ...model.board, slug: "default" } }
+  test('同 board 重新挂载后丢弃旧 observer、旧状态和迟到刷新', async () => {
+    const old = controlledQuery(), current = controlledQuery(), pending = deferred<BoardReadModel>()
+    old.query.reload.mockReturnValueOnce(pending.promise)
+    const oldModel = vi.fn(), nextModel = vi.fn(), nextState = vi.fn()
+    const a = acquireBoardSession(runtime, model, resource(old.query), oldModel, vi.fn())
+    const wait = a.refresh(); a.release()
+    const b = acquireBoardSession(runtime, model, resource(current.query), nextModel, nextState)
+    old.next(); old.state('live'); old.fail(); pending.resolve(readModel); await wait
+    a.retry(); a.reconnect(); a.release(); await a.refresh()
+    expect(oldModel).not.toHaveBeenCalled()
+    expect(nextModel).not.toHaveBeenCalled()
+    expect(nextState).not.toHaveBeenCalled()
+    expect(current.query.reload).not.toHaveBeenCalled()
+    current.next(); expect(nextModel).toHaveBeenCalledOnce()
+    b.release()
+  })
 
-    const slugHandle = acquireBoardSession(runtime, model, resource(queryBySlug, runtime, "default"), vi.fn(), vi.fn(), { createController })
-    const idHandle = acquireBoardSession(runtime, idModel, idResource, vi.fn(), vi.fn(), { createController })
+  test('不同 board 与 runtime/build 各自隔离', () => {
+    const a = controlledQuery(), b = controlledQuery(), c = controlledQuery()
+    const alternate = { ...runtime, webBuildId: 'replacement' }
+    const otherModel = { ...model, board: { id: 'b_other', slug: 'other', name: 'Other' } }
+    const first = vi.fn(), second = vi.fn(), third = vi.fn()
+    acquireBoardSession(runtime, model, resource(a.query), first, vi.fn())
+    acquireBoardSession(runtime, otherModel, resource(b.query, runtime, 'other', 'b_other', 'other'), second, vi.fn())
+    acquireBoardSession(alternate, model, resource(c.query, alternate), third, vi.fn())
+    expect(activeBoardSessionCount()).toBe(3)
+    a.next(); expect(first).toHaveBeenCalledOnce(); expect(second).not.toHaveBeenCalled(); expect(third).not.toHaveBeenCalled()
+    expect(hasActiveBoardSession(runtime, 'other')).toBe(true)
+    expect(hasActiveBoardSession({ ...runtime, apiBaseUrl: '/new' })).toBe(false)
+  })
 
-    expect(createController).toHaveBeenCalledTimes(1)
+  test('Ready 确认前不会完成显式刷新或重建 observer', async () => {
+    const h = controlledQuery(), pending = deferred<BoardReadModel>(), publish = vi.fn(), completed = vi.fn()
+    h.query.reload.mockReturnValueOnce(pending.promise)
+    const handle = acquireBoardSession(runtime, model, resource(h.query), publish, vi.fn())
+    const wait = handle.refresh().then(completed)
+    await Promise.resolve()
+    expect(publish).not.toHaveBeenCalled(); expect(completed).not.toHaveBeenCalled()
+    pending.resolve(readModel); await wait
+    expect(publish).toHaveBeenCalledWith(readModel)
+    expect(completed).toHaveBeenCalledOnce()
+    expect(h.query.observe).toHaveBeenCalledOnce()
+  })
+
+  test('每次显式刷新请求都有独立 Ready 等待，后到写入不借用前次完成', async () => {
+    const h = controlledQuery(), first = deferred<BoardReadModel>(), second = deferred<BoardReadModel>(), done = vi.fn()
+    h.query.reload.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    const handle = acquireBoardSession(runtime, model, resource(h.query), vi.fn(), vi.fn())
+    const a = handle.refresh(), b = handle.refresh().then(done)
+    first.resolve(readModel); await a
+    expect(done).not.toHaveBeenCalled()
+    second.resolve(readModel); await b
+    expect(done).toHaveBeenCalledOnce()
+    expect(h.signal.aborted).toBe(false)
+  })
+
+  test('非 live 可以显式重连，live 保持原连接；故障直接报告 stale', async () => {
+    const h = controlledQuery(), state = vi.fn()
+    acquireBoardSession(runtime, model, resource(h.query), vi.fn(), state)
+    expect(reconnectActiveBoardSession(runtime, 'missing')).toBe('unavailable')
+    expect(reconnectActiveBoardSession(runtime, 'default')).toBe('reconnecting')
+    expect(h.query.reload).toHaveBeenCalledOnce()
+    h.state('live'); expect(reconnectActiveBoardSession(runtime)).toBe('already-live')
+    h.state('offline'); expect(state).toHaveBeenLastCalledWith('stale')
+    h.state('connecting'); expect(state).toHaveBeenLastCalledWith('connecting')
+    h.fail(); expect(state).toHaveBeenLastCalledWith('stale')
+    await Promise.resolve()
+  })
+
+  test('同步 observer 构造失败释放资源，后续同 key 仍可订阅', () => {
+    const h = controlledQuery()
+    h.query.observe.mockImplementationOnce(() => { throw new Error('订阅失败') })
+    expect(() => acquireBoardSession(runtime, model, resource(h.query), vi.fn(), vi.fn())).toThrow('订阅失败')
+    expect(activeBoardSessionCount()).toBe(0)
+    expect(h.query.invalidate).toHaveBeenCalledOnce()
+    acquireBoardSession(runtime, model, resource(h.query), vi.fn(), vi.fn())
     expect(activeBoardSessionCount()).toBe(1)
-    expect(start).toHaveBeenCalledTimes(2)
-
-    slugHandle.release()
-    expect(stop).not.toHaveBeenCalled()
-    expect(queryBySlug.invalidate).not.toHaveBeenCalled()
-    idHandle.release()
-    expect(stop).toHaveBeenCalledTimes(1)
-    expect(queryBySlug.invalidate).toHaveBeenCalledTimes(1)
-    expect(queryById.invalidate).not.toHaveBeenCalled()
   })
 
-  test("old reset handles cannot release or retry a replacement same-key session", () => {
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const firstStop = vi.fn()
-    const secondStop = vi.fn()
-    const firstRetry = vi.fn()
-    const secondRetry = vi.fn()
-    const createController = vi.fn()
-      .mockImplementationOnce(() => ({ start: vi.fn(), stop: firstStop, retry: firstRetry }))
-      .mockImplementationOnce(() => ({ start: vi.fn(), stop: secondStop, retry: secondRetry }))
+  test('resource 的 runtime、selector 与 canonical identity 必须共同匹配', () => {
+    const h = controlledQuery(), value = resource(h.query)
+    expect(bindBoardResourceIdentity(runtime, value, readModel)).toBe(value.identityKey)
+    expect(() => bindBoardResourceIdentity({ ...runtime, webBuildId: 'new' }, value, readModel)).toThrow('runtime')
+    expect(() => bindBoardResourceIdentity(runtime, value, { ...readModel, identity: { ...readModel.identity, selector: 'other' } })).toThrow('selector')
+    expect(() => acquireBoardSession(runtime, model, { ...value, canonicalBoardId: asCanonicalBoardId('b_other') }, vi.fn(), vi.fn())).toThrow('identity')
+    expect(activeBoardSessionCount()).toBe(0)
+  })
 
-    const oldHandle = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
+  test('reset 后旧 handle 无法释放或重试同 key 新会话', () => {
+    const first = controlledQuery(), next = controlledQuery(), publish = vi.fn()
+    const old = acquireBoardSession(runtime, model, resource(first.query), vi.fn(), vi.fn())
     resetBoardSessionsForTests()
-    const newHandle = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
-
-    oldHandle.release()
-    oldHandle.retry()
-    expect(secondStop).not.toHaveBeenCalled()
-    expect(secondRetry).not.toHaveBeenCalled()
+    acquireBoardSession(runtime, model, resource(next.query), publish, vi.fn())
+    old.release(); old.retry(); old.reconnect(); first.next()
     expect(activeBoardSessionCount()).toBe(1)
-
-    newHandle.release()
-    expect(secondStop).toHaveBeenCalledTimes(1)
+    expect(next.query.reload).not.toHaveBeenCalled()
+    next.next(); expect(publish).toHaveBeenCalledOnce()
   })
 
-  test("builds a same-origin stream URL with the runtime API prefix", () => {
-    const query = {
-      load: vi.fn(async () => readModel),
-      reload: vi.fn(async () => readModel),
-      invalidate: vi.fn(),
-    } satisfies BoardReadQuery
-    const createController = vi.fn((options: ConstructorParameters<typeof import("../sync/index").WebSyncController>[0]) => ({
-      start: vi.fn(),
-      stop: vi.fn(),
-      retry: vi.fn(),
-      options,
-    }))
-
-    const prefixedRuntime = { ...runtime, apiBaseUrl: "/gateway" }
-    const handle = acquireBoardSession(
-      prefixedRuntime,
-      model,
-      resource(query, prefixedRuntime),
-      vi.fn(),
-      vi.fn(),
-      { createController },
-    )
-
-    expect(createController).toHaveBeenCalledWith(expect.objectContaining({ streamUrl: "/gateway/api/v1/stream/events" }))
-    handle.release()
-
-    const unprefixedHandle = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
-    expect(createController).toHaveBeenLastCalledWith(expect.objectContaining({ streamUrl: "/api/v1/stream/events" }))
-    unprefixedHandle.release()
+  test('会话归属通知只在 acquire/release 改变，不把 query 内容更新转换成全局刷新', () => {
+    const h = controlledQuery(), listener = vi.fn(), before = boardSessionRevision()
+    const unsubscribe = subscribeBoardSessions(listener)
+    const handle = acquireBoardSession(runtime, model, resource(h.query), vi.fn(), vi.fn())
+    expect(boardSessionRevision()).toBeGreaterThan(before)
+    h.next(); h.state('live')
+    expect(listener).toHaveBeenCalledOnce()
+    handle.release(); expect(listener).toHaveBeenCalledTimes(2)
+    unsubscribe()
   })
 })

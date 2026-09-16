@@ -18,7 +18,14 @@ fmt:
 fmt-check: fmt
 
 fmt-full:
-    cargo fmt -p kanban-core -p kanban-service -p kanban-protocol -p kanban-web-artifact -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p xtask -- --check
+    cargo fmt --all -- --check
+
+# 独立临时数据库与 listener，使用真实生成客户端和 Node Fetch 验证 Host。
+grpc-fetch-check:
+    scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server grpc::tests::business::generated_business_client_fetches_current_host -- --ignored --nocapture
+
+grpc-attachment-check:
+    scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server grpc::tests::business::attachment_exact_256_mib_boundary_roundtrip -- --ignored --nocapture
 
 fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
@@ -121,6 +128,12 @@ web-contracts-generate:
 web-contracts-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- web-contracts check
 
+grpc-contracts-generate:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- rpc-contracts generate
+
+grpc-contracts-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- rpc-contracts check
+
 web-test:
     pnpm --filter @kanban-tool/web test
 
@@ -148,14 +161,23 @@ web-e2e:
     just node-lock-check
     pnpm --filter @kanban-tool/web e2e
 
+# 直接启动隔离 Chromium 和 Host，验证真实 BFCache 往返；每次使用新的证据目录。
+web-bfcache binary web_dir evidence_dir:
+    node apps/web/build/bfcache-proof.mjs {{quote(binary)}} {{quote(web_dir)}} {{quote(evidence_dir)}}
+
 # Stage09 09A real-host lane；mock/preview specs 仍由 `web-e2e` 单独编排。
 release-proof-09a:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- release check --root .
     KANBAN_RELEASE_SKIP_RECEIPT=0 scripts/release-proof-09a.sh
 
+# 同一隔离 Host 的性能、查询恢复、2k 分页及 5k 压力验收。
+release-proof-09d:
+    scripts/release-proof-09d.sh
+
 web-check:
     just node-lock-check
     just web-contracts-check
+    just grpc-contracts-check
     just web-typecheck
     just web-lint
     just web-react-doctor
@@ -270,7 +292,7 @@ schema-tool:
     scripts/cargo-build-lock.sh -- cargo clippy --locked -p xtask --all-targets -- -D warnings
 
 schema-surface-audit:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog; fi
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-server rpc_routes_match_method_manifest_and_descriptor --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server rpc_routes_match_method_manifest_and_descriptor; fi
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog; fi
 
 schema-contract:

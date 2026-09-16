@@ -9,10 +9,11 @@ pub(crate) struct QueryArgs {
     pub(crate) limit: usize,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &QueryArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &QueryArgs) -> Result<(), CliFailure> {
     let response = ctx
         .client()?
-        .graph_query(&ctx.board, &args.query, args.limit)?;
+        .graph_query(&ctx.board, &args.query, args.limit)
+        .await?;
     if ctx.json {
         output::print_json(&response);
     } else {

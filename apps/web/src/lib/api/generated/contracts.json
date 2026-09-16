@@ -1330,44 +1330,14 @@
     "validFixture": "fixtures/api-list-events-response.valid.json"
   },
   {
-    "direction": "deserialize",
-    "id": "sse.stream-events.headers",
-    "invalidFixture": "fixtures/sse-stream-events-headers.invalid.json",
-    "schemaId": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
-    "schemaPath": "schemas/sse-stream-events-headers.schema.json",
-    "strictness": "deny_unknown_fields",
-    "surface": "sse",
-    "validFixture": "fixtures/sse-stream-events-headers.valid.json"
-  },
-  {
-    "direction": "deserialize",
-    "id": "sse.stream-events.query",
-    "invalidFixture": "fixtures/sse-stream-events-query.invalid.json",
-    "schemaId": "urn:kanban-tool:schema:sse:stream-events-query:v1",
-    "schemaPath": "schemas/sse-stream-events-query.schema.json",
-    "strictness": "deny_unknown_fields",
-    "surface": "sse",
-    "validFixture": "fixtures/sse-stream-events-query.valid.json"
-  },
-  {
     "direction": "serialize",
-    "id": "sse.event.data",
-    "invalidFixture": "fixtures/sse-event-data.invalid.json",
-    "schemaId": "urn:kanban-tool:schema:sse:stream-event-data:v1",
-    "schemaPath": "schemas/sse-event-data.schema.json",
+    "id": "api.event.data",
+    "invalidFixture": "fixtures/api-event-data.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:event-data:v1",
+    "schemaPath": "schemas/api-event-data.schema.json",
     "strictness": "deny_unknown_fields",
-    "surface": "sse",
-    "validFixture": "fixtures/sse-event-data.valid.json"
-  },
-  {
-    "direction": "serialize",
-    "id": "sse.event.heartbeat",
-    "invalidFixture": "fixtures/sse-event-heartbeat.invalid.json",
-    "schemaId": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
-    "schemaPath": "schemas/sse-event-heartbeat.schema.json",
-    "strictness": "deny_unknown_fields",
-    "surface": "sse",
-    "validFixture": "fixtures/sse-event-heartbeat.valid.json"
+    "surface": "api",
+    "validFixture": "fixtures/api-event-data.valid.json"
   },
   {
     "direction": "deserialize",

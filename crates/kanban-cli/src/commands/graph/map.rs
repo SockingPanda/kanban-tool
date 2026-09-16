@@ -19,18 +19,21 @@ pub(crate) struct MapArgs {
     pub(crate) hide_isolated: bool,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &MapArgs) -> Result<(), CliFailure> {
-    let value = ctx.client()?.board_task_map(
-        &ctx.board,
-        &BoardTaskMapQuery {
-            active_only: args.active_only,
-            context_depth: args.context_depth,
-            limit_nodes: args.limit_nodes,
-            include_done_context: args.include_done_context,
-            include_archived_context: args.include_archived_context,
-            hide_isolated: args.hide_isolated,
-        },
-    )?;
+pub(crate) async fn run(ctx: &CliContext, args: &MapArgs) -> Result<(), CliFailure> {
+    let value = ctx
+        .client()?
+        .board_task_map(
+            &ctx.board,
+            &BoardTaskMapQuery {
+                active_only: args.active_only,
+                context_depth: args.context_depth,
+                limit_nodes: args.limit_nodes,
+                include_done_context: args.include_done_context,
+                include_archived_context: args.include_archived_context,
+                hide_isolated: args.hide_isolated,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&BoardTaskMapResponse { data: value });
     } else {

@@ -20,3 +20,8 @@ tokio = { workspace = true, features = [
     "macros",
     "rt-multi-thread",
 ] }
+
+[dev-dependencies]
+kanban-server.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["io-util", "net", "process", "sync", "time"] }

@@ -1,30 +1,33 @@
-use kanban_protocol::{ApiTask, PromoteTaskRequest, PromoteTaskResponse};
+use kanban_protocol::{ApiTask, PromoteTaskRequest};
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
 
 impl KanbanClient {
-    pub fn promote_task(
+    pub async fn promote_task(
         &self,
         task_id: &str,
         request: &PromoteTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let response: PromoteTaskResponse = self.post(
-            &format!(
-                "/api/v1/tasks/{}/transitions/promote",
-                encode_path_segment(task_id.trim())
-            ),
-            request,
+        let response: kanban_protocol::PromoteTaskResponse = rpc!(
+            self,
+            promote_task,
+            PromoteTaskRequest,
+            kanban_protocol::PromoteTaskPath {
+                task_id: task_id.trim().to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
 
-    pub fn promote_task_by_selector(
+    pub async fn promote_task_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &PromoteTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.promote_task(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.promote_task(&task_id, request).await
     }
 }

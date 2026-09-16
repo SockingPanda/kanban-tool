@@ -11,19 +11,21 @@ pub(crate) struct ReleaseArgs {
     pub(crate) claim_token: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ReleaseArgs,
 ) -> Result<(), CliFailure> {
-    let task = client.release_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &ReleaseTaskRequest {
-            actor: None,
-            claim_token: args.claim_token.clone(),
-        },
-    )?;
+    let task = client
+        .release_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &ReleaseTaskRequest {
+                actor: None,
+                claim_token: args.claim_token.clone(),
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&ReleaseTaskResponse::new(task));
     } else {

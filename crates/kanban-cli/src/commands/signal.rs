@@ -90,46 +90,59 @@ pub(crate) struct SupersedeArgs {
     pub(crate) reason: String,
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &SignalCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &SignalCommand) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     match command {
-        SignalCommand::Record(args) => record(ctx, &client, args),
-        SignalCommand::List(args) => list(ctx, &client, args),
-        SignalCommand::Show(args) => show(ctx, &client, args),
-        SignalCommand::Review(args) => review(ctx, &client, args),
-        SignalCommand::Confirm(args) => lifecycle(
-            ctx,
-            &client,
-            "confirm",
-            &args.signal_ids,
-            None,
-            &args.reason,
-        ),
-        SignalCommand::Reject(args) => {
-            lifecycle(ctx, &client, "reject", &args.signal_ids, None, &args.reason)
+        SignalCommand::Record(args) => record(ctx, &client, args).await,
+        SignalCommand::List(args) => list(ctx, &client, args).await,
+        SignalCommand::Show(args) => show(ctx, &client, args).await,
+        SignalCommand::Review(args) => review(ctx, &client, args).await,
+        SignalCommand::Confirm(args) => {
+            lifecycle(
+                ctx,
+                &client,
+                "confirm",
+                &args.signal_ids,
+                None,
+                &args.reason,
+            )
+            .await
         }
-        SignalCommand::Resolve(args) => lifecycle(
-            ctx,
-            &client,
-            "resolve",
-            &args.signal_ids,
-            None,
-            &args.reason,
-        ),
-        SignalCommand::Supersede(args) => lifecycle(
-            ctx,
-            &client,
-            "supersede",
-            &args.signal_ids,
-            Some(&args.replacement_signal_id),
-            &args.reason,
-        ),
+        SignalCommand::Reject(args) => {
+            lifecycle(ctx, &client, "reject", &args.signal_ids, None, &args.reason).await
+        }
+        SignalCommand::Resolve(args) => {
+            lifecycle(
+                ctx,
+                &client,
+                "resolve",
+                &args.signal_ids,
+                None,
+                &args.reason,
+            )
+            .await
+        }
+        SignalCommand::Supersede(args) => {
+            lifecycle(
+                ctx,
+                &client,
+                "supersede",
+                &args.signal_ids,
+                Some(&args.replacement_signal_id),
+                &args.reason,
+            )
+            .await
+        }
     }
 }
 
-fn record(ctx: &CliContext, client: &KanbanClient, args: &RecordArgs) -> Result<(), CliFailure> {
+async fn record(
+    ctx: &CliContext,
+    client: &KanbanClient,
+    args: &RecordArgs,
+) -> Result<(), CliFailure> {
     let request = read_record_request(&args.input)?;
-    let response = client.record_signal(&ctx.board, &request)?;
+    let response = client.record_signal(&ctx.board, &request).await?;
     let signal = cli_signal(response.data.signal)?;
     if ctx.json {
         output::print_json(&CliSignalRecordOutput::new(CliSignalRecordResult {
@@ -142,17 +155,19 @@ fn record(ctx: &CliContext, client: &KanbanClient, args: &RecordArgs) -> Result<
     Ok(())
 }
 
-fn list(ctx: &CliContext, client: &KanbanClient, args: &ListArgs) -> Result<(), CliFailure> {
-    let response = client.list_signals(
-        &ctx.board,
-        &signal_query(
-            &args.status,
-            &args.kind,
-            &args.task,
-            args.include_all,
-            args.limit,
-        ),
-    )?;
+async fn list(ctx: &CliContext, client: &KanbanClient, args: &ListArgs) -> Result<(), CliFailure> {
+    let response = client
+        .list_signals(
+            &ctx.board,
+            &signal_query(
+                &args.status,
+                &args.kind,
+                &args.task,
+                args.include_all,
+                args.limit,
+            ),
+        )
+        .await?;
     let signals = response
         .data
         .into_iter()
@@ -166,13 +181,13 @@ fn list(ctx: &CliContext, client: &KanbanClient, args: &ListArgs) -> Result<(), 
     Ok(())
 }
 
-fn review(
+async fn review(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ListReviewArgs,
 ) -> Result<(), CliFailure> {
     let query = signal_query(&args.status, &args.kind, &args.task, false, args.limit);
-    let response = client.review_signals(&ctx.board, &query)?;
+    let response = client.review_signals(&ctx.board, &query).await?;
     let signals = response
         .data
         .into_iter()
@@ -186,8 +201,8 @@ fn review(
     Ok(())
 }
 
-fn show(ctx: &CliContext, client: &KanbanClient, args: &ShowArgs) -> Result<(), CliFailure> {
-    let response = client.get_signal(&args.signal_id)?;
+async fn show(ctx: &CliContext, client: &KanbanClient, args: &ShowArgs) -> Result<(), CliFailure> {
+    let response = client.get_signal(&args.signal_id).await?;
     let signal = cli_signal(response.data)?;
     if ctx.json {
         output::print_json(&CliSignalShowOutput::new(signal));
@@ -197,7 +212,7 @@ fn show(ctx: &CliContext, client: &KanbanClient, args: &ShowArgs) -> Result<(), 
     Ok(())
 }
 
-fn lifecycle(
+async fn lifecycle(
     ctx: &CliContext,
     client: &KanbanClient,
     action: &str,
@@ -213,10 +228,10 @@ fn lifecycle(
         expected_updated_at: None,
     };
     let signals = match action {
-        "confirm" => client.confirm_signals(&ctx.board, &request)?.data,
-        "reject" => client.reject_signals(&ctx.board, &request)?.data,
-        "resolve" => client.resolve_signals(&ctx.board, &request)?.data,
-        "supersede" => client.supersede_signals(&ctx.board, &request)?.data,
+        "confirm" => client.confirm_signals(&ctx.board, &request).await?.data,
+        "reject" => client.reject_signals(&ctx.board, &request).await?.data,
+        "resolve" => client.resolve_signals(&ctx.board, &request).await?.data,
+        "supersede" => client.supersede_signals(&ctx.board, &request).await?.data,
         _ => unreachable!("signal lifecycle action is selected by clap"),
     }
     .into_iter()

@@ -16,15 +16,15 @@ pub(crate) enum RunCommand {
     Logs(log::LogArgs),
 }
 
-pub(crate) fn list(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
+pub(crate) async fn list(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    list::run(ctx, &client, args)
+    list::run(ctx, &client, args).await
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &RunCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &RunCommand) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     match command {
-        RunCommand::Show(args) => show::run(ctx, &client, args),
-        RunCommand::Logs(args) => log::run(ctx, &client, args),
+        RunCommand::Show(args) => show::run(ctx, &client, args).await,
+        RunCommand::Logs(args) => log::run(ctx, &client, args).await,
     }
 }

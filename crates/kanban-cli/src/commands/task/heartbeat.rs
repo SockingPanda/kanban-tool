@@ -15,21 +15,23 @@ pub(crate) struct HeartbeatArgs {
     pub(crate) note: Option<String>,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &HeartbeatArgs,
 ) -> Result<(), CliFailure> {
-    let task = client.heartbeat_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &HeartbeatTaskRequest {
-            actor: None,
-            claim_token: args.claim_token.clone(),
-            ttl_ms: args.ttl_ms,
-            note: args.note.clone(),
-        },
-    )?;
+    let task = client
+        .heartbeat_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &HeartbeatTaskRequest {
+                actor: None,
+                claim_token: args.claim_token.clone(),
+                ttl_ms: args.ttl_ms,
+                note: args.note.clone(),
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&HeartbeatTaskResponse::new(task));
     } else {

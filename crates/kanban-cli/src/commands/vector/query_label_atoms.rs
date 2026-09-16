@@ -20,15 +20,21 @@ pub(crate) struct Args {
     pub(crate) include_vector: bool,
 }
 
-pub(crate) fn run(ctx: &CliContext, client: &KanbanClient, args: &Args) -> Result<(), CliFailure> {
-    let hits = client.query_vector_label_atoms(VectorQuery {
-        board: ctx.board.clone(),
-        q: args.q.clone(),
-        limit: args.limit,
-        embedding_model: None,
-        polarity: args.polarity.clone(),
-        include_vector: args.include_vector,
-    })?;
+pub(crate) async fn run(
+    ctx: &CliContext,
+    client: &KanbanClient,
+    args: &Args,
+) -> Result<(), CliFailure> {
+    let hits = client
+        .query_vector_label_atoms(VectorQuery {
+            board: ctx.board.clone(),
+            q: args.q.clone(),
+            limit: args.limit,
+            embedding_model: None,
+            polarity: args.polarity.clone(),
+            include_vector: args.include_vector,
+        })
+        .await?;
     let data = hits
         .into_iter()
         .map(|hit| {

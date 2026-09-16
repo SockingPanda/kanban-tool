@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@bufbuild/protobuf@2.15.0': e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1
+
 importers:
 
   .: {}
@@ -16,6 +19,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.15.0
+        version: 2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)
+      '@connectrpc/connect':
+        specifier: 2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))
+      '@connectrpc/connect-web':
+        specifier: 2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)))
       ajv:
         specifier: 8.20.0
         version: 8.20.0
@@ -32,6 +44,9 @@ importers:
       '@axe-core/playwright':
         specifier: 4.12.1
         version: 4.12.1(playwright-core@1.62.1)
+      '@bufbuild/protoc-gen-es':
+        specifier: 2.15.0
+        version: 2.15.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))(supports-color@7.2.0)
       '@eslint/js':
         specifier: ^9.17.0
         version: 9.39.4
@@ -155,6 +170,33 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
+
+  '@bufbuild/protobuf@2.15.0':
+    resolution: {integrity: sha512-DAheWUkVr/SJTWCc+lg9dhY0eN4SaWlf4+bG1KzHeXbnqt0AfB/NX0Z+VunGlM1ki1B4zVvye27MpKh/svySUA==}
+
+  '@bufbuild/protoc-gen-es@2.15.0':
+    resolution: {integrity: sha512-FRhNTAZEXW6arWx2JxgtpuazhmewYctXugu5SfXGpXpLLCInDT1005fSKDzEM/70Es2oIn07PM4RvpwvDvR/fg==}
+    engines: {node: '>=22'}
+    hasBin: true
+    peerDependencies:
+      '@bufbuild/protobuf': 2.15.0
+    peerDependenciesMeta:
+      '@bufbuild/protobuf':
+        optional: true
+
+  '@bufbuild/protoplugin@2.15.0':
+    resolution: {integrity: sha512-vZhRoqB/jTHATqItRvJQf1zbxdrGRRhiusGty4+lKcfEFODG0PMXky2Ezv4WHHS6oSxq+5qShITuE7K1/82SuQ==}
+
+  '@connectrpc/connect-web@2.2.0':
+    resolution: {integrity: sha512-uuBUcBTYfb/r1o98LzCCZk1H90yx0vmZ5m21dpw/q4EUwsKwkCDGI8H0aEdjcZld+Q2jJ5A5ADvPqfb6lzQ/sg==}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.7.0
+      '@connectrpc/connect': 2.2.0
+
+  '@connectrpc/connect@2.2.0':
+    resolution: {integrity: sha512-M63OQ1ZFcPUm85CuewJ9G9CMV8LjzGR9935xOnXNQGSazAbwMb3x2W7vXBYM1zqrP7XFD8uxp/dUAhirclgwnQ==}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.7.0
 
   '@emnapi/core@1.11.2':
     resolution: {integrity: sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA==}
@@ -958,6 +1000,11 @@ packages:
     resolution: {integrity: sha512-EbGRQg4FhrmwLodl+t3JNAnXHWVr9Vp+Zl1QBZVPY4ByfkzIT8cX3K6QWODHtkIZqqJVEWvhHSx3v5PDHsaQag==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@typescript/vfs@1.6.4':
+    resolution: {integrity: sha512-PJFXFS4ZJKiJ9Qiuix6Dz/OwEIqHD7Dme1UwZhTK11vR+5dqW2ACbdndWQexBzCx+CPuMe5WBYQWCsFyGlQLlQ==}
+    peerDependencies:
+      typescript: '*'
+
   '@vitejs/plugin-react@6.0.5':
     resolution: {integrity: sha512-BOVzne/NL162sMdResB25mUv+vWMF5NoAjNf09TeGlE7ZpszZWSD3winycicLJw72yeVsoCn/2kOhEuCvEShMA==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1739,6 +1786,11 @@ packages:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
       typescript: '>=4.8.4 <6.1.0'
 
+  typescript@5.4.5:
+    resolution: {integrity: sha512-vcI4UpRgg81oIRUFwR0WSIHKt11nJ7SAVlYNIu+QpqeyXP+gpQJy/Z4+F0aGxSE4MqwjyXvW/TzgkLAx2AGHwQ==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
@@ -1995,6 +2047,33 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)': {}
+
+  '@bufbuild/protoc-gen-es@2.15.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))(supports-color@7.2.0)':
+    dependencies:
+      '@bufbuild/protoplugin': 2.15.0(supports-color@7.2.0)
+    optionalDependencies:
+      '@bufbuild/protobuf': 2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@bufbuild/protoplugin@2.15.0(supports-color@7.2.0)':
+    dependencies:
+      '@bufbuild/protobuf': 2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)
+      '@typescript/vfs': 1.6.4(supports-color@7.2.0)(typescript@5.4.5)
+      typescript: 5.4.5
+    transitivePeerDependencies:
+      - supports-color
+
+  '@connectrpc/connect-web@2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)))':
+    dependencies:
+      '@bufbuild/protobuf': 2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)
+      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))
+
+  '@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1))':
+    dependencies:
+      '@bufbuild/protobuf': 2.15.0(patch_hash=e69a4938e434e7e35445af8937969d0c53d626a118e127943ef17dafb08b33e1)
 
   '@emnapi/core@1.11.2':
     dependencies:
@@ -2590,6 +2669,13 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 8.60.1
       eslint-visitor-keys: 5.0.1
+
+  '@typescript/vfs@1.6.4(supports-color@7.2.0)(typescript@5.4.5)':
+    dependencies:
+      debug: 4.4.3(supports-color@7.2.0)
+      typescript: 5.4.5
+    transitivePeerDependencies:
+      - supports-color
 
   '@vitejs/plugin-react@6.0.5(vite@8.2.1(@types/node@22.19.20)(jiti@2.7.0)(yaml@2.9.1))':
     dependencies:
@@ -3374,6 +3460,8 @@ snapshots:
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
+
+  typescript@5.4.5: {}
 
   typescript@5.9.3: {}
 

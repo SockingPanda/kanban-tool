@@ -10,19 +10,21 @@ pub(crate) struct ReopenArgs {
     #[arg(long, help = "重新打开原因")]
     pub(crate) reason: String,
 }
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ReopenArgs,
 ) -> Result<(), CliFailure> {
-    let task = client.reopen_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &ReopenTaskRequest {
-            actor: None,
-            reason: args.reason.clone(),
-        },
-    )?;
+    let task = client
+        .reopen_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &ReopenTaskRequest {
+                actor: None,
+                reason: args.reason.clone(),
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&ReopenTaskResponse::new(task));
     } else {

@@ -11,8 +11,18 @@ default = []
 legacy-sqlite-import = ["kanban-service/legacy-sqlite-import"]
 
 [dependencies]
-axum.workspace = true
+async-stream.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+sha2.workspace = true
+prost.workspace = true
+tonic = { workspace = true, features = ["transport", "codegen"] }
+tonic-web.workspace = true
+tower.workspace = true
+kanban-live-core.workspace = true
+axum = { workspace = true, features = ["http2"] }
 futures-util.workspace = true
+hyper-util = { workspace = true, features = ["server-auto", "http1", "http2", "tokio", "service"] }
 kanban-service.workspace = true
 kanban-protocol = { workspace = true, default-features = false }
 kanban-web-artifact = { workspace = true, default-features = false }
@@ -33,7 +43,8 @@ tower-http = { workspace = true, features = ["cors", "trace"] }
 tracing.workspace = true
 
 [dev-dependencies]
-http-body-util.workspace = true
+prost-types.workspace = true
+reqwest = { workspace = true, features = ["stream", "http2"] }
 kanban-service = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

@@ -1,21 +1,25 @@
+import type { Integer } from '../../domain/integer'
+import type { RpcCall } from "../../application/data/rpc-transport";
+import { inheritReadScope } from '../../application/query/observe-read';
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
-import { asCanonicalBoardId, type CanonicalBoardId } from "../../application/sync/contracts";
+import { asCanonicalBoardId, type CanonicalBoardId } from "../../domain/board-id";
 
 import { parseApiListBoardsResponse } from "../../lib/api/generated/contracts/api-list-boards-response";
 
 import { parseApiListTasksByStatusResponse } from "../../lib/api/generated/contracts/api-list-tasks-by-status-response";
 
-import { createHttpTransport } from "./http-transport";
-import { type HttpTransportResponse } from "../../application/data/http-transport";
+import { createRpcTransport } from "./rpc-transport";
+import { type RpcTransportResponse } from "../../application/data/rpc-transport";
 
-import { type LinkedAbortSignal, type BoardReadTransport, BoardReadBudget, BoardReadError, wrapTransportError, type ResolvedBoardIdentity, emptyError, parseContract, boardQuery, validateBoardList, type BoardTaskStatus, type WireBoardTask, type BoardReadModelOptions, type BoardTask, tasksPath, DEFAULT_TASK_OFFSET, MAX_TASK_PAGES, tasksQuery, appendTasksQuery, projectTask, type BoardReadModel, validateTaskPageSize, parseColumns, columnsPath, type BoardReadQuery, generationAbortError } from "../../application/data/board-read-model";
+import { type LinkedAbortSignal, type BoardReadTransport, BoardReadBudget, BoardReadError, wrapTransportError, type ResolvedBoardIdentity, emptyError, parseContract, boardQuery, validateBoardList, type BoardTaskStatus, type WireBoardTask, type BoardReadModelOptions, type BoardTask, tasksPath, DEFAULT_TASK_OFFSET, MAX_TASK_PAGES, tasksQuery, appendTasksQuery, projectTask, type BoardReadModel, validateTaskPageSize, parseColumns, columnsPath, generationAbortError } from "../../application/data/board-read-model";
 
 export function linkAbortSignals(signals: readonly (AbortSignal | undefined)[]): LinkedAbortSignal {
   const controller = new AbortController()
   const activeSignals = signals.filter((signal): signal is AbortSignal => signal !== undefined)
   const abort = () => controller.abort()
   for (const signal of activeSignals) {
+    inheritReadScope(signal, controller.signal)
     if (signal.aborted) controller.abort()
     else signal.addEventListener("abort", abort, { once: true })
   }
@@ -29,12 +33,14 @@ export function linkAbortSignals(signals: readonly (AbortSignal | undefined)[]):
 
 export async function get(
   transport: BoardReadTransport,
-  path: string,
+  request: RpcCall,
   signal: AbortSignal | undefined,
   budget: BoardReadBudget,
 ): Promise<unknown> {
   try {
-    const response: HttpTransportResponse = await transport.get(path, signal)
+    if (signal?.aborted) throw generationAbortError()
+    const response: RpcTransportResponse = await transport.call({ ...request, signal })
+    if (signal?.aborted) throw generationAbortError()
     if (
       response === null
       || typeof response !== "object"
@@ -43,7 +49,7 @@ export async function get(
       || !Number.isSafeInteger(response.bytes)
       || response.bytes < 0
     ) {
-      throw new BoardReadError("anomaly", "Web API transport 返回了无效 raw JSON 字节数。")
+      throw new BoardReadError("anomaly", "Web API transport 返回了无效 Protobuf 字节数。")
     }
     budget.consumeBytes(response.bytes)
     return response.payload
@@ -90,8 +96,8 @@ export function parseTasksWindow(
   status: BoardTaskStatus,
   expectedOffset: number,
   expectedLimit: number,
-  expectedTotal: number | null,
-): { tasks: readonly WireBoardTask[]; total: number; nextOffset: number } {
+  expectedTotal: Integer | null,
+): { tasks: readonly WireBoardTask[]; total: Integer; nextOffset: number } {
   const response = parseContract(
     "api.list-tasks-by-status.response",
     parseApiListTasksByStatusResponse,
@@ -157,7 +163,7 @@ export async function loadTasksForStatus(
 ): Promise<readonly BoardTask[]> {
   const basePath = tasksPath(identity.slug)
   let offset = DEFAULT_TASK_OFFSET
-  let total: number | null = null
+  let total: Integer | null = null
   let pages = 0
   const tasks: BoardTask[] = []
   const taskIds = new Set<string>()
@@ -204,7 +210,7 @@ export async function loadBoardReadModel(
     let transport: BoardReadTransport
     try {
       transport = options.dependencies?.transport
-        ?? createHttpTransport(runtime, options.dependencies)
+        ?? createRpcTransport(runtime, options.dependencies)
     } catch (error) {
       return wrapTransportError(error)
     }
@@ -236,62 +242,5 @@ export async function loadBoardReadModel(
     return wrapTransportError(error)
   } finally {
     linked.cleanup()
-  }
-}
-
-export function createBoardReadQuery(
-  runtime: WebRuntimeConfig,
-  selector = runtime.defaultBoard,
-  options: BoardReadModelOptions = {},
-): BoardReadQuery {
-  let generation = 0
-  let cached: BoardReadModel | null = null
-  let generationController: AbortController | null = null
-  let pending: { readonly generation: number; readonly promise: Promise<BoardReadModel> } | null = null
-
-  const load = (signal?: AbortSignal): Promise<BoardReadModel> => {
-    if (cached !== null) return Promise.resolve(cached)
-    if (pending !== null && pending.generation === generation) return pending.promise
-
-    const requestGeneration = generation
-    const controller = new AbortController()
-    const linked = linkAbortSignals([options.signal, signal, controller.signal])
-    generationController = controller
-    const loadOptions = { ...options, signal: linked.signal }
-    const promise = loadBoardReadModel(runtime, selector, loadOptions).then(
-      (model) => {
-        if (requestGeneration !== generation) throw generationAbortError()
-        cached = model
-        pending = null
-        generationController = null
-        return model
-      },
-      (error: unknown) => {
-        if (requestGeneration === generation) {
-          pending = null
-          generationController = null
-        }
-        throw error
-      },
-    ).finally(() => linked.cleanup())
-    pending = { generation: requestGeneration, promise }
-    return promise
-  }
-
-  const invalidate = (): void => {
-    generationController?.abort()
-    generationController = null
-    generation += 1
-    cached = null
-    pending = null
-  }
-
-  return {
-    load,
-    reload(signal) {
-      invalidate()
-      return load(signal)
-    },
-    invalidate,
   }
 }

@@ -37,20 +37,18 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskDoneArgs>,
     ) -> Result<Json<CompleteTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.complete_task_by_selector(
-                &board,
-                &args.task_ref,
-                &CompleteTaskRequest {
-                    actor: None,
-                    claim_token: args.claim_token,
-                    force: args.force,
-                    summary: args.summary,
-                    result: args.result,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.complete_task_by_selector(
+            &board,
+            &args.task_ref,
+            &CompleteTaskRequest {
+                actor: None,
+                claim_token: args.claim_token,
+                force: args.force,
+                summary: args.summary,
+                result: args.result,
+            },
+        ))
         .await?;
         Ok(Json(CompleteTaskResponse::new(task)))
     }

@@ -10,12 +10,12 @@ pub(crate) struct LogArgs {
     pub(crate) run_id: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &LogArgs,
 ) -> Result<(), CliFailure> {
-    let log = client.get_run_log(&args.run_id)?;
+    let log = client.get_run_log(&args.run_id).await?;
     if ctx.json {
         output::print_json(&CliRunLogsOutput::new(CliRunLog {
             run_id: log.run_id,

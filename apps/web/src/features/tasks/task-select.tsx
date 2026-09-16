@@ -12,10 +12,10 @@ export function TaskSelect({ workspace, exclude = [], ...props }: Omit<SelectPro
 }) {
   const [search, setSearch] = useState('');
   const { loadTaskListPage } = useWorkspaceOperations();
-  const { runtime, route, boardRevision, online } = workspace;
+  const { runtime, route, online } = workspace;
   const read = useAsyncRead(true, `${route.boardSlug}:${search}`, signal =>
     loadTaskListPage(runtime, route.boardSlug, { ...defaultTaskListQuery, search, limit: 100 }, { signal }),
-    boardRevision, online !== false);
+    online !== false);
   const excluded = new Set(exclude);
   const options = (read.data?.tasks ?? []).flatMap(task => excluded.has(task.id) ? [] : [{ value: task.id, label: `${task.ref} · ${task.title}` }]);
   return <>

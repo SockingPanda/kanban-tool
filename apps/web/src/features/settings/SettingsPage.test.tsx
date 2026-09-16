@@ -6,7 +6,7 @@ import type { WebRuntimeConfig } from '../../lib/runtime';
 import type { HealthReport } from '../../application/data/health-read-model';
 import { apiOriginForRuntime, diagnosticsText } from '../../application/diagnostics';
 import { SettingsPage, type SettingsPageProps } from './SettingsPage';
-const runtime={apiBaseUrl:'',webBasePath:'/app/',actor:'local',defaultBoard:'default',serverVersion:'3.0.0',protocolVersion:'v1',webBuildId:'build-test'} satisfies WebRuntimeConfig;
+const runtime={apiBaseUrl:'',webBasePath:'/app/',actor:'local',defaultBoard:'default',serverVersion:'3.0.0',protocolVersion:'v2',webBuildId:'build-test'} satisfies WebRuntimeConfig;
 const health={ok:true,db:'turso',version:'3.0.0',db_path:'/tmp/kanban.db',db_fingerprint:'sha256:test'} satisfies HealthReport;
 const render=(props:Partial<SettingsPageProps>={})=>renderToStaticMarkup(<PreferencesProvider><SettingsPage runtime={runtime} initialHealth={health} {...props}/></PreferencesProvider>);
 describe('SettingsPage progressive disclosure',()=>{

@@ -29,7 +29,7 @@ pub(crate) struct BootstrapArgs {
     pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &BootstrapArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &BootstrapArgs) -> Result<(), CliFailure> {
     let verify = args.verify || args.vector_config.is_some();
     if verify && !(0.0..=1.0).contains(&args.min_verify_score) {
         return Err(CliFailure {
@@ -44,22 +44,24 @@ pub(crate) fn run(ctx: &CliContext, args: &BootstrapArgs) -> Result<(), CliFailu
         .map(read_vector_config)
         .transpose()?;
     let client = ctx.client()?;
-    let response = client.bootstrap_task_label_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &BootstrapTaskLabelRequest {
-            name: args.label.clone(),
-            description: args.description.clone(),
-            applies_when: args.applies_when.clone(),
-            excludes_when: args.excludes_when.clone(),
-            positive_examples: args.positive_examples.clone(),
-            negative_examples: args.negative_examples.clone(),
-            verify,
-            min_verify_score: args.min_verify_score,
-            vector_config,
-            actor: None,
-        },
-    )?;
+    let response = client
+        .bootstrap_task_label_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &BootstrapTaskLabelRequest {
+                name: args.label.clone(),
+                description: args.description.clone(),
+                applies_when: args.applies_when.clone(),
+                excludes_when: args.excludes_when.clone(),
+                positive_examples: args.positive_examples.clone(),
+                negative_examples: args.negative_examples.clone(),
+                verify,
+                min_verify_score: args.min_verify_score,
+                vector_config,
+                actor: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CliLabelBootstrapOutput {
             data: CliLabelBootstrapResult {

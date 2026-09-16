@@ -1,5 +1,7 @@
 //! 提供 label semantics、atoms、proposals 和 ontology ledger 的 MCP tools。
 
+use std::future::Future;
+
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -26,7 +28,7 @@ struct OntologyArgs {
 
 async fn call<F>(operation: F) -> Result<Json<Value>, McpError>
 where
-    F: FnOnce() -> Result<Value, kanban_client::ClientError> + Send + 'static,
+    F: Future<Output = Result<Value, kanban_client::ClientError>>,
 {
     Ok(Json(call_client_internal(operation).await?))
 }
@@ -41,9 +43,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        call(move || client.list_label_semantics(&board)).await
+        call(client.list_label_semantics(&board)).await
     }
 
     #[tool(
@@ -54,10 +56,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let reference = args.reference.unwrap_or_default();
-        call(move || client.get_label_semantics(&board, &reference)).await
+        call(client.get_label_semantics(&board, &reference)).await
     }
 
     #[tool(
@@ -68,11 +70,11 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let reference = args.reference.unwrap_or_default();
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.upsert_label_semantics(&board, &reference, payload)).await
+        call(client.upsert_label_semantics(&board, &reference, payload)).await
     }
 
     #[tool(
@@ -83,7 +85,7 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let reference = args.reference.unwrap_or_default();
         let payload = args.payload.unwrap_or_else(|| json!({}));
@@ -97,7 +99,7 @@ impl KanbanMcp {
             .and_then(Value::as_str)
             .unwrap_or("delete label semantics")
             .to_owned();
-        call(move || client.delete_label_semantics(&board, &reference, &expected, &reason)).await
+        call(client.delete_label_semantics(&board, &reference, &expected, &reason)).await
     }
 
     #[tool(name = "label_atoms_list", description = "列出 canonical label atoms")]
@@ -105,9 +107,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        call(move || client.list_label_atoms(&board)).await
+        call(client.list_label_atoms(&board)).await
     }
 
     #[tool(name = "label_atom_explain", description = "解释 atom provenance")]
@@ -115,10 +117,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let reference = args.reference.unwrap_or_default();
-        call(move || client.explain_label_atom(&board, &reference)).await
+        call(client.explain_label_atom(&board, &reference)).await
     }
 
     #[tool(
@@ -129,9 +131,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        call(move || client.label_atom_index_status(&board)).await
+        call(client.label_atom_index_status(&board)).await
     }
 
     #[tool(
@@ -142,9 +144,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        call(move || client.rebuild_label_atom_index(&board)).await
+        call(client.rebuild_label_atom_index(&board)).await
     }
 
     #[tool(
@@ -155,16 +157,14 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        call(move || {
-            client.query_label_atom_index(
-                &board,
-                args.q.as_deref(),
-                args.polarity.as_deref(),
-                args.limit.unwrap_or(24),
-            )
-        })
+        call(client.query_label_atom_index(
+            &board,
+            args.q.as_deref(),
+            args.polarity.as_deref(),
+            args.limit.unwrap_or(24),
+        ))
         .await
     }
 
@@ -173,11 +173,11 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let task = args.task_ref.unwrap_or_default();
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.suggest_task_labels(&task, Some(&board), payload)).await
+        call(client.suggest_task_labels(&task, Some(&board), payload)).await
     }
 
     #[tool(name = "label_propose", description = "提出任务 label")]
@@ -185,11 +185,11 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let task = args.task_ref.unwrap_or_default();
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.propose_task_label(&board, &task, payload)).await
+        call(client.propose_task_label(&board, &task, payload)).await
     }
 
     #[tool(
@@ -200,9 +200,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        call(move || client.list_label_proposals(&board, args.task_ref.as_deref(), None)).await
+        call(client.list_label_proposals(&board, args.task_ref.as_deref(), None)).await
     }
 
     #[tool(name = "label_proposal_show", description = "查看一条 label proposal")]
@@ -210,9 +210,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let proposal = args.proposal_id.or(args.reference).unwrap_or_default();
-        call(move || client.get_label_proposal(&proposal)).await
+        call(client.get_label_proposal(&proposal)).await
     }
 
     #[tool(name = "label_proposal_accept", description = "接受 label proposal")]
@@ -220,10 +220,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let proposal = args.proposal_id.or(args.reference).unwrap_or_default();
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.decide_label_proposal(&proposal, true, payload)).await
+        call(client.decide_label_proposal(&proposal, true, payload)).await
     }
 
     #[tool(name = "label_proposal_reject", description = "拒绝 label proposal")]
@@ -231,10 +231,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let proposal = args.proposal_id.or(args.reference).unwrap_or_default();
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.decide_label_proposal(&proposal, false, payload)).await
+        call(client.decide_label_proposal(&proposal, false, payload)).await
     }
 
     #[tool(name = "label_ontology_signals", description = "列出 ontology signals")]
@@ -242,10 +242,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.list_label_ontology_signals(&board, payload)).await
+        call(client.list_label_ontology_signals(&board, payload)).await
     }
 
     #[tool(
@@ -256,9 +256,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let signal = args.signal_id.or(args.reference).unwrap_or_default();
-        call(move || client.get_label_ontology_signal(&signal)).await
+        call(client.get_label_ontology_signal(&signal)).await
     }
 
     #[tool(
@@ -269,10 +269,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.review_label_ontology(&board, payload)).await
+        call(client.review_label_ontology(&board, payload)).await
     }
 
     #[tool(
@@ -283,10 +283,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.create_label_ontology_action(&board, payload)).await
+        call(client.create_label_ontology_action(&board, payload)).await
     }
 
     #[tool(name = "label_ontology_apply_atom", description = "应用 atom mutation")]
@@ -294,10 +294,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.apply_label_ontology_atom(&board, payload)).await
+        call(client.apply_label_ontology_atom(&board, payload)).await
     }
 
     #[tool(
@@ -308,10 +308,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.revert_label_ontology(&board, payload)).await
+        call(client.revert_label_ontology(&board, payload)).await
     }
 
     #[tool(name = "label_ontology_validate", description = "校验 ontology action")]
@@ -319,10 +319,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.validate_label_ontology(&board, payload)).await
+        call(client.validate_label_ontology(&board, payload)).await
     }
 
     #[tool(
@@ -333,9 +333,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        call(move || client.label_ontology_quality(&board, args.limit.unwrap_or(20))).await
+        call(client.label_ontology_quality(&board, args.limit.unwrap_or(20))).await
     }
 
     #[tool(
@@ -346,10 +346,10 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<OntologyArgs>,
     ) -> Result<Json<Value>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
         let task = args.task_ref.unwrap_or_default();
         let payload = args.payload.unwrap_or_else(|| json!({}));
-        call(move || client.record_label_ontology_observation(&board, &task, payload)).await
+        call(client.record_label_ontology_observation(&board, &task, payload)).await
     }
 }

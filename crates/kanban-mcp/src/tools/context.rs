@@ -78,8 +78,8 @@ impl KanbanMcp {
             depth: args.depth,
             budget: Some(args.budget),
         };
-        let client = self.client.clone();
-        let response = call_client(move || client.build_context(&subject, &query)).await?;
+        let client = &self.client;
+        let response = call_client(client.build_context(&subject, &query)).await?;
         Ok(Json(response))
     }
 }

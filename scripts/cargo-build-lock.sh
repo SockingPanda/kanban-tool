@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RAW_TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}"
+RAW_TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-/media/zebra/T7_Linux_Work/projects/Personal/labs/.cache/kanban-tool/cargo-target}"
 CHILD_PID=""
 CHILD_PGID=""
 COMMAND=()
@@ -40,7 +40,7 @@ Environment:
   KANBAN_CARGO_TARGET_ROOT    Override target root for local tests. The wrapper
                               uses this exact directory for every worktree while
                               keeping one shared build lock.
-                              Default: $HOME/.cache/kanban-tool/cargo-target
+                              Default: /media/zebra/T7_Linux_Work/projects/Personal/labs/.cache/kanban-tool/cargo-target
   KANBAN_CARGO_BUILD_JOBS     Repo-level default for CARGO_BUILD_JOBS.
   KANBAN_TEST_THREADS         Repo-level default for nextest/libtest threads.
                               Set either repo-level value to "auto" to leave the

@@ -1,3 +1,4 @@
+import { type Integer } from '../../domain/integer'
 export type TaskInspectorRelationTaskStatus =
   | "triage"
   | "todo"
@@ -16,7 +17,7 @@ export interface TaskInspectorCommentView {
   readonly author: string
   readonly kind: TaskInspectorCommentKind
   readonly body: string
-  readonly createdAt: number
+  readonly createdAt: Integer
   /** Structured metadata is rendered as escaped JSON; it is never interpreted as HTML. */
   readonly metadata?: Readonly<Record<string, unknown>>
 }

@@ -1,11 +1,19 @@
-use kanban_protocol::{ApiBoard, GetBoardResponse};
+use kanban_protocol::ApiBoard;
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
 
 impl KanbanClient {
-    pub fn get_board(&self, board: &str) -> Result<ApiBoard, ClientError> {
-        let path = format!("/api/v1/boards/{}", encode_path_segment(board.trim()));
-        let response: GetBoardResponse = self.get(&path)?;
+    pub async fn get_board(&self, board: &str) -> Result<ApiBoard, ClientError> {
+        let response: kanban_protocol::GetBoardResponse = rpc!(
+            self,
+            get_board,
+            GetBoardRequest,
+            kanban_protocol::GetBoardPath {
+                board: board.trim().to_owned()
+            },
+            (),
+            ()
+        )?;
         Ok(response.data)
     }
 }

@@ -3,6 +3,9 @@ import path from "node:path"
 
 import Ajv2020 from "ajv/dist/2020"
 import standaloneCode from "ajv/dist/standalone"
+import { _, type KeywordCxt } from "ajv"
+import { parseJson } from "../src/lib/lossless-json"
+import { I64_MIN, I64_MAX, U64_MAX } from "../src/domain/integer"
 
 const virtualModulePrefix = "virtual:kanban-contract-validator/"
 const resolvedVirtualModulePrefix = `\0${virtualModulePrefix}`
@@ -28,12 +31,43 @@ export function createContractValidatorPlugin(options: { schemaDirectory?: strin
 
       const slug = id.slice(resolvedVirtualModulePrefix.length)
       const schemaPath = schemaPathForSlug(slug, schemaDirectory)
-      const schema = JSON.parse(readFileSync(schemaPath, "utf8")) as object
+      const schema = integerSchema(parseJson(readFileSync(schemaPath, "utf8"))) as object
       const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false, code: { esm: true, source: true } })
+      ajv.addKeyword({
+        keyword: 'kanbanInteger',
+        schemaType: 'object',
+        code(context: KeywordCxt) {
+          const { data, schema: bounds } = context
+          const minimum = String(bounds.minimum)
+          const maximum = String(bounds.maximum)
+          context.fail(_`!((typeof ${data} === "bigint" || (typeof ${data} === "number" && Number.isSafeInteger(${data}))) && ${data} >= BigInt(${minimum}) && ${data} <= BigInt(${maximum}))`)
+        },
+      })
       const validator = ajv.compile(schema)
       return standaloneCode(ajv, validator)
     },
   }
+}
+
+/** 仅在构建时投影整数规则；canonical JSON Schema 保持原样。 */
+function integerSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(integerSchema)
+  if (value === null || typeof value !== 'object') return value
+  const schema = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, integerSchema(child)]))
+  if (schema.format !== undefined && !['int64', 'uint64', 'uint'].includes(String(schema.format))) return schema
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type]
+  if (!types.includes('integer')) return schema
+  const unsigned = schema.format === 'uint64' || schema.format === 'uint'
+  const lower = unsigned ? 0n : I64_MIN
+  const upper = unsigned ? U64_MAX : I64_MAX
+  const minimum = schema.minimum === undefined ? lower : BigInt(String(schema.minimum))
+  const maximum = schema.maximum === undefined ? upper : BigInt(String(schema.maximum))
+  const integer = { kanbanInteger: { minimum: String(minimum > lower ? minimum : lower), maximum: String(maximum < upper ? maximum : upper) } }
+  delete schema.type
+  delete schema.format
+  delete schema.minimum
+  delete schema.maximum
+  return { ...schema, anyOf: [integer, ...types.flatMap(type => type === 'integer' ? [] : [{ type }])] }
 }
 
 function schemaPathForSlug(slug: string, schemaDirectory: string): string {

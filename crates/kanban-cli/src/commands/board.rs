@@ -29,13 +29,13 @@ pub(crate) enum BoardCommand {
     Current,
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &BoardCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &BoardCommand) -> Result<(), CliFailure> {
     match command {
-        BoardCommand::Create(args) => create::run(ctx, args),
-        BoardCommand::List(args) => list::run(ctx, args),
-        BoardCommand::Show(args) => show::run(ctx, args),
-        BoardCommand::Archive(args) => archive::run(ctx, args),
-        BoardCommand::Columns(args) => columns::run(ctx, args),
+        BoardCommand::Create(args) => create::run(ctx, args).await,
+        BoardCommand::List(args) => list::run(ctx, args).await,
+        BoardCommand::Show(args) => show::run(ctx, args).await,
+        BoardCommand::Archive(args) => archive::run(ctx, args).await,
+        BoardCommand::Columns(args) => columns::run(ctx, args).await,
         BoardCommand::Use { board } => {
             let selected_board = board.trim();
             let write = crate::config::write_active_board(selected_board)

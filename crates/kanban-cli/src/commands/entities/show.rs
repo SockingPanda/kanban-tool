@@ -7,8 +7,8 @@ pub(crate) struct ShowArgs {
     pub(crate) uri: String,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &ShowArgs) -> Result<(), CliFailure> {
-    let entity = ctx.client()?.get_entity(&args.uri)?;
+pub(crate) async fn run(ctx: &CliContext, args: &ShowArgs) -> Result<(), CliFailure> {
+    let entity = ctx.client()?.get_entity(&args.uri).await?;
     if ctx.json {
         output::print_json(&kanban_protocol::CliEntityShowOutput { data: entity });
     } else {

@@ -3,12 +3,13 @@ import { readdir, readFile, writeFile } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 
 import type { Plugin } from "vite"
+import { WEB_PROTOCOL_VERSION } from "../src/lib/web-protocol.ts"
 
 export const WEB_ARTIFACT_FORMAT_VERSION = 1
 export const WEB_ARTIFACT_BASE_PATH = "/app/"
 export const WEB_ARTIFACT_ENTRYPOINT = "index.html"
 export const WEB_ARTIFACT_MANIFEST_PATH = "manifest.json"
-export const WEB_PROTOCOL_VERSION = "v1"
+export { WEB_PROTOCOL_VERSION } from "../src/lib/web-protocol.ts"
 
 const BUILD_ID_DOMAIN = "kanban-tool:web-artifact-build-id:v1"
 const BUILD_ID_PREFIX = "sha256:"

@@ -34,9 +34,9 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let query = args.query;
         let limit = args.limit;
-        let client = self.client.clone();
+        let client = &self.client;
         Ok(Json(
-            call_client(move || client.graph_query(&board, &query, limit)).await?,
+            call_client(client.graph_query(&board, &query, limit)).await?,
         ))
     }
 }

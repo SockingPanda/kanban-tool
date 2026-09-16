@@ -1,29 +1,29 @@
 #[cfg(feature = "legacy-sqlite-import")]
 use std::fs;
 
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
+use crate::test_support::{parts, rpc_request, wire_response};
+use kanban_protocol::rpc::v1 as pb;
+#[cfg(feature = "legacy-sqlite-import")]
 use serde_json::Value;
+use std::collections::BTreeMap;
 use tokio::sync::OnceCell;
 use tower::ServiceExt;
 
 use crate::{AppState, build_router};
 
-static LEGACY_HTTP_FLOW: OnceCell<()> = OnceCell::const_new();
+static LEGACY_RPC_FLOW: OnceCell<()> = OnceCell::const_new();
 
-pub(crate) async fn ensure_legacy_http_flow() {
-    LEGACY_HTTP_FLOW
+pub(crate) async fn ensure_legacy_rpc_flow() {
+    LEGACY_RPC_FLOW
         .get_or_init(|| async {
-            run_legacy_http_flow()
+            run_legacy_rpc_flow()
                 .await
-                .expect("legacy SQLite v30 HTTP flow");
+                .expect("legacy SQLite v30 RPC flow");
         })
         .await;
 }
 
-async fn run_legacy_http_flow() -> Result<(), String> {
+async fn run_legacy_rpc_flow() -> Result<(), String> {
     let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
     let target_path = directory.path().join("legacy-target.db");
     let target = AppState::open(&target_path, "legacy-adoption")
@@ -37,18 +37,28 @@ async fn run_legacy_http_flow() -> Result<(), String> {
             kanban_service::adoption_test_support::make_legacy_source(directory.path())?;
         let attachment_root = directory.path().join("canonical-attachments");
         let response = router
-            .oneshot(post_json(
-                "/api/v1/maintenance/import-v30",
-                serde_json::json!({
-                    "path": source_path,
-                    "canonical_attachment_root": attachment_root,
-                }),
+            .oneshot(rpc_request(
+                "MaintenanceImportV30",
+                pb::MaintenanceImportV30Request::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({
+                        "path": source_path,
+                        "canonical_attachment_root": attachment_root,
+                    })),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
-        let status = response.status();
-        let body = decode_json(response).await?;
-        assert_eq!(status, StatusCode::OK, "legacy import response: {body}");
+        let report: kanban_protocol::LegacyImportResponse =
+            wire_response::<pb::MaintenanceImportV30Response>(response)
+                .await
+                .unwrap()
+                .try_into()
+                .unwrap();
+        let body = serde_json::to_value(report).unwrap();
         assert_eq!(body["data"]["phase"], "completed");
         assert_eq!(body["data"]["resumed"], false);
         assert_eq!(body["data"]["attachment_count"], 1);
@@ -67,13 +77,25 @@ async fn run_legacy_http_flow() -> Result<(), String> {
     #[cfg(not(feature = "legacy-sqlite-import"))]
     {
         let response = router
-            .oneshot(post_json(
-                "/api/v1/maintenance/import-v30",
-                serde_json::json!({"path":"/tmp/legacy-v30.sqlite"}),
+            .oneshot(rpc_request(
+                "MaintenanceImportV30",
+                pb::MaintenanceImportV30Request::from_parts(
+                    (),
+                    (),
+                    parts(serde_json::json!({"path":"/tmp/legacy-v30.sqlite"})),
+                )
+                .unwrap(),
+                &BTreeMap::new(),
             ))
             .await
             .map_err(|error| error.to_string())?;
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            wire_response::<pb::MaintenanceImportV30Response>(response)
+                .await
+                .unwrap_err()
+                .code(),
+            tonic::Code::Unimplemented
+        );
     }
     Ok(())
 }
@@ -106,24 +128,4 @@ async fn assert_target_facts(target: &AppState) -> Result<(), String> {
         .await
         .map_err(|error| error.to_string())?;
     kanban_service::adoption_test_support::assert_legacy_target_facts(&export_path)
-}
-
-fn post_json(uri: &str, value: Value) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header("content-type", "application/json")
-        .body(Body::from(
-            serde_json::to_vec(&value).expect("legacy request JSON"),
-        ))
-        .expect("legacy POST request")
-}
-
-#[cfg(feature = "legacy-sqlite-import")]
-async fn decode_json(response: axum::response::Response) -> Result<Value, String> {
-    let bytes = http_body_util::BodyExt::collect(response.into_body())
-        .await
-        .map_err(|error| error.to_string())?
-        .to_bytes();
-    serde_json::from_slice(&bytes).map_err(|error| error.to_string())
 }

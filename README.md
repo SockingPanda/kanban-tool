@@ -7,8 +7,9 @@ Turso host 边界内协作。
 产品只有一条运行路径：
 
 ```text
-CLI / MCP / Desktop
-        │ typed localhost HTTP/SSE
+CLI / MCP                 Web / Desktop WebView
+        │ 原生 gRPC                │ binary gRPC-Web
+        └─────────────┬────────────┘
         ▼
 kanban serve（唯一 host）
         │ KanbanService application path
@@ -83,7 +84,7 @@ specify、unblock、reopen、reclaim 和 archive 都是显式 service command，
 - [`kanban-service` 迁移与导入](crates/kanban-service/docs/migration.md)
 - [`kanban-service` 维护](crates/kanban-service/docs/maintenance.md)
 - [`kanban-protocol` schema/wire 契约](crates/kanban-protocol/docs/schema.md)
-- [CLI](crates/kanban-cli/README.md)、[HTTP host](crates/kanban-server/README.md)、[MCP](crates/kanban-mcp/README.md)、[Desktop](apps/desktop/README.md)
+- [CLI](crates/kanban-cli/README.md)、[gRPC host](crates/kanban-server/README.md)、[MCP](crates/kanban-mcp/README.md)、[Desktop](apps/desktop/README.md)
 
 ## 范围
 

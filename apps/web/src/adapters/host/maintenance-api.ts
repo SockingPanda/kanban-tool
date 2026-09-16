@@ -40,90 +40,30 @@ import { parseApiSearchStatusQuery } from "../../lib/api/generated/contracts/api
 
 import { parseApiSearchStatusResponse } from "../../lib/api/generated/contracts/api-search-status-response";
 
-import { createHttpTransport } from "./http-transport";
+import { createRpcTransport } from "./rpc-transport";
 
-import { type MaintenanceApiDependencies, type MaintenanceApi, MaintenanceApiError, type MaintenanceApiTransport, parseResponse, wrapTransportError, encodedBoard, normalizedOwner } from "../../application/data/maintenance-api";
+import { type MaintenanceApi,type MaintenanceApiDependencies,MaintenanceApiError,normalizedOwner,parseResponse,wrapTransportError } from "../../application/data/maintenance-api";
 
-export function createMaintenanceApi(
-  dependencies: MaintenanceApiDependencies = {},
-  runtime?: WebRuntimeConfig,
-): MaintenanceApi {
-  const selectedTransport = dependencies.transport ?? (runtime ? createHttpTransport(runtime, dependencies) : null)
-  if (!selectedTransport) throw new MaintenanceApiError("offline", "Web maintenance 缺少 runtime transport。")
-  const transport: MaintenanceApiTransport = selectedTransport
-
-  async function get<T>(
-    path: string,
-    parser: (payload: unknown) => { data: T },
-    contractId: string,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    try {
-      return parseResponse(await transport.get(path, signal), parser, contractId)
-    } catch (error) {
-      return wrapTransportError(error)
-    }
+import type { RpcCall,RpcMethod } from '../../application/data/rpc-transport';
+export function createMaintenanceApi(dependencies: MaintenanceApiDependencies = {}, runtime?: WebRuntimeConfig): MaintenanceApi {
+  const transport = dependencies.transport ?? (runtime ? createRpcTransport(runtime, dependencies) : null)
+  if (!transport) throw new MaintenanceApiError('offline', 'Web maintenance 缺少 runtime transport。')
+  async function call<T>(method: RpcMethod, parts: Pick<RpcCall, 'path' | 'query' | 'input'>, parser: (payload: unknown) => { data: T }, contractId: string, signal?: AbortSignal): Promise<T> {
+    try { return parseResponse(await transport!.call({ method, ...parts, ...(signal ? { signal } : {}) }), parser, contractId) }
+    catch (error) { return wrapTransportError(error) }
   }
-
-  async function post<T>(
-    path: string,
-    body: unknown,
-    parser: (payload: unknown) => { data: T },
-    contractId: string,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    try {
-      return parseResponse(await transport.request({ method: "POST", path, body, signal }), parser, contractId)
-    } catch (error) {
-      return wrapTransportError(error)
-    }
-  }
-
   return {
-    status: (signal) => get("/api/v1/maintenance/status", parseApiMaintenanceStatusResponse, "api.maintenance-status.response", signal),
-    doctor: (signal) => get("/api/v1/maintenance/doctor", parseApiDoctorResponse, "api.doctor.response", signal),
-    stats: async (board, signal) => {
-      const query = parseApiGetStatsQuery({ board })
-      return get(`/api/v1/stats?board=${encodedBoard(query.board ?? "default")}`, parseApiGetStatsResponse, "api.get-stats.response", signal)
-    },
-    searchStatus: async (board, signal) => {
-      const query = parseApiSearchStatusQuery({ board })
-      return get(`/api/v1/search/status?board=${encodedBoard(query.board ?? "default")}`, parseApiSearchStatusResponse, "api.search-status.response", signal)
-    },
-    checkpoint: (signal) => post("/api/v1/maintenance/checkpoint", undefined, parseApiCheckpointResponse, "api.checkpoint.response", signal),
-    backup: async (path, signal) => {
-      const body = parseApiMaintenanceBackupRequest({ path })
-      return post("/api/v1/maintenance/backup", body, parseApiMaintenanceBackupResponse, "api.maintenance-backup.response", signal)
-    },
-    exportData: async (path, signal) => {
-      const body = parseApiMaintenanceExportRequest({ path })
-      return post("/api/v1/maintenance/export", body, parseApiMaintenanceExportResponse, "api.maintenance-export.response", signal)
-    },
-    importData: async (path, replace, signal) => {
-      const body = parseApiMaintenanceImportRequest({ path, replace })
-      return post("/api/v1/maintenance/import", body, parseApiMaintenanceImportResponse, "api.maintenance-import.response", signal)
-    },
-    vacuum: (signal) => post("/api/v1/maintenance/vacuum", undefined, parseApiMaintenanceVacuumResponse, "api.maintenance-vacuum.response", signal),
-    maintenanceRun: (owner, signal) => post(
-      "/api/v1/maintenance/run",
-      parseApiMaintenanceRunRequest({ owner: normalizedOwner(owner), action: "run" }),
-      parseApiMaintenanceRunResponse,
-      "api.maintenance-run.response",
-      signal,
-    ),
-    maintenanceRebuild: (owner, signal) => post(
-      "/api/v1/maintenance/rebuild",
-      parseApiMaintenanceRebuildRequest({ owner: normalizedOwner(owner), action: null }),
-      parseApiMaintenanceRebuildResponse,
-      "api.maintenance-rebuild.response",
-      signal,
-    ),
-    maintenanceCleanup: (owner, signal) => post(
-      "/api/v1/maintenance/cleanup",
-      parseApiMaintenanceCleanupRequest({ owner: normalizedOwner(owner), action: null }),
-      parseApiMaintenanceCleanupResponse,
-      "api.maintenance-cleanup.response",
-      signal,
-    ),
+    status: signal => call('MaintenanceStatus', {}, parseApiMaintenanceStatusResponse, 'api.maintenance-status.response', signal),
+    doctor: signal => call('Doctor', {}, parseApiDoctorResponse, 'api.doctor.response', signal),
+    stats: (board, signal) => call('GetStats', { query: parseApiGetStatsQuery({ board }) }, parseApiGetStatsResponse, 'api.get-stats.response', signal),
+    searchStatus: (board, signal) => call('SearchStatus', { query: parseApiSearchStatusQuery({ board }) }, parseApiSearchStatusResponse, 'api.search-status.response', signal),
+    checkpoint: signal => call('Checkpoint', {}, parseApiCheckpointResponse, 'api.checkpoint.response', signal),
+    backup: (path, signal) => call('MaintenanceBackup', { input: parseApiMaintenanceBackupRequest({ path }) }, parseApiMaintenanceBackupResponse, 'api.maintenance-backup.response', signal),
+    exportData: (path, signal) => call('MaintenanceExport', { input: parseApiMaintenanceExportRequest({ path }) }, parseApiMaintenanceExportResponse, 'api.maintenance-export.response', signal),
+    importData: (path, replace, signal) => call('MaintenanceImport', { input: parseApiMaintenanceImportRequest({ path, replace }) }, parseApiMaintenanceImportResponse, 'api.maintenance-import.response', signal),
+    vacuum: signal => call('MaintenanceVacuum', {}, parseApiMaintenanceVacuumResponse, 'api.maintenance-vacuum.response', signal),
+    maintenanceRun: (owner, signal) => call('MaintenanceRun', { input: parseApiMaintenanceRunRequest({ owner: normalizedOwner(owner), action: 'run' }) }, parseApiMaintenanceRunResponse, 'api.maintenance-run.response', signal),
+    maintenanceRebuild: (owner, signal) => call('MaintenanceRebuild', { input: parseApiMaintenanceRebuildRequest({ owner: normalizedOwner(owner), action: null }) }, parseApiMaintenanceRebuildResponse, 'api.maintenance-rebuild.response', signal),
+    maintenanceCleanup: (owner, signal) => call('MaintenanceCleanup', { input: parseApiMaintenanceCleanupRequest({ owner: normalizedOwner(owner), action: null }) }, parseApiMaintenanceCleanupResponse, 'api.maintenance-cleanup.response', signal),
   }
 }

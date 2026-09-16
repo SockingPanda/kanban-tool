@@ -1,3 +1,7 @@
+import { fromBinary } from "@bufbuild/protobuf"
+import { WatchQueriesRequestSchema, type QueryCursor } from "../src/generated/rpc/kanban/v1/query_pb"
+import { installQueryProbe } from "./release-query-probe"
+import { rpcRequest } from "./release-rpc"
 import { constants } from "node:fs"
 import { lstat, mkdir, open, rename, rm } from "node:fs/promises"
 import { join } from "node:path"
@@ -23,18 +27,21 @@ type MetricSample = {
   readonly cls_entry_count: number
   readonly observer_supported: boolean
 }
-type SseSample = {
+type QuerySample = {
   readonly sample: number
   readonly task_id: string
   readonly mutation_to_event_ms: number
   readonly disconnected_catch_up: boolean
 }
 
-type SseStreamRequest = {
+type CursorEvidence = { readonly epoch: string; readonly scope: string; readonly revision: string }
+function cursorEvidence(cursor: QueryCursor | undefined): CursorEvidence | null { return cursor ? { epoch: cursor.epoch, scope: cursor.scope, revision: String(cursor.revision) } : null }
+
+type QueryStreamRequest = {
+  readonly client_query_id: string
   readonly url: string
   readonly at_ms: number
-  readonly last_event_id: string | null
-  readonly after: string | null
+  readonly resume: CursorEvidence | null
 }
 
 type ConfirmedTaskCursor = {
@@ -42,11 +49,23 @@ type ConfirmedTaskCursor = {
   readonly event_id: string
 }
 
-type ListUiEvidence = {
-  readonly row_count: number
-  readonly range: string
-  readonly first_task_id: string | null
-  readonly last_task_id: string | null
+type CanonicalTask = { readonly id: string; readonly status: string; readonly title: string }
+type WindowQuery = { readonly page: number; readonly limit: number; readonly sort: string; readonly status: readonly string[]; readonly q: string }
+type TaskWindowEvidence = {
+  readonly view: "list" | "board"
+  readonly url: string
+  readonly query: WindowQuery
+  readonly footer_text: string
+  readonly displayed_count: number
+  readonly displayed_total: number
+  readonly pager_text: string
+  readonly page: number
+  readonly total_pages: number
+  readonly previous_enabled: boolean
+  readonly next_enabled: boolean
+  readonly task_ids: readonly string[]
+  readonly canonical: { readonly total: number; readonly offset: number; readonly limit: number; readonly tasks: readonly CanonicalTask[] }
+  readonly columns: readonly BoardColumnEvidence[] | null
 }
 
 type BoardReadyEvidence = {
@@ -57,59 +76,37 @@ type BoardReadyEvidence = {
 }
 
 type BoardColumnEvidence = {
-  readonly column_id: string
-  readonly total: number
-  readonly page: number
-  readonly total_pages: number
-  readonly range_start: number
-  readonly range_end: number
-  readonly range_total: number
-  readonly rendered_card_count: number
-}
-
-type BoardWindowEvidence = {
-  readonly column_id: string
-  readonly page_size: number
-  readonly page1: {
-    readonly page: number
-    readonly range_start: number
-    readonly range_end: number
-    readonly total: number
-    readonly first_task_id: string | null
-    readonly last_task_id: string | null
-  }
-  readonly page2: {
-    readonly page: number
-    readonly range_start: number
-    readonly range_end: number
-    readonly total: number
-    readonly first_task_id: string | null
-    readonly last_task_id: string | null
-  }
+  readonly label: string
+  readonly count_text: string
+  readonly displayed_count: number
+  readonly task_ids: readonly string[]
+  readonly task_statuses: readonly string[]
 }
 
 type FunctionalUiEvidence = {
-  readonly board_total: number
-  readonly board_rendered_count: number
-  readonly board_columns: readonly BoardColumnEvidence[]
-  readonly board_window: BoardWindowEvidence
+  readonly stats: { readonly text: string; readonly total: number; readonly canonical_total: number }
   readonly board_ready: BoardReadyEvidence
-  readonly list_total: number
-  readonly page1: ListUiEvidence
-  readonly page2: ListUiEvidence
+  readonly board_pages: readonly TaskWindowEvidence[]
+  readonly list_pages: readonly TaskWindowEvidence[]
+  readonly filter_sort: {
+    readonly status_text: string
+    readonly search_text: string
+    readonly sort_text: string
+    readonly pages: readonly TaskWindowEvidence[]
+    readonly changed_sort_text: string
+    readonly changed_sort: TaskWindowEvidence
+    readonly cleared: TaskWindowEvidence
+  }
 }
 
-type StressUiEvidence = {
-  readonly board_total: number
-  readonly board_rendered_count: number
-  readonly board_columns: readonly BoardColumnEvidence[]
-  readonly board_window: BoardWindowEvidence
-  readonly board_ready: BoardReadyEvidence
-  readonly list_total: number
-  readonly before_limit: number
-  readonly before: ListUiEvidence
-  readonly after_limit: number
-  readonly after: ListUiEvidence
+type StressUiEvidence = FunctionalUiEvidence & {
+  readonly page_size: {
+    readonly options: readonly string[]
+    readonly before_text: string
+    readonly before_pages: readonly TaskWindowEvidence[]
+    readonly after_text: string
+    readonly after: TaskWindowEvidence
+  }
   readonly map: {
     readonly node_count: number
     readonly edge_count: number
@@ -141,10 +138,10 @@ type UiMutation = {
 
 const browserErrors: BrowserError[] = []
 const metricSamples: MetricSample[] = []
-const sseSamples: SseSample[] = []
+const querySamples: QuerySample[] = []
 const taskCounts: Array<{ readonly target: number; readonly total: number }> = []
 const fixtureSeedRecords: FixtureSeedRecord[] = []
-const sseStreamRequests: SseStreamRequest[] = []
+const queryStreamRequests: QueryStreamRequest[] = []
 let mapEvidence: {
   readonly node_count: number
   readonly edge_count: number
@@ -162,24 +159,25 @@ const uiEvidence: { functional_2k: FunctionalUiEvidence | null; stress_5k: Stres
 }
 let fixtureSeedResponseErrors = 0
 let firstFailure: string | null = null
-let sseKeyPathPassed = false
-let sseReconnectPassed = false
-let sseStaleCleared = false
-let sseReconnectEvidence: {
+let queryKeyPathPassed = false
+let queryReconnectPassed = false
+let queryStaleCleared = false
+let queryReconnectEvidence: {
   readonly before_count: number
   readonly request_count_after_disconnect: number
   readonly request_at_ms: number | null
   readonly event_seen_at_ms: number | null
-  readonly last_event_id: string | null
-  readonly after: string | null
-  readonly confirmed_cursor: string | null
+  readonly resume: CursorEvidence | null
+  readonly confirmed_cursor: CursorEvidence | null
+  readonly recovery_cursor: CursorEvidence | null
+  readonly recovery_mode: "resume" | "snapshot" | null
   readonly confirmed_task_id: string | null
   readonly confirmed_event_id: string | null
 } | null = null
 
 const phaseTarget = phase.includes("5k") ? 5_000 : phase.includes("2k") ? 2_000 : null
-const SSE_P95_BUDGET_MS = 1_000
-const SSE_CATCH_UP_P95_BUDGET_MS = 3_000
+const QUERY_P95_BUDGET_MS = 1_000
+const QUERY_CATCH_UP_P95_BUDGET_MS = 3_000
 const FIXTURE_CONCURRENCY = 16
 const FIXTURE_TEST_TIMEOUT_MS = 30 * 60_000
 const BOARD_READY_BUDGET_MS = 120_000
@@ -285,7 +283,8 @@ function attachBrowserErrors(page: Page, errors: BrowserError[]): void {
 }
 
 async function listTaskTotal(request: APIRequestContext): Promise<number> {
-  const response = await request.get(`${baseURL}/api/v1/boards/default/tasks?limit=1&offset=0&sort=seq`)
+  void request
+  const response = await rpcRequest("ListTasks", { path: { board: "default" }, query: { limit: 1, offset: 0, sort: "seq" } })
   expect(response.ok()).toBe(true)
   const body = await response.json() as { meta?: { total?: unknown } }
   const total = body.meta?.total
@@ -299,7 +298,7 @@ async function confirmedTaskCursor(request: APIRequestContext, taskId: string): 
   let after = 0
   let selected: { id: number; event_id: string } | null = null
   for (let page = 0; page < 100; page += 1) {
-    const response = await request.get(`${baseURL}/api/v1/events?board=default&after=${after}&limit=100`)
+    const response = await rpcRequest("ListEvents", { query: { board: "default", after: after, limit: 100 } })
     expect(response.ok()).toBe(true)
     const body = await response.json() as {
       data?: Array<{ id?: unknown; event_id?: unknown; task_id?: unknown }>
@@ -317,157 +316,165 @@ async function confirmedTaskCursor(request: APIRequestContext, taskId: string): 
   return { cursor: String(selected.id), event_id: selected.event_id }
 }
 
-async function listUiEvidence(page: Page): Promise<ListUiEvidence> {
-  const list = page.getByTestId("task-list")
-  const range = (await list.locator("header p").last().innerText()).trim()
-  const rows = page.getByTestId("task-row")
-  const rowCount = await rows.count()
+const listStatusOrder = ["running", "blocked", "review", "ready", "scheduled", "todo", "triage", "done", "archived"]
+const boardColumns = [
+  { label: "待开始", statuses: ["triage", "todo", "scheduled", "ready"] },
+  { label: "进行中", statuses: ["running", "blocked"] },
+  { label: "待验收", statuses: ["review"] },
+  { label: "已完成", statuses: ["done", "archived"] },
+]
+const defaultWindowQuery: WindowQuery = { page: 1, limit: 100, sort: "updated_at", status: [], q: "" }
+
+function queryFromUrl(url: string): WindowQuery {
+  const params = new URL(url).searchParams
   return {
-    row_count: rowCount,
-    range,
-    first_task_id: rowCount > 0 ? await rows.first().getAttribute("data-task-id") : null,
-    last_task_id: rowCount > 0 ? await rows.last().getAttribute("data-task-id") : null,
+    page: Number(params.get("page") ?? 1), limit: Number(params.get("limit") ?? 100),
+    sort: params.get("sort") ?? "updated_at", status: params.getAll("status"), q: params.get("q") ?? "",
   }
 }
 
-function listTotalFromRange(range: string): number {
-  const match = range.match(/\/\s*(\d+)$/)
-  if (!match) throw new Error(`task list range did not expose a total: ${range}`)
-  const total = Number(match[1])
-  if (!Number.isSafeInteger(total) || total < 0) throw new Error(`task list total is not a safe integer: ${range}`)
-  return total
+async function taskIds(locator: Locator): Promise<string[]> {
+  return locator.evaluateAll(elements => elements.map(element => element.getAttribute("data-task-id") ?? ""))
 }
 
-function parseBoardRange(text: string): { readonly start: number; readonly end: number; readonly total: number } {
-  const match = text.trim().match(/^(\d+)–(\d+)\s*\/\s*(\d+)$/)
-  if (!match) throw new Error(`board page range did not expose a visible range: ${text}`)
-  const start = Number(match[1])
-  const end = Number(match[2])
-  const total = Number(match[3])
-  if (![start, end, total].every((value) => Number.isSafeInteger(value) && value >= 0)) {
-    throw new Error(`board page range contains an unsafe number: ${text}`)
-  }
-  return { start, end, total }
+async function canonicalWindow(query: WindowQuery): Promise<TaskWindowEvidence["canonical"]> {
+  const response = await rpcRequest("ListTasks", {
+    path: { board: "default" },
+    query: { limit: query.limit, offset: (query.page - 1) * query.limit, sort: query.sort, status: [...query.status], q: query.q || null },
+  })
+  expect(response.ok()).toBe(true)
+  const body = await response.json() as { data: CanonicalTask[]; meta: { total: number; offset: number; limit: number } }
+  expect(Number.isSafeInteger(body.meta.total)).toBe(true)
+  expect(body.meta.offset).toBe((query.page - 1) * query.limit)
+  expect(body.meta.limit).toBe(query.limit)
+  return { ...body.meta, tasks: body.data.map(({ id, status, title }) => ({ id, status, title })) }
 }
 
-async function boardColumnEvidence(page: Page): Promise<{ readonly total: number; readonly rendered: number; readonly columns: readonly BoardColumnEvidence[] }> {
-  const boardTotalElement = page.getByTestId("board-task-total")
-  await expect(boardTotalElement).toBeVisible({ timeout: UI_ACTION_TIMEOUT_MS })
-  const boardTotalText = (await boardTotalElement.innerText()).trim()
-  const boardTotal = Number(await boardTotalElement.getAttribute("data-total"))
-  if (!Number.isSafeInteger(boardTotal) || boardTotal < 0 || !boardTotalText.includes(String(boardTotal))) {
-    throw new Error(`board total is not a visible safe integer: ${boardTotalText}`)
-  }
-  const columns = page.getByTestId("board-column")
-  const columnEvidence: BoardColumnEvidence[] = []
-  for (let index = 0; index < await columns.count(); index += 1) {
-    const column = columns.nth(index)
-    const columnId = await column.getAttribute("data-column-id")
-    const totalElement = column.getByTestId("board-column-total")
-    const pageElement = column.getByTestId("board-column-page")
-    const total = Number(await totalElement.getAttribute("data-total"))
-    const renderedCardCount = await column.getByTestId("board-task").count()
-    if (!Number.isSafeInteger(total) || total < 0 || total > 5_000) {
-      throw new Error(`board column ${columnId ?? "unknown"} exposed an unsafe total`)
-    }
-    if (await pageElement.count() === 0) {
-      if (total > 100 || renderedCardCount !== total) {
-        throw new Error(`non-paginated board column ${columnId ?? "unknown"} exceeded its bounded window`)
-      }
-      columnEvidence.push({
-        column_id: columnId ?? "",
-        total,
-        page: 1,
-        total_pages: 1,
-        range_start: total === 0 ? 0 : 1,
-        range_end: total,
-        range_total: total,
-        rendered_card_count: renderedCardCount,
-      })
-      continue
-    }
-    const pageNumber = Number(await pageElement.getAttribute("data-page"))
-    const totalPages = Number(await pageElement.getAttribute("data-total-pages"))
-    const rangeStart = Number(await pageElement.getAttribute("data-range-start"))
-    const rangeEnd = Number(await pageElement.getAttribute("data-range-end"))
-    const rangeTotal = Number(await pageElement.getAttribute("data-total"))
-    const range = parseBoardRange(await pageElement.innerText())
-    if (
-      columnId === null
-      || ![total, pageNumber, totalPages, rangeStart, rangeEnd, rangeTotal].every((value) => Number.isSafeInteger(value) && value >= 0)
-      || range.start !== rangeStart
-      || range.end !== rangeEnd
-      || range.total !== rangeTotal
-      || total !== rangeTotal
-    ) throw new Error(`board column ${columnId ?? "unknown"} exposed inconsistent total/range metadata`)
-    columnEvidence.push({
-      column_id: columnId,
-      total,
-      page: pageNumber,
-      total_pages: totalPages,
-      range_start: rangeStart,
-      range_end: rangeEnd,
-      range_total: rangeTotal,
-      rendered_card_count: renderedCardCount,
-    })
-  }
-  return {
-    total: boardTotal,
-    rendered: await page.getByTestId("board-task").count(),
-    columns: columnEvidence,
-  }
-}
-
-async function boardWindowSnapshot(column: Locator): Promise<BoardWindowEvidence["page1"]> {
-  const pageElement = column.getByTestId("board-column-page")
-  const page = Number(await pageElement.getAttribute("data-page"))
-  const rangeStart = Number(await pageElement.getAttribute("data-range-start"))
-  const rangeEnd = Number(await pageElement.getAttribute("data-range-end"))
-  const total = Number(await pageElement.getAttribute("data-total"))
-  const range = parseBoardRange(await pageElement.innerText())
-  const cards = column.getByTestId("board-task")
-  const rendered = await cards.count()
-  if (rendered === 0 || range.start !== rangeStart || range.end !== rangeEnd || range.total !== total) {
-    throw new Error("board window did not expose a consistent visible range")
-  }
-  return {
-    page,
-    range_start: rangeStart,
-    range_end: rangeEnd,
-    total,
-    first_task_id: await cards.first().getAttribute("data-task-id"),
-    last_task_id: await cards.last().getAttribute("data-task-id"),
-  }
-}
-
-async function boardWindowEvidence(page: Page): Promise<BoardWindowEvidence> {
-  const columns = page.getByTestId("board-column")
-  for (let index = 0; index < await columns.count(); index += 1) {
-    const column = columns.nth(index)
-    const pageElement = column.getByTestId("board-column-page")
-    if (await pageElement.count() === 0) continue
-    const totalPages = Number(await pageElement.getAttribute("data-total-pages"))
-    if (!Number.isSafeInteger(totalPages) || totalPages <= 1) continue
-    const columnId = await column.getAttribute("data-column-id")
-    if (columnId === null) throw new Error("paginated board column did not expose its identity")
-    const page1 = await boardWindowSnapshot(column)
-    const next = column.getByTestId("board-page-next")
-    await expect(next).toBeEnabled({ timeout: UI_ACTION_TIMEOUT_MS })
-    await next.click()
-    await expect(pageElement).toHaveAttribute("data-page", "2", { timeout: UI_ACTION_TIMEOUT_MS })
-    const page2 = await boardWindowSnapshot(column)
-    expect(page2.page).toBeGreaterThan(page1.page)
-    expect(page2.range_start).toBeGreaterThan(page1.range_start)
-    expect(page2.first_task_id).not.toBe(page1.first_task_id)
-    expect(page2.last_task_id).not.toBe(page1.last_task_id)
-    return {
-      column_id: columnId,
-      page_size: page1.range_end - page1.range_start + 1,
-      page1,
-      page2,
+async function taskWindow(page: Page, view: "list" | "board", query: WindowQuery, total?: number): Promise<TaskWindowEvidence> {
+  await expect.poll(() => queryFromUrl(page.url()), { timeout: UI_ACTION_TIMEOUT_MS }).toEqual(query)
+  const canonical = await canonicalWindow(query)
+  if (total !== undefined) expect(canonical.total).toBe(total)
+  const ids = canonical.tasks.map(task => task.id)
+  expect(ids.length).toBe(Math.min(query.limit, Math.max(0, canonical.total - canonical.offset)))
+  expect(new Set(ids).size).toBe(ids.length)
+  const rows = page.getByTestId(view === "list" ? "task-row" : "board-task")
+  // Atlas 列表按状态分组；每组内保留 canonical 排序，看板按展示列分组。
+  const expectedIds = view === "list"
+    ? listStatusOrder.flatMap(status => canonical.tasks.filter(task => task.status === status).map(task => task.id))
+    : boardColumns.flatMap(column => canonical.tasks.filter(task => column.statuses.includes(task.status)).map(task => task.id))
+  await expect.poll(async () => {
+    const rendered = await taskIds(rows)
+    return view === "list" ? rendered : rendered.sort()
+  }, { timeout: UI_ACTION_TIMEOUT_MS }).toEqual(view === "list" ? expectedIds : [...expectedIds].sort())
+  const footer = page.locator(".table-footer")
+  await expect(footer).toContainText(`显示 ${ids.length} / ${canonical.total} 个任务`)
+  const footerText = (await footer.innerText()).trim()
+  const counts = footerText.match(/^显示 (\d+) \/ (\d+) 个任务/)
+  if (!counts) throw new Error(`Atlas footer did not expose displayed count and total: ${footerText}`)
+  const pager = page.locator(".paper-pagination > span").last()
+  const totalPages = Math.max(1, Math.ceil(canonical.total / query.limit))
+  await expect(pager).toHaveText(`${query.page} / ${totalPages}`)
+  const pagerText = (await pager.innerText()).trim()
+  const pageNumbers = pagerText.match(/^(\d+) \/ (\d+)$/)
+  if (!pageNumbers) throw new Error(`Atlas pager did not expose its current page: ${pagerText}`)
+  const previous = page.getByRole("button", { name: "上一页", exact: true })
+  const next = page.getByRole("button", { name: "下一页", exact: true })
+  expect(await previous.isEnabled()).toBe(query.page > 1)
+  expect(await next.isEnabled()).toBe(query.page < totalPages)
+  const columns: BoardColumnEvidence[] = []
+  if (view === "board") {
+    await expect(page.locator(".board-column")).toHaveCount(boardColumns.length)
+    for (const expected of boardColumns) {
+      const column = page.getByRole("region", { name: expected.label, exact: true })
+      const cards = column.getByTestId("board-task")
+      const expectedTasks = canonical.tasks.filter(task => expected.statuses.includes(task.status))
+      const countText = (await column.locator("header > span").innerText()).trim()
+      const columnIds = await taskIds(cards)
+      const statuses = await cards.evaluateAll(elements => elements.map(element => element.getAttribute("data-status") ?? ""))
+      expect(countText).toBe(String(expectedTasks.length))
+      expect([...columnIds].sort()).toEqual(expectedTasks.map(task => task.id).sort())
+      expect(statuses).toEqual(columnIds.map(id => expectedTasks.find(task => task.id === id)!.status))
+      columns.push({ label: await column.getAttribute("aria-label") ?? "", count_text: countText, displayed_count: Number(countText), task_ids: columnIds, task_statuses: statuses })
     }
   }
-  throw new Error("board did not expose a paginated visible column")
+  return {
+    view, url: page.url(), query: queryFromUrl(page.url()), footer_text: footerText,
+    displayed_count: Number(counts[1]), displayed_total: Number(counts[2]),
+    pager_text: pagerText, page: Number(pageNumbers[1]), total_pages: Number(pageNumbers[2]),
+    previous_enabled: await previous.isEnabled(), next_enabled: await next.isEnabled(),
+    task_ids: await taskIds(rows), canonical, columns: view === "board" ? columns : null,
+  }
+}
+
+async function selectChoice(page: Page, label: string, option: string): Promise<void> {
+  const control = page.getByRole("combobox", { name: label, exact: true })
+  if (label === "排序" || label === "每页") {
+    const filters = page.locator(".task-extra-filters")
+    if (!await filters.evaluate(element => element.hasAttribute("open"))) await filters.locator("summary").click()
+  }
+  await control.click()
+  await page.getByRole("option", { name: option, exact: true }).click()
+  await expect(control).toContainText(option)
+}
+
+async function nextWindow(page: Page, view: "list" | "board", previous: TaskWindowEvidence): Promise<TaskWindowEvidence> {
+  await page.getByRole("button", { name: "下一页", exact: true }).click()
+  const next = await taskWindow(page, view, { ...previous.query, page: previous.page + 1 }, previous.displayed_total)
+  expect(next.task_ids.filter(id => previous.task_ids.includes(id))).toEqual([])
+  return next
+}
+
+async function loadUiEvidence(page: Page, total: number): Promise<FunctionalUiEvidence> {
+  await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+  const ready = await assertBoardReady(page)
+  expect(ready.within_budget).toBe(true)
+  const statsResponse = await rpcRequest("GetStats", { query: { board: "default" } })
+  expect(statsResponse.ok()).toBe(true)
+  const statsBody = await statsResponse.json() as { data: { status_counts: Array<{ status: string; count: number }> } }
+  const canonicalTotal = statsBody.data.status_counts.reduce((sum, row) => sum + row.count, 0)
+  expect(canonicalTotal).toBe(total)
+  const statsElement = page.locator(".page-inline-stats > span").first()
+  await expect(statsElement).toHaveText(`${total} 个任务`)
+  const statsText = (await statsElement.innerText()).trim()
+  const statsTotal = Number(statsText.match(/^(\d+)\s+个任务$/)?.[1])
+  expect(statsTotal).toBe(total)
+  const firstBoard = await taskWindow(page, "board", defaultWindowQuery, total)
+  const secondBoard = await nextWindow(page, "board", firstBoard)
+  // 返回也必须恢复同一 canonical 窗口，不能只证明页码变了。
+  await page.getByRole("button", { name: "上一页", exact: true }).click()
+  expect((await taskWindow(page, "board", defaultWindowQuery, total)).task_ids).toEqual(firstBoard.task_ids)
+  await page.getByRole("button", { name: "列表", exact: true }).click()
+  const listPages = [await taskWindow(page, "list", defaultWindowQuery, total)]
+  for (let number = 2; number <= Math.ceil(total / 100); number += 1) {
+    listPages.push(await nextWindow(page, "list", listPages.at(-1)!))
+  }
+  const allIds = listPages.flatMap(window => window.task_ids)
+  expect(allIds).toHaveLength(total)
+  expect(new Set(allIds).size).toBe(total)
+  expect(new Set(allIds)).toEqual(new Set(listPages.flatMap(window => window.canonical.tasks.map(task => task.id))))
+  await selectChoice(page, "按状态筛选任务", "待开始")
+  await page.getByTestId("list-search").fill("load task 1")
+  await selectChoice(page, "排序", "标题")
+  const filteredQuery: WindowQuery = { ...defaultWindowQuery, status: ["todo"], q: "load task 1", sort: "title" }
+  const firstFiltered = await taskWindow(page, "list", filteredQuery, 1_000)
+  const secondFiltered = await nextWindow(page, "list", firstFiltered)
+  expect(firstFiltered.canonical.tasks.every(task => task.status === "todo" && task.title.includes("load task 1"))).toBe(true)
+  const statusText = await page.getByRole("combobox", { name: "按状态筛选任务", exact: true }).innerText()
+  const searchText = await page.getByTestId("list-search").inputValue()
+  const sortText = await page.getByRole("combobox", { name: "排序", exact: true }).innerText()
+  await selectChoice(page, "排序", "最近更新")
+  const changedSort = await taskWindow(page, "list", { ...filteredQuery, sort: "updated_at" }, 1_000)
+  expect(changedSort.task_ids).not.toEqual(firstFiltered.task_ids)
+  const changedSortText = await page.getByRole("combobox", { name: "排序", exact: true }).innerText()
+  await page.getByTestId("list-search").fill("")
+  await selectChoice(page, "按状态筛选任务", "所有状态")
+  const cleared = await taskWindow(page, "list", defaultWindowQuery, total)
+  expect(cleared.task_ids).toEqual(listPages[0]!.task_ids)
+  return {
+    stats: { text: statsText, total: statsTotal, canonical_total: canonicalTotal },
+    board_ready: ready, board_pages: [firstBoard, secondBoard], list_pages: listPages,
+    filter_sort: { status_text: statusText, search_text: searchText, sort_text: sortText, pages: [firstFiltered, secondFiltered], changed_sort_text: changedSortText, changed_sort: changedSort, cleared },
+  }
 }
 
 async function createTaskBatch(request: APIRequestContext, ids: readonly string[]): Promise<number> {
@@ -476,8 +483,7 @@ async function createTaskBatch(request: APIRequestContext, ids: readonly string[
     const batch = ids.slice(offset, offset + FIXTURE_CONCURRENCY)
     await Promise.all(batch.map(async (taskId) => {
       try {
-        const response = await request.post(`${baseURL}/api/v1/boards/default/tasks`, {
-          data: {
+        const response = await rpcRequest("CreateTask", { path: { board: "default" }, input: {
             task_id: taskId,
             idempotency_key: `release-09d:create:${taskId}`,
             title: `Stage09 09D load task ${taskId.slice(-4)}`,
@@ -488,8 +494,7 @@ async function createTaskBatch(request: APIRequestContext, ids: readonly string[
             labels: [],
             depends_on: [],
             actor: "release-09d",
-          },
-        })
+          } })
         if (![200, 201].includes(response.status())) {
           fixtureSeedResponseErrors += 1
           throw new Error(`fixture task ${taskId} response status ${response.status()}`)
@@ -693,7 +698,7 @@ async function createTaskFromUi(page: Page, title: string): Promise<UiMutation> 
       }
     }, { capture: true, once: true })
   })
-  await dialog.getByRole("button", { name: "创建", exact: true }).click()
+  await dialog.getByRole("button", { name: "创建任务", exact: true }).click()
   const mutationStarted = await page.evaluate(() => {
     type MutationClockWindow = Window & { __release09dSubmitClock?: number | null }
     const value = (window as MutationClockWindow).__release09dSubmitClock
@@ -741,17 +746,17 @@ test.afterAll(async ({ request }, testInfo) => {
     cls: summarize(metricSamples.map((sample) => sample.cls)),
     samples: metricSamples,
   }
-  const normalSseLatencies = sseSamples
+  const normalQueryLatencies = querySamples
     .filter((sample) => !sample.disconnected_catch_up)
     .map((sample) => sample.mutation_to_event_ms)
-  const catchUpSseLatencies = sseSamples
+  const catchUpQueryLatencies = querySamples
     .filter((sample) => sample.disconnected_catch_up)
     .map((sample) => sample.mutation_to_event_ms)
-  const sseSummary = sseSamples.length === 0 ? null : {
-    latency_ms: summarize(sseSamples.map((sample) => sample.mutation_to_event_ms)),
-    mutation_to_event_ms: summarize(normalSseLatencies),
-    disconnected_catch_up_ms: summarize(catchUpSseLatencies),
-    samples: sseSamples,
+  const querySummary = querySamples.length === 0 ? null : {
+    latency_ms: summarize(querySamples.map((sample) => sample.mutation_to_event_ms)),
+    mutation_to_event_ms: summarize(normalQueryLatencies),
+    disconnected_catch_up_ms: summarize(catchUpQueryLatencies),
+    samples: querySamples,
   }
   const initialBrotliBytes = Number(process.env.KANBAN_RELEASE_09D_INITIAL_BROTLI_BYTES)
   const initialBrotliWithinBudget = Number.isSafeInteger(initialBrotliBytes)
@@ -766,19 +771,19 @@ test.afterAll(async ({ request }, testInfo) => {
     && initialBrotliWithinBudget
     && noBrowserErrors
     && firstFailure === null
-  const sseLatencyBudgetStatus = sseSummary === null
+  const queryLatencyBudgetStatus = querySummary === null
     ? "not_run"
     : testInfo.project.name !== "chromium"
       ? "not_applicable"
-      : (sseSummary.mutation_to_event_ms?.p95 ?? Number.POSITIVE_INFINITY) <= SSE_P95_BUDGET_MS
-        && (sseSummary.disconnected_catch_up_ms?.p95 ?? Number.POSITIVE_INFINITY) <= SSE_CATCH_UP_P95_BUDGET_MS
+      : (querySummary.mutation_to_event_ms?.p95 ?? Number.POSITIVE_INFINITY) <= QUERY_P95_BUDGET_MS
+        && (querySummary.disconnected_catch_up_ms?.p95 ?? Number.POSITIVE_INFINITY) <= QUERY_CATCH_UP_P95_BUDGET_MS
         && noBrowserErrors
         && firstFailure === null
         ? "passed"
         : "failed"
-  const sseKeyPathStatus = sseSummary === null
+  const queryKeyPathStatus = querySummary === null
     ? "not_run"
-    : sseKeyPathPassed && sseReconnectPassed && sseStaleCleared && noBrowserErrors && firstFailure === null
+    : queryKeyPathPassed && queryReconnectPassed && queryStaleCleared && noBrowserErrors && firstFailure === null
       ? "passed"
       : "failed"
   await writeEvidence(`release-09d-${phase}-${testInfo.project.name}.json`, {
@@ -788,11 +793,11 @@ test.afterAll(async ({ request }, testInfo) => {
     browser: testInfo.project.name,
     ...hostEvidence(),
     gates: {
-      performance: phase === "small-perf-sse"
+      performance: phase === "small-perf-query"
         ? testInfo.project.name !== "chromium" ? "not-applicable" : performanceThresholdsPassed ? "passed" : "failed"
         : "not-run",
-      sse: sseSummary === null ? "not-run" : sseKeyPathStatus === "passed"
-        && (sseLatencyBudgetStatus === "passed" || sseLatencyBudgetStatus === "not_applicable")
+      query: querySummary === null ? "not-run" : queryKeyPathStatus === "passed"
+        && (queryLatencyBudgetStatus === "passed" || queryLatencyBudgetStatus === "not_applicable")
           ? "passed"
           : "failed",
       functional_2k: phaseTarget === 2_000 && finalTotal === 2_000 && uiEvidence.functional_2k !== null && noBrowserErrors && firstFailure === null ? "passed" : phaseTarget === 2_000 ? "failed" : "not-run",
@@ -804,13 +809,13 @@ test.afterAll(async ({ request }, testInfo) => {
       files: initialBrotliFiles,
     } : null,
     performance: metricSummary,
-    sse: sseSummary,
-    sse_contract: {
-      latency_budget_status: sseLatencyBudgetStatus,
-      key_path_status: sseKeyPathStatus,
+    query: querySummary,
+    query_contract: {
+      latency_budget_status: queryLatencyBudgetStatus,
+      key_path_status: queryKeyPathStatus,
       budgets_ms: {
-        mutation_to_event_p95: SSE_P95_BUDGET_MS,
-        disconnected_catch_up_p95: SSE_CATCH_UP_P95_BUDGET_MS,
+        mutation_to_event_p95: QUERY_P95_BUDGET_MS,
+        disconnected_catch_up_p95: QUERY_CATCH_UP_P95_BUDGET_MS,
       },
     },
     fixture_seed: {
@@ -819,18 +824,19 @@ test.afterAll(async ({ request }, testInfo) => {
     },
     ui: uiEvidence.functional_2k === null && uiEvidence.stress_5k === null ? null : uiEvidence,
     map: mapEvidence,
-    sse_stream_requests: sseStreamRequests,
-    sse_reconnect: {
-      new_request_after_disconnect: sseReconnectPassed,
-      stale_notice_cleared: sseStaleCleared,
-      ...(sseReconnectEvidence ?? {
+    query_stream_requests: queryStreamRequests,
+    query_reconnect: {
+      new_request_after_disconnect: queryReconnectPassed,
+      stale_notice_cleared: queryStaleCleared,
+      ...(queryReconnectEvidence ?? {
         before_count: 0,
         request_count_after_disconnect: 0,
         request_at_ms: null,
         event_seen_at_ms: null,
-        last_event_id: null,
-        after: null,
+        resume: null,
         confirmed_cursor: null,
+        recovery_cursor: null,
+        recovery_mode: null,
         confirmed_task_id: null,
         confirmed_event_id: null,
       }),
@@ -875,7 +881,7 @@ test("09D performance real browser Web Vitals and initial Brotli budget", async 
         throw new Error("real browser did not expose buffered LCP/CLS entries")
       }
       await installInteractionObserver(samplePage)
-      await samplePage.getByRole("link", { name: "列表", exact: true }).click()
+      await samplePage.getByRole("button", { name: "列表", exact: true }).click()
       await expect(samplePage.getByTestId("task-list")).toBeVisible()
       const inp = await readInteractionDuration(samplePage)
       if (inp === null) throw new Error("real browser did not expose EventTiming for the real UI click")
@@ -906,7 +912,7 @@ test("09D performance real browser Web Vitals and initial Brotli budget", async 
   expect(brotliBytes).toBeLessThanOrEqual(750 * 1024)
 })
 
-test("09D persistent SSE UI mutation latency and disconnect catch-up", async ({ browser, request }, testInfo) => {
+test("09D persistent QueryService UI mutation latency and disconnect catch-up", async ({ browser, request }, testInfo) => {
   const sampleCount = testInfo.project.name === "chromium" ? 20 : 1
   const contextB = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } })
   const pageB = await contextB.newPage()
@@ -915,18 +921,21 @@ test("09D persistent SSE UI mutation latency and disconnect catch-up", async ({ 
   const errors: BrowserError[] = []
   attachBrowserErrors(pageB, errors)
   attachBrowserErrors(pageA, errors)
-  const streamRequests: SseStreamRequest[] = []
+  const probe = await installQueryProbe(pageB)
+  const streamRequests: QueryStreamRequest[] = []
   pageB.on("request", (request) => {
-    if (request.url().includes("/api/v1/stream/events")) {
-      const url = new URL(request.url())
+    if (request.url().endsWith("/kanban.v1.QueryService/WatchQueries")) {
+      const queries = fromBinary(WatchQueriesRequestSchema, request.postDataBuffer()!.subarray(5)).queries
+      const subscription = queries.find(query => query.query.case === "recentEvents")
+      if (!subscription) return
       const entry = {
+        client_query_id: subscription.clientQueryId,
         url: request.url(),
         at_ms: Date.now(),
-        last_event_id: request.headers()["last-event-id"] ?? null,
-        after: url.searchParams.get("after"),
+        resume: cursorEvidence(subscription.resume),
       }
       streamRequests.push(entry)
-      sseStreamRequests.push(entry)
+      queryStreamRequests.push(entry)
     }
   })
   try {
@@ -938,66 +947,69 @@ test("09D persistent SSE UI mutation latency and disconnect catch-up", async ({ 
     for (let sample = 1; sample <= sampleCount; sample += 1) {
       await pageA.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
       await assertBoardReady(pageA)
-      const title = `Stage09 09D SSE ${testInfo.project.name} ${sample}`
+      const title = `Stage09 09D QUERY ${testInfo.project.name} ${sample}`
       const mutation = await createTaskFromUi(pageA, title)
       const eventSeenAt = await eventVisibleAt(pageB, mutation.taskId)
-      sseSamples.push({ sample, task_id: mutation.taskId, mutation_to_event_ms: eventSeenAt - mutation.mutationStarted, disconnected_catch_up: false })
+      querySamples.push({ sample, task_id: mutation.taskId, mutation_to_event_ms: eventSeenAt - mutation.mutationStarted, disconnected_catch_up: false })
     }
 
-    const lastNormalTaskId = sseSamples.at(-1)?.task_id
-    if (!lastNormalTaskId) throw new Error("normal SSE samples did not produce a confirmed task")
+    const lastNormalTaskId = querySamples.at(-1)?.task_id
+    if (!lastNormalTaskId) throw new Error("normal QUERY samples did not produce a confirmed task")
     const confirmed = await confirmedTaskCursor(request, lastNormalTaskId)
+    const confirmedProjection = cursorEvidence(probe.committed("recentEvents"))
+    expect(confirmedProjection).not.toBeNull()
     const streamRequestsBeforeDisconnect = streamRequests.length
     await contextB.setOffline(true)
     await waitForOfflineNotice(pageB)
     await pageA.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await assertBoardReady(pageA)
-    const catchUpMutation = await createTaskFromUi(pageA, `Stage09 09D SSE catch-up ${testInfo.project.name}`)
+    const catchUpMutation = await createTaskFromUi(pageA, `Stage09 09D QUERY catch-up ${testInfo.project.name}`)
     await expect(pageB.getByTestId("event-row").filter({ hasText: catchUpMutation.taskId })).toHaveCount(0)
     await contextB.setOffline(false)
     await expect.poll(async () => streamRequests.length, { timeout: 120_000 }).toBeGreaterThan(streamRequestsBeforeDisconnect)
     const reconnectRequest = streamRequests.at(-1)
-    if (!reconnectRequest) throw new Error("SSE reconnect request was not captured")
-    expect(reconnectRequest.last_event_id).not.toBeNull()
-    expect(reconnectRequest.after).not.toBeNull()
-    expect(reconnectRequest.last_event_id).toBe(confirmed.cursor)
-    expect(reconnectRequest.after).toBe(confirmed.cursor)
+    if (!reconnectRequest) throw new Error("QUERY reconnect request was not captured")
+    if (reconnectRequest.resume) expect(reconnectRequest.resume).toEqual(confirmedProjection)
     const catchUpEventSeenAt = await eventVisibleAt(pageB, catchUpMutation.taskId)
-    sseSamples.push({ sample: sampleCount + 1, task_id: catchUpMutation.taskId, mutation_to_event_ms: catchUpEventSeenAt - catchUpMutation.mutationStarted, disconnected_catch_up: true })
+    querySamples.push({ sample: sampleCount + 1, task_id: catchUpMutation.taskId, mutation_to_event_ms: catchUpEventSeenAt - catchUpMutation.mutationStarted, disconnected_catch_up: true })
     expect(reconnectRequest.at_ms).toBeLessThanOrEqual(catchUpEventSeenAt)
     await expect(pageB.getByTestId("events-ready")).toBeVisible({ timeout: 120_000 })
     await expect(pageB.getByTestId("events-stale-notice")).toHaveCount(0)
     await expect(pageB.getByTestId("events-offline")).toHaveCount(0)
-    sseReconnectPassed = streamRequests.length > streamRequestsBeforeDisconnect
-      && reconnectRequest.last_event_id === confirmed.cursor
-      && reconnectRequest.after === confirmed.cursor
-    sseStaleCleared = true
-    sseReconnectEvidence = {
+    // 离线 UI 可释放最后一个查询消费者；新 owner 必须接收完整 snapshot。
+    if (!reconnectRequest.resume) {
+      const connection = probe.requests.at(-1)!.connection
+      expect(probe.frames.some(item => item.connection === connection && item.definition?.query.case === 'recentEvents' && item.frame.body.case === 'begin' && item.frame.body.value.snapshot)).toBe(true)
+    }
+    queryReconnectPassed = streamRequests.length > streamRequestsBeforeDisconnect
+    queryStaleCleared = true
+    queryReconnectEvidence = {
       before_count: streamRequestsBeforeDisconnect,
       request_count_after_disconnect: streamRequests.length,
       request_at_ms: reconnectRequest.at_ms,
       event_seen_at_ms: catchUpEventSeenAt,
-      last_event_id: reconnectRequest.last_event_id,
-      after: reconnectRequest.after,
-      confirmed_cursor: confirmed.cursor,
+      resume: reconnectRequest.resume,
+      confirmed_cursor: confirmedProjection,
+      recovery_cursor: cursorEvidence(probe.committed("recentEvents")),
+      recovery_mode: reconnectRequest.resume ? "resume" : "snapshot",
       confirmed_task_id: lastNormalTaskId,
       confirmed_event_id: confirmed.event_id,
     }
-    const normalLatencies = sseSamples
+    const normalLatencies = querySamples
       .filter((sample) => !sample.disconnected_catch_up)
       .map((sample) => sample.mutation_to_event_ms)
-    const catchUpLatencies = sseSamples
+    const catchUpLatencies = querySamples
       .filter((sample) => sample.disconnected_catch_up)
       .map((sample) => sample.mutation_to_event_ms)
     expect(normalLatencies).toHaveLength(sampleCount)
     expect(catchUpLatencies).toHaveLength(1)
     if (testInfo.project.name === "chromium") {
-      expect(percentile(normalLatencies, 0.95)).toBeLessThanOrEqual(SSE_P95_BUDGET_MS)
-      expect(percentile(catchUpLatencies, 0.95)).toBeLessThanOrEqual(SSE_CATCH_UP_P95_BUDGET_MS)
+      expect(percentile(normalLatencies, 0.95)).toBeLessThanOrEqual(QUERY_P95_BUDGET_MS)
+      expect(percentile(catchUpLatencies, 0.95)).toBeLessThanOrEqual(QUERY_CATCH_UP_P95_BUDGET_MS)
     }
     expect(streamRequests.length).toBeGreaterThan(0)
     expect(errors).toEqual([])
-    sseKeyPathPassed = true
+    queryKeyPathPassed = true
   } finally {
     await contextA.close()
     await contextB.close()
@@ -1009,36 +1021,7 @@ test("09D functional_2k real board and list pagination", async ({ page, request 
   const errorCountBefore = browserErrors.length
   const total = await ensureTaskTotal(request, 2_000)
   expect(total).toBe(2_000)
-  await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
-  const boardReady = await assertBoardReady(page)
-  expect(boardReady.budget_ms).toBe(BOARD_READY_BUDGET_MS)
-  expect(boardReady.within_budget).toBe(true)
-  const board = await boardColumnEvidence(page)
-  expect(board.total).toBe(total)
-  expect(board.columns.reduce((sum, column) => sum + column.total, 0)).toBe(total)
-  expect(board.columns.every((column) => column.rendered_card_count <= 100)).toBe(true)
-  expect(board.rendered).toBeLessThanOrEqual(Math.max(1, board.columns.length) * 100)
-  const boardWindow = await boardWindowEvidence(page)
-  await page.goto("/app/boards/default/list", { waitUntil: "domcontentloaded" })
-  await expect(page.getByTestId("task-list")).toContainText("2000")
-  await expect(page.getByTestId("task-row")).toHaveCount(100)
-  const page1 = await listUiEvidence(page)
-  const listTotal = listTotalFromRange(page1.range)
-  expect(listTotal).toBe(2_000)
-  await page.getByRole("button", { name: "下一页", exact: true }).click()
-  await expect(page.getByTestId("task-row")).toHaveCount(100)
-  const page2 = await listUiEvidence(page)
-  expect(page2.range).toContain("101–200")
-  uiEvidence.functional_2k = {
-    board_total: board.total,
-    board_rendered_count: board.rendered,
-    board_columns: board.columns,
-    board_window: boardWindow,
-    board_ready: boardReady,
-    list_total: listTotal,
-    page1,
-    page2,
-  }
+  uiEvidence.functional_2k = await loadUiEvidence(page, total)
   expect(browserErrors.slice(errorCountBefore)).toEqual([])
 })
 
@@ -1047,31 +1030,19 @@ test("09D stress_5k real board list map no-crash bounded interaction", async ({ 
   const errorCountBefore = browserErrors.length
   const total = await ensureTaskTotal(request, 5_000)
   expect(total).toBe(5_000)
-  await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
-  const boardReady = await assertBoardReady(page)
-  expect(boardReady.budget_ms).toBe(BOARD_READY_BUDGET_MS)
-  expect(boardReady.within_budget).toBe(true)
-  const board = await boardColumnEvidence(page)
-  expect(board.total).toBe(total)
-  expect(board.columns.reduce((sum, column) => sum + column.total, 0)).toBe(total)
-  expect(board.columns.every((column) => column.rendered_card_count <= 100)).toBe(true)
-  expect(board.rendered).toBeLessThanOrEqual(Math.max(1, board.columns.length) * 100)
-  const boardWindow = await boardWindowEvidence(page)
-  await page.goto("/app/boards/default/list", { waitUntil: "domcontentloaded" })
-  await expect(page.getByTestId("task-list")).toContainText("5000", { timeout: UI_ACTION_TIMEOUT_MS })
-  await expect(page.getByTestId("task-row")).toHaveCount(100, { timeout: UI_ACTION_TIMEOUT_MS })
-  const before = await listUiEvidence(page)
-  const listTotal = listTotalFromRange(before.range)
-  expect(listTotal).toBe(5_000)
-  const listLimit = page.getByTestId("list-limit")
-  const beforeLimit = Number(await listLimit.inputValue())
-  expect(beforeLimit).toBe(100)
-  await listLimit.selectOption("200")
-  await expect(page.getByTestId("task-row")).toHaveCount(200, { timeout: UI_ACTION_TIMEOUT_MS })
-  await expect(listLimit).toHaveValue("200", { timeout: UI_ACTION_TIMEOUT_MS })
-  const afterLimit = Number(await listLimit.inputValue())
-  expect(afterLimit).toBe(200)
-  const after = await listUiEvidence(page)
+  const load = await loadUiEvidence(page, total)
+  const limit = page.getByRole("combobox", { name: "每页", exact: true })
+  await limit.click()
+  const options = await page.getByRole("option").allTextContents()
+  expect(options).toEqual(["每页 10 项", "每页 25 项", "每页 50 项", "每页 100 项"])
+  await page.getByRole("option", { name: "每页 50 项", exact: true }).click()
+  const beforeText = await limit.innerText()
+  const first50 = await taskWindow(page, "list", { ...defaultWindowQuery, limit: 50 }, total)
+  const second50 = await nextWindow(page, "list", first50)
+  await selectChoice(page, "每页", "每页 100 项")
+  const afterText = await limit.innerText()
+  const after100 = await taskWindow(page, "list", defaultWindowQuery, total)
+  expect(new Set([...first50.task_ids, ...second50.task_ids])).toEqual(new Set(after100.task_ids))
   await page.goto("/app/boards/default/map?filter=all", { waitUntil: "domcontentloaded" })
   const taskMap = page.getByTestId("task-map")
   await expect(taskMap).toBeVisible({ timeout: UI_ACTION_TIMEOUT_MS })
@@ -1086,7 +1057,7 @@ test("09D stress_5k real board list map no-crash bounded interaction", async ({ 
   const mapTruncated = await page.getByTestId("task-map-truncated").count() === 1
   expect(mapNodeCount).toBeGreaterThan(0)
   expect(mapNodeCount).toBeLessThanOrEqual(240)
-  const mapResponse = await request.get(`${baseURL}/api/v1/boards/default/task-map?active_only=true&context_depth=1&include_done_context=false&include_archived_context=false&hide_isolated=false&limit_nodes=240`)
+  const mapResponse = await rpcRequest("BoardTaskMap", { path: { board: "default" }, query: { active_only: true, context_depth: 1, include_done_context: false, include_archived_context: false, hide_isolated: false, limit_nodes: 240 } })
   expect(mapResponse.ok()).toBe(true)
   const mapBody = await mapResponse.json() as {
     data?: { nodes?: unknown[]; edges?: unknown[]; meta?: { node_count?: unknown; edge_count?: unknown; truncated?: unknown; limit_nodes?: unknown } }
@@ -1121,16 +1092,8 @@ test("09D stress_5k real board list map no-crash bounded interaction", async ({ 
     zoom_after: mapZoomAfter,
   }
   uiEvidence.stress_5k = {
-    board_total: board.total,
-    board_rendered_count: board.rendered,
-    board_columns: board.columns,
-    board_window: boardWindow,
-    board_ready: boardReady,
-    list_total: listTotal,
-    before_limit: beforeLimit,
-    before,
-    after_limit: afterLimit,
-    after,
+    ...load,
+    page_size: { options, before_text: beforeText, before_pages: [first50, second50], after_text: afterText, after: after100 },
     map: {
       node_count: mapMeta.node_count,
       edge_count: mapMeta.edge_count,

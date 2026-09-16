@@ -11,6 +11,28 @@ impl TursoStore {
         after: i64,
         limit: usize,
     ) -> Result<TaskEventListPage, StoreError> {
+        self.event_window(board_selector, task_id, after, limit, false)
+            .await
+    }
+
+    pub async fn recent_events(
+        &self,
+        board_selector: &str,
+        task_id: Option<&str>,
+        limit: usize,
+    ) -> Result<TaskEventListPage, StoreError> {
+        self.event_window(board_selector, task_id, 0, limit, true)
+            .await
+    }
+
+    async fn event_window(
+        &self,
+        board_selector: &str,
+        task_id: Option<&str>,
+        after: i64,
+        limit: usize,
+        recent: bool,
+    ) -> Result<TaskEventListPage, StoreError> {
         if after < 0 {
             return Err(StoreError::InvalidInput(
                 "after must be non-negative".to_owned(),
@@ -80,7 +102,11 @@ impl TursoStore {
             sql.push_str(" AND task_id = :task_id");
             params.push((":task_id".to_owned(), Value::Text(task_id)));
         }
-        sql.push_str(" ORDER BY id ASC LIMIT :limit");
+        sql.push_str(if recent {
+            " ORDER BY id DESC LIMIT :limit"
+        } else {
+            " ORDER BY id ASC LIMIT :limit"
+        });
         params.push((":limit".to_owned(), Value::Integer(effective_limit)));
 
         let mut rows = connection.query(&sql, params).await?;
@@ -97,6 +123,9 @@ impl TursoStore {
                 payload_json: text_value(row.get_value(7)?, "task_events.payload_json")?,
                 created_at: integer_value(row.get_value(8)?, "task_events.created_at")?,
             });
+        }
+        if recent {
+            events.reverse();
         }
         let next_after = events.last().map_or(after, |event| event.id);
         Ok(TaskEventListPage { events, next_after })
@@ -196,6 +225,20 @@ mod tests {
         assert_eq!(first.events.first().expect("first event").id, 1);
         assert_eq!(first.events.last().expect("last event").id, 1_000);
         assert_eq!(first.next_after, 1_000);
+
+        let recent = store.recent_events("default", None, 3).await.unwrap();
+        assert_eq!(
+            recent
+                .events
+                .iter()
+                .map(|event| event.id)
+                .collect::<Vec<_>>(),
+            vec![1003, 1004, 1005]
+        );
+        assert_eq!(recent.next_after, 1005);
+        let recent_capped = store.recent_events("default", None, 5000).await.unwrap();
+        assert_eq!(recent_capped.events.len(), 1000);
+        assert_eq!(recent_capped.events[0].id, 6);
 
         let exclusive = store
             .list_events("b_default", None, 1_000, 2)

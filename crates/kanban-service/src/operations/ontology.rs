@@ -1,8 +1,15 @@
 //! 标签本体 operation 的规范 service path。
 //!
-//! HTTP、CLI 与 MCP 都只传递 JSON command；这里负责解析登记的 operation，
-//! 再直接调用 canonical Turso primitives。事务与 mutation gate 仍由 service
-//! boundary 统一持有，入口不会各自复制业务语义。
+//! 具名 command/query 是 RPC 的 application 入口，明确字段和结果结构。
+//! 旧 HTTP 调度在迁移期间保留，两种入口共用 canonical Turso primitives 与 mutation gate。
+
+mod commands;
+mod convert;
+mod records;
+mod typed;
+
+pub use commands::*;
+pub use records::*;
 
 use kanban_core::{Clock, KanbanError, Result};
 use serde::de::DeserializeOwned;
@@ -10,9 +17,9 @@ use serde_json::{Value, json};
 
 use crate::error::store_error;
 use crate::{
-    KanbanService, LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
-    OntologyActionInput, OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput,
-    OntologyValidateInput, UpsertLabelSemanticsInput,
+    KanbanService, LabelProposalDecisionInput, LabelProposalInput, OntologyActionInput,
+    OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
+    UpsertLabelSemanticsInput,
 };
 
 fn decode<T: DeserializeOwned>(value: Value) -> Result<T> {
@@ -33,9 +40,9 @@ fn optional_text(value: &Value, field: &str) -> Option<String> {
     value.get(field).and_then(Value::as_str).map(str::to_owned)
 }
 
-fn options(value: Value) -> Result<LabelSuggestionOptions> {
+fn options(value: Value) -> Result<crate::store_operations::LabelSuggestionOptions> {
     let object = value.as_object().cloned().unwrap_or_default();
-    let options = LabelSuggestionOptions {
+    let options = crate::store_operations::LabelSuggestionOptions {
         output_limit: object
             .get("output_limit")
             .or_else(|| object.get("limit"))
@@ -191,7 +198,8 @@ where
                 store
                     .query_label_atom_index(board, query.as_deref(), polarity.as_deref(), limit)
                     .await
-                    .map_err(store_error)?
+                    .map_err(store_error)
+                    .map(|record| json!(record))?
             }
             "suggest_labels" => {
                 let task_ref = text(&value, "task_ref")?;
@@ -376,3 +384,6 @@ where
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests;

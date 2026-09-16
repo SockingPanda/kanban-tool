@@ -1,4 +1,6 @@
-import { type CanonicalBoardId } from "../sync/contracts";
+import type { Integer } from '../../domain/integer'
+import type { RpcCall } from "./rpc-transport";
+import { type CanonicalBoardId } from "../../domain/board-id";
 
 import { parseApiListBoardColumnsPath } from "../../lib/api/generated/contracts/api-list-board-columns-path";
 
@@ -22,7 +24,7 @@ import type { ApiListTasksByStatusResponseContract } from "../../lib/api/generat
 
 import { ContractValidationError } from "../../lib/api/generated/runtime";
 
-import { HttpTransportError, type HttpReadTransport, type HttpTransportOptions } from "./http-transport";
+import { RpcTransportError, type RpcTransport, type RpcTransportOptions } from "./rpc-transport";
 
 export type BoardColumn = ApiListBoardColumnsResponseContract["data"][number]
 
@@ -125,9 +127,9 @@ export class BoardReadError extends Error {
   }
 }
 
-export type BoardReadTransport = HttpReadTransport
+export type BoardReadTransport = RpcTransport
 
-export interface BoardReadDependencies extends HttpTransportOptions {
+export interface BoardReadDependencies extends RpcTransportOptions {
   readonly transport?: BoardReadTransport
 }
 
@@ -142,9 +144,11 @@ export interface BoardReadModelOptions {
 }
 
 export interface BoardReadQuery {
-  /** Load the cached snapshot or the current generation once. */
+  observe(signal: AbortSignal, next: (model: BoardReadModel) => void, failed: (error: unknown) => void): void
+  subscribeConnection(listener: (state: 'connecting' | 'live' | 'offline') => void): () => void
+  /** 等待当前完整查询结果；不会创建独立缓存。 */
   load(signal?: AbortSignal): Promise<BoardReadModel>
-  /** Abort the current generation, invalidate it, and load a fresh snapshot. */
+  /** 请求 refresh，并等待对应连接的 Ready 屏障。 */
   reload(signal?: AbortSignal): Promise<BoardReadModel>
   /** Abort and discard the current generation without issuing a replacement request. */
   invalidate(): void
@@ -160,7 +164,7 @@ export const MAX_TOTAL_TASKS = 50_000
 
 export const MAX_TASK_PAGES = MAX_TOTAL_TASKS
 
-export const MAX_TOTAL_JSON_BYTES = 64 * 1024 * 1024
+export const MAX_TOTAL_PROTOBUF_BYTES = 64 * 1024 * 1024
 
 export const RESERVED_SLUG_PREFIXES = ["b_", "t_", "r_", "c_", "a_", "l_", "col_", "e_"] as const
 
@@ -169,8 +173,8 @@ export class BoardReadBudget {
   private totalTasks = 0
 
   consumeBytes(bytes: number): void {
-    if (!Number.isSafeInteger(bytes) || bytes < 0 || this.totalBytes > MAX_TOTAL_JSON_BYTES - bytes) {
-      throw new BoardReadError("anomaly", `board read raw JSON 超过 ${MAX_TOTAL_JSON_BYTES} 字节预算。`)
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || this.totalBytes > MAX_TOTAL_PROTOBUF_BYTES - bytes) {
+      throw new BoardReadError("anomaly", `board read Protobuf 超过 ${MAX_TOTAL_PROTOBUF_BYTES} 字节预算。`)
     }
     this.totalBytes += bytes
   }
@@ -186,10 +190,6 @@ export class BoardReadBudget {
 export interface LinkedAbortSignal {
   readonly signal: AbortSignal
   readonly cleanup: () => void
-}
-
-export function encodedSegment(value: string): string {
-  return encodeURIComponent(value)
 }
 
 export function parseContract<T>(contractId: string, parser: (value: unknown) => T, value: unknown): T {
@@ -220,7 +220,7 @@ export function generationAbortError(): Error {
 export function wrapTransportError(error: unknown): never {
   if (isAbortError(error)) throw error
   if (error instanceof BoardReadError) throw error
-  if (error instanceof HttpTransportError) {
+  if (error instanceof RpcTransportError) {
     const kind = error.kind === "invalid_bytes" ? "anomaly" : error.kind
     throw new BoardReadError(kind, error.message, {
       status: error.status ?? undefined,
@@ -231,21 +231,19 @@ export function wrapTransportError(error: unknown): never {
   throw error
 }
 
-export function boardQuery(includeArchived: boolean): string {
+export function boardQuery(includeArchived: boolean): RpcCall {
   const query = parseApiListBoardsQuery({ include_archived: includeArchived })
-  const params = new URLSearchParams()
-  params.set("include_archived", String(query.include_archived))
-  return `/api/v1/boards?${params.toString()}`
+  return { method: "ListBoards", query }
 }
 
-export function columnsPath(selector: string): string {
+export function columnsPath(selector: string): RpcCall {
   const path = parseApiListBoardColumnsPath({ board: selector })
-  return `/api/v1/boards/${encodedSegment(path.board)}/columns`
+  return { method: "ListBoardColumns", path }
 }
 
-export function tasksPath(selector: string): string {
+export function tasksPath(selector: string): RpcCall {
   const path = parseApiListTasksByStatusPath({ board: selector })
-  return `/api/v1/boards/${encodedSegment(path.board)}/tasks/by-status`
+  return { method: "ListTasksByStatus", path }
 }
 
 export function validateTaskPageSize(value: number | undefined): number {
@@ -282,19 +280,8 @@ export function tasksQuery(
   )
 }
 
-export function appendTasksQuery(path: string, query: ApiListTasksByStatusQueryContract): string {
-  const params = new URLSearchParams()
-  for (const status of query.status ?? []) params.append("status", status)
-  for (const priority of query.priority ?? []) params.append("priority", String(priority))
-  for (const label of query.label ?? []) params.append("label", label)
-  for (const planFilter of query.plan_filter ?? []) params.append("plan_filter", planFilter)
-  if (query.assignee !== undefined && query.assignee !== null) params.set("assignee", query.assignee)
-  if (query.q !== undefined && query.q !== null) params.set("q", query.q)
-  if (query.include_archived !== undefined) params.set("include_archived", String(query.include_archived))
-  if (query.limit !== undefined) params.set("limit", String(query.limit))
-  if (query.offset !== undefined) params.set("offset", String(query.offset))
-  if (query.sort !== undefined) params.set("sort", query.sort)
-  return `${path}?${params.toString()}`
+export function appendTasksQuery(request: RpcCall, query: ApiListTasksByStatusQueryContract): RpcCall {
+  return { ...request, query }
 }
 
 export function emptyError(selector: string, reason: "no-boards" | "board-not-found"): BoardReadError {
@@ -361,7 +348,7 @@ export function parseColumns(
   )
   const columnIds = new Set<string>()
   const statuses = new Set<BoardTaskStatus>()
-  const positions = new Set<number>()
+  const positions = new Set<Integer>()
   for (const column of response.data) {
     if (column.id.trim().length === 0 || column.title.trim().length === 0) {
       throw new BoardReadError("anomaly", "看板列响应缺少 id 或 title。")

@@ -1,0 +1,228 @@
+# Atlas 后续迁移任务
+
+基线：codex/v4-atlas-paper，f53e7b884b440f782020587c6f08a7e451757484。
+
+[机器可读计划](../tasks/tasks.json) 不是 kanban import 格式，也未向真实看板创建任务。执行 agent 使用实际 CLI/MCP 创建任务后另存 Gxx 到 t_... 的映射。
+
+## 执行关系
+
+G01 联编先行。G02 装配完成后可以立即进行 G04 的 Atlas gRPC 刷新接线；它不必等待完整分页 live query。G03 契约、G05 CLI/MCP 和 G07 完整投影随后覆盖各业务，G06 审查写路径与测量开销，G08 汇总真实联调，G09 才移除旧通道。精确依赖以以下各任务及 JSON 为准。
+
+代码、测试、文档和证据应随每个任务一次交付；综合评审在 G08/G09 进行。当前所有任务状态为 todo，框架的离线通过不等同于完成这些集成任务。
+
+## G01 联编 Atlas 分支、生成客户端并冻结真实依赖
+
+Owner：framework/service。依赖：无。状态：todo。
+
+输入：`Cargo.toml`、`web/package.json`、`integration/patch-plan.json`、`integration/kanban-adapter/src/lib.rs`、`integration/atlas-server/grpc.rs`、`crates/kanban-rpc-host/tests/refresh.rs`、`docs/07-validation.md`。
+
+### 实施
+
+1. 从固定 Atlas SHA 建立独立工作树；安装 migration/grpc-framework，并执行应用器 --check/--write；有目标文件漂移先人工重定位，不能放宽 blob 检查。
+2. 经原 scripts/cargo-build-lock.sh 编译 kanban-server --features grpc-framework、独立框架与 kanban-adapter；检查 Tower/http-body/Axum 版本兼容，修复真实编译错误。
+3. 恢复依赖并生成 Protobuf-ES；同时联编 client.ts、atlas-client.ts 和 Atlas 新增接口，不能只运行 tsconfig.core.json。
+4. 执行 rustfmt、Rust 测试、clippy、105 项离线测试和原 Web 门禁；把真实依赖锁及生成策略纳入当前 justfile/xtask。
+
+### 验收
+
+- 新增 Rust 代码与原 service 测试实际通过，fixture 不能代替完整分支接线。
+- 生成客户端对 WatchChanges 的 uint64、oneof、enum 类型与代码一致。
+- 完整 Atlas TypeScript imports、生产构建与依赖边界通过。
+- 没有第二个 Turso owner；未改变状态机和 UI；首次解析后的锁文件可用 --locked 重现。
+
+交付：Atlas feature 构建与原 kanban-service 回归日志；完整生成客户端及类型检查；真实 Cargo/pnpm 锁文件与 justfile 门禁。
+
+非目标：不迁移全部 CLI/MCP/页面；不跳过编译问题并把 fixture 测试算作联调。
+
+## G02 在唯一 host 装配刷新 RPC、同源路由与关闭生命周期
+
+Owner：host/desktop。依赖：G01。状态：todo。
+
+输入：`integration/atlas-server/grpc.rs`、`crates/kanban-rpc-host/src/lib.rs`、`crates/kanban-rpc-host/src/refresh.rs`、`docs/05-integration.md`。
+
+### 实施
+
+1. 启用 grpc-framework feature，在现有 kanban-server 产品 router 调用 workspace_rpc_mount 并合并标准 WorkspaceService 路径，不额外打开数据库或绑定端口。
+2. 从实际 listener、runtime 和开发配置得到精确 Origin allowlist；验证原生 HTTP/2 与 gRPC-Web unary/server-streaming 所需的 body/CORS/路由行为。
+3. 将 RpcApp runtime 放入唯一 host 生命周期，在 graceful/force shutdown 拒绝新流并 stop；核对 dispatcher、静态 /app/、health/probe 和 Desktop sidecar 行为。
+4. Vite 代理标准 RPC 前缀到同一 host；保持 strict CSP，不允许浏览器直接访问另一个跨源服务。
+
+### 验收
+
+- 同一 host 上标准 /kanban.framework.v1.WorkspaceService/WatchChanges 可被真实原生 gRPC 与 Fetch gRPC-Web 消费。
+- 无效 board/protocol/Origin 在响应头前失败；并发订阅上限和关闭行为实际验证。
+- 首次连接刷新与已提交的非卡片变化均触发 query invalidation。
+- 已有静态资源、健康探测和未迁移消费者正常；不引入自动协议回退。
+
+交付：正式 host 的 RPC router；静态资源与 RPC 共存接线；统一 shutdown/probe 测试。
+
+非目标：不直接把 example 的 50051 当成新生产端口；不为协议统一重写数据库。
+
+## G03 按 Atlas 实际页面与命令补齐命名业务契约
+
+Owner：protocol/application。依赖：G01。状态：todo。
+
+输入：`proto/kanban/framework/v1/board.proto`、`integration/kanban-adapter/src/lib.rs`、`docs/09-migration-map.md`。
+
+### 实施
+
+1. 同时核对分支 operation catalog、KanbanService operations、WorkspaceDataSource、TaskMutationClient 和实际展示字段，不沿旧前端路径迁移。
+2. 为读、写、状态动作、claim、步骤、评论、依赖、普通标签、运行、附件与管理操作定义命名 RPC；保留完整字段版本、幂等键、actor 和错误语义。
+3. optional/oneof 明确区分未修改、清空与具体值；生成类型只进入 adapter；UI domain 不依赖生成代码。
+4. 原状态/事务/claim 校验继续由 KanbanService 执行；删去泛型 HTTP 调度提案，禁止 Execute(method,json) 或伪造完整 TaskCard。
+
+### 验收
+
+- 当前被使用的业务操作有完整的 RPC 映射与约束测试。
+- 命令失败保留草稿；迟到响应不会覆盖更新的权威状态；冲突和幂等行为不退化。
+- 七字段 Card 仅作为框架示例，未被断言为完整 Atlas 任务。
+- 模块、迭代等尚未接入页面保持其真实状态，不虚构后端能力。
+
+交付：按领域拆分的正式 proto；当前 operation 到 RPC 的逐项映射；统一错误与 metadata 约束。
+
+非目标：不虚构当前未实现的 module/cycle 业务；不将 host-admin 默认暴露为 MCP tool。
+
+## G04 将 Atlas 数据源显式切到 gRPC 实时接口并保留界面
+
+Owner：web。依赖：G02。状态：todo。
+
+输入：`web/src/atlas-client.ts`、`web/src/changes.ts`、`integration/atlas-web/source.ts`、`integration/atlas-web/bind.ts`、`integration/patch-plan.json`、`docs/00-atlas-branch-audit.md`、`docs/05-integration.md`。
+
+### 实施
+
+1. 沿实际 bootstrap 到 adapters/host 的数据源工厂注入 createAtlasRpcRealtime，并将所需生成客户端与依赖纳入原 pnpm/xtask 生成流程。
+2. 应用层通过 BoardRealtimeSource 操作，保留 includeTasks:false；页面筛选、排序、分页和 URL 恢复仍由原查询负责。
+3. rpc-refresh-required 走现有保守刷新控制通路；不把控制序号当审计事件游标；多个通知合并后刷新所有受影响的已挂载读取。
+4. 连接状态、重试和 generation fence 接入原会话生命周期。先证实 gRPC 路径不构建 SSE controller，再逐业务接入 G03 契约。
+5. 保留 Atlas styles/components/features、表单草稿、claim token、焦点和滚动行为；不得换成演示页。
+
+### 验收
+
+- 真实外部写入能更新分页看板、列表和当前详情，包括只有评论/标签变化的情况。
+- 选中 boardRealtime 后无 SSE 连接，RPC 故障只重试该协议或显示失败。
+- 新项目和新数据源不会复用旧连接，释放后迟到帧不再发布。
+- 原 just web-check、web-react-doctor-diff v4 和浏览器查询/草稿测试通过；完整 typed query delta 的退出条件与 G07 对齐。
+
+交付：原 bootstrap/host 数据源组合中的 boardRealtime 注入；原分页与详情的 gRPC invalidation 接线；Atlas Web 门禁和查询/草稿回归记录。
+
+非目标：不要求此任务同时完成所有业务 RPC；不将临时 gRPC invalidation 声称为完整 live query；不重写纸本视觉。
+
+## G05 迁移 CLI 与 MCP 的内部调用
+
+Owner：client/cli/mcp。依赖：G02、G03。状态：todo。
+
+输入：`crates/kanban-rpc-host/examples/native_client.rs`、`docs/09-migration-map.md`。
+
+### 实施
+
+1. 根据当前命令与 MCP catalog 枚举需要迁移的全部调用，不永久依赖旧工具数量。
+2. 共享 tonic channel 生命周期，避免 async 内 block_on 和每次调用新 runtime。
+3. 保留 CLI 输出/退出码和 MCP tool schema、错误表达及 host-admin 隔离。
+4. 核对令牌、幂等键和 actor metadata，不记录敏感 payload。
+
+### 验收
+
+- CLI/MCP 内部无业务 REST 请求。
+- 代表性的 mutation 经同一 application path 出现在 Web stream。
+- 工具库存一致且 host-admin 未泄露。
+- 运行相关 claim/release/heartbeat 行为通过回归。
+
+交付：统一异步 gRPC client；等价 CLI 调用层；保留标准 MCP 的 adapter。
+
+非目标：不把对外 MCP stdio/JSON-RPC 换成 gRPC；不购买或依赖新的 LLM API。
+
+## G06 验证写入提示覆盖、隔离与两类订阅开销
+
+Owner：service/realtime。依赖：G02。状态：todo。
+
+输入：`integration/service-src/mutation_gate.rs`、`integration/service-src/realtime.rs`、`crates/kanban-live-core/src/source.rs`、`crates/kanban-live-core/src/refresh.rs`、`crates/kanban-rpc-host/src/refresh.rs`。
+
+### 实施
+
+1. 审查 dispatcher、维护、HTTP 旧入口和新 RPC 的全部写入是否共用 mutation gate；测例必须覆盖非卡片的评论、标签、步骤和附件变化。
+2. 验证失败/回滚仅造成冗余刷新，不能伪造业务成功；read fence 不产生通知；验证初始化订阅时的并发写入。
+3. 测量全局提示带来的跨项目冗余刷新、10ms 合并、查询请求数、写锁等待、source load 和 mutation-to-visible。
+4. 必要时把提示改成 board/topic scoped 或事务提交后的 durable 机制；基于数据决定，维持一个 application 所有者。
+
+### 验收
+
+- 持久业务事实与刷新提示语义分开，所有必要写入最终能让观察视图收敛。
+- 活动 board 被归档、服务停机或数据替换时，流退出/重连和 UI 状态符合协议。
+- 心跳只证明连接活性，不冒充数据库健康；外部绕过 gate 的写入不属于已验证支持范围。
+- 故障、RSS、请求放大和延迟有真实测量记录；无需的优化不扩大任务。
+
+交付：写路径覆盖测试；source 故障与延迟观测；测量后决定是否优化的记录。
+
+非目标：没有实测瓶颈时不强加持久 outbox；不为性能改变任务状态规则。
+
+## G07 实现适合分页 Atlas 的完整 typed query snapshot/delta
+
+Owner：read-model/protocol。依赖：G03。状态：todo。
+
+输入：`proto/kanban/framework/v1/board.proto`、`crates/kanban-live-core/src/model.rs`、`crates/kanban-live-core/src/hub.rs`、`docs/03-stream-protocol.md`、`docs/11-atlas-refresh-protocol.md`。
+
+### 实施
+
+1. 为实际 TaskListQueryState、分页窗口、TaskInspector、Map、Runs 和 Events 定义各自最小充分投影字段，不能通过类型断言把 Card 填成完整任务。
+2. query identity 包含 runtime、canonical board、全部过滤排序、offset/limit、可见字段和版本；每次改变查询进入新 generation。
+3. 实现 total、窗口补位、排序变化、membership remove/upsert 和跨任务依赖影响；快照与 revision 必须处在一致读取边界。
+4. 按需共享相同查询 Hub 并回收无订阅项；对每个完成的 typed query 关闭对应保守刷新，避免双重读取与两个状态所有者。
+
+### 验收
+
+- 分页头尾、空页、新成员进入和旧成员移出的结果与权威查询一致。
+- 完整 task/detail projection 直接原子发布，不需要每个 delta 重新 HTTP 拉取。
+- 跨板、跨查询、断线中间快照与迟到命令响应不会覆盖新状态。
+- 全量 typed stream 已迁移后删除 WorkspaceService 过渡刷新流或明确限制到尚需的诊断用途。
+
+交付：按需 Hub registry 与回收；TaskDetail/Map/QueryWindow 契约；其他必要视图 source 与测试。
+
+非目标：不构造任意 SQL 的远程订阅接口；不使用缺少字段的审计 payload 伪造完整状态。
+
+## G08 执行真实协议、浏览器和 Desktop 联调
+
+Owner：verification。依赖：G04、G05、G06、G07。状态：todo。
+
+输入：`crates/kanban-rpc-host/tests/interop.rs`、`crates/kanban-rpc-host/tests/refresh.rs`、`tests/atlas.test.mjs`、`web/tests/changes.test.mjs`、`docs/10-debugging.md`。
+
+### 实施
+
+1. 从真实 Atlas checkout 构建同一 host，用原生 gRPC 和浏览器 Fetch gRPC-Web 同时连接，不能用 stub 代替实际 HTTP/2/body。
+2. CLI/MCP 操作临时数据库，观察真实分页看板、列表、Inspector、评论、步骤、依赖、运行和动态。
+3. 故障注入覆盖断线、EOF 循环、源关闭、历史淘汰、快照中断、慢消费者、切项目和侧栏/详情卸载。
+4. 在 WebKitGTK/Tauri 上测流、CSP、runtime identity、sidecar 停机和资源回收；保留实际环境与命令日志。
+
+### 验收
+
+- 编译、运行、协议、产品回归分别记录，未执行项显式标记。
+- 没有重复任务、跨板污染、提前确认 cursor 或无限增长的队列。
+- 正常/强制退出回收所有资源。
+- 用户可见状态在恢复后与权威读取一致。
+
+交付：真实 loopback 数据链路证据；WebView/Desktop 验证记录；断线与背压压力结果。
+
+非目标：不把 Node reducer 测试称作浏览器端到端；不在正式数据库上故障注入。
+
+## G09 删除旧 REST/SSE 业务路径并同步最终文档
+
+Owner：migration-owner。依赖：G08。状态：todo。
+
+输入：`docs/09-migration-map.md`、`tasks/tasks.json`。
+
+### 实施
+
+1. 依据当前所有消费者映射确认已无调用旧业务 API。
+2. 在全部消费者迁移后删除旧 SSE handler/parser/transport/Last-Event-ID 业务逻辑、ureq 业务路径和 WorkspaceDataSource 的旧网络字段；移除过渡刷新控制通路中已无使用者的部分。
+3. 保留静态资源及明确记录的 bootstrap 例外。
+4. 把有价值的旧恢复、隔离、关闭测试迁到新 RPC；更新 justfile/schema 生成库存。
+
+### 验收
+
+- 正常业务调用与持续更新只有 gRPC/gRPC-Web。
+- 无隐藏 REST handler 回调或 SSE fallback。
+- 标准 MCP 对外兼容，内部 gRPC。
+- 所有产品 gate 和文档链接通过，最终报告与真实代码状态一致。
+
+交付：旧业务 transport 退出 diff；更新后的 owner 文档/AGENTS/catalog；最终迁移验收报告。
+
+非目标：不将本框架的“源码已提供”偷换成“全量迁移已完成”；不删除仍被使用的接口来让静态扫描通过。

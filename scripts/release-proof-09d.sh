@@ -110,8 +110,8 @@ while IFS= read -r -d '' stale_tmp; do
 done < <(find "$EVIDENCE_DIR" -maxdepth 1 \( -name '.release-09d-evidence.tmp' -o -name 'release-09d-*.tmp' \) -print0)
 
 for stale_json in \
-  "$EVIDENCE_DIR/release-09d-small-perf-sse-chromium.json" \
-  "$EVIDENCE_DIR/release-09d-small-sse-firefox.json" \
+  "$EVIDENCE_DIR/release-09d-small-perf-query-chromium.json" \
+  "$EVIDENCE_DIR/release-09d-small-query-firefox.json" \
   "$EVIDENCE_DIR/release-09d-functional-2k-chromium.json" \
   "$EVIDENCE_DIR/release-09d-functional-2k-firefox.json" \
   "$EVIDENCE_DIR/release-09d-functional-2k-chromium-chromium.json" \
@@ -216,7 +216,9 @@ fi
 BOARDS_JSON="$(KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json --board default board list)"
 if ! jq -e '.data | any(.slug == "default")' <<<"$BOARDS_JSON" >/dev/null; then
   KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json --board default board create default --name "Stage09 09D" >/dev/null
+  BOARDS_JSON="$(KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json --board default board list)"
 fi
+BOARD_ID="$(jq -er '[.data[] | select(.slug == "default")] | if length == 1 and (.[0].id | type == "string" and length > 0) then .[0].id else error("default board identity is missing or ambiguous") end' <<<"$BOARDS_JSON")"
 KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json --board default task create "Stage09 09D seed" --status todo --task-id t_release_09d_seed >/dev/null
 
 HEALTH_DB_PATH="$(jq -er '.data.db_path' <<<"$HEALTH_BEFORE")"
@@ -227,6 +229,7 @@ HOST_PID_RECORDED="$HOST_PID"
 HOST_STARTTIME_RECORDED="$HOST_STARTTIME"
 
 export KANBAN_RELEASE_09D_BASE_URL="$BASE_URL"
+export KANBAN_RELEASE_BASE_URL="$BASE_URL"
 export KANBAN_RELEASE_09D_RUN_ID="$RUN_ID"
 export KANBAN_RELEASE_09D_FORMAL="$FORMAL_MODE"
 export KANBAN_RELEASE_09D_EVIDENCE_DIR="$EVIDENCE_DIR"
@@ -254,10 +257,10 @@ run_playwright() {
       --grep "$grep_pattern"
 }
 
-# 整条有序链路复用同一个 canonical DB：依次执行小数据性能/SSE、精确 2k 功能验证，
+# 整条有序链路复用同一个 canonical DB：依次执行小数据性能/QueryService、精确 2k 功能验证，
 # 再执行精确 5k UI 压力验证；Firefox 只覆盖关键路径。
-run_playwright "small-perf-sse" chromium "09D (performance|persistent SSE)"
-run_playwright "small-sse" firefox "09D persistent SSE"
+run_playwright "small-perf-query" chromium "09D (performance|persistent QueryService)"
+run_playwright "small-query" firefox "09D persistent QueryService"
 run_playwright "functional-2k" chromium "09D functional_2k real board and list pagination"
 run_playwright "functional-2k" firefox "09D functional_2k real board and list pagination"
 run_playwright "stress-5k" chromium "09D stress_5k real board list map no-crash bounded interaction"
@@ -269,7 +272,8 @@ HEALTH_DB_PATH_AFTER="$(jq -er '.data.db_path' <<<"$HEALTH_AFTER")"
 DB_IDENTITY_AFTER="$(stat -c '%d:%i' -- "$HEALTH_DB_PATH_AFTER")"
 [[ "$DB_IDENTITY_AFTER" == "$DB_IDENTITY_BEFORE" ]] || error "canonical DB inode changed during 09D"
 DB_FINGERPRINT_AFTER="$(jq -er '.data.db_fingerprint' <<<"$HEALTH_AFTER")"
-FINAL_TOTAL="$(curl --fail --silent --show-error "$BASE_URL/api/v1/boards/default/tasks?limit=1&offset=0&sort=seq" | jq -er '.meta.total')"
+# 此时所有写入与性能采样已经结束；完整状态分组排除 archived 后等于默认任务列表的 total。
+FINAL_TOTAL="$(KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json stats --board default | node "$ROOT/scripts/release-proof-09d.mjs" task-total --board-id "$BOARD_ID")"
 [[ "$FINAL_TOTAL" == "5000" ]] || error "final exact task total is $FINAL_TOTAL, expected 5000"
 
 stop_host
@@ -288,8 +292,8 @@ check_private_file() {
 }
 
 for evidence in \
-  "$EVIDENCE_DIR/release-09d-small-perf-sse-chromium.json" \
-  "$EVIDENCE_DIR/release-09d-small-sse-firefox.json" \
+  "$EVIDENCE_DIR/release-09d-small-perf-query-chromium.json" \
+  "$EVIDENCE_DIR/release-09d-small-query-firefox.json" \
   "$EVIDENCE_DIR/release-09d-functional-2k-chromium.json" \
   "$EVIDENCE_DIR/release-09d-functional-2k-firefox.json" \
   "$EVIDENCE_DIR/release-09d-stress-5k-chromium.json" \
@@ -309,11 +313,11 @@ if [[ "$FORMAL_MODE" == "true" && ( "$START_CLEAN" != "true" || "$END_CLEAN" != 
 fi
 
 check_browser_evidence() {
-  local file="$1" browser="$2" performance_gate="$3" sse_gate="$4" functional_gate="$5" stress_gate="$6" metric_samples="$7" sse_samples="$8" task_target="$9" final_total="${10}" latency_status="${11}" key_path_status="${12}" map_required="${13}" stream_min="${14}" reconnect_required="${15}" ui_kind="${16}"
+  local file="$1" browser="$2" performance_gate="$3" query_gate="$4" functional_gate="$5" stress_gate="$6" metric_samples="$7" query_samples="$8" task_target="$9" final_total="${10}" latency_status="${11}" key_path_status="${12}" map_required="${13}" stream_min="${14}" reconnect_required="${15}" ui_kind="${16}"
   jq -e \
     --arg browser "$browser" \
     --arg performance_gate "$performance_gate" \
-    --arg sse_gate "$sse_gate" \
+    --arg query_gate "$query_gate" \
     --arg functional_gate "$functional_gate" \
     --arg stress_gate "$stress_gate" \
     --arg latency_status "$latency_status" \
@@ -331,13 +335,10 @@ check_browser_evidence() {
     --arg db_before "$DB_IDENTITY_BEFORE" \
     --argjson host_pid "$HOST_PID_RECORDED" \
     --argjson metric_samples "$metric_samples" \
-    --argjson sse_samples "$sse_samples" \
+    --argjson query_samples "$query_samples" \
     --argjson task_target "$task_target" \
     --argjson final_total "$final_total" \
     --argjson map_required "$map_required" \
-    --argjson stream_min "$stream_min" \
-    --argjson reconnect_required "$reconnect_required" \
-    --arg ui_kind "$ui_kind" \
     '(
       .browser == $browser
       and .run_id == $run_id
@@ -353,13 +354,13 @@ check_browser_evidence() {
       and .db_path == $db_path
       and .db_identity_before == $db_before
       and .gates.performance == $performance_gate
-      and .gates.sse == $sse_gate
+      and .gates.query == $query_gate
       and .gates.functional_2k == $functional_gate
       and .gates.stress_5k == $stress_gate
-      and .sse_contract.latency_budget_status == $latency_status
-      and .sse_contract.key_path_status == $key_path_status
+      and .query_contract.latency_budget_status == $latency_status
+      and .query_contract.key_path_status == $key_path_status
       and ((.performance.samples // []) | length) == $metric_samples
-      and ((.sse.samples // []) | length) == $sse_samples
+      and ((.query.samples // []) | length) == $query_samples
       and (.browser_errors | length) == 0
       and .failure == null
       and (.fixture_seed.response_error_count // 0) == 0
@@ -378,122 +379,17 @@ check_browser_evidence() {
         end)
       and (if $final_total == null then true else .final_task_total == $final_total end)
       and (if $map_required == 1 then .map != null and .map.node_count > 0 and .map.node_count <= .map.limit_nodes and .map.limit_nodes == 240 and (.map.truncated | type) == "boolean" and .map.ui_node_count == .map.node_count and .map.ui_edge_count == .map.edge_count and .map.ui_truncated == .map.truncated and .map.zoom_before == 100 and .map.zoom_after == 115 else .map == null end)
-      and (if $ui_kind == "none"
-        then .ui == null
-        elif $ui_kind == "functional_2k"
-        then .ui != null and .ui.functional_2k != null and .ui.stress_5k == null
-          and .ui.functional_2k.board_total == 2000
-          and .ui.functional_2k.board_rendered_count > 0
-          and .ui.functional_2k.board_rendered_count <= ((.ui.functional_2k.board_columns | length) * 100)
-          and .ui.functional_2k.board_rendered_count == ([.ui.functional_2k.board_columns[].rendered_card_count] | add // 0)
-          and ([.ui.functional_2k.board_columns[].total] | add // 0) == 2000
-          and ([.ui.functional_2k.board_columns[] | select(.rendered_card_count > 100 or .total != .range_total or .range_start > .range_end or .range_end > .total or .page != 1 or .total_pages < 1 or (.total == 0 and (.range_start != 0 or .range_end != 0 or .rendered_card_count != 0)) or (.total > 0 and (.range_start != 1 or .rendered_card_count != (.range_end - .range_start + 1))))] | length) == 0
-          and .ui.functional_2k.board_ready.budget_ms == 120000
-          and .ui.functional_2k.board_ready.within_budget == true
-          and (.ui.functional_2k.board_ready.navigation_start_ms | type) == "number"
-          and (.ui.functional_2k.board_ready.ready_ms | type) == "number"
-          and .ui.functional_2k.board_ready.ready_ms <= .ui.functional_2k.board_ready.budget_ms
-          and .ui.functional_2k.board_window.page_size == 100
-          and .ui.functional_2k.board_window.page1.page == 1
-          and .ui.functional_2k.board_window.page1.range_start == 1
-          and .ui.functional_2k.board_window.page1.range_end == 100
-          and .ui.functional_2k.board_window.page1.total == .ui.functional_2k.board_window.page2.total
-          and .ui.functional_2k.board_window.page1.total >= 101
-          and ((.ui.functional_2k.board_window.column_id) as $column_id | (.ui.functional_2k.board_window.page1.total) as $window_total | ([.ui.functional_2k.board_columns[] | select(.column_id == $column_id and .total == $window_total and .total_pages >= 2 and .rendered_card_count <= 100)] | length) == 1)
-          and .ui.functional_2k.board_window.page1.first_task_id != null
-          and .ui.functional_2k.board_window.page1.last_task_id != null
-          and .ui.functional_2k.board_window.page2.page == 2
-          and .ui.functional_2k.board_window.page2.range_start == 101
-          and .ui.functional_2k.board_window.page2.range_end == 200
-          and .ui.functional_2k.board_window.page2.total == .ui.functional_2k.board_window.page1.total
-          and .ui.functional_2k.board_window.page2.first_task_id != null
-          and .ui.functional_2k.board_window.page2.last_task_id != null
-          and .ui.functional_2k.board_window.page2.first_task_id != .ui.functional_2k.board_window.page1.first_task_id
-          and .ui.functional_2k.board_window.page2.last_task_id != .ui.functional_2k.board_window.page1.last_task_id
-          and .ui.functional_2k.list_total == 2000
-          and .ui.functional_2k.page1.row_count == 100
-          and .ui.functional_2k.page1.range == "1–100 / 2000"
-          and .ui.functional_2k.page1.first_task_id != null
-          and .ui.functional_2k.page1.last_task_id != null
-          and .ui.functional_2k.page2.row_count == 100
-          and .ui.functional_2k.page2.range == "101–200 / 2000"
-          and .ui.functional_2k.page2.first_task_id != null
-          and .ui.functional_2k.page2.last_task_id != null
-        elif $ui_kind == "stress_5k"
-        then .ui != null and .ui.functional_2k == null and .ui.stress_5k != null
-          and .ui.stress_5k.board_total == 5000
-          and .ui.stress_5k.board_rendered_count > 0
-          and .ui.stress_5k.board_rendered_count <= ((.ui.stress_5k.board_columns | length) * 100)
-          and .ui.stress_5k.board_rendered_count == ([.ui.stress_5k.board_columns[].rendered_card_count] | add // 0)
-          and ([.ui.stress_5k.board_columns[].total] | add // 0) == 5000
-          and ([.ui.stress_5k.board_columns[] | select(.rendered_card_count > 100 or .total != .range_total or .range_start > .range_end or .range_end > .total or .page != 1 or .total_pages < 1 or (.total == 0 and (.range_start != 0 or .range_end != 0 or .rendered_card_count != 0)) or (.total > 0 and (.range_start != 1 or .rendered_card_count != (.range_end - .range_start + 1))))] | length) == 0
-          and .ui.stress_5k.board_ready.budget_ms == 120000
-          and .ui.stress_5k.board_ready.within_budget == true
-          and (.ui.stress_5k.board_ready.navigation_start_ms | type) == "number"
-          and (.ui.stress_5k.board_ready.ready_ms | type) == "number"
-          and .ui.stress_5k.board_ready.ready_ms <= .ui.stress_5k.board_ready.budget_ms
-          and .ui.stress_5k.board_window.page_size == 100
-          and .ui.stress_5k.board_window.page1.page == 1
-          and .ui.stress_5k.board_window.page1.range_start == 1
-          and .ui.stress_5k.board_window.page1.range_end == 100
-          and .ui.stress_5k.board_window.page1.total == .ui.stress_5k.board_window.page2.total
-          and .ui.stress_5k.board_window.page1.total >= 101
-          and ((.ui.stress_5k.board_window.column_id) as $column_id | (.ui.stress_5k.board_window.page1.total) as $window_total | ([.ui.stress_5k.board_columns[] | select(.column_id == $column_id and .total == $window_total and .total_pages >= 2 and .rendered_card_count <= 100)] | length) == 1)
-          and .ui.stress_5k.board_window.page1.first_task_id != null
-          and .ui.stress_5k.board_window.page1.last_task_id != null
-          and .ui.stress_5k.board_window.page2.page == 2
-          and .ui.stress_5k.board_window.page2.range_start == 101
-          and .ui.stress_5k.board_window.page2.range_end == 200
-          and .ui.stress_5k.board_window.page2.total == .ui.stress_5k.board_window.page1.total
-          and .ui.stress_5k.board_window.page2.first_task_id != null
-          and .ui.stress_5k.board_window.page2.last_task_id != null
-          and .ui.stress_5k.board_window.page2.first_task_id != .ui.stress_5k.board_window.page1.first_task_id
-          and .ui.stress_5k.board_window.page2.last_task_id != .ui.stress_5k.board_window.page1.last_task_id
-          and .ui.stress_5k.list_total == 5000
-          and .ui.stress_5k.before_limit == 100
-          and .ui.stress_5k.before.row_count == 100
-          and .ui.stress_5k.before.range == "1–100 / 5000"
-          and .ui.stress_5k.after_limit == 200
-          and .ui.stress_5k.after.row_count == 200
-          and .ui.stress_5k.after.range == "1–200 / 5000"
-          and .ui.stress_5k.map.node_count == .map.node_count
-          and .ui.stress_5k.map.edge_count == .map.edge_count
-          and .ui.stress_5k.map.truncated == .map.truncated
-          and .ui.stress_5k.map.limit_nodes == 240
-          and .ui.stress_5k.map.zoom_before == 100
-          and .ui.stress_5k.map.zoom_after == 115
-        else false
-        end)
-      and ((.sse_stream_requests // []) | length) >= $stream_min
-      and .sse_reconnect.new_request_after_disconnect == ($reconnect_required == 1)
-      and .sse_reconnect.stale_notice_cleared == ($reconnect_required == 1)
-      and (if $reconnect_required == 1
-        then .sse_reconnect.request_count_after_disconnect > .sse_reconnect.before_count
-          and (.sse_reconnect.request_at_ms != null)
-          and (.sse_reconnect.event_seen_at_ms != null)
-          and .sse_reconnect.request_at_ms <= .sse_reconnect.event_seen_at_ms
-          and (.sse_reconnect.last_event_id != null)
-          and (.sse_reconnect.after != null)
-          and (.sse_reconnect.confirmed_cursor != null)
-          and (.sse_reconnect.confirmed_task_id != null)
-          and (.sse_reconnect.confirmed_event_id != null)
-          and .sse_reconnect.last_event_id == .sse_reconnect.after
-          and .sse_reconnect.after == .sse_reconnect.confirmed_cursor
-        else .sse_reconnect.request_count_after_disconnect == 0
-          and .sse_reconnect.request_at_ms == null
-          and .sse_reconnect.event_seen_at_ms == null
-          and .sse_reconnect.last_event_id == null
-          and .sse_reconnect.after == null
-          and .sse_reconnect.confirmed_cursor == null
-          and .sse_reconnect.confirmed_task_id == null
-          and .sse_reconnect.confirmed_event_id == null
-        end)
     )' \
     -- "$file" >/dev/null || error "browser evidence contract failed: $file"
+  node "$ROOT/scripts/release-proof-09d.mjs" ui-evidence --kind "$ui_kind" \
+    <"$file" || error "browser Atlas UI evidence contract failed: $file"
+  node "$ROOT/scripts/release-proof-09d.mjs" query-evidence \
+    --stream-min "$stream_min" --reconnect-required "$reconnect_required" \
+    <"$file" || error "browser query evidence contract failed: $file"
 }
 
-check_browser_evidence "$EVIDENCE_DIR/release-09d-small-perf-sse-chromium.json" chromium passed passed not-run not-run 20 21 0 null passed passed 0 2 1 none
-check_browser_evidence "$EVIDENCE_DIR/release-09d-small-sse-firefox.json" firefox not-run passed not-run not-run 0 2 0 null not_applicable passed 0 2 1 none
+check_browser_evidence "$EVIDENCE_DIR/release-09d-small-perf-query-chromium.json" chromium passed passed not-run not-run 20 21 0 null passed passed 0 2 1 none
+check_browser_evidence "$EVIDENCE_DIR/release-09d-small-query-firefox.json" firefox not-run passed not-run not-run 0 2 0 null not_applicable passed 0 2 1 none
 check_browser_evidence "$EVIDENCE_DIR/release-09d-functional-2k-chromium.json" chromium not-run not-run passed not-run 0 0 2000 2000 not_run not_run 0 0 0 functional_2k
 check_browser_evidence "$EVIDENCE_DIR/release-09d-functional-2k-firefox.json" firefox not-run not-run passed not-run 0 0 2000 2000 not_run not_run 0 0 0 functional_2k
 check_browser_evidence "$EVIDENCE_DIR/release-09d-stress-5k-chromium.json" chromium not-run not-run not-run passed 0 0 5000 5000 not_run not_run 1 0 0 stress_5k
@@ -511,8 +407,8 @@ if [[ -e "$TMP_ROOT_RECORDED" ]]; then error "temporary canonical root was not r
 DB_REMOVED=true
 INITIAL_FILES_JSON="$INITIAL_FILES_JSON" \
   jq -n \
-  --slurpfile a "$EVIDENCE_DIR/release-09d-small-perf-sse-chromium.json" \
-  --slurpfile b "$EVIDENCE_DIR/release-09d-small-sse-firefox.json" \
+  --slurpfile a "$EVIDENCE_DIR/release-09d-small-perf-query-chromium.json" \
+  --slurpfile b "$EVIDENCE_DIR/release-09d-small-query-firefox.json" \
   --slurpfile c "$EVIDENCE_DIR/release-09d-functional-2k-chromium.json" \
   --slurpfile d "$EVIDENCE_DIR/release-09d-functional-2k-firefox.json" \
   --slurpfile e "$EVIDENCE_DIR/release-09d-stress-5k-chromium.json" \
@@ -578,117 +474,29 @@ if [[ "$FORMAL_MODE" == "true" ]]; then EXPECTED_RELEASE_STATUS="passed"; fi
 jq -e --arg expected_status "$EXPECTED_RELEASE_STATUS" '.release_status == $expected_status and .formal == ($expected_status == "passed") and .fixtures.exact_2k and .fixtures.exact_5k and .cleanup.host_stopped and .cleanup.port_free and .cleanup.db_removed and .cleanup.temp_root_removed and .initial_brotli.bytes <= .initial_brotli.budget_bytes' "$EVIDENCE_DIR/release-09d-evidence.json" >/dev/null
 jq -e --arg host_log_path "$HOST_LOG_RELATIVE_PATH" --arg host_log_sha "$HOST_LOG_SHA256" --arg start_sha "$START_SHA" --arg end_sha "$END_SHA" --arg host_starttime "$HOST_STARTTIME_RECORDED" --argjson host_pid "$HOST_PID_RECORDED" '.host.host_log_path == $host_log_path and .host.host_log_sha256 == $host_log_sha and .host.start_sha == $start_sha and .host.end_sha == $end_sha and .host.pid == $host_pid and .host.starttime == $host_starttime and .host.live_binary_bound == true' "$EVIDENCE_DIR/release-09d-evidence.json" >/dev/null
 jq -e '
-  def ui_ok($kind):
-    if $kind == "none" then .ui == null
-    elif $kind == "functional_2k"
-    then .ui != null and .ui.functional_2k != null and .ui.stress_5k == null
-      and .ui.functional_2k.board_total == 2000
-      and .ui.functional_2k.board_rendered_count > 0
-      and .ui.functional_2k.board_rendered_count <= ((.ui.functional_2k.board_columns | length) * 100)
-      and .ui.functional_2k.board_rendered_count == ([.ui.functional_2k.board_columns[].rendered_card_count] | add // 0)
-      and ([.ui.functional_2k.board_columns[].total] | add // 0) == 2000
-      and ([.ui.functional_2k.board_columns[] | select(.rendered_card_count > 100 or .total != .range_total or .range_start > .range_end or .range_end > .total or .page != 1 or .total_pages < 1 or (.total == 0 and (.range_start != 0 or .range_end != 0 or .rendered_card_count != 0)) or (.total > 0 and (.range_start != 1 or .rendered_card_count != (.range_end - .range_start + 1))))] | length) == 0
-      and .ui.functional_2k.board_ready.budget_ms == 120000
-      and .ui.functional_2k.board_ready.within_budget == true
-      and (.ui.functional_2k.board_ready.navigation_start_ms | type) == "number"
-      and (.ui.functional_2k.board_ready.ready_ms | type) == "number"
-      and .ui.functional_2k.board_ready.ready_ms <= .ui.functional_2k.board_ready.budget_ms
-      and .ui.functional_2k.board_window.page_size == 100
-      and .ui.functional_2k.board_window.page1.page == 1
-      and .ui.functional_2k.board_window.page1.range_start == 1
-      and .ui.functional_2k.board_window.page1.range_end == 100
-      and .ui.functional_2k.board_window.page1.total == .ui.functional_2k.board_window.page2.total
-      and .ui.functional_2k.board_window.page1.total >= 101
-      and ((.ui.functional_2k.board_window.column_id) as $column_id | (.ui.functional_2k.board_window.page1.total) as $window_total | ([.ui.functional_2k.board_columns[] | select(.column_id == $column_id and .total == $window_total and .total_pages >= 2 and .rendered_card_count <= 100)] | length) == 1)
-      and .ui.functional_2k.board_window.page1.first_task_id != null
-      and .ui.functional_2k.board_window.page1.last_task_id != null
-      and .ui.functional_2k.board_window.page2.page == 2
-      and .ui.functional_2k.board_window.page2.range_start == 101
-      and .ui.functional_2k.board_window.page2.range_end == 200
-      and .ui.functional_2k.board_window.page2.total == .ui.functional_2k.board_window.page1.total
-      and .ui.functional_2k.board_window.page2.first_task_id != null
-      and .ui.functional_2k.board_window.page2.last_task_id != null
-      and .ui.functional_2k.board_window.page2.first_task_id != .ui.functional_2k.board_window.page1.first_task_id
-      and .ui.functional_2k.board_window.page2.last_task_id != .ui.functional_2k.board_window.page1.last_task_id
-      and .ui.functional_2k.list_total == 2000
-      and .ui.functional_2k.page1.row_count == 100
-      and .ui.functional_2k.page1.range == "1–100 / 2000"
-      and .ui.functional_2k.page1.first_task_id != null
-      and .ui.functional_2k.page1.last_task_id != null
-      and .ui.functional_2k.page2.row_count == 100
-      and .ui.functional_2k.page2.range == "101–200 / 2000"
-      and .ui.functional_2k.page2.first_task_id != null
-      and .ui.functional_2k.page2.last_task_id != null
-    elif $kind == "stress_5k"
-    then .ui != null and .ui.functional_2k == null and .ui.stress_5k != null
-      and .ui.stress_5k.board_total == 5000
-      and .ui.stress_5k.board_rendered_count > 0
-      and .ui.stress_5k.board_rendered_count <= ((.ui.stress_5k.board_columns | length) * 100)
-      and .ui.stress_5k.board_rendered_count == ([.ui.stress_5k.board_columns[].rendered_card_count] | add // 0)
-      and ([.ui.stress_5k.board_columns[].total] | add // 0) == 5000
-      and ([.ui.stress_5k.board_columns[] | select(.rendered_card_count > 100 or .total != .range_total or .range_start > .range_end or .range_end > .total or .page != 1 or .total_pages < 1 or (.total == 0 and (.range_start != 0 or .range_end != 0 or .rendered_card_count != 0)) or (.total > 0 and (.range_start != 1 or .rendered_card_count != (.range_end - .range_start + 1))))] | length) == 0
-      and .ui.stress_5k.board_ready.budget_ms == 120000
-      and .ui.stress_5k.board_ready.within_budget == true
-      and (.ui.stress_5k.board_ready.navigation_start_ms | type) == "number"
-      and (.ui.stress_5k.board_ready.ready_ms | type) == "number"
-      and .ui.stress_5k.board_ready.ready_ms <= .ui.stress_5k.board_ready.budget_ms
-      and .ui.stress_5k.board_window.page_size == 100
-      and .ui.stress_5k.board_window.page1.page == 1
-      and .ui.stress_5k.board_window.page1.range_start == 1
-      and .ui.stress_5k.board_window.page1.range_end == 100
-      and .ui.stress_5k.board_window.page1.total == .ui.stress_5k.board_window.page2.total
-      and .ui.stress_5k.board_window.page1.total >= 101
-      and ((.ui.stress_5k.board_window.column_id) as $column_id | (.ui.stress_5k.board_window.page1.total) as $window_total | ([.ui.stress_5k.board_columns[] | select(.column_id == $column_id and .total == $window_total and .total_pages >= 2 and .rendered_card_count <= 100)] | length) == 1)
-      and .ui.stress_5k.board_window.page1.first_task_id != null
-      and .ui.stress_5k.board_window.page1.last_task_id != null
-      and .ui.stress_5k.board_window.page2.page == 2
-      and .ui.stress_5k.board_window.page2.range_start == 101
-      and .ui.stress_5k.board_window.page2.range_end == 200
-      and .ui.stress_5k.board_window.page2.total == .ui.stress_5k.board_window.page1.total
-      and .ui.stress_5k.board_window.page2.first_task_id != null
-      and .ui.stress_5k.board_window.page2.last_task_id != null
-      and .ui.stress_5k.board_window.page2.first_task_id != .ui.stress_5k.board_window.page1.first_task_id
-      and .ui.stress_5k.board_window.page2.last_task_id != .ui.stress_5k.board_window.page1.last_task_id
-      and .ui.stress_5k.list_total == 5000
-      and .ui.stress_5k.before_limit == 100
-      and .ui.stress_5k.before.row_count == 100
-      and .ui.stress_5k.before.range == "1–100 / 5000"
-      and .ui.stress_5k.after_limit == 200
-      and .ui.stress_5k.after.row_count == 200
-      and .ui.stress_5k.after.range == "1–200 / 5000"
-      and .ui.stress_5k.map.node_count == .map.node_count
-      and .ui.stress_5k.map.edge_count == .map.edge_count
-      and .ui.stress_5k.map.truncated == .map.truncated
-      and .ui.stress_5k.map.limit_nodes == 240
-      and .ui.stress_5k.map.zoom_before == 100
-      and .ui.stress_5k.map.zoom_after == 115
-      and .map.ui_node_count == .map.node_count
-      and .map.ui_edge_count == .map.edge_count
-      and .map.ui_truncated == .map.truncated
-      and .map.zoom_before == 100
-      and .map.zoom_after == 115
-    else false end;
-  def record($phase; $browser; $performance; $sse; $functional; $stress; $metrics; $events; $target; $latency; $key_path; $ui):
+  def record($phase; $browser; $performance; $query; $functional; $stress; $metrics; $events; $target; $latency; $key_path; $ui):
     .phase == $phase
     and .browser == $browser
     and .gates.performance == $performance
-    and .gates.sse == $sse
+    and .gates.query == $query
     and .gates.functional_2k == $functional
     and .gates.stress_5k == $stress
-    and .sse_contract.latency_budget_status == $latency
-    and .sse_contract.key_path_status == $key_path
+    and .query_contract.latency_budget_status == $latency
+    and .query_contract.key_path_status == $key_path
     and ((.performance.samples // []) | length) == $metrics
-    and ((.sse.samples // []) | length) == $events
+    and ((.query.samples // []) | length) == $events
     and (.browser_errors | length) == 0
     and .failure == null
     and (if $target == 0 then ((.task_counts // []) | length) == 0 else ((.task_counts // []) | length) == 1 and .task_counts[0].target == $target and .task_counts[0].total == $target end)
-    and ui_ok($ui);
+    and (if $ui == "none" then .ui == null else .ui[$ui] != null end);
   (.browsers | length) == 6
-  and ([.browsers[] | select(record("small-perf-sse"; "chromium"; "passed"; "passed"; "not-run"; "not-run"; 20; 21; 0; "passed"; "passed"; "none"))] | length) == 1
-  and ([.browsers[] | select(record("small-sse"; "firefox"; "not-run"; "passed"; "not-run"; "not-run"; 0; 2; 0; "not_applicable"; "passed"; "none"))] | length) == 1
+  and ([.browsers[] | select(record("small-perf-query"; "chromium"; "passed"; "passed"; "not-run"; "not-run"; 20; 21; 0; "passed"; "passed"; "none"))] | length) == 1
+  and ([.browsers[] | select(record("small-query"; "firefox"; "not-run"; "passed"; "not-run"; "not-run"; 0; 2; 0; "not_applicable"; "passed"; "none"))] | length) == 1
   and ([.browsers[] | select(record("functional-2k"; "chromium"; "not-run"; "not-run"; "passed"; "not-run"; 0; 0; 2000; "not_run"; "not_run"; "functional_2k"))] | length) == 1
   and ([.browsers[] | select(record("functional-2k"; "firefox"; "not-run"; "not-run"; "passed"; "not-run"; 0; 0; 2000; "not_run"; "not_run"; "functional_2k"))] | length) == 1
   and ([.browsers[] | select(record("stress-5k"; "chromium"; "not-run"; "not-run"; "not-run"; "passed"; 0; 0; 5000; "not_run"; "not_run"; "stress_5k"))] | length) == 1
   and ([.browsers[] | select(record("stress-5k"; "firefox"; "not-run"; "not-run"; "not-run"; "passed"; 0; 0; 5000; "not_run"; "not_run"; "stress_5k"))] | length) == 1
 ' "$EVIDENCE_DIR/release-09d-evidence.json" >/dev/null
+node "$ROOT/scripts/release-proof-09d.mjs" ui-evidence --kind all \
+  <"$EVIDENCE_DIR/release-09d-evidence.json" || error "aggregate Atlas UI evidence contract failed"
 echo "release-proof 09D ${EXPECTED_RELEASE_STATUS}: run_id=$RUN_ID final_tasks=$FINAL_TOTAL initial_brotli_bytes=$INITIAL_BROTLI_BYTES evidence=$EVIDENCE_DIR/release-09d-evidence.json"

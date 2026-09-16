@@ -9,10 +9,12 @@ pub(crate) struct RemoveArgs {
     pub(crate) attachment_id: String,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let task_id = client.resolve_task_id(&ctx.board, &args.task_ref)?;
-    let deleted = client.delete_attachment(&task_id, &args.attachment_id)?;
+    let task_id = client.resolve_task_id(&ctx.board, &args.task_ref).await?;
+    let deleted = client
+        .delete_attachment(&task_id, &args.attachment_id)
+        .await?;
     if ctx.json {
         output::print_json(&CliAttachmentRemoveOutput {
             data: kanban_protocol::DeleteResult { deleted },

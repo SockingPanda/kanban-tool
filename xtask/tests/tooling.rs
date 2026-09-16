@@ -123,8 +123,11 @@ fn generated_artifact_set_is_byte_deterministic() {
 
     assert_eq!(first, second);
     assert!(first.contains_key("manifest.json"));
-    assert!(first.contains_key("operations.json"));
-    assert!(first.contains_key("surface-operations.json"));
+    assert!(first.contains_key("dto-contracts.json"));
+    assert!(first.contains_key("dto-bindings.json"));
+    assert!(first.contains_key("rpc-catalog.json"));
+    assert!(!first.contains_key("operations.json"));
+    assert!(!first.contains_key("surface-operations.json"));
 }
 
 #[test]
@@ -194,7 +197,7 @@ fn assert_local_references(value: &Value, root_id: &str) {
 
 #[test]
 fn binary_help_preserves_public_cli_contract() {
-    // `release package` is a public Stage09 package-proof command.
+    // RPC 生成与 release package 都由根 justfile 经公共 xtask 命令进入。
     let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
         .arg("--help")
         .output()
@@ -204,7 +207,7 @@ fn binary_help_preserves_public_cli_contract() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         String::from_utf8(output.stdout).expect("help output must be UTF-8"),
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|web-assets check|release check|receipt|package|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n用法：xtask release receipt [--root PATH] [--out PATH] [--artifact PATH]\n用法：xtask release package [--diagnostic] [--root PATH] [--evidence PATH] [--out PATH]\n"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|rpc-contracts generate|check|web-assets check|release check|receipt|package|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n用法：xtask release receipt [--root PATH] [--out PATH] [--artifact PATH]\n用法：xtask release package [--diagnostic] [--root PATH] [--evidence PATH] [--out PATH]\n"
     );
 }
 
@@ -417,9 +420,10 @@ fn web_contract_generation_is_selection_scoped() {
         .filter_map(|operation| operation.get("id").and_then(Value::as_str))
         .collect::<std::collections::BTreeSet<_>>();
     assert!(operation_ids.contains("api.list-tasks"));
-    assert!(operation_ids.contains("sse.stream-events"));
+    assert!(operation_ids.contains("api.list-events"));
+    assert!(!operation_ids.contains("sse.stream-events"));
     assert!(!operation_ids.contains("api.create-board"));
-    assert!(!operation_ids.contains("api.update-step"));
+    assert!(operation_ids.contains("api.update-step"));
     assert!(operation_ids.contains("api.list-task-labels"));
     let contracts: Value =
         serde_json::from_slice(files.get("contracts.json").expect("contracts manifest"))
@@ -432,7 +436,8 @@ fn web_contract_generation_is_selection_scoped() {
             .any(|contract| contract.get("id")
                 == Some(&Value::String("api.error.response".to_owned())))
     );
-    assert!(files.contains_key("sse.ts"));
+    assert!(!files.contains_key("sse.ts"));
+    assert!(files.contains_key("contracts/api-event-data.ts"));
     assert!(files.contains_key("manifest.json"));
 }
 

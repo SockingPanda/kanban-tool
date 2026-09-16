@@ -31,6 +31,8 @@ esac
 }
 
 mkdir -p "$(dirname "$DEST")"
+# Desktop 校验资源根目录不可由 group/world 写入；不要继承开发机的宽松 umask。
+chmod 0755 "$(dirname "$DEST")"
 if [[ "$SOURCE" != "$DEST" ]]; then
   cp -- "$SOURCE" "$DEST"
 fi

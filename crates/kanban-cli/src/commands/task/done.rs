@@ -13,22 +13,24 @@ pub(crate) struct DoneArgs {
     pub(crate) force: bool,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &DoneArgs,
 ) -> Result<(), CliFailure> {
-    let task = client.complete_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &CompleteTaskRequest {
-            actor: None,
-            claim_token: args.claim_token.clone(),
-            force: args.force,
-            summary: None,
-            result: None,
-        },
-    )?;
+    let task = client
+        .complete_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &CompleteTaskRequest {
+                actor: None,
+                claim_token: args.claim_token.clone(),
+                force: args.force,
+                summary: None,
+                result: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CompleteTaskResponse::new(task));
     } else {

@@ -10,10 +10,11 @@ pub(crate) struct ListArgs {
     pub(crate) limit: usize,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
-    let entities =
-        ctx.client()?
-            .list_entities(Some(&ctx.board), args.kind.as_deref(), args.limit)?;
+pub(crate) async fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
+    let entities = ctx
+        .client()?
+        .list_entities(Some(&ctx.board), args.kind.as_deref(), args.limit)
+        .await?;
     if ctx.json {
         output::print_json(&kanban_protocol::CliEntityListOutput { data: entities });
     } else {

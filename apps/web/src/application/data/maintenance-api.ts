@@ -20,7 +20,7 @@ import { type ApiSearchStatusResponseContract } from "../../lib/api/generated/co
 
 import { ContractValidationError } from "../../lib/api/generated/runtime";
 
-import { HttpTransportError, type HttpTransport, type HttpTransportOptions, type HttpTransportResponse } from "./http-transport";
+import { RpcTransportError,type RpcTransport,type RpcTransportOptions,type RpcTransportResponse } from "./rpc-transport";
 
 export type MaintenanceStatus = ApiMaintenanceStatusResponseContract["data"]
 
@@ -74,12 +74,9 @@ export class MaintenanceApiError extends Error {
   }
 }
 
-export interface MaintenanceApiTransport {
-  readonly get: HttpTransport["get"]
-  readonly request: HttpTransport["request"]
-}
+export type MaintenanceApiTransport = RpcTransport
 
-export interface MaintenanceApiDependencies extends HttpTransportOptions {
+export interface MaintenanceApiDependencies extends RpcTransportOptions {
   readonly transport?: MaintenanceApiTransport
 }
 
@@ -90,7 +87,7 @@ export function isAbortError(error: unknown): boolean {
 export function wrapTransportError(error: unknown): never {
   if (isAbortError(error)) throw error
   if (error instanceof MaintenanceApiError) throw error
-  if (error instanceof HttpTransportError) {
+  if (error instanceof RpcTransportError) {
     throw new MaintenanceApiError(error.kind, error.message, {
       code: error.apiError?.code,
       status: error.status ?? undefined,
@@ -101,7 +98,7 @@ export function wrapTransportError(error: unknown): never {
 }
 
 export function parseResponse<T>(
-  response: HttpTransportResponse,
+  response: RpcTransportResponse,
   parser: (payload: unknown) => { data: T },
   contractId: string,
 ): T {
@@ -116,10 +113,6 @@ export function parseResponse<T>(
     }
     throw error
   }
-}
-
-export function encodedBoard(board: string): string {
-  return encodeURIComponent(board)
 }
 
 export function normalizedOwner(owner?: string | null): string | null {

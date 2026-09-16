@@ -47,29 +47,27 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<TaskCreateArgs>,
     ) -> Result<Json<CreateTaskResponse>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        let task = call_client(move || {
-            client.create_task(
-                &board,
-                CreateTaskRequest {
-                    task_id: args.task_id,
-                    idempotency_key: args.idempotency_key,
-                    title: args.title,
-                    description: args.description,
-                    status: args.status,
-                    assignee: args.assignee,
-                    priority: args.priority,
-                    scheduled_at: args.scheduled_at,
-                    due_at: args.due_at,
-                    max_retries: args.max_retries,
-                    metadata: args.metadata,
-                    labels: args.labels,
-                    depends_on: args.depends_on,
-                    actor: None,
-                },
-            )
-        })
+        let task = call_client(client.create_task(
+            &board,
+            CreateTaskRequest {
+                task_id: args.task_id,
+                idempotency_key: args.idempotency_key,
+                title: args.title,
+                description: args.description,
+                status: args.status,
+                assignee: args.assignee,
+                priority: args.priority,
+                scheduled_at: args.scheduled_at,
+                due_at: args.due_at,
+                max_retries: args.max_retries,
+                metadata: args.metadata,
+                labels: args.labels,
+                depends_on: args.depends_on,
+                actor: None,
+            },
+        ))
         .await?;
 
         Ok(Json(CreateTaskResponse { data: task }))

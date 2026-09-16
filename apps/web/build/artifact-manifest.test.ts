@@ -36,6 +36,12 @@ function sampleFiles(): WebArtifactFile[] {
 }
 
 describe("Web artifact manifest contract", () => {
+  test('拒绝旧 v1 artifact，传输切换不能混用旧 Host', () => {
+    const manifest = buildWebArtifactManifest({ serverVersion: '3.0.0', outputs: [{ path: 'index.html', source: '<html />' }] })
+    expect(() => validateWebArtifactManifest({ ...manifest, protocolVersion: 'v1' })).toThrow(/protocolVersion/)
+    expect(() => buildWebArtifactManifest({ serverVersion: '3.0.0', protocolVersion: 'v1', outputs: [{ path: 'index.html', source: '<html />' }] })).toThrow(/protocolVersion/)
+  })
+
   test("matches the Rust known vector byte-for-byte", () => {
     const files = sampleFiles()
     const preimage = webArtifactBuildPreimage({
@@ -48,7 +54,7 @@ describe("Web artifact manifest contract", () => {
     })
 
     expect(preimage.toString("hex")).toBe(
-      "00000000000000246b616e62616e2d746f6f6c3a7765622d61727469666163742d6275696c642d69643a7631000000000000000100000000000000052f6170702f000000000000000a696e6465782e68746d6c0000000000000005332e302e30000000000000000276310000000000000002000000000000000d6173736574732f6170702e6a730000000000000003aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000a696e6465782e68746d6c0000000000000002bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "00000000000000246b616e62616e2d746f6f6c3a7765622d61727469666163742d6275696c642d69643a7631000000000000000100000000000000052f6170702f000000000000000a696e6465782e68746d6c0000000000000005332e302e30000000000000000276320000000000000002000000000000000d6173736574732f6170702e6a730000000000000003aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000a696e6465782e68746d6c0000000000000002bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     )
     expect(
       webArtifactBuildIdFor({
@@ -59,7 +65,7 @@ describe("Web artifact manifest contract", () => {
         protocolVersion: WEB_PROTOCOL_VERSION,
         files,
       }),
-    ).toBe("sha256:ce7b387aff6a614f4e376260a8edbd1341148d932df90db96dd00bce038f44a7")
+    ).toBe("sha256:25391778f405062df8abee64f99eb0f1a6bd4b6d54fd4ae8c9f11bc0296f792b")
   })
 
   test("sorts inventory by UTF-8 bytes and emits the fixed manifest shape", () => {
@@ -79,7 +85,7 @@ describe("Web artifact manifest contract", () => {
       basePath: "/app/",
       entrypoint: "index.html",
       serverVersion: "3.0.0",
-      protocolVersion: "v1",
+      protocolVersion: "v2",
     })
     expect(manifest.files.map(({ path }) => path)).toEqual([
       "assets/a.js",

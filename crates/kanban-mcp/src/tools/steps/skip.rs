@@ -30,21 +30,15 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
         let step_ref = args.step_ref;
-        let client = self.client.clone();
-        let before = {
-            let client = client.clone();
-            let board = board.clone();
-            let task_ref = task_ref.clone();
-            call_client(move || client.list_steps_by_selector(&board, &task_ref)).await?
-        };
+        let client = &self.client;
+        let before = call_client(client.list_steps_by_selector(&board, &task_ref)).await?;
         let request = SkipStepRequest {
             reason: args.reason,
             actor: None,
         };
-        let step = call_client(move || {
-            client.skip_step_by_selector(&board, &task_ref, &step_ref, &request)
-        })
-        .await?;
+        let step =
+            call_client(client.skip_step_by_selector(&board, &task_ref, &step_ref, &request))
+                .await?;
         let mut steps = before;
         if let Some(found) = steps
             .steps

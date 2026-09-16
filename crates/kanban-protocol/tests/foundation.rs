@@ -288,10 +288,7 @@ const B4_C2_LABEL_OPERATION_IDS: &[&str] = &[
 
 #[test]
 fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
-    let endpoints = endpoint_catalog()
-        .iter()
-        .filter(|endpoint| endpoint.operation_id != "sse.stream-events")
-        .collect::<Vec<_>>();
+    let endpoints = endpoint_catalog().iter().collect::<Vec<_>>();
     // 当前 catalog 同时包含完整领域、维护、graph 与 vector 的 JSON endpoint。
     assert_eq!(endpoints.len(), 117);
 
@@ -336,55 +333,16 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
 }
 
 #[test]
-fn sse_contract_freezes_cursor_header_heartbeat_and_scope_metadata() {
-    let endpoint = endpoint_descriptor("sse.stream-events").expect("SSE endpoint descriptor");
-    assert_eq!(
-        endpoint.obligations.headers,
-        EndpointObligation::Contract("sse.stream-events.headers")
-    );
-    assert_eq!(
-        endpoint.obligations.sse,
-        EndpointObligation::Contract("sse.event.data")
-    );
-    assert_eq!(endpoint.shared_components, &["sse.event.heartbeat"]);
-
-    let headers = operation_inventory()
+fn audit_data_is_shared_by_list_events_without_a_legacy_stream_endpoint() {
+    let endpoint = endpoint_descriptor("api.list-events").expect("ListEvents DTO binding");
+    assert_eq!(endpoint.shared_components, &["api.event.data"]);
+    assert!(endpoint_descriptor("sse.stream-events").is_none());
+    let audit = operation_inventory()
         .iter()
-        .find(|contract| contract.id == "sse.stream-events.headers")
-        .expect("SSE header contract");
-    assert_eq!(headers.binding, ContractBinding::ExactSurface);
-    assert_eq!(headers.direction, ContractDirection::Deserialize);
-    assert_eq!(
-        headers.transport,
-        ContractTransport::Http {
-            operation_key: Some("GET /api/v1/stream/events"),
-            location: HttpTransportLocation::Headers,
-            parameters: &[
-                WireParameter {
-                    name: "Accept-Language",
-                    cardinality: Some(WireParameterCardinality::OptionalOne),
-                },
-                WireParameter {
-                    name: "Last-Event-ID",
-                    cardinality: Some(WireParameterCardinality::OptionalOne),
-                },
-            ],
-        }
-    );
-
-    let heartbeat = operation_inventory()
-        .iter()
-        .find(|contract| contract.id == "sse.event.heartbeat")
-        .expect("SSE heartbeat contract");
-    assert_eq!(heartbeat.binding, ContractBinding::SharedComponent);
-    assert!(matches!(
-        heartbeat.transport,
-        ContractTransport::Http {
-            location: HttpTransportLocation::Sse,
-            ..
-        }
-    ));
-    assert_eq!(kanban_protocol::SSE_HEARTBEAT_EVENT, "kb-heartbeat");
+        .find(|c| c.id == "api.event.data")
+        .unwrap();
+    assert_eq!(audit.binding, ContractBinding::SharedComponent);
+    assert_eq!(audit.direction, ContractDirection::Serialize);
     assert!(
         kanban_protocol::TASK_SCOPED_EVENT_KINDS
             .iter()
@@ -513,11 +471,6 @@ fn b4_c2_label_operations_exactly_own_all_non_header_dimensions() {
             )),
             "{operation_id}"
         );
-        assert_eq!(
-            endpoint.obligations.sse,
-            EndpointObligation::NotApplicable,
-            "{operation_id}"
-        );
         for (dimension, obligation) in [
             ("path", endpoint.obligations.path),
             ("query", endpoint.obligations.query),
@@ -631,7 +584,6 @@ fn public_operation_inventory_covers_every_public_surface() {
         ContractSurface::Api,
         ContractSurface::Cli,
         ContractSurface::Jsonl,
-        ContractSurface::Sse,
         ContractSurface::Metadata,
         ContractSurface::Config,
     ]);
@@ -645,7 +597,7 @@ fn public_operation_inventory_covers_every_public_surface() {
 fn public_catalog_preserves_contract_and_exclusion_counts() {
     assert_eq!(
         operation_inventory().len(),
-        583,
+        580,
         "public contract inventory 不得静默增删"
     );
     let exclusions = surface_operation_catalog()
@@ -956,7 +908,7 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:metadata:ontology-validation-evidence-input:v1",
         "urn:kanban-tool:schema:metadata:signal-link-output:v1",
         "urn:kanban-tool:schema:metadata:signal-record-input:v1",
-        "urn:kanban-tool:schema:sse:stream-event-data:v1",
+        "urn:kanban-tool:schema:api:event-data:v1",
         "urn:kanban-tool:schema:api:get-stats-query:v1",
         "urn:kanban-tool:schema:api:get-stats-response:v1",
         "urn:kanban-tool:schema:api:search-tasks-query:v1",
@@ -1001,9 +953,6 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:vector-sync-request:v1",
         "urn:kanban-tool:schema:api:vector-sync-response:v1",
         "urn:kanban-tool:schema:api:list-events-query:v1",
-        "urn:kanban-tool:schema:sse:stream-events-query:v1",
-        "urn:kanban-tool:schema:sse:stream-events-headers:v1",
-        "urn:kanban-tool:schema:sse:event-heartbeat:v1",
     ]);
     expected.extend(
         kanban_protocol::portable_contract_catalog()
@@ -1129,21 +1078,13 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        118,
-        "117 JSON API + 1 SSE 必须全部有 descriptor"
-    );
-    assert_eq!(
-        endpoints
-            .iter()
-            .filter(|endpoint| endpoint.surface == ContractSurface::Sse)
-            .count(),
-        1,
-        "SSE 必须作为独立 transport descriptor"
+        117,
+        "业务 DTO bindings 必须全部有 descriptor"
     );
     assert!(endpoints.iter().all(|endpoint| {
         !endpoint.operation_id.is_empty()
             && !endpoint.path.is_empty()
-            && endpoint.obligations.entries().len() == 6
+            && endpoint.obligations.entries().len() == 5
     }));
 }
 
@@ -1179,7 +1120,6 @@ fn endpoint_descriptor_validator_rejects_duplicate_operation_and_method_path() {
             headers: EndpointObligation::Todo,
             body: EndpointObligation::Todo,
             success: EndpointObligation::Todo,
-            sse: EndpointObligation::NotApplicable,
         },
     }];
     assert!(validate_endpoint_catalog(&wrong_surface).is_err());
@@ -1280,7 +1220,7 @@ fn claim_endpoint_with_query_contract() -> EndpointDescriptor {
 fn operation_inventory_declares_http_or_explicit_no_transport() {
     for contract in operation_inventory() {
         match contract.surface {
-            ContractSurface::Api | ContractSurface::Sse => assert!(
+            ContractSurface::Api => assert!(
                 matches!(contract.transport, ContractTransport::Http { .. }),
                 "{} 必须显式声明 HTTP transport",
                 contract.id
@@ -1335,7 +1275,7 @@ fn topology_rejects_body_contract_in_query_with_location_diagnostic() {
 }
 
 #[test]
-fn topology_rejects_success_deserialize_and_surface_location_drift() {
+fn topology_rejects_success_deserialize() {
     let health = *endpoint_catalog()
         .iter()
         .find(|endpoint| endpoint.operation_id == "api.health")
@@ -1348,19 +1288,6 @@ fn topology_rejects_success_deserialize_and_surface_location_drift() {
         .expect_err("success contract 指向 Deserialize 必须失败");
     assert!(
         error.contains("transport direction does not match location success"),
-        "{error}"
-    );
-
-    let mut wrong_location = operation_inventory().to_vec();
-    contract_mut(&mut wrong_location, "api.health.response").transport = ContractTransport::Http {
-        operation_key: Some("GET /health"),
-        location: HttpTransportLocation::Sse,
-        parameters: &[],
-    };
-    let error = validate_contract_topology(&[health], &wrong_location)
-        .expect_err("API contract 声明 SSE location 必须失败");
-    assert!(
-        error.contains("transport location sse is incompatible with api surface"),
         "{error}"
     );
 }
@@ -1883,7 +1810,7 @@ fn error_transport_is_serialize_shared_only_and_has_no_endpoint_obligation() {
     assert!(
         endpoint_catalog()
             .iter()
-            .all(|endpoint| endpoint.obligations.entries().len() == 6),
+            .all(|endpoint| endpoint.obligations.entries().len() == 5),
         "Error 只是 shared transport location，不新增第七 endpoint obligation"
     );
 
@@ -2055,11 +1982,6 @@ fn cardinality_validation_covers_headers_names_forbidden_locations_and_shared_in
             HttpTransportLocation::Success,
             Some("GET /health"),
         ),
-        (
-            "sse.event.data",
-            HttpTransportLocation::Sse,
-            Some("GET /api/v1/events"),
-        ),
         ("api.error.response", HttpTransportLocation::Error, None),
     ] {
         let mut inventory = operation_inventory().to_vec();
@@ -2069,11 +1991,10 @@ fn cardinality_validation_covers_headers_names_forbidden_locations_and_shared_in
             parameters: FORBIDDEN_WIRE_PARAMETER,
         };
         let error = validate_contract_topology(&[], &inventory)
-            .expect_err("Body/Success/Sse/Error 不得声明 parameters");
+            .expect_err("Body/Success/Error 不得声明 parameters");
         let expected_location = match location {
             HttpTransportLocation::Body => "body",
             HttpTransportLocation::Success => "success",
-            HttpTransportLocation::Sse => "sse",
             HttpTransportLocation::Error => "error",
             _ => unreachable!(),
         };

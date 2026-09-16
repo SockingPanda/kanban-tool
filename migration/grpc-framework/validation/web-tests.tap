@@ -1,0 +1,418 @@
+TAP version 13
+# Subtest: refresh starts with attached and monotonic writes
+ok 1 - refresh starts with attached and monotonic writes
+  ---
+  duration_ms: 1.674014
+  type: 'test'
+  ...
+# Subtest: heartbeat does not create a query refresh
+ok 2 - heartbeat does not create a query refresh
+  ---
+  duration_ms: 0.265605
+  type: 'test'
+  ...
+# Subtest: heartbeat cannot establish an initial baseline
+ok 3 - heartbeat cannot establish an initial baseline
+  ---
+  duration_ms: 0.419867
+  type: 'test'
+  ...
+# Subtest: initial write hint cannot replace attached
+ok 4 - initial write hint cannot replace attached
+  ---
+  duration_ms: 0.270031
+  type: 'test'
+  ...
+# Subtest: initial sequence must be one
+ok 5 - initial sequence must be one
+  ---
+  duration_ms: 0.202811
+  type: 'test'
+  ...
+# Subtest: wrong board is rejected
+ok 6 - wrong board is rejected
+  ---
+  duration_ms: 0.176967
+  type: 'test'
+  ...
+# Subtest: epoch cannot change within one RPC
+ok 7 - epoch cannot change within one RPC
+  ---
+  duration_ms: 0.393239
+  type: 'test'
+  ...
+# Subtest: duplicate refresh is rejected rather than silently acknowledged
+ok 8 - duplicate refresh is rejected rather than silently acknowledged
+  ---
+  duration_ms: 1.213525
+  type: 'test'
+  ...
+# Subtest: sequence gaps force a new connection
+ok 9 - sequence gaps force a new connection
+  ---
+  duration_ms: 0.599257
+  type: 'test'
+  ...
+# Subtest: heartbeat cannot advance query refresh sequence
+ok 10 - heartbeat cannot advance query refresh sequence
+  ---
+  duration_ms: 0.581799
+  type: 'test'
+  ...
+# Subtest: heartbeat may not carry write reason
+ok 11 - heartbeat may not carry write reason
+  ---
+  duration_ms: 0.349922
+  type: 'test'
+  ...
+# Subtest: unknown kind and reason are rejected
+ok 12 - unknown kind and reason are rejected
+  ---
+  duration_ms: 0.210199
+  type: 'test'
+  ...
+# Subtest: invalid uint64 and oversized epoch are rejected
+ok 13 - invalid uint64 and oversized epoch are rejected
+  ---
+  duration_ms: 0.209562
+  type: 'test'
+  ...
+# Subtest: reconnection accepts a new epoch and forces fresh queries
+ok 14 - reconnection accepts a new epoch and forces fresh queries
+  ---
+  duration_ms: 0.190656
+  type: 'test'
+  ...
+# Subtest: same-origin rpc prefix is preserved
+ok 15 - same-origin rpc prefix is preserved
+  ---
+  duration_ms: 0.436561
+  type: 'test'
+  ...
+# Subtest: localhost aliases and different ports are not treated as same origin
+ok 16 - localhost aliases and different ports are not treated as same origin
+  ---
+  duration_ms: 0.225093
+  type: 'test'
+  ...
+# Subtest: public endpoints, credentials, query, fragment, and dot segments are rejected
+ok 17 - public endpoints, credentials, query, fragment, and dot segments are rejected
+  ---
+  duration_ms: 0.511644
+  type: 'test'
+  ...
+# Subtest: invalid controller configuration is rejected
+ok 18 - invalid controller configuration is rejected
+  ---
+  duration_ms: 0.315786
+  type: 'test'
+  ...
+# Subtest: start is idempotent and refresh is separate from heartbeat
+ok 19 - start is idempotent and refresh is separate from heartbeat
+  ---
+  duration_ms: 17.864927
+  type: 'test'
+  ...
+# Subtest: every reconnect requests an attached refresh without an audit cursor
+ok 20 - every reconnect requests an attached refresh without an audit cursor
+  ---
+  duration_ms: 3.148196
+  type: 'test'
+  ...
+# Subtest: terminal protocol mismatch never falls back to SSE or repeats
+ok 21 - terminal protocol mismatch never falls back to SSE or repeats
+  ---
+  duration_ms: 3.291458
+  type: 'test'
+  ...
+# Subtest: liveness watchdog can stop a noncooperative iterator
+ok 22 - liveness watchdog can stop a noncooperative iterator
+  ---
+  duration_ms: 10.205236
+  type: 'test'
+  ...
+# Subtest: retired stream cannot refresh after a manual restart
+ok 23 - retired stream cannot refresh after a manual restart
+  ---
+  duration_ms: 2.595401
+  type: 'test'
+  ...
+# Subtest: stop inside refresh callback does not report live afterwards
+ok 24 - stop inside refresh callback does not report live afterwards
+  ---
+  duration_ms: 3.129006
+  type: 'test'
+  ...
+# Subtest: stop while waiting retry prevents another connection
+ok 25 - stop while waiting retry prevents another connection
+  ---
+  duration_ms: 2.278303
+  type: 'test'
+  ...
+# Subtest: snapshot remains invisible until complete commit
+ok 26 - snapshot remains invisible until complete commit
+  ---
+  duration_ms: 2.657115
+  type: 'test'
+  ...
+# Subtest: empty snapshot commits with zero chunks
+ok 27 - empty snapshot commits with zero chunks
+  ---
+  duration_ms: 0.36639
+  type: 'test'
+  ...
+# Subtest: cross-board frames are rejected
+ok 28 - cross-board frames are rejected
+  ---
+  duration_ms: 0.74432
+  type: 'test'
+  ...
+# Subtest: cross-query scope is rejected
+ok 29 - cross-query scope is rejected
+  ---
+  duration_ms: 0.265298
+  type: 'test'
+  ...
+# Subtest: chunk without begin is rejected
+ok 30 - chunk without begin is rejected
+  ---
+  duration_ms: 0.330099
+  type: 'test'
+  ...
+# Subtest: out-of-order chunks are rejected
+ok 31 - out-of-order chunks are rejected
+  ---
+  duration_ms: 0.350888
+  type: 'test'
+  ...
+# Subtest: duplicate IDs within chunk are rejected atomically
+ok 32 - duplicate IDs within chunk are rejected atomically
+  ---
+  duration_ms: 1.548844
+  type: 'test'
+  ...
+# Subtest: incomplete commit does not expose partial snapshot
+ok 33 - incomplete commit does not expose partial snapshot
+  ---
+  duration_ms: 0.292516
+  type: 'test'
+  ...
+# Subtest: duplicate begin is rejected
+ok 34 - duplicate begin is rejected
+  ---
+  duration_ms: 0.614787
+  type: 'test'
+  ...
+# Subtest: reset preserves old visible view but disables resume
+ok 35 - reset preserves old visible view but disables resume
+  ---
+  duration_ms: 0.71236
+  type: 'test'
+  ...
+# Subtest: new epoch needs explicit reset before replacement
+ok 36 - new epoch needs explicit reset before replacement
+  ---
+  duration_ms: 0.424522
+  type: 'test'
+  ...
+# Subtest: uint64 above JS safe integer is lossless
+ok 37 - uint64 above JS safe integer is lossless
+  ---
+  duration_ms: 0.774343
+  type: 'test'
+  ...
+# Subtest: uint64 overflow is rejected
+ok 38 - uint64 overflow is rejected
+  ---
+  duration_ms: 0.685556
+  type: 'test'
+  ...
+# Subtest: one delta publishes upserts and removals atomically
+ok 39 - one delta publishes upserts and removals atomically
+  ---
+  duration_ms: 0.512078
+  type: 'test'
+  ...
+# Subtest: identical duplicate delta is idempotent
+ok 40 - identical duplicate delta is idempotent
+  ---
+  duration_ms: 0.287173
+  type: 'test'
+  ...
+# Subtest: same revision with different payload fails closed
+ok 41 - same revision with different payload fails closed
+  ---
+  duration_ms: 0.293336
+  type: 'test'
+  ...
+# Subtest: delta cannot skip a missing revision
+ok 42 - delta cannot skip a missing revision
+  ---
+  duration_ms: 0.253636
+  type: 'test'
+  ...
+# Subtest: delta must move exactly one projection revision
+ok 43 - delta must move exactly one projection revision
+  ---
+  duration_ms: 0.595617
+  type: 'test'
+  ...
+# Subtest: stale lock version cannot replace new task data
+ok 44 - stale lock version cannot replace new task data
+  ---
+  duration_ms: 0.296695
+  type: 'test'
+  ...
+# Subtest: unknown removals indicate an inconsistent baseline
+ok 45 - unknown removals indicate an inconsistent baseline
+  ---
+  duration_ms: 0.478519
+  type: 'test'
+  ...
+# Subtest: same ID cannot be removed and upserted in a batch
+ok 46 - same ID cannot be removed and upserted in a batch
+  ---
+  duration_ms: 0.388433
+  type: 'test'
+  ...
+# Subtest: heartbeat never confirms unapplied server revision
+ok 47 - heartbeat never confirms unapplied server revision
+  ---
+  duration_ms: 0.179581
+  type: 'test'
+  ...
+# Subtest: delta from previous epoch is rejected
+ok 48 - delta from previous epoch is rejected
+  ---
+  duration_ms: 0.252659
+  type: 'test'
+  ...
+# Subtest: disconnect discards staging and keeps confirmed cursor
+ok 49 - disconnect discards staging and keeps confirmed cursor
+  ---
+  duration_ms: 0.168636
+  type: 'test'
+  ...
+# Subtest: publication failure does not acknowledge the delta
+ok 50 - publication failure does not acknowledge the delta
+  ---
+  duration_ms: 0.238761
+  type: 'test'
+  ...
+# Subtest: snapshot byte budget rejects before publication
+ok 51 - snapshot byte budget rejects before publication
+  ---
+  duration_ms: 0.194124
+  type: 'test'
+  ...
+# Subtest: snapshot count budget is enforced
+ok 52 - snapshot count budget is enforced
+  ---
+  duration_ms: 0.176244
+  type: 'test'
+  ...
+# Subtest: unknown task status is not silently coerced
+ok 53 - unknown task status is not silently coerced
+  ---
+  duration_ms: 0.170426
+  type: 'test'
+  ...
+# Subtest: empty titles are rejected
+ok 54 - empty titles are rejected
+  ---
+  duration_ms: 0.144384
+  type: 'test'
+  ...
+# Subtest: same-epoch snapshot cannot rewind published state
+ok 55 - same-epoch snapshot cannot rewind published state
+  ---
+  duration_ms: 0.173287
+  type: 'test'
+  ...
+# Subtest: unchanged task retains reference across delta
+ok 56 - unchanged task retains reference across delta
+  ---
+  duration_ms: 0.47088
+  type: 'test'
+  ...
+# Subtest: ordering is deterministic without unsafe bigint coercion
+ok 57 - ordering is deterministic without unsafe bigint coercion
+  ---
+  duration_ms: 1.286625
+  type: 'test'
+  ...
+# Subtest: unknown required frame cannot move cursor
+ok 58 - unknown required frame cannot move cursor
+  ---
+  duration_ms: 0.251329
+  type: 'test'
+  ...
+# Subtest: randomized sequence of 1000 batches matches reference map
+ok 59 - randomized sequence of 1000 batches matches reference map
+  ---
+  duration_ms: 85.712062
+  type: 'test'
+  ...
+# Subtest: reconnect uses applied cursor not an unfinished snapshot
+ok 60 - reconnect uses applied cursor not an unfinished snapshot
+  ---
+  duration_ms: 2.098678
+  type: 'test'
+  ...
+# Subtest: protocol gap forces snapshot request while preserving visible data
+ok 61 - protocol gap forces snapshot request while preserving visible data
+  ---
+  duration_ms: 0.806125
+  type: 'test'
+  ...
+# Subtest: terminal transport error is never retried
+ok 62 - terminal transport error is never retried
+  ---
+  duration_ms: 1.163846
+  type: 'test'
+  ...
+# Subtest: EOF retry backoff is capped and eventually stops
+ok 63 - EOF retry backoff is capped and eventually stops
+  ---
+  duration_ms: 1.044857
+  type: 'test'
+  ...
+# Subtest: stop aborts the active stream without a new connection
+ok 64 - stop aborts the active stream without a new connection
+  ---
+  duration_ms: 5.355026
+  type: 'test'
+  ...
+# Subtest: old generation cannot clear staging of a new connection
+ok 65 - old generation cannot clear staging of a new connection
+  ---
+  duration_ms: 0.932984
+  type: 'test'
+  ...
+# Subtest: watchdog cancels a silent stream and retries
+ok 66 - watchdog cancels a silent stream and retries
+  ---
+  duration_ms: 5.261508
+  type: 'test'
+  ...
+# Subtest: stopping during retry delay does not open another RPC
+ok 67 - stopping during retry delay does not open another RPC
+  ---
+  duration_ms: 0.826855
+  type: 'test'
+  ...
+# Subtest: healthy heartbeat on resumed stream exposes live status
+ok 68 - healthy heartbeat on resumed stream exposes live status
+  ---
+  duration_ms: 0.74315
+  type: 'test'
+  ...
+1..68
+# tests 68
+# suites 0
+# pass 68
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 219.975919

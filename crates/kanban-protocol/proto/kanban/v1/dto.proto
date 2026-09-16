@@ -1,0 +1,2484 @@
+// @generated: xtask rpc-codegen；字段编号属于正式契约，不得重排。
+syntax = "proto3";
+package kanban.v1;
+import "kanban/v1/common.proto";
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticProposalWire>
+message AcceptLabelProposalResponse {
+  DtoLabelSemanticProposalWire data = 1;
+}
+
+// crate::dependencies::AddDependencyResponse
+message AddDependencyResponse {
+  DtoApiDependencies data = 1;
+}
+
+// crate::wire::OptionalMetadataEnvelope<crate::api_components::ApiTask,crate::wire::CreatedLabelsMeta<crate::api_components::ApiLabel>>
+message AddTaskLabelResponse {
+  DtoApiTask data = 1;
+  DtoCreatedLabelsMetaOfDtoApiLabel meta = 2;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>
+message ApplyLabelOntologyAtomResponse {
+  DtoLabelOntologyActionWire data = 1;
+}
+
+// crate::boards::ArchiveBoardResponse
+message ArchiveBoardResponse {
+  DtoApiBoard data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message ArchiveTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message BlockTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::task_graph::BoardTaskMap>
+message BoardTaskMapResponse {
+  DtoBoardTaskMap data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::BootstrapTaskLabelData>
+message BootstrapTaskLabelResponse {
+  DtoBootstrapTaskLabelData data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::ContextPack>
+message BuildContextResponse {
+  DtoContextPack data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::CheckpointReport>
+message CheckpointResponse {
+  DtoCheckpointReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::runs::ApiClaim>
+message ClaimTaskResponse {
+  DtoApiClaim data = 1;
+}
+
+// crate::steps::CompleteStepResponse
+message CompleteStepResponse {
+  DtoApiTaskSteps data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message CompleteTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>
+message ConfirmSignalsResponse {
+  repeated DtoSignalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::attachments::ApiAttachment>
+message CreateAttachmentResponse {
+  DtoApiAttachment data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiLabel>
+message CreateBoardLabelResponse {
+  DtoApiLabel data = 1;
+}
+
+// crate::boards::CreateBoardResponse
+message CreateBoardResponse {
+  DtoApiBoard data = 1;
+}
+
+// crate::comments::CreateCommentResponse
+message CreateCommentResponse {
+  DtoApiComment data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>
+message CreateLabelOntologyActionResponse {
+  DtoLabelOntologyActionWire data = 1;
+}
+
+// crate::steps::CreateStepResponse
+message CreateStepResponse {
+  DtoApiTaskSteps data = 1;
+}
+
+// crate::create_task::CreateTaskResponse
+message CreateTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::wire::DeleteResult>
+message DeleteAttachmentResponse {
+  DtoDeleteResult data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::DeleteBoardLabelResult>
+message DeleteBoardLabelResponse {
+  DtoDeleteBoardLabelResult data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::wire::DeleteResult>
+message DeleteLabelSemanticsResponse {
+  DtoDeleteResult data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::DoctorReport>
+message DoctorResponse {
+  DtoDoctorReport data = 1;
+}
+
+// crate::rpc::dto::AttachmentDownload
+message DownloadAttachmentResponse {
+  DtoApiAttachment attachment = 1;
+  bytes content = 2;
+}
+
+// crate::attachments::ApiAttachment
+message DtoApiAttachment {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string task_id = 3;
+  optional string filename = 4;
+  optional string rel_path = 5;
+  optional string content_type = 6;
+  optional int64 size_bytes = 7;
+  optional string sha256 = 8;
+  optional string created_by = 9;
+  optional int64 created_at = 10;
+}
+
+// crate::boards::ApiBoard
+message DtoApiBoard {
+  optional string id = 1;
+  optional string slug = 2;
+  optional string name = 3;
+  optional string description = 4;
+  optional int64 created_at = 5;
+  optional int64 updated_at = 6;
+  optional int64 archived_at = 7;
+}
+
+// crate::boards::ApiBoardColumn
+message DtoApiBoardColumn {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional DtoApiTaskStatus status = 3;
+  optional string title = 4;
+  optional int64 position = 5;
+  optional bool hidden = 6;
+  optional int64 wip_limit = 7;
+  optional int64 created_at = 8;
+  optional int64 updated_at = 9;
+}
+
+// crate::runs::ApiClaim
+message DtoApiClaim {
+  DtoApiTask task = 1;
+  DtoApiRun run = 2;
+  optional string claim_token = 3;
+  optional int64 claim_expires_at = 4;
+}
+
+// crate::comments::ApiComment
+message DtoApiComment {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string task_id = 3;
+  optional string author = 4;
+  optional DtoCommentsCommentAuthorType author_type = 5;
+  optional string agent_type = 6;
+  optional string body = 7;
+  optional DtoCommentsCommentKind kind = 8;
+  DtoStructuredMetadataJsonObject metadata = 9;
+  optional int64 created_at = 10;
+}
+
+enum DtoApiCreateTaskStatus {
+  DTO_API_CREATE_TASK_STATUS_UNSPECIFIED = 0;
+  DTO_API_CREATE_TASK_STATUS_TRIAGE = 1;
+  DTO_API_CREATE_TASK_STATUS_TODO = 2;
+  DTO_API_CREATE_TASK_STATUS_SCHEDULED = 3;
+  DTO_API_CREATE_TASK_STATUS_READY = 4;
+}
+
+// crate::dependencies::ApiDependencies
+message DtoApiDependencies {
+  DtoApiDependencyTask task = 1;
+  repeated DtoApiTask parents = 2;
+  repeated DtoApiTask children = 3;
+  repeated DtoApiDependencyEdge edges = 4;
+}
+
+// crate::dependencies::ApiDependencyEdge
+message DtoApiDependencyEdge {
+  DtoApiDependencyTask parent = 1;
+  DtoApiDependencyTask child = 2;
+}
+
+// crate::dependencies::ApiDependencyTask
+message DtoApiDependencyTask {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string board_slug = 3;
+  optional string task_ref = 4;
+  optional string title = 5;
+  optional DtoApiTaskStatus status = 6;
+}
+
+enum DtoApiErrorCode {
+  DTO_API_ERROR_CODE_UNSPECIFIED = 0;
+  DTO_API_ERROR_CODE_NOT_FOUND = 1;
+  DTO_API_ERROR_CODE_CONFLICT = 2;
+  DTO_API_ERROR_CODE_IDEMPOTENCY_CONFLICT = 3;
+  DTO_API_ERROR_CODE_DEPENDENCY_CYCLE = 4;
+  DTO_API_ERROR_CODE_INVALID_INPUT = 5;
+  DTO_API_ERROR_CODE_FEATURE_NOT_AVAILABLE = 6;
+  DTO_API_ERROR_CODE_SERVER_UNAVAILABLE = 7;
+  DTO_API_ERROR_CODE_EXECUTION_PLAN_REQUIRED = 8;
+  DTO_API_ERROR_CODE_STEPS_INCOMPLETE = 9;
+  DTO_API_ERROR_CODE_CLAIM_TOKEN_MISMATCH = 10;
+  DTO_API_ERROR_CODE_DEPENDENCY_BLOCKED = 11;
+  DTO_API_ERROR_CODE_CLAIM_CONFLICT = 12;
+  DTO_API_ERROR_CODE_INVALID_TRANSITION = 13;
+  DTO_API_ERROR_CODE_INTERNAL = 14;
+}
+
+// crate::steps::ApiExecutionPlan
+message DtoApiExecutionPlan {
+  optional string board_id = 1;
+  optional string task_id = 2;
+  optional DtoApiExecutionPlanState state = 3;
+  optional string reason = 4;
+  optional string updated_by = 5;
+  optional int64 updated_at = 6;
+}
+
+enum DtoApiExecutionPlanState {
+  DTO_API_EXECUTION_PLAN_STATE_UNSPECIFIED = 0;
+  DTO_API_EXECUTION_PLAN_STATE_UNPLANNED = 1;
+  DTO_API_EXECUTION_PLAN_STATE_PLANNED = 2;
+  DTO_API_EXECUTION_PLAN_STATE_NOT_REQUIRED = 3;
+}
+
+// crate::api_components::ApiLabel
+message DtoApiLabel {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string name = 3;
+  optional string color = 4;
+  optional int64 created_at = 5;
+  optional int64 updated_at = 6;
+}
+
+// crate::derived::ApiRelation
+message DtoApiRelation {
+  optional string subject_uri = 1;
+  optional string predicate = 2;
+  optional string object_uri = 3;
+  optional string graph_uri = 4;
+  DtoApiRelationProvenance provenance = 5;
+  JsonValue metadata = 6;
+  optional int64 created_at = 7;
+  optional int64 updated_at = 8;
+}
+
+// crate::derived::ApiRelationProvenance
+message DtoApiRelationProvenance {
+  optional string source_table = 1;
+  optional string source_id = 2;
+  optional int64 source_event_id = 3;
+  optional string authoritative_store = 4;
+}
+
+// crate::runs::ApiRun
+message DtoApiRun {
+  optional string id = 1;
+  optional string task_id = 2;
+  optional DtoApiRunStatus status = 3;
+  optional string worker_profile = 4;
+  optional int64 worker_pid = 5;
+  optional string claim_owner = 6;
+  optional int64 started_at = 7;
+  optional int64 finished_at = 8;
+  optional int64 exit_code = 9;
+  optional string summary = 10;
+  optional string error = 11;
+  optional bool has_log = 12;
+  JsonValue metadata = 13;
+}
+
+// crate::runs::ApiRunLog
+message DtoApiRunLog {
+  optional string run_id = 1;
+  optional string content = 2;
+  optional bool truncated = 3;
+}
+
+enum DtoApiRunStatus {
+  DTO_API_RUN_STATUS_UNSPECIFIED = 0;
+  DTO_API_RUN_STATUS_RUNNING = 1;
+  DTO_API_RUN_STATUS_SUCCEEDED = 2;
+  DTO_API_RUN_STATUS_FAILED = 3;
+  DTO_API_RUN_STATUS_CANCELED = 4;
+  DTO_API_RUN_STATUS_EXPIRED = 5;
+}
+
+enum DtoApiStepStatus {
+  DTO_API_STEP_STATUS_UNSPECIFIED = 0;
+  DTO_API_STEP_STATUS_TODO = 1;
+  DTO_API_STEP_STATUS_DONE = 2;
+  DTO_API_STEP_STATUS_SKIPPED = 3;
+}
+
+// crate::api_components::ApiTask
+message DtoApiTask {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string board_slug = 3;
+  optional string task_ref = 4;
+  optional int64 seq = 5;
+  optional string title = 6;
+  optional string description = 7;
+  optional DtoApiTaskStatus status = 8;
+  optional string status_reason = 9;
+  optional string assignee = 10;
+  DtoApiTaskPriority priority = 11;
+  optional int64 position = 12;
+  optional int64 scheduled_at = 13;
+  optional int64 due_at = 14;
+  optional string created_by = 15;
+  optional int64 created_at = 16;
+  optional int64 updated_at = 17;
+  optional int64 started_at = 18;
+  optional int64 completed_at = 19;
+  optional int64 archived_at = 20;
+  optional string claim_owner = 21;
+  optional int64 claim_expires_at = 22;
+  optional int64 last_heartbeat_at = 23;
+  optional string current_run_id = 24;
+  optional int64 retry_count = 25;
+  optional int64 max_retries = 26;
+  optional string result_summary = 27;
+  JsonValue result = 28;
+  JsonValue metadata = 29;
+  optional int64 lock_version = 30;
+  optional bool dependency_blocked = 31;
+  optional int64 unfinished_parent_count = 32;
+  optional DtoApiExecutionPlanState execution_plan_state = 33;
+  optional int64 required_step_count = 34;
+  optional int64 completed_required_step_count = 35;
+  optional int64 optional_step_count = 36;
+  repeated DtoApiLabel labels = 37;
+}
+
+enum DtoApiTaskGraphEdgeKind {
+  DTO_API_TASK_GRAPH_EDGE_KIND_UNSPECIFIED = 0;
+  DTO_API_TASK_GRAPH_EDGE_KIND_DEPENDENCY = 1;
+  DTO_API_TASK_GRAPH_EDGE_KIND_STEP = 2;
+}
+
+enum DtoApiTaskGraphNodeRole {
+  DTO_API_TASK_GRAPH_NODE_ROLE_UNSPECIFIED = 0;
+  DTO_API_TASK_GRAPH_NODE_ROLE_CENTER = 1;
+  DTO_API_TASK_GRAPH_NODE_ROLE_DEPENDENCY_PARENT = 2;
+  DTO_API_TASK_GRAPH_NODE_ROLE_DEPENDENCY_CHILD = 3;
+  DTO_API_TASK_GRAPH_NODE_ROLE_STEP_PARENT = 4;
+  DTO_API_TASK_GRAPH_NODE_ROLE_STEP_CHILD = 5;
+  DTO_API_TASK_GRAPH_NODE_ROLE_ACTIVE = 6;
+  DTO_API_TASK_GRAPH_NODE_ROLE_CONTEXT = 7;
+}
+
+message DtoApiTaskPriority {
+  optional uint32 value = 1;
+}
+
+enum DtoApiTaskStatus {
+  DTO_API_TASK_STATUS_UNSPECIFIED = 0;
+  DTO_API_TASK_STATUS_TRIAGE = 1;
+  DTO_API_TASK_STATUS_TODO = 2;
+  DTO_API_TASK_STATUS_SCHEDULED = 3;
+  DTO_API_TASK_STATUS_READY = 4;
+  DTO_API_TASK_STATUS_RUNNING = 5;
+  DTO_API_TASK_STATUS_BLOCKED = 6;
+  DTO_API_TASK_STATUS_REVIEW = 7;
+  DTO_API_TASK_STATUS_DONE = 8;
+  DTO_API_TASK_STATUS_ARCHIVED = 9;
+}
+
+// crate::steps::ApiTaskStep
+message DtoApiTaskStep {
+  optional string id = 1;
+  optional string parent_task_id = 2;
+  optional string title = 3;
+  optional string body = 4;
+  DtoApiTask linked_task = 5;
+  optional int64 position = 6;
+  optional bool required = 7;
+  optional DtoApiStepStatus status = 8;
+  optional string resolution_note = 9;
+  optional string resolved_by = 10;
+  optional int64 resolved_at = 11;
+  optional string created_by = 12;
+  optional int64 created_at = 13;
+  optional string updated_by = 14;
+  optional int64 updated_at = 15;
+}
+
+// crate::steps::ApiTaskSteps
+message DtoApiTaskSteps {
+  optional string task_id = 1;
+  repeated DtoApiTaskStep steps = 2;
+  DtoApiExecutionPlan execution_plan = 3;
+}
+
+// crate::maintenance::BackupReport
+message DtoBackupReport {
+  optional string out_path = 1;
+  optional string checksum_sha256 = 2;
+  optional uint64 bytes = 3;
+  optional string source_fingerprint = 4;
+}
+
+// crate::derived::BlockedReasonCount
+message DtoBlockedReasonCount {
+  optional string reason = 1;
+  optional int64 count = 2;
+}
+
+// crate::event_payload::BoardCreatedPayload
+message DtoBoardCreatedPayload {
+  optional string slug = 1;
+}
+
+// crate::task_graph::BoardTaskMap
+message DtoBoardTaskMap {
+  repeated DtoTaskGraphNode nodes = 1;
+  repeated DtoTaskGraphEdge edges = 2;
+  DtoTaskGraphMeta meta = 3;
+}
+
+// crate::label_surfaces::BootstrapTaskLabelData
+message DtoBootstrapTaskLabelData {
+  DtoApiTask task = 1;
+  DtoLabelSemanticsWire semantics = 2;
+  DtoBootstrapTaskLabelVerification verification = 3;
+}
+
+// crate::label_surfaces::BootstrapTaskLabelVerification
+message DtoBootstrapTaskLabelVerification {
+  optional string label_name = 1;
+  optional float score = 2;
+  optional string source = 3;
+  optional float min_score = 4;
+  optional bool degraded = 5;
+  repeated string diagnostics = 6;
+}
+
+// crate::maintenance::CheckpointReport
+message DtoCheckpointReport {
+  optional int64 busy = 1;
+  optional int64 log_frames = 2;
+  optional int64 checkpointed_frames = 3;
+}
+
+// crate::cli::CliEntity
+message DtoCliEntity {
+  optional string uri = 1;
+  optional string kind = 2;
+  optional string source_table = 3;
+  optional string source_id = 4;
+  optional string board_id = 5;
+  optional string task_id = 6;
+  optional string title = 7;
+  optional string summary = 8;
+  optional string content_hash = 9;
+  optional int64 created_at = 10;
+  optional int64 updated_at = 11;
+  optional int64 archived_at = 12;
+}
+
+// crate::cli_helpers::CliGraphQueryBinding
+message DtoCliGraphQueryBinding {
+  optional string name = 1;
+  optional string value = 2;
+}
+
+// crate::cli_helpers::CliGraphQueryRow
+message DtoCliGraphQueryRow {
+  repeated DtoCliGraphQueryBinding bindings = 1;
+}
+
+// crate::cli_labels::CliLabelOntologyPrecisionRecall
+message DtoCliLabelOntologyPrecisionRecall {
+  optional bool available = 1;
+  optional string reason = 2;
+}
+
+// crate::cli_labels::CliLabelOntologyQuality
+message DtoCliLabelOntologyQuality {
+  optional string board_id = 1;
+  DtoCliLabelOntologyQualityDenominator denominator = 2;
+  DtoCliLabelOntologyQualityDisagreement disagreement = 3;
+  DtoCliLabelOntologyQualityRates rates = 4;
+  DtoCliLabelOntologyPrecisionRecall precision_recall = 5;
+  repeated string warnings = 6;
+}
+
+// crate::cli_labels::CliLabelOntologyQualityDenominator
+message DtoCliLabelOntologyQualityDenominator {
+  optional string source = 1;
+  optional string description = 2;
+  optional int64 observation_count = 3;
+  optional int64 distinct_task_count = 4;
+  optional int64 agreement_observation_count = 5;
+  optional int64 agreement_task_count = 6;
+  optional int64 degraded_observation_count = 7;
+  optional int64 first_observed_at = 8;
+  optional int64 latest_observed_at = 9;
+  repeated string sample_task_refs = 10;
+}
+
+// crate::cli_labels::CliLabelOntologyQualityDisagreement
+message DtoCliLabelOntologyQualityDisagreement {
+  optional int64 signal_count = 1;
+  optional int64 distinct_task_count = 2;
+  map<string, int64> by_kind = 3;
+  map<string, int64> by_status = 4;
+}
+
+// crate::cli_labels::CliLabelOntologyQualityRates
+message DtoCliLabelOntologyQualityRates {
+  optional double disagreement_task_rate = 1;
+  optional string disagreement_task_rate_basis = 2;
+}
+
+enum DtoCommentsCommentAuthorType {
+  DTO_COMMENTS_COMMENT_AUTHOR_TYPE_UNSPECIFIED = 0;
+  DTO_COMMENTS_COMMENT_AUTHOR_TYPE_USER = 1;
+  DTO_COMMENTS_COMMENT_AUTHOR_TYPE_AGENT = 2;
+}
+
+enum DtoCommentsCommentKind {
+  DTO_COMMENTS_COMMENT_KIND_UNSPECIFIED = 0;
+  DTO_COMMENTS_COMMENT_KIND_NOTE = 1;
+  DTO_COMMENTS_COMMENT_KIND_DECISION = 2;
+  DTO_COMMENTS_COMMENT_KIND_SIGNAL = 3;
+}
+
+// crate::derived::ContextDiagnostic
+message DtoContextDiagnostic {
+  optional string source = 1;
+  optional string code = 2;
+  optional string message = 3;
+}
+
+// crate::derived::ContextEvidence
+message DtoContextEvidence {
+  optional string kind = 1;
+  optional string entity_uri = 2;
+  optional string task_id = 3;
+  optional string relation_id = 4;
+  optional string predicate = 5;
+  optional string summary = 6;
+}
+
+// crate::derived::ContextItem
+message DtoContextItem {
+  optional string entity_uri = 1;
+  optional string source = 2;
+  repeated string provenance = 3;
+  optional double score = 4;
+  optional string title = 5;
+  optional string snippet = 6;
+  optional uint64 rank = 7;
+  optional string reason = 8;
+  repeated DtoContextEvidence evidence = 9;
+}
+
+// crate::derived::ContextPack
+message DtoContextPack {
+  optional string subject = 1;
+  DtoContextPolicy policy = 2;
+  repeated DtoContextItem items = 3;
+  repeated string degraded = 4;
+  repeated DtoContextDiagnostic diagnostics = 5;
+  repeated DtoContextProviderStatus providers = 6;
+  optional bool truncated = 7;
+  optional string truncation_reason = 8;
+}
+
+// crate::derived::ContextPolicy
+message DtoContextPolicy {
+  optional uint64 depth = 1;
+  optional uint64 lexical_limit = 2;
+  optional uint64 graph_limit = 3;
+  optional uint64 vector_limit = 4;
+  optional uint64 max_items = 5;
+  optional uint64 budget = 6;
+}
+
+// crate::derived::ContextProviderStatus
+message DtoContextProviderStatus {
+  optional string provider = 1;
+  optional string capability = 2;
+  optional bool available = 3;
+  optional bool degraded = 4;
+  optional string reason = 5;
+}
+
+// crate::wire::CreatedLabelsMeta<crate::api_components::ApiLabel>
+message DtoCreatedLabelsMetaOfDtoApiLabel {
+  repeated DtoApiLabel created_labels = 1;
+}
+
+// crate::label_surfaces::DeleteBoardLabelResult
+message DtoDeleteBoardLabelResult {
+  DtoApiLabel label = 1;
+  optional bool forced = 2;
+  optional int64 removed_task_bindings = 3;
+  optional bool removed_semantics = 4;
+  optional int64 removed_atoms = 5;
+}
+
+// crate::wire::DeleteResult
+message DtoDeleteResult {
+  optional bool deleted = 1;
+}
+
+// crate::event_payload::DependencyPayload
+message DtoDependencyPayload {
+  optional string parent_task_id = 1;
+}
+
+// crate::maintenance::DoctorDerivedStore
+message DtoDoctorDerivedStore {
+  optional string store_name = 1;
+  optional int64 schema_version = 2;
+  optional int64 last_event_id = 3;
+  optional bool dirty = 4;
+  optional string last_error = 5;
+  optional int64 pending_outbox = 6;
+  optional int64 running_outbox = 7;
+  optional int64 failed_outbox = 8;
+}
+
+// crate::maintenance::DoctorIssue
+message DtoDoctorIssue {
+  optional string severity = 1;
+  optional string code = 2;
+  optional string message = 3;
+  repeated string record_ids = 4;
+}
+
+// crate::maintenance::DoctorReport
+message DtoDoctorReport {
+  optional bool ok = 1;
+  optional string integrity_check = 2;
+  optional int64 migration_version = 3;
+  optional int64 user_version = 4;
+  optional int64 expired_running_tasks = 5;
+  optional int64 running_tasks_without_active_run = 6;
+  optional int64 orphan_running_runs = 7;
+  optional int64 dependency_cycles = 8;
+  optional int64 archived_dependency_edges = 9;
+  optional int64 missing_run_logs = 10;
+  optional int64 suspicious_run_log_paths = 11;
+  optional int64 executable_dependency_violations = 12;
+  optional int64 executable_spec_violations = 13;
+  optional int64 executable_schedule_violations = 14;
+  optional int64 unplanned_active_tasks = 15;
+  optional int64 active_parents_with_incomplete_required_steps = 16;
+  optional int64 outbox_pending = 17;
+  optional int64 outbox_running = 18;
+  optional int64 outbox_failed = 19;
+  optional int64 derived_dirty_stores = 20;
+  optional int64 derived_error_stores = 21;
+  repeated DtoDoctorDerivedStore derived_stores = 22;
+  optional int64 consistency_errors = 23;
+  optional int64 consistency_warnings = 24;
+  repeated DtoDoctorIssue consistency_issues = 25;
+  optional int64 ontology_ledger_errors = 26;
+  optional int64 ontology_ledger_warnings = 27;
+  repeated DtoDoctorIssue ontology_ledger_issues = 28;
+}
+
+// crate::event_payload::EmptyPayload
+message DtoEmptyPayload {
+
+}
+
+message DtoEventPayload {
+  oneof value {
+    DtoEmptyPayload empty = 1;
+    DtoBoardCreatedPayload board_created = 2;
+    DtoDependencyPayload dependency = 3;
+    DtoLabelCreatedPayload label_created = 4;
+    DtoLabelDeletedPayload label_deleted = 5;
+    DtoLabelOntologyObservationRecordedPayload label_ontology_observation_recorded = 6;
+    DtoLabelOntologyActionCreatedPayload label_ontology_action_created = 7;
+    DtoLabelOntologySignalReviewedPayload label_ontology_signal_reviewed = 8;
+    DtoSignalRecordedPayload signal_recorded = 9;
+    DtoSignalReviewedPayload signal_reviewed = 10;
+    DtoTaskReasonPayload task_reason = 11;
+    DtoTaskClaimedPayload task_claimed = 12;
+    DtoTaskCommentCreatedPayload task_comment_created = 13;
+    DtoTaskResultPayload task_result = 14;
+    DtoTaskStatusPayload task_status = 15;
+    DtoTaskToStatusPayload task_to_status = 16;
+    DtoExecutionPlanPayload execution_plan = 17;
+    DtoHeartbeatPayload heartbeat = 18;
+    DtoTaskLabelPayload task_label = 19;
+    DtoLabelProposalPayload label_proposal = 20;
+    DtoTaskReclaimedPayload task_reclaimed = 21;
+    DtoTaskRetryPayload task_retry = 22;
+    DtoTaskReopenedPayload task_reopened = 23;
+    DtoRetryPolicyPayload retry_policy = 24;
+    DtoTaskStepPayload task_step = 25;
+    DtoTaskExportSanitizedPayload task_export_sanitized = 26;
+    JsonValue unknown = 27;
+  }
+}
+
+enum DtoEventPayloadCommentAuthorType {
+  DTO_EVENT_PAYLOAD_COMMENT_AUTHOR_TYPE_UNSPECIFIED = 0;
+  DTO_EVENT_PAYLOAD_COMMENT_AUTHOR_TYPE_USER = 1;
+  DTO_EVENT_PAYLOAD_COMMENT_AUTHOR_TYPE_AGENT = 2;
+}
+
+enum DtoEventPayloadCommentKind {
+  DTO_EVENT_PAYLOAD_COMMENT_KIND_UNSPECIFIED = 0;
+  DTO_EVENT_PAYLOAD_COMMENT_KIND_NOTE = 1;
+  DTO_EVENT_PAYLOAD_COMMENT_KIND_DECISION = 2;
+  DTO_EVENT_PAYLOAD_COMMENT_KIND_SIGNAL = 3;
+}
+
+// crate::event_payload::ExecutionPlanPayload
+message DtoExecutionPlanPayload {
+  optional DtoExecutionPlanState state = 1;
+}
+
+enum DtoExecutionPlanState {
+  DTO_EXECUTION_PLAN_STATE_UNSPECIFIED = 0;
+  DTO_EXECUTION_PLAN_STATE_PLANNED = 1;
+  DTO_EXECUTION_PLAN_STATE_NOT_REQUIRED = 2;
+  DTO_EXECUTION_PLAN_STATE_UNPLANNED = 3;
+}
+
+// crate::maintenance::ExportReport
+message DtoExportReport {
+  optional string out_path = 1;
+  optional string checksum_sha256 = 2;
+  optional uint64 bytes = 3;
+  optional uint64 record_count = 4;
+  optional string source_fingerprint = 5;
+}
+
+// crate::derived::GraphMaintenance
+message DtoGraphMaintenance {
+  optional string mode = 1;
+  optional string board_id = 2;
+  optional string generation = 3;
+  optional string fingerprint = 4;
+  optional int64 validated_tasks = 5;
+  optional int64 validated_entities = 6;
+  optional int64 validated_relations = 7;
+  optional int64 pending_jobs = 8;
+  optional int64 consumed_jobs = 9;
+  optional int64 updated_at = 10;
+  optional string message = 11;
+}
+
+// crate::derived::GraphStatus
+message DtoGraphStatus {
+  optional string backend = 1;
+  optional bool enabled = 2;
+  optional string message = 3;
+}
+
+// crate::wire::HealthReport
+message DtoHealthReport {
+  optional bool ok = 1;
+  optional string db = 2;
+  optional string version = 3;
+  optional string db_path = 4;
+  optional string db_fingerprint = 5;
+}
+
+// crate::event_payload::HeartbeatPayload
+message DtoHeartbeatPayload {
+  optional string note = 1;
+}
+
+// crate::maintenance::ImportReport
+message DtoImportReport {
+  optional string in_path = 1;
+  optional string source_fingerprint = 2;
+  optional uint64 imported_records = 3;
+  optional uint64 skipped_records = 4;
+  optional uint64 rebuild_jobs_enqueued = 5;
+  optional string journal_id = 6;
+  optional string phase = 7;
+  optional bool restart_required = 8;
+  optional string staged_database_path = 9;
+  optional string target_fingerprint_before = 10;
+  optional string staged_fingerprint = 11;
+  repeated string publish_preconditions = 12;
+}
+
+message DtoJsonArray {
+  repeated JsonValue value = 1;
+}
+
+// crate::label_surfaces::LabelAtomExplainActionWire
+message DtoLabelAtomExplainActionWire {
+  DtoLabelOntologyActionWire action = 1;
+  optional string matched_by = 2;
+}
+
+// crate::label_surfaces::LabelAtomExplainSignalWire
+message DtoLabelAtomExplainSignalWire {
+  DtoLabelOntologySignalWire signal = 1;
+  DtoLabelOntologyObservationWire observation = 2;
+  DtoApiTask source_task = 3;
+  optional string task_ref_snapshot = 4;
+  optional bool suggest_input_stale = 5;
+  optional bool suggest_degraded = 6;
+  repeated string warnings = 7;
+}
+
+// crate::label_surfaces::LabelAtomExplainValidationWire
+message DtoLabelAtomExplainValidationWire {
+  DtoLabelOntologyActionWire action = 1;
+  optional string parent_action_id = 2;
+  optional DtoLabelOntologyValidationStatusWire validation_status = 3;
+  JsonValue manual = 4;
+  JsonValue summary = 5;
+  JsonValue cases = 6;
+  repeated string warnings = 7;
+}
+
+// crate::label_surfaces::LabelAtomExplainWire
+message DtoLabelAtomExplainWire {
+  optional string query = 1;
+  DtoLabelAtomWire atom = 2;
+  DtoLabelSemanticsWire current_semantics = 3;
+  repeated DtoLabelAtomExplainActionWire provenance_actions = 4;
+  repeated DtoLabelAtomExplainSignalWire supporting_signals = 5;
+  repeated DtoLabelAtomExplainValidationWire validation_history = 6;
+  optional bool legacy_untracked = 7;
+  optional string legacy_reason = 8;
+}
+
+// crate::rpc::dto::LabelAtomIndexHit
+message DtoLabelAtomIndexHit {
+  optional string atom_id = 1;
+  optional string label_id = 2;
+  optional string label_name = 3;
+  optional string board_id = 4;
+  optional string polarity = 5;
+  optional string kind = 6;
+  optional string text = 7;
+  optional int64 ordinal = 8;
+  optional string content_hash = 9;
+  optional string embedding_model = 10;
+  optional double distance = 11;
+}
+
+// crate::rpc::dto::LabelAtomIndexQueryData
+message DtoLabelAtomIndexQueryData {
+  repeated DtoLabelAtomIndexHit data = 1;
+  optional bool degraded = 2;
+  repeated string diagnostics = 3;
+}
+
+// crate::label_surfaces::LabelAtomWire
+message DtoLabelAtomWire {
+  optional string id = 1;
+  optional string label_id = 2;
+  optional string board_id = 3;
+  optional string label_name = 4;
+  optional string polarity = 5;
+  optional string kind = 6;
+  optional string text = 7;
+  optional int64 ordinal = 8;
+  optional string content_hash = 9;
+  optional int64 created_at = 10;
+  optional int64 updated_at = 11;
+}
+
+// crate::event_payload::LabelCreatedPayload
+message DtoLabelCreatedPayload {
+  optional string label_id = 1;
+  optional string label = 2;
+  optional string color = 3;
+}
+
+// crate::event_payload::LabelDeletedPayload
+message DtoLabelDeletedPayload {
+  optional string label_id = 1;
+  optional string label = 2;
+  optional bool forced = 3;
+  optional uint64 removed_task_bindings = 4;
+  optional bool removed_semantics = 5;
+  optional uint64 removed_atoms = 6;
+}
+
+// crate::event_payload::LabelOntologyActionCreatedPayload
+message DtoLabelOntologyActionCreatedPayload {
+  optional string action_id = 1;
+  optional string action_type = 2;
+  repeated string signal_ids = 3;
+}
+
+enum DtoLabelOntologyActionTypeWire {
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_CONFIRM = 1;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_REJECT = 2;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_SUPERSEDE = 3;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_RESOLVE_NO_CHANGE = 4;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_ADD_POSITIVE_ATOM = 5;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_ADD_NEGATIVE_ATOM = 6;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_ADOPT_EXISTING_ATOM = 7;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_UPDATE_SEMANTICS = 8;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_CREATE_LABEL_PROPOSAL = 9;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_BOOTSTRAP_LABEL = 10;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_RENAME_LABEL = 11;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_SPLIT_LABEL = 12;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_MERGE_LABELS = 13;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_REVERT_ONTOLOGY_MUTATION = 14;
+  DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_VALIDATE = 15;
+}
+
+// crate::label_surfaces::LabelOntologyActionWire
+message DtoLabelOntologyActionWire {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string parent_action_id = 3;
+  optional DtoLabelOntologyActionTypeWire action_type = 4;
+  optional string reason = 5;
+  optional string target_label_id = 6;
+  optional string result_label_id = 7;
+  optional string result_atom_id = 8;
+  optional string result_atom_content_hash = 9;
+  optional string result_proposal_id = 10;
+  optional string canonical_before_hash = 11;
+  optional string canonical_after_hash = 12;
+  DtoStructuredMetadataJsonObject change = 13;
+  optional DtoLabelOntologyValidationRequirementWire validation_requirement = 14;
+  optional DtoLabelOntologyValidationStatusWire validation_status = 15;
+  optional DtoLabelOntologyValidationEffectiveOutcomeWire validation_effective_outcome = 16;
+  optional string validation_latest_attempt_id = 17;
+  DtoStructuredMetadataJsonObject validation = 18;
+  optional string created_by = 19;
+  optional string created_by_type = 20;
+  optional string agent_type = 21;
+  optional int64 created_at = 22;
+  repeated string signal_ids = 23;
+}
+
+// crate::label_surfaces::LabelOntologyActorWire
+message DtoLabelOntologyActorWire {
+  optional string name = 1;
+  optional string actor_type = 2;
+  optional string agent_type = 3;
+}
+
+// crate::label_surfaces::LabelOntologyCandidateAtomRequest
+message DtoLabelOntologyCandidateAtomRequest {
+  optional string polarity = 1;
+  optional string kind = 2;
+  optional string text = 3;
+}
+
+// crate::event_payload::LabelOntologyObservationRecordedPayload
+message DtoLabelOntologyObservationRecordedPayload {
+  optional string observation_id = 1;
+  repeated string signal_ids = 2;
+}
+
+// crate::label_surfaces::LabelOntologyObservationWire
+message DtoLabelOntologyObservationWire {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string task_id = 3;
+  optional string task_ref_snapshot = 4;
+  DtoStructuredMetadataJsonObject task_snapshot = 5;
+  optional string suggest_input_hash = 6;
+  DtoJsonArray agent_candidates = 7;
+  DtoStructuredMetadataJsonObject suggestion_snapshot = 8;
+  DtoStructuredMetadataJsonObject final_decision = 9;
+  optional double suggest_coverage = 10;
+  optional double suggest_coverage_cosine = 11;
+  optional double suggest_residual_norm = 12;
+  optional bool suggest_needs_new_label = 13;
+  optional bool suggest_degraded = 14;
+  DtoJsonArray diagnostics = 15;
+  optional string capture_fingerprint = 16;
+  optional string created_by = 17;
+  optional string created_by_type = 18;
+  optional string agent_type = 19;
+  optional int64 created_at = 20;
+  repeated DtoLabelOntologySignalWire signals = 21;
+}
+
+enum DtoLabelOntologyProposedActionWire {
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_OBSERVE = 1;
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_ADD_POSITIVE_ATOM = 2;
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_ADD_NEGATIVE_ATOM = 3;
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_UPDATE_SEMANTICS = 4;
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_BOOTSTRAP_LABEL = 5;
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_RENAME_LABEL = 6;
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_SPLIT_LABEL = 7;
+  DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_MERGE_LABELS = 8;
+}
+
+// crate::label_surfaces::LabelOntologyReviewAtomVariantWire
+message DtoLabelOntologyReviewAtomVariantWire {
+  optional string content_hash = 1;
+  optional string polarity = 2;
+  optional string kind = 3;
+  optional string text = 4;
+  optional int64 signal_count = 5;
+}
+
+enum DtoLabelOntologyReviewGroupByWire {
+  DTO_LABEL_ONTOLOGY_REVIEW_GROUP_BY_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_ONTOLOGY_REVIEW_GROUP_BY_WIRE_LABEL = 1;
+  DTO_LABEL_ONTOLOGY_REVIEW_GROUP_BY_WIRE_CANDIDATE_ATOM = 2;
+  DTO_LABEL_ONTOLOGY_REVIEW_GROUP_BY_WIRE_PROPOSED_LABEL = 3;
+}
+
+// crate::label_surfaces::LabelOntologyReviewGroupWire
+message DtoLabelOntologyReviewGroupWire {
+  optional DtoLabelOntologyReviewGroupByWire group_by = 1;
+  optional string key = 2;
+  optional string label_id = 3;
+  optional string label_name = 4;
+  optional string candidate_atom_polarity = 5;
+  optional string candidate_atom_kind = 6;
+  optional string candidate_text = 7;
+  optional string candidate_content_hash = 8;
+  optional string proposed_label_name = 9;
+  optional string proposed_label_name_normalized = 10;
+  optional string cluster_key = 11;
+  optional string cluster_reason = 12;
+  optional int64 task_count = 13;
+  optional int64 signal_count = 14;
+  optional int64 open_count = 15;
+  optional int64 confirmed_count = 16;
+  optional int64 resolved_count = 17;
+  optional int64 rejected_count = 18;
+  optional int64 superseded_count = 19;
+  optional int64 degraded_count = 20;
+  optional double average_score = 21;
+  optional double median_score = 22;
+  optional int64 oldest_signal_at = 23;
+  optional int64 latest_signal_at = 24;
+  repeated string sample_task_refs = 25;
+  repeated string signal_ids = 26;
+  optional int64 action_count = 27;
+  repeated string action_ids = 28;
+  repeated string proposal_ids = 29;
+  repeated DtoLabelOntologyReviewLabelRefWire labels = 30;
+  repeated DtoLabelOntologyReviewAtomVariantWire candidate_atom_variants = 31;
+}
+
+// crate::label_surfaces::LabelOntologyReviewLabelRefWire
+message DtoLabelOntologyReviewLabelRefWire {
+  optional string id = 1;
+  optional string name = 2;
+}
+
+// crate::wire::LabelOntologyReviewMeta
+message DtoLabelOntologyReviewMeta {
+  optional string group_by = 1;
+  optional bool include_all = 2;
+  optional uint64 limit = 3;
+}
+
+// crate::label_surfaces::LabelOntologySignalDetailWire
+message DtoLabelOntologySignalDetailWire {
+  DtoLabelOntologySignalWire signal = 1;
+  DtoLabelOntologyObservationWire observation = 2;
+  repeated DtoLabelOntologyActionWire actions = 3;
+}
+
+enum DtoLabelOntologySignalKindWire {
+  DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_FALSE_NEGATIVE = 1;
+  DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_FALSE_POSITIVE = 2;
+  DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_VOCABULARY_GAP = 3;
+  DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_NAME_ISSUE = 4;
+  DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_BOUNDARY_ISSUE = 5;
+  DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_STRUCTURE_ISSUE = 6;
+}
+
+// crate::label_surfaces::LabelOntologySignalRequest
+message DtoLabelOntologySignalRequest {
+  optional DtoLabelOntologySignalKindWire kind = 1;
+  optional string target_label_ref = 2;
+  JsonValue related_labels = 3;
+  optional DtoLabelOntologyProposedActionWire proposed_action = 4;
+  DtoLabelOntologyCandidateAtomRequest candidate_atom = 5;
+  optional string proposed_label_name = 6;
+  JsonValue proposal = 7;
+  optional bool agent_selected = 8;
+  optional DtoLabelOntologySuggestStateWire suggest_state = 9;
+  optional double suggest_score = 10;
+  optional int64 suggest_rank = 11;
+  optional bool final_selected = 12;
+  optional string rationale = 13;
+  optional double confidence = 14;
+  optional string signal_key = 15;
+}
+
+// crate::event_payload::LabelOntologySignalReviewedPayload
+message DtoLabelOntologySignalReviewedPayload {
+  optional string signal_id = 1;
+  optional string action_id = 2;
+  optional DtoSignalStatus status = 3;
+  optional string reason = 4;
+}
+
+// crate::ontology::LabelOntologySignalWire
+message DtoLabelOntologySignalWire {
+  optional string id = 1;
+  optional string observation_id = 2;
+  optional string board_id = 3;
+  optional string kind = 4;
+  optional string status = 5;
+  optional string target_label_id = 6;
+  optional string target_label_name_snapshot = 7;
+  DtoJsonArray related_labels = 8;
+  optional string proposed_action = 9;
+  optional string candidate_atom_polarity = 10;
+  optional string candidate_atom_kind = 11;
+  optional string candidate_text = 12;
+  optional string candidate_content_hash = 13;
+  optional string proposed_label_name = 14;
+  optional string proposed_label_name_normalized = 15;
+  DtoStructuredMetadataJsonObject proposal = 16;
+  optional bool agent_selected = 17;
+  optional string suggest_state = 18;
+  optional double suggest_score = 19;
+  optional int64 suggest_rank = 20;
+  optional bool final_selected = 21;
+  optional string rationale = 22;
+  optional double confidence = 23;
+  optional string signal_key = 24;
+  optional string superseded_by_signal_id = 25;
+  optional string status_reason = 26;
+  optional int64 created_at = 27;
+  optional int64 updated_at = 28;
+  optional int64 reviewed_at = 29;
+  optional int64 closed_at = 30;
+}
+
+enum DtoLabelOntologySuggestStateWire {
+  DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_SELECTED = 1;
+  DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_CANDIDATE = 2;
+  DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_ABSENT = 3;
+  DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_UNAVAILABLE = 4;
+}
+
+enum DtoLabelOntologyValidationEffectiveOutcomeWire {
+  DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_NOT_REQUIRED = 1;
+  DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_UNSUPPORTED = 2;
+  DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_PENDING = 3;
+  DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_PASSED = 4;
+  DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_FAILED = 5;
+  DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_PARTIAL = 6;
+}
+
+enum DtoLabelOntologyValidationRequirementWire {
+  DTO_LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_WIRE_NONE = 1;
+  DTO_LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_WIRE_REQUIRED = 2;
+  DTO_LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_WIRE_UNSUPPORTED = 3;
+}
+
+enum DtoLabelOntologyValidationStatusWire {
+  DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_NOT_REQUIRED = 1;
+  DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_PENDING = 2;
+  DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_PASSED = 3;
+  DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_FAILED = 4;
+  DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_PARTIAL = 5;
+}
+
+// crate::label_surfaces::LabelProposalAttemptWire
+message DtoLabelProposalAttemptWire {
+  optional string task_id = 1;
+  optional string board_id = 2;
+  DtoLabelSemanticProposalWire proposal = 3;
+  optional bool degraded = 4;
+  repeated string diagnostics = 5;
+  optional float heuristic_coverage = 6;
+  optional float heuristic_coverage_cosine = 7;
+  optional float heuristic_residual_norm = 8;
+  optional string top1_existing_label_id = 9;
+  optional string top1_existing_label_name = 10;
+}
+
+// crate::label_surfaces::LabelProposalCandidateWire
+message DtoLabelProposalCandidateWire {
+  optional string name = 1;
+  optional string description = 2;
+  repeated string applies_when = 3;
+  repeated string excludes_when = 4;
+  repeated string positive_examples = 5;
+  repeated string negative_examples = 6;
+}
+
+// crate::event_payload::LabelProposalPayload
+message DtoLabelProposalPayload {
+  optional string proposal_id = 1;
+  optional string name = 2;
+  optional DtoLabelProposalStatus status = 3;
+}
+
+enum DtoLabelProposalStatus {
+  DTO_LABEL_PROPOSAL_STATUS_UNSPECIFIED = 0;
+  DTO_LABEL_PROPOSAL_STATUS_PROPOSED = 1;
+  DTO_LABEL_PROPOSAL_STATUS_ACCEPTED = 2;
+  DTO_LABEL_PROPOSAL_STATUS_REJECTED = 3;
+}
+
+enum DtoLabelProposalStatusWire {
+  DTO_LABEL_PROPOSAL_STATUS_WIRE_UNSPECIFIED = 0;
+  DTO_LABEL_PROPOSAL_STATUS_WIRE_PROPOSED = 1;
+  DTO_LABEL_PROPOSAL_STATUS_WIRE_ACCEPTED = 2;
+  DTO_LABEL_PROPOSAL_STATUS_WIRE_REJECTED = 3;
+}
+
+// crate::label_surfaces::LabelSemanticProposalWire
+message DtoLabelSemanticProposalWire {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string task_id = 3;
+  optional DtoLabelProposalStatusWire status = 4;
+  optional string name = 5;
+  optional string description = 6;
+  repeated string applies_when = 7;
+  repeated string excludes_when = 8;
+  repeated string positive_examples = 9;
+  repeated string negative_examples = 10;
+  optional float heuristic_coverage = 11;
+  optional float heuristic_coverage_cosine = 12;
+  optional float heuristic_residual_norm = 13;
+  optional string top1_existing_label_id = 14;
+  optional string top1_existing_label_name = 15;
+  repeated string diagnostics = 16;
+  optional string created_by = 17;
+  optional string decision_reason = 18;
+  optional string resolved_label_id = 19;
+  optional int64 created_at = 20;
+  optional int64 updated_at = 21;
+  optional int64 decided_at = 22;
+}
+
+// crate::label_surfaces::LabelSemanticsWire
+message DtoLabelSemanticsWire {
+  optional string label_id = 1;
+  optional string board_id = 2;
+  optional string label_name = 3;
+  optional string semantics_hash = 4;
+  optional string description = 5;
+  repeated string applies_when = 6;
+  repeated string excludes_when = 7;
+  repeated string positive_examples = 8;
+  repeated string negative_examples = 9;
+  optional int64 created_at = 10;
+  optional int64 updated_at = 11;
+  repeated DtoLabelAtomWire atoms = 12;
+}
+
+// crate::label_surfaces::LabelSuggestionCandidateWire
+message DtoLabelSuggestionCandidateWire {
+  optional string label_id = 1;
+  optional string label_name = 2;
+  optional float score = 3;
+  optional float weight = 4;
+  optional bool already_applied = 5;
+  repeated DtoLabelSuggestionEvidenceAtomWire evidence_atoms = 6;
+  repeated DtoLabelSuggestionEvidenceAtomWire negative_evidence_atoms = 7;
+}
+
+// crate::label_surfaces::LabelSuggestionEvidenceAtomWire
+message DtoLabelSuggestionEvidenceAtomWire {
+  optional string atom_id = 1;
+  optional string label_id = 2;
+  optional string label_name = 3;
+  optional string polarity = 4;
+  optional string kind = 5;
+  optional string text = 6;
+  optional float score = 7;
+}
+
+// crate::label_surfaces::LabelSuggestionResultWire
+message DtoLabelSuggestionResultWire {
+  optional string task_id = 1;
+  optional string board_id = 2;
+  repeated DtoLabelSuggestionCandidateWire selected_labels = 3;
+  repeated DtoLabelSuggestionCandidateWire candidates = 4;
+  optional float coverage = 5;
+  optional float coverage_cosine = 6;
+  optional float residual_norm = 7;
+  optional bool needs_new_label = 8;
+  repeated string reason_codes = 9;
+  optional bool degraded = 10;
+  repeated string diagnostics = 11;
+}
+
+// crate::maintenance::LegacyImportReport
+message DtoLegacyImportReport {
+  optional string journal_id = 1;
+  optional string phase = 2;
+  optional string source_path = 3;
+  optional string source_fingerprint = 4;
+  optional string schema_fingerprint = 5;
+  optional bool resumed = 6;
+  optional uint64 attachment_count = 7;
+  repeated DtoLegacyImportTableCount table_counts = 8;
+}
+
+// crate::maintenance::LegacyImportTableCount
+message DtoLegacyImportTableCount {
+  optional string table = 1;
+  optional uint64 source_rows = 2;
+  optional uint64 target_rows = 3;
+}
+
+// crate::wire::LimitMeta
+message DtoLimitMeta {
+  optional uint64 limit = 1;
+}
+
+// crate::api_components::ListTasksByStatusData
+message DtoListTasksByStatusData {
+  repeated DtoListTasksStatusWindow statuses = 1;
+}
+
+// crate::api_components::ListTasksStatusWindow
+message DtoListTasksStatusWindow {
+  optional DtoApiTaskStatus status = 1;
+  repeated DtoApiTask tasks = 2;
+  DtoTotalPaginationMeta page = 3;
+}
+
+// crate::maintenance::MaintenanceOwnerStatus
+message DtoMaintenanceOwnerStatus {
+  optional string owner = 1;
+  optional string mode = 2;
+  optional int64 lease_expires_at = 3;
+  optional int64 fence_epoch = 4;
+  optional string build_identity = 5;
+  optional int64 last_heartbeat_at = 6;
+  optional bool active = 7;
+}
+
+// crate::maintenance::MaintenanceRunReport
+message DtoMaintenanceRunReport {
+  optional string database_instance_id = 1;
+  optional int64 protocol_version = 2;
+  optional string owner = 3;
+  optional string mode = 4;
+  optional string action = 5;
+  optional uint64 processed = 6;
+  optional string phase = 7;
+  optional bool degraded = 8;
+  repeated string errors = 9;
+  repeated DtoProjectionStoreStatus stores = 10;
+}
+
+// crate::maintenance::MaintenanceStatusReport
+message DtoMaintenanceStatusReport {
+  optional string database_instance_id = 1;
+  optional int64 protocol_version = 2;
+  DtoMaintenanceOwnerStatus owner = 3;
+  repeated DtoProjectionStoreStatus stores = 4;
+}
+
+// crate::wire::NextAfterMeta
+message DtoNextAfterMeta {
+  optional int64 next_after = 1;
+}
+
+// crate::wire::OffsetPaginationMeta
+message DtoOffsetPaginationMeta {
+  optional uint64 limit = 1;
+  optional uint64 offset = 2;
+}
+
+// crate::maintenance::ProjectionStoreStatus
+message DtoProjectionStoreStatus {
+  optional string store_name = 1;
+  optional string active_generation = 2;
+  optional string active_fingerprint = 3;
+  optional string previous_generation = 4;
+  optional string building_generation = 5;
+  optional string lifecycle_status = 6;
+  optional int64 fence_epoch = 7;
+  optional int64 last_event_id = 8;
+  optional bool dirty = 9;
+  optional int64 pending = 10;
+  optional int64 running = 11;
+  optional int64 failed = 12;
+  optional string last_error = 13;
+  optional string phase = 14;
+  optional bool degraded = 15;
+  repeated string errors = 16;
+  optional int64 updated_at = 17;
+}
+
+// crate::derived::QueueStats
+message DtoQueueStats {
+  optional string board_id = 1;
+  optional int64 generated_at = 2;
+  repeated DtoStatusCount status_counts = 3;
+  repeated DtoStaleClaim stale_claims = 4;
+  repeated DtoBlockedReasonCount blocked_reasons = 5;
+  optional int64 unplanned_active_tasks = 6;
+  optional int64 active_parents_with_incomplete_required_steps = 7;
+}
+
+enum DtoReclaimTargetStatus {
+  DTO_RECLAIM_TARGET_STATUS_UNSPECIFIED = 0;
+  DTO_RECLAIM_TARGET_STATUS_READY = 1;
+  DTO_RECLAIM_TARGET_STATUS_BLOCKED = 2;
+}
+
+// crate::event_payload::RetryPolicyPayload
+message DtoRetryPolicyPayload {
+  optional int64 max_retries = 1;
+}
+
+enum DtoRunStatus {
+  DTO_RUN_STATUS_UNSPECIFIED = 0;
+  DTO_RUN_STATUS_CANCELED = 1;
+}
+
+// crate::derived::SearchMeta
+message DtoSearchMeta {
+  optional string backend = 1;
+  optional bool stale = 2;
+  optional string database_instance_id = 3;
+  optional int64 protocol_version = 4;
+  optional string generation = 5;
+  optional string resolved_board_id = 6;
+  optional string fallback_reason = 7;
+  optional string index_version = 8;
+  optional int64 last_event_id = 9;
+  optional int64 index_lag_events = 10;
+}
+
+// crate::derived::SearchPageMeta
+message DtoSearchPageMeta {
+  optional uint64 limit = 1;
+  optional uint64 offset = 2;
+  optional uint64 total = 3;
+}
+
+// crate::derived::SearchStatus
+message DtoSearchStatus {
+  optional string backend = 1;
+  optional bool derived_index = 2;
+  optional bool stale = 3;
+  optional string database_instance_id = 4;
+  optional int64 protocol_version = 5;
+  optional string generation = 6;
+  optional string resolved_board_id = 7;
+  optional string fallback_reason = 8;
+  optional string index_version = 9;
+  optional int64 last_event_id = 10;
+  optional int64 index_lag_events = 11;
+  optional string message = 12;
+}
+
+// crate::derived::SearchTaskHit
+message DtoSearchTaskHit {
+  optional string task_id = 1;
+  optional int64 seq = 2;
+  optional double score = 3;
+  optional string snippet = 4;
+  DtoApiTask task = 5;
+}
+
+// crate::derived::SearchTaskStatusWindow
+message DtoSearchTaskStatusWindow {
+  optional DtoApiTaskStatus status = 1;
+  repeated DtoApiTask tasks = 2;
+  DtoSearchMeta search_meta = 3;
+  DtoSearchPageMeta page = 4;
+}
+
+// crate::derived::SearchTaskStatusWindows
+message DtoSearchTaskStatusWindows {
+  repeated DtoSearchTaskStatusWindow statuses = 1;
+}
+
+// crate::derived::SearchTasksData
+message DtoSearchTasksData {
+  repeated DtoSearchTaskHit hits = 1;
+  DtoSearchMeta meta = 2;
+}
+
+// crate::signals::SignalCommentRequest
+message DtoSignalCommentRequest {
+  optional string body = 1;
+}
+
+// crate::wire::SignalFilterMeta
+message DtoSignalFilterMeta {
+  optional bool include_all = 1;
+  optional uint64 limit = 2;
+}
+
+// crate::label_surfaces::SignalObservationWire
+message DtoSignalObservationWire {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string task_id = 3;
+  optional string task_ref_snapshot = 4;
+  optional string run_id = 5;
+  optional string comment_id = 6;
+  optional string actor = 7;
+  optional string agent_type = 8;
+  optional string source = 9;
+  DtoStructuredMetadataJsonObject evidence = 10;
+  optional int64 created_at = 11;
+}
+
+// crate::signals::SignalRecordResult
+message DtoSignalRecordResult {
+  DtoSignalWire signal = 1;
+  DtoApiComment backlink_comment = 2;
+}
+
+// crate::event_payload::SignalRecordedPayload
+message DtoSignalRecordedPayload {
+  optional string signal_id = 1;
+  optional string observation_id = 2;
+  optional string kind = 3;
+  optional DtoSignalStatus status = 4;
+}
+
+// crate::event_payload::SignalReviewedPayload
+message DtoSignalReviewedPayload {
+  optional string signal_id = 1;
+  optional DtoSignalStatus status = 2;
+  optional string reason = 3;
+}
+
+enum DtoSignalStatus {
+  DTO_SIGNAL_STATUS_UNSPECIFIED = 0;
+  DTO_SIGNAL_STATUS_OPEN = 1;
+  DTO_SIGNAL_STATUS_CONFIRMED = 2;
+  DTO_SIGNAL_STATUS_REJECTED = 3;
+  DTO_SIGNAL_STATUS_SUPERSEDED = 4;
+  DTO_SIGNAL_STATUS_RESOLVED = 5;
+}
+
+// crate::label_surfaces::SignalWire
+message DtoSignalWire {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string observation_id = 3;
+  optional string kind = 4;
+  optional string title = 5;
+  optional string summary = 6;
+  optional string severity = 7;
+  optional string status = 8;
+  optional string dedupe_key = 9;
+  optional string superseded_by_signal_id = 10;
+  optional string reviewed_by = 11;
+  optional int64 reviewed_at = 12;
+  optional string review_reason = 13;
+  optional int64 created_at = 14;
+  optional int64 updated_at = 15;
+  DtoSignalObservationWire observation = 16;
+}
+
+// crate::derived::StaleClaim
+message DtoStaleClaim {
+  optional string task_id = 1;
+  optional int64 seq = 2;
+  optional string title = 3;
+  optional string claim_owner = 4;
+  optional int64 claim_expires_at = 5;
+  optional int64 last_heartbeat_at = 6;
+  optional string current_run_id = 7;
+  optional int64 retry_count = 8;
+  optional int64 max_retries = 9;
+}
+
+// crate::derived::StatusCount
+message DtoStatusCount {
+  optional DtoApiTaskStatus status = 1;
+  optional int64 count = 2;
+}
+
+enum DtoStepStatus {
+  DTO_STEP_STATUS_UNSPECIFIED = 0;
+  DTO_STEP_STATUS_TODO = 1;
+  DTO_STEP_STATUS_DONE = 2;
+  DTO_STEP_STATUS_SKIPPED = 3;
+}
+
+// crate::event_stream::StreamEventData
+message DtoStreamEventData {
+  optional int64 id = 1;
+  optional string event_id = 2;
+  optional string board_id = 3;
+  optional string task_id = 4;
+  optional string run_id = 5;
+  optional string kind = 6;
+  optional string actor = 7;
+  DtoEventPayload payload = 8;
+  optional int64 created_at = 9;
+}
+
+message DtoStructuredMetadataJsonObject {
+  map<string, JsonValue> value = 1;
+}
+
+// crate::event_payload::TaskClaimedPayload
+message DtoTaskClaimedPayload {
+  optional string claim_owner = 1;
+  JsonValue metadata = 2;
+}
+
+// crate::event_payload::TaskCommentCreatedPayload
+message DtoTaskCommentCreatedPayload {
+  optional string comment_id = 1;
+  optional DtoEventPayloadCommentKind kind = 2;
+  optional DtoEventPayloadCommentAuthorType author_type = 3;
+  optional string agent_type = 4;
+}
+
+// crate::task_core::TaskDetailAggregate
+message DtoTaskDetailAggregate {
+  DtoApiTask task = 1;
+  repeated DtoApiLabel labels = 2;
+  DtoApiDependencies dependencies = 3;
+  DtoApiExecutionPlan execution_plan = 4;
+  repeated DtoApiTaskStep steps = 5;
+  repeated DtoApiComment comments = 6;
+  repeated DtoApiRun runs = 7;
+  repeated DtoStreamEventData events = 8;
+  DtoTaskDetailOntology ontology = 9;
+}
+
+// crate::task_core::TaskDetailOntology
+message DtoTaskDetailOntology {
+  DtoTaskOntologySummary summary = 1;
+  optional bool degraded = 2;
+  repeated string diagnostics = 3;
+}
+
+// crate::event_payload::TaskExportSanitizedPayload
+message DtoTaskExportSanitizedPayload {
+  optional DtoTaskStatus from_status = 1;
+  optional DtoTaskStatus to_status = 2;
+  optional DtoRunStatus run_status = 3;
+  optional string original_run_id = 4;
+  optional string claim_owner = 5;
+  optional int64 claim_expires_at = 6;
+  optional string reason = 7;
+}
+
+// crate::task_graph::TaskGraphEdge
+message DtoTaskGraphEdge {
+  optional string id = 1;
+  optional string source_task_id = 2;
+  optional string target_task_id = 3;
+  optional DtoApiTaskGraphEdgeKind kind = 4;
+  optional bool required = 5;
+  optional bool blocking = 6;
+}
+
+// crate::task_graph::TaskGraphMeta
+message DtoTaskGraphMeta {
+  optional uint64 depth = 1;
+  optional uint64 context_depth = 2;
+  optional int64 generated_at = 3;
+  optional uint64 node_count = 4;
+  optional uint64 edge_count = 5;
+  optional bool truncated = 6;
+  repeated DtoApiTaskStatus active_statuses = 7;
+  optional bool active_only = 8;
+  optional bool include_done_context = 9;
+  optional bool include_archived_context = 10;
+  optional bool hide_isolated = 11;
+  optional uint64 limit_nodes = 12;
+}
+
+// crate::task_graph::TaskGraphNode
+message DtoTaskGraphNode {
+  DtoApiTask task = 1;
+  optional DtoApiTaskGraphNodeRole role = 2;
+  optional bool context_only = 3;
+}
+
+// crate::event_payload::TaskLabelPayload
+message DtoTaskLabelPayload {
+  optional string label_id = 1;
+  optional string label = 2;
+}
+
+// crate::task_graph::TaskNeighborhood
+message DtoTaskNeighborhood {
+  optional string center_task_id = 1;
+  repeated DtoTaskGraphNode nodes = 2;
+  repeated DtoTaskGraphEdge edges = 3;
+  DtoTaskGraphMeta meta = 4;
+}
+
+// crate::wire::TaskOntologyDetailsMeta<Option<crate::task_core::TaskOntologySummary>>
+message DtoTaskOntologyDetailsMetaOfOptionalDtoTaskOntologySummary {
+  DtoTaskOntologyDetailsOfOptionalDtoTaskOntologySummary details = 1;
+}
+
+// crate::wire::TaskOntologyDetails<Option<crate::task_core::TaskOntologySummary>>
+message DtoTaskOntologyDetailsOfOptionalDtoTaskOntologySummary {
+  DtoTaskOntologySummary ontology_summary = 1;
+}
+
+// crate::task_core::TaskOntologySignalSummary
+message DtoTaskOntologySignalSummary {
+  optional string id = 1;
+  optional string kind = 2;
+  optional string status = 3;
+  optional string proposed_action = 4;
+  optional string target_label_id = 5;
+  optional string target_label_name = 6;
+  optional string candidate_atom_polarity = 7;
+  optional string candidate_atom_kind = 8;
+  optional string candidate_text = 9;
+  optional string candidate_content_hash = 10;
+  optional string proposed_label_name = 11;
+  optional string proposed_label_name_normalized = 12;
+  optional double suggest_score = 13;
+  optional int64 suggest_rank = 14;
+  optional bool degraded = 15;
+  optional bool stale = 16;
+  optional bool legacy_incomparable = 17;
+  optional bool suggest_input_drift = 18;
+  optional int64 created_at = 19;
+  optional int64 updated_at = 20;
+  optional int64 latest_action_at = 21;
+  optional int64 action_count = 22;
+}
+
+// crate::task_core::TaskOntologySummary
+message DtoTaskOntologySummary {
+  optional string task_id = 1;
+  optional int64 observation_count = 2;
+  optional int64 signal_count = 3;
+  optional int64 open_count = 4;
+  optional int64 confirmed_count = 5;
+  optional int64 resolved_count = 6;
+  optional int64 rejected_count = 7;
+  optional int64 superseded_count = 8;
+  optional int64 degraded_count = 9;
+  optional int64 stale_count = 10;
+  optional int64 suggest_input_drift_count = 11;
+  optional int64 legacy_incomparable_count = 12;
+  optional int64 incomparable_count = 13;
+  optional int64 action_count = 14;
+  optional int64 oldest_open_confirmed_signal_at = 15;
+  optional int64 oldest_open_confirmed_signal_age_ms = 16;
+  optional int64 latest_signal_at = 17;
+  optional int64 latest_action_at = 18;
+  optional string current_suggest_input_hash = 19;
+  repeated DtoTaskOntologySignalSummary sample_signals = 20;
+}
+
+message DtoTaskReadLabel {
+  optional string value = 1;
+}
+
+enum DtoTaskReadPlanFilter {
+  DTO_TASK_READ_PLAN_FILTER_UNSPECIFIED = 0;
+  DTO_TASK_READ_PLAN_FILTER_PLAN_NEEDED = 1;
+  DTO_TASK_READ_PLAN_FILTER_HAS_STEPS = 2;
+  DTO_TASK_READ_PLAN_FILTER_INCOMPLETE_REQUIRED_STEPS = 3;
+}
+
+enum DtoTaskReadSort {
+  DTO_TASK_READ_SORT_UNSPECIFIED = 0;
+  DTO_TASK_READ_SORT_SEQ = 1;
+  DTO_TASK_READ_SORT_SEQ_DESC = 2;
+  DTO_TASK_READ_SORT_TITLE = 3;
+  DTO_TASK_READ_SORT_TITLE_DESC = 4;
+  DTO_TASK_READ_SORT_STATUS = 5;
+  DTO_TASK_READ_SORT_STATUS_DESC = 6;
+  DTO_TASK_READ_SORT_POSITION = 7;
+  DTO_TASK_READ_SORT_POSITION_DESC = 8;
+  DTO_TASK_READ_SORT_PRIORITY = 9;
+  DTO_TASK_READ_SORT_PRIORITY_DESC = 10;
+  DTO_TASK_READ_SORT_ASSIGNEE = 11;
+  DTO_TASK_READ_SORT_ASSIGNEE_DESC = 12;
+  DTO_TASK_READ_SORT_SCHEDULED_AT = 13;
+  DTO_TASK_READ_SORT_SCHEDULED_AT_DESC = 14;
+  DTO_TASK_READ_SORT_DUE_AT = 15;
+  DTO_TASK_READ_SORT_DUE_AT_DESC = 16;
+  DTO_TASK_READ_SORT_CREATED_AT = 17;
+  DTO_TASK_READ_SORT_CREATED_AT_DESC = 18;
+  DTO_TASK_READ_SORT_UPDATED_AT = 19;
+  DTO_TASK_READ_SORT_UPDATED_AT_DESC = 20;
+}
+
+// crate::event_payload::TaskReasonPayload
+message DtoTaskReasonPayload {
+  optional string reason = 1;
+}
+
+// crate::event_payload::TaskReclaimedPayload
+message DtoTaskReclaimedPayload {
+  optional int64 retry_count = 1;
+  optional int64 max_retries = 2;
+  optional DtoTaskStatus to_status = 3;
+  optional string reason = 4;
+}
+
+// crate::event_payload::TaskReopenedPayload
+message DtoTaskReopenedPayload {
+  optional DtoTaskStatus from = 1;
+  optional DtoTaskStatus to = 2;
+  optional string reason = 3;
+  optional int64 original_completed_at = 4;
+}
+
+// crate::event_payload::TaskResultPayload
+message DtoTaskResultPayload {
+  JsonValue result = 1;
+}
+
+// crate::event_payload::TaskRetryPayload
+message DtoTaskRetryPayload {
+  optional int64 retry_count = 1;
+  optional int64 max_retries = 2;
+}
+
+enum DtoTaskStatus {
+  DTO_TASK_STATUS_UNSPECIFIED = 0;
+  DTO_TASK_STATUS_TRIAGE = 1;
+  DTO_TASK_STATUS_TODO = 2;
+  DTO_TASK_STATUS_SCHEDULED = 3;
+  DTO_TASK_STATUS_READY = 4;
+  DTO_TASK_STATUS_RUNNING = 5;
+  DTO_TASK_STATUS_BLOCKED = 6;
+  DTO_TASK_STATUS_REVIEW = 7;
+  DTO_TASK_STATUS_DONE = 8;
+  DTO_TASK_STATUS_ARCHIVED = 9;
+}
+
+// crate::event_payload::TaskStatusPayload
+message DtoTaskStatusPayload {
+  optional DtoTaskStatus status = 1;
+}
+
+// crate::event_payload::TaskStepPayload
+message DtoTaskStepPayload {
+  optional string step_id = 1;
+  optional string linked_task_id = 2;
+  optional int64 position = 3;
+  optional bool required = 4;
+  optional DtoStepStatus status = 5;
+}
+
+// crate::event_payload::TaskToStatusPayload
+message DtoTaskToStatusPayload {
+  optional DtoTaskStatus to_status = 1;
+}
+
+// crate::wire::TotalPaginationMeta
+message DtoTotalPaginationMeta {
+  optional uint64 limit = 1;
+  optional uint64 offset = 2;
+  optional uint64 total = 3;
+}
+
+// crate::maintenance::VacuumReport
+message DtoVacuumReport {
+  optional bool ok = 1;
+  optional uint64 before_bytes = 2;
+  optional uint64 after_bytes = 3;
+  optional string source_fingerprint = 4;
+}
+
+// crate::protocols::VectorChunkResult
+message DtoVectorChunkResult {
+  optional string id = 1;
+  optional string entity_uri = 2;
+  optional string source_kind = 3;
+  optional string content = 4;
+  optional string content_hash = 5;
+  optional string embedding_model = 6;
+  optional float distance = 7;
+  optional float score = 8;
+}
+
+// crate::protocols::VectorConfigureRequest
+message DtoVectorConfigureRequest {
+  optional string provider = 1;
+  optional string endpoint = 2;
+  optional string model = 3;
+  optional uint64 dimensions = 4;
+}
+
+// crate::protocols::VectorLabelAtomResult
+message DtoVectorLabelAtomResult {
+  optional string atom_id = 1;
+  optional string label_id = 2;
+  optional string label_name = 3;
+  optional string board_id = 4;
+  optional string polarity = 5;
+  optional string kind = 6;
+  optional string text = 7;
+  optional int64 ordinal = 8;
+  optional string content_hash = 9;
+  optional string embedding_model = 10;
+  optional float distance = 11;
+  ListOfF32 vector = 12;
+}
+
+// crate::derived::VectorStatus
+message DtoVectorStatus {
+  optional string backend = 1;
+  optional bool enabled = 2;
+  optional string message = 3;
+  repeated string diagnostics = 4;
+  optional bool dirty = 5;
+  optional bool board_dirty = 6;
+  optional int64 generation = 7;
+}
+
+// crate::label_surfaces::VectorStoreStatusWire
+message DtoVectorStoreStatusWire {
+  optional string backend = 1;
+  optional bool enabled = 2;
+  optional string message = 3;
+  repeated string diagnostics = 4;
+  optional bool dirty = 5;
+  optional bool board_dirty = 6;
+  optional int64 generation = 7;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelAtomExplainWire>
+message ExplainLabelAtomResponse {
+  DtoLabelAtomExplainWire data = 1;
+}
+
+// crate::boards::GetBoardResponse
+message GetBoardResponse {
+  DtoApiBoard data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::cli::CliEntity>
+message GetEntityResponse {
+  DtoCliEntity data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::wire::HealthReport>
+message GetHealthResponse {
+  DtoHealthReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::cli_labels::CliLabelOntologyQuality>
+message GetLabelOntologyQualityResponse {
+  DtoCliLabelOntologyQuality data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologySignalDetailWire>
+message GetLabelOntologySignalResponse {
+  DtoLabelOntologySignalDetailWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticProposalWire>
+message GetLabelProposalResponse {
+  DtoLabelSemanticProposalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticsWire>
+message GetLabelSemanticsResponse {
+  DtoLabelSemanticsWire data = 1;
+}
+
+// crate::runs::GetRunLogResponse
+message GetRunLogResponse {
+  DtoApiRunLog data = 1;
+}
+
+// crate::runs::GetRunResponse
+message GetRunResponse {
+  DtoApiRun data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::SignalWire>
+message GetSignalResponse {
+  DtoSignalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::QueueStats>
+message GetStatsResponse {
+  DtoQueueStats data = 1;
+}
+
+// crate::task_core::GetTaskDetailsResponse
+message GetTaskDetailsResponse {
+  DtoTaskDetailAggregate data = 1;
+}
+
+// crate::wire::OptionalMetadataEnvelope<crate::api_components::ApiTask,crate::wire::TaskOntologyDetailsMeta<Option<crate::task_core::TaskOntologySummary>>>
+message GetTaskResponse {
+  DtoApiTask data = 1;
+  DtoTaskOntologyDetailsMetaOfOptionalDtoTaskOntologySummary meta = 2;
+}
+
+// crate::wire::MetadataEnvelope<Vec<crate::derived::ApiRelation>,crate::wire::LimitMeta>
+message GraphNeighborsResponse {
+  repeated DtoApiRelation data = 1;
+  DtoLimitMeta meta = 2;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::cli_helpers::CliGraphQueryRow>>
+message GraphQueryResponse {
+  repeated DtoCliGraphQueryRow data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::GraphMaintenance>
+message GraphRebuildResponse {
+  DtoGraphMaintenance data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::GraphStatus>
+message GraphStatusResponse {
+  DtoGraphStatus data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::GraphMaintenance>
+message GraphSyncResponse {
+  DtoGraphMaintenance data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message HeartbeatTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::VectorStoreStatusWire>
+message LabelAtomIndexStatusResponse {
+  DtoVectorStoreStatusWire data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::attachments::ApiAttachment>>
+message ListAttachmentsResponse {
+  repeated DtoApiAttachment data = 1;
+}
+
+// crate::boards::ListBoardColumnsResponse
+message ListBoardColumnsResponse {
+  repeated DtoApiBoardColumn data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelSemanticProposalWire>>
+message ListBoardLabelProposalsResponse {
+  repeated DtoLabelSemanticProposalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::api_components::ApiLabel>>
+message ListBoardLabelsResponse {
+  repeated DtoApiLabel data = 1;
+}
+
+// crate::boards::ListBoardsResponse
+message ListBoardsResponse {
+  repeated DtoApiBoard data = 1;
+}
+
+// crate::comments::ListCommentsResponse
+message ListCommentsResponse {
+  repeated DtoApiComment data = 1;
+}
+
+// crate::dependencies::ListDependenciesResponse
+message ListDependenciesResponse {
+  DtoApiDependencies data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::cli::CliEntity>>
+message ListEntitiesResponse {
+  repeated DtoCliEntity data = 1;
+}
+
+// crate::events::ListEventsResponse
+message ListEventsResponse {
+  repeated DtoStreamEventData data = 1;
+  DtoNextAfterMeta meta = 2;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelAtomWire>>
+message ListLabelAtomsResponse {
+  repeated DtoLabelAtomWire data = 1;
+}
+
+// crate::ontology::LabelOntologySignalsResponse
+message ListLabelOntologySignalsResponse {
+  repeated DtoLabelOntologySignalWire data = 1;
+  DtoSignalFilterMeta meta = 2;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelSemanticsWire>>
+message ListLabelSemanticsResponse {
+  repeated DtoLabelSemanticsWire data = 1;
+}
+
+message ListOfF32 {
+  repeated float items = 1;
+}
+
+message ListOfString {
+  repeated string items = 1;
+}
+
+// crate::runs::ListRunsResponse
+message ListRunsResponse {
+  repeated DtoApiRun data = 1;
+}
+
+// crate::wire::MetadataEnvelope<Vec<crate::label_surfaces::SignalWire>,crate::wire::SignalFilterMeta>
+message ListSignalsResponse {
+  repeated DtoSignalWire data = 1;
+  DtoSignalFilterMeta meta = 2;
+}
+
+// crate::steps::ListStepsResponse
+message ListStepsResponse {
+  DtoApiTaskSteps data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelSemanticProposalWire>>
+message ListTaskLabelProposalsResponse {
+  repeated DtoLabelSemanticProposalWire data = 1;
+}
+
+// crate::labels::ListTaskLabelsResponse
+message ListTaskLabelsResponse {
+  repeated DtoApiLabel data = 1;
+}
+
+// crate::api_components::ListTasksByStatusResponse
+message ListTasksByStatusResponse {
+  DtoListTasksByStatusData data = 1;
+  DtoOffsetPaginationMeta meta = 2;
+}
+
+// crate::api_components::ListTasksResponse
+message ListTasksResponse {
+  repeated DtoApiTask data = 1;
+  DtoTotalPaginationMeta meta = 2;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::BackupReport>
+message MaintenanceBackupResponse {
+  DtoBackupReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::MaintenanceRunReport>
+message MaintenanceCleanupResponse {
+  DtoMaintenanceRunReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::ExportReport>
+message MaintenanceExportResponse {
+  DtoExportReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::ImportReport>
+message MaintenanceImportResponse {
+  DtoImportReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::LegacyImportReport>
+message MaintenanceImportV30Response {
+  DtoLegacyImportReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::MaintenanceRunReport>
+message MaintenanceRebuildResponse {
+  DtoMaintenanceRunReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::MaintenanceRunReport>
+message MaintenanceRunResponse {
+  DtoMaintenanceRunReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::MaintenanceStatusReport>
+message MaintenanceStatusResponse {
+  DtoMaintenanceStatusReport data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::maintenance::VacuumReport>
+message MaintenanceVacuumResponse {
+  DtoVacuumReport data = 1;
+}
+
+message MapOfJsonValue {
+  map<string, JsonValue> entries = 1;
+}
+
+// crate::steps::MarkExecutionPlanNotRequiredResponse
+message MarkExecutionPlanNotRequiredResponse {
+  DtoApiExecutionPlan data = 1;
+}
+
+// 外层缺失表示不修改；clear/value 是明确的写入意图。
+message PatchI64 {
+  oneof change {
+    Empty clear = 1;
+    int64 value = 2;
+  }
+}
+
+// 外层缺失表示不修改；clear/value 是明确的写入意图。
+message PatchJsonValue {
+  oneof change {
+    Empty clear = 1;
+    JsonValue value = 2;
+  }
+}
+
+// 外层缺失表示不修改；clear/value 是明确的写入意图。
+message PatchString {
+  oneof change {
+    Empty clear = 1;
+    string value = 2;
+  }
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message PromoteTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelProposalAttemptWire>
+message ProposeTaskLabelResponse {
+  DtoLabelProposalAttemptWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::rpc::dto::LabelAtomIndexQueryData>
+message QueryLabelAtomIndexResponse {
+  DtoLabelAtomIndexQueryData data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::VectorStoreStatusWire>
+message RebuildLabelAtomIndexResponse {
+  DtoVectorStoreStatusWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::SearchStatus>
+message RebuildSearchIndexResponse {
+  DtoSearchStatus data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message ReclaimTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyObservationWire>
+message RecordLabelOntologyObservationResponse {
+  DtoLabelOntologyObservationWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::signals::SignalRecordResult>
+message RecordSignalResponse {
+  DtoSignalRecordResult data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticProposalWire>
+message RejectLabelProposalResponse {
+  DtoLabelSemanticProposalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>
+message RejectSignalsResponse {
+  repeated DtoSignalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message ReleaseTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::dependencies::RemoveDependencyResponse
+message RemoveDependencyResponse {
+  DtoApiDependencies data = 1;
+}
+
+// crate::steps::RemoveStepResponse
+message RemoveStepResponse {
+  DtoApiTaskSteps data = 1;
+}
+
+// crate::labels::RemoveTaskLabelResponse
+message RemoveTaskLabelResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::steps::ReopenStepResponse
+message ReopenStepResponse {
+  DtoApiTaskSteps data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message ReopenTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>
+message ResolveSignalsResponse {
+  repeated DtoSignalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>
+message RevertLabelOntologyMutationResponse {
+  DtoLabelOntologyActionWire data = 1;
+}
+
+// crate::wire::MetadataEnvelope<Vec<crate::label_surfaces::LabelOntologyReviewGroupWire>,crate::wire::LabelOntologyReviewMeta>
+message ReviewLabelOntologyResponse {
+  repeated DtoLabelOntologyReviewGroupWire data = 1;
+  DtoLabelOntologyReviewMeta meta = 2;
+}
+
+// crate::wire::MetadataEnvelope<Vec<crate::label_surfaces::SignalWire>,crate::wire::SignalFilterMeta>
+message ReviewSignalsResponse {
+  repeated DtoSignalWire data = 1;
+  DtoSignalFilterMeta meta = 2;
+}
+
+// crate::wire::DataEnvelope<crate::derived::SearchStatus>
+message SearchStatusResponse {
+  DtoSearchStatus data = 1;
+}
+
+// crate::wire::MetadataEnvelope<crate::derived::SearchTaskStatusWindows,crate::wire::OffsetPaginationMeta>
+message SearchTasksByStatusResponse {
+  DtoSearchTaskStatusWindows data = 1;
+  DtoOffsetPaginationMeta meta = 2;
+}
+
+// crate::wire::MetadataEnvelope<crate::derived::SearchTasksData,crate::wire::OffsetPaginationMeta>
+message SearchTasksResponse {
+  DtoSearchTasksData data = 1;
+  DtoOffsetPaginationMeta meta = 2;
+}
+
+// crate::steps::SkipStepResponse
+message SkipStepResponse {
+  DtoApiTaskSteps data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message SpecifyTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message SubmitReviewTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelSuggestionResultWire>
+message SuggestTaskLabelsResponse {
+  DtoLabelSuggestionResultWire data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>
+message SupersedeSignalsResponse {
+  repeated DtoSignalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::SearchStatus>
+message SyncSearchIndexResponse {
+  DtoSearchStatus data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::task_graph::TaskNeighborhood>
+message TaskNeighborhoodResponse {
+  DtoTaskNeighborhood data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message UnblockTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::steps::UpdateStepResponse
+message UpdateStepResponse {
+  DtoApiTaskSteps data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::api_components::ApiTask>
+message UpdateTaskResponse {
+  DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::cli::CliEntity>
+message UpsertEntityResponse {
+  DtoCliEntity data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticsWire>
+message UpsertLabelSemanticsResponse {
+  DtoLabelSemanticsWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>
+message ValidateLabelOntologyActionResponse {
+  DtoLabelOntologyActionWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::protocols::VectorConfigureRequest>
+message VectorConfigureResponse {
+  DtoVectorConfigureRequest data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::protocols::VectorChunkResult>>
+message VectorQueryChunksResponse {
+  repeated DtoVectorChunkResult data = 1;
+}
+
+// crate::wire::DataEnvelope<Vec<crate::protocols::VectorLabelAtomResult>>
+message VectorQueryLabelAtomsResponse {
+  repeated DtoVectorLabelAtomResult data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::VectorStatus>
+message VectorRebuildResponse {
+  DtoVectorStatus data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::VectorStatus>
+message VectorStatusResponse {
+  DtoVectorStatus data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::derived::VectorStatus>
+message VectorSyncResponse {
+  DtoVectorStatus data = 1;
+}

@@ -233,7 +233,7 @@ KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json --board default label create "Sta
 HEALTH_BEFORE_JSON="$(curl --fail --silent --show-error "$BASE_URL/health")"
 RUNTIME_JSON="$(curl --fail --silent --show-error "$BASE_URL/app/runtime.json")"
 MANIFEST_JSON="$(curl --fail --silent --show-error "$BASE_URL/app/manifest.json")"
-DOCTOR_JSON="$(curl --fail --silent --show-error "$BASE_URL/api/v1/maintenance/doctor")"
+DOCTOR_JSON="$(KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json doctor)"
 MIGRATION_BEFORE="$(jq -er '.data.migration_version // .data.user_version' <<<"$DOCTOR_JSON")"
 DB_PATH_BEFORE_RESTART="$(jq -er '.data.db_path' <<<"$HEALTH_BEFORE_JSON")"
 DB_FINGERPRINT_BEFORE_RESTART="$(jq -er '.data.db_fingerprint' <<<"$HEALTH_BEFORE_JSON")"

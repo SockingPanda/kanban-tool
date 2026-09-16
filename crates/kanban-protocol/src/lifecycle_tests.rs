@@ -356,7 +356,6 @@ fn lifecycle_request_inventory_is_exact() {
                 format!("{operation_id}.headers").into_boxed_str()
             ))
         );
-        assert_eq!(endpoint.obligations.sse, EndpointObligation::NotApplicable);
 
         let contract = operation_inventory()
             .iter()

@@ -29,7 +29,7 @@ description: 维护 kanban-tool 的文档事实源、owner placement 和同步�
 wire/schema/catalog；`kanban-client` → typed transport；`kanban-server` → host/dispatcher；`kanban-cli`、
 `kanban-mcp`、`apps/desktop` → 各自 adapter/shell；`.config/codex` → 环境说明。
 
-精确 CLI 由 Clap help、精确 HTTP/MCP 由 router/catalog、精确 schema 由 migration/generated artifact
+精确 CLI 由 Clap help、精确 RPC/MCP 由正式 descriptor/catalog、精确 schema 由 migration/generated artifact
 持有。不要手工复制 operation、表、字段、命令、测试或 gate inventory。
 
 ## 历史与证据

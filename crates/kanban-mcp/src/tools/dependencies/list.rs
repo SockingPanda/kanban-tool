@@ -29,9 +29,9 @@ impl KanbanMcp {
     ) -> Result<Json<ListDependenciesResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
+        let client = &self.client;
         let dependencies =
-            call_client(move || client.list_dependencies_by_selector(&board, &task_ref)).await?;
+            call_client(client.list_dependencies_by_selector(&board, &task_ref)).await?;
         Ok(Json(ListDependenciesResponse { data: dependencies }))
     }
 }

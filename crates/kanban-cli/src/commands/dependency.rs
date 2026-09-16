@@ -17,10 +17,10 @@ pub(crate) enum DependencyCommand {
     List(list::ListArgs),
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &DependencyCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &DependencyCommand) -> Result<(), CliFailure> {
     match command {
-        DependencyCommand::Add(args) => add::run(ctx, args),
-        DependencyCommand::Remove(args) => remove::run(ctx, args),
-        DependencyCommand::List(args) => list::run(ctx, args),
+        DependencyCommand::Add(args) => add::run(ctx, args).await,
+        DependencyCommand::Remove(args) => remove::run(ctx, args).await,
+        DependencyCommand::List(args) => list::run(ctx, args).await,
     }
 }

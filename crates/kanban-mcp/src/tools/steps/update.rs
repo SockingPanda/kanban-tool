@@ -40,7 +40,7 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
         let step_ref = args.step_ref;
-        let client = self.client.clone();
+        let client = &self.client;
         let request = UpdateStepRequest {
             title: args.title,
             body: args.body,
@@ -50,10 +50,9 @@ impl KanbanMcp {
             required: args.required,
             actor: None,
         };
-        let steps = call_client(move || {
-            client.update_step_by_selector(&board, &task_ref, &step_ref, &request)
-        })
-        .await?;
+        let steps =
+            call_client(client.update_step_by_selector(&board, &task_ref, &step_ref, &request))
+                .await?;
         Ok(Json(UpdateStepResponse { data: steps }))
     }
 }

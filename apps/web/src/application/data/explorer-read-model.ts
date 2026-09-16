@@ -1,8 +1,10 @@
+import { isInteger, type Integer } from '../../domain/integer'
+import type { RpcCall } from "./rpc-transport";
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
 import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "../../domain/board-slug";
 
-import { asCanonicalBoardId, type CanonicalBoardId } from "../sync/contracts";
+import { asCanonicalBoardId, type CanonicalBoardId } from "../../domain/board-id";
 
 import { parseApiListBoardsQuery } from "../../lib/api/generated/contracts/api-list-boards-query";
 
@@ -58,13 +60,12 @@ import { parseApiListAttachmentsPath } from "../../lib/api/generated/contracts/a
 
 import { type ApiListAttachmentsResponseContract } from "../../lib/api/generated/contracts/api-list-attachments-response";
 
-import { parseApiListEventsQuery } from "../../lib/api/generated/contracts/api-list-events-query";
 
-import { parseApiListEventsResponse, type ApiListEventsResponseContract } from "../../lib/api/generated/contracts/api-list-events-response";
+import { type ApiListEventsResponseContract } from "../../lib/api/generated/contracts/api-list-events-response";
 
 import { ContractValidationError } from "../../lib/api/generated/runtime";
 
-import { HttpTransportError, type HttpTransportErrorKind, type HttpReadTransport, type HttpTransportOptions } from "./http-transport";
+import { RpcTransportError, type RpcTransportErrorKind, type RpcTransport, type RpcTransportOptions } from "./rpc-transport";
 
 export type TaskListStatus = NonNullable<ApiListTasksQueryContract["status"]>[number]
 
@@ -165,10 +166,6 @@ export function serializeTaskListQuery(query: TaskListQueryState): string {
   return encoded ? `?${encoded}` : ""
 }
 
-export function encodedSegment(value: string): string {
-  return encodeURIComponent(value)
-}
-
 export function parseContract<T>(contractId: string, parser: (value: unknown) => T, payload: unknown): T {
   try {
     return parser(payload)
@@ -197,7 +194,7 @@ export class ExplorerReadError extends Error {
   readonly reason: "board-not-found" | "task-not-found" | null
   readonly status: number | null
   readonly contractId: string | null
-  readonly apiError: HttpTransportError["apiError"]
+  readonly apiError: RpcTransportError["apiError"]
 
   constructor(
     kind: ExplorerReadErrorKind,
@@ -224,19 +221,19 @@ export class ExplorerReadError extends Error {
   }
 }
 
-export interface ExplorerReadDependencies extends HttpTransportOptions {
-  /** Read models only need the GET half of the shared browser transport. */
-  readonly transport?: Pick<HttpReadTransport, "get">
+export interface ExplorerReadDependencies extends RpcTransportOptions {
+  /** 读模型通过具名 RPC 请求业务 DTO。 */
+  readonly transport?: RpcTransport
 }
 
-export const MAX_EXPLORER_TOTAL_JSON_BYTES = 64 * 1024 * 1024
+export const MAX_EXPLORER_TOTAL_PROTOBUF_BYTES = 64 * 1024 * 1024
 
 export class ExplorerReadBudget {
   private totalBytes = 0
 
   consume(bytes: number): void {
-    if (!Number.isSafeInteger(bytes) || bytes < 0 || this.totalBytes > MAX_EXPLORER_TOTAL_JSON_BYTES - bytes) {
-      throw new ExplorerReadError("anomaly", `Explorer read raw JSON 超过 ${MAX_EXPLORER_TOTAL_JSON_BYTES} 字节预算。`)
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || this.totalBytes > MAX_EXPLORER_TOTAL_PROTOBUF_BYTES - bytes) {
+      throw new ExplorerReadError("anomaly", `Explorer read Protobuf 超过 ${MAX_EXPLORER_TOTAL_PROTOBUF_BYTES} 字节预算。`)
     }
     this.totalBytes += bytes
   }
@@ -245,8 +242,7 @@ export class ExplorerReadBudget {
 export interface ExplorerReadOptions extends ExplorerReadDependencies {
   readonly signal?: AbortSignal
   readonly includeArchived?: boolean
-  /** Incremental event cursor; zero is reserved for initial/recovery reads. */
-  readonly after?: number
+  /** 同一次展示映射共用的 Protobuf 结果预算。 */
   readonly budget?: ExplorerReadBudget
 }
 
@@ -265,24 +261,7 @@ export interface ExplorerTaskListPage {
 
 export const BOARD_EVENTS_PAGE_LIMIT = 150
 
-export const MAX_BOARD_EVENTS_PAGES = 1_024
-
 export type ExplorerEvent = ApiListEventsResponseContract["data"][number]
-
-export function parseBoardEvent(value: unknown): ExplorerEvent | null {
-  try {
-    const id = typeof value === "object" && value !== null && "id" in value && typeof value.id === "number" ? value.id : -1
-    return parseApiListEventsResponse({ data: [value] as ApiListEventsResponseContract["data"], meta: { next_after: id } }).data[0] ?? null
-  } catch {
-    return null
-  }
-}
-
-export interface BoardEventsBatch {
-  readonly boardId: CanonicalBoardId
-  readonly events: readonly ExplorerEvent[]
-  readonly nextAfter: number
-}
 
 export interface BoardEventsReadModel {
   readonly board: ExplorerBoardIdentity
@@ -290,7 +269,7 @@ export interface BoardEventsReadModel {
   readonly events: readonly ExplorerEvent[]
   readonly meta: {
     readonly count: number
-    readonly nextAfter: number
+    readonly nextAfter: Integer
     readonly limit: number
   }
 }
@@ -306,7 +285,7 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
   throw error
 }
 
-export function explorerErrorKind(kind: HttpTransportErrorKind): ExplorerReadErrorKind {
+export function explorerErrorKind(kind: RpcTransportErrorKind): ExplorerReadErrorKind {
   switch (kind) {
     case "cross_origin":
     case "malformed_url":
@@ -325,7 +304,7 @@ export function explorerErrorKind(kind: HttpTransportErrorKind): ExplorerReadErr
 export function wrapTransportError(error: unknown): never {
   if (isAbortError(error)) throw error
   if (error instanceof ExplorerReadError) throw error
-  if (error instanceof HttpTransportError) {
+  if (error instanceof RpcTransportError) {
     throw new ExplorerReadError(explorerErrorKind(error.kind), error.message, {
       status: error.status ?? undefined,
       apiError: error.apiError,
@@ -335,11 +314,9 @@ export function wrapTransportError(error: unknown): never {
   throw error
 }
 
-export function boardListPath(includeArchived: boolean): string {
+export function boardListPath(includeArchived: boolean): RpcCall {
   const query = parseApiListBoardsQuery({ include_archived: includeArchived })
-  const params = new URLSearchParams()
-  if (query.include_archived !== undefined) params.set("include_archived", String(query.include_archived))
-  return `/api/v1/boards?${params.toString()}`
+  return { method: "ListBoards", query }
 }
 
 export function validBoardId(value: string): CanonicalBoardId | null {
@@ -390,41 +367,26 @@ export function resolveBoard(boards: ApiListBoardsResponseContract["data"], sele
   return Object.freeze({ selector: requested, id: identity.id, slug: identity.slug, name: identity.candidate.name.trim() })
 }
 
-export function safeEventCursor(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-}
-
-export function safeEventId(value: unknown): value is number {
-  return safeEventCursor(value) && value > 0
-}
-
-export function stableEventValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableEventValue)
-  if (typeof value !== "object" || value === null) return value
-  const record = value as Record<string, unknown>
-  return Object.fromEntries(Object.keys(record).sort().map((key) => [key, stableEventValue(record[key])]))
-}
-
-export function eventFingerprint(event: ExplorerEvent): string {
-  return JSON.stringify(stableEventValue(event))
+export function safeEventCursor(value: unknown): value is Integer {
+  return isInteger(value) && value >= 0
 }
 
 export function validateEventBatch(
   events: readonly ExplorerEvent[],
   board: ExplorerBoardIdentity,
   taskId: string | null,
-  after: number,
-  nextAfter: number,
+  after: Integer,
+  nextAfter: Integer,
   limit: number,
 ): void {
   if (!safeEventCursor(after) || !safeEventCursor(nextAfter)) {
-    throw new ExplorerReadError("anomaly", "事件响应的 cursor 不是非负安全整数。")
+    throw new ExplorerReadError("anomaly", "事件响应的 cursor 不是非负 64 位整数。")
   }
   if (!Number.isSafeInteger(limit) || limit < 0 || events.length > limit) {
     throw new ExplorerReadError("anomaly", "事件响应超过请求的 page limit。")
   }
   let previousId = after
-  const ids = new Set<number>()
+  const ids = new Set<Integer>()
   const eventIds = new Set<string>()
   for (const event of events) {
     if (!safeEventCursor(event.id) || event.id <= previousId) {
@@ -453,36 +415,9 @@ export function validateEventBatch(
   }
 }
 
-export function buildBoardEventsRequest(board: string, taskId: string | null = null, after = 0): string {
+export function buildTaskListRequest(board: string, query: TaskListQueryState): RpcCall {
   try {
-    if (taskId !== null) validateCanonicalTaskSelector(taskId)
-    const parsed = parseApiListEventsQuery({
-      board,
-      task_id: taskId,
-      after,
-      limit: BOARD_EVENTS_PAGE_LIMIT,
-    })
-    const params = new URLSearchParams()
-    if (parsed.board !== undefined) params.set("board", parsed.board)
-    if (parsed.task_id !== undefined && parsed.task_id !== null) params.set("task_id", parsed.task_id)
-    if (parsed.after !== undefined) params.set("after", String(parsed.after))
-    if (parsed.limit !== undefined) params.set("limit", String(parsed.limit))
-    return `/api/v1/events?${params.toString()}`
-  } catch (error) {
-    if (error instanceof ContractValidationError) {
-      throw new ExplorerReadError("invalid_contract", "Board Events 请求不符合 generated query contract。", {
-        contractId: "api.list-events.query",
-        cause: error,
-      })
-    }
-    throw error
-  }
-}
-
-export function buildTaskListRequest(board: string, query: TaskListQueryState): string {
-  let path: string
-  try {
-    path = `/api/v1/boards/${encodedSegment(parseApiListTasksPath({ board }).board)}/tasks`
+    const path = parseApiListTasksPath({ board })
     const offset = (query.page - 1) * query.limit
     if (!Number.isSafeInteger(offset) || offset < 0) throw new ExplorerReadError("anomaly", "列表页码超出安全范围。")
     const parsed = parseApiListTasksQuery({
@@ -497,16 +432,7 @@ export function buildTaskListRequest(board: string, query: TaskListQueryState): 
       offset,
       sort: query.sort,
     })
-    const params = new URLSearchParams()
-    for (const status of parsed.status ?? []) params.append("status", status)
-    for (const priority of parsed.priority ?? []) params.append("priority", String(priority))
-    for (const plan of parsed.plan_filter ?? []) params.append("plan_filter", plan)
-    if (parsed.q) params.set("q", parsed.q)
-    if (parsed.include_archived !== undefined) params.set("include_archived", String(parsed.include_archived))
-    if (parsed.limit !== undefined) params.set("limit", String(parsed.limit))
-    if (parsed.offset !== undefined) params.set("offset", String(parsed.offset))
-    if (parsed.sort !== undefined) params.set("sort", parsed.sort)
-    return `${path}?${params.toString()}`
+    return { method: "ListTasks", path, query: parsed }
   } catch (error) {
     if (error instanceof ExplorerReadError) throw error
     if (error instanceof ContractValidationError) {
@@ -572,10 +498,10 @@ export function validateProvidedBoardIdentity(identity: ExplorerBoardIdentity, s
   return Object.freeze({ selector: requested, id, slug, name: identity.name.trim() })
 }
 
-export function buildTaskMapRequest(board: string, options: TaskMapQueryOptions = defaultTaskMapQuery): string {
+export function buildTaskMapRequest(board: string, options: TaskMapQueryOptions = defaultTaskMapQuery): RpcCall {
   try {
     validateTaskMapOptions(options)
-    const path = parseApiBoardTaskMapPath({ board }).board
+    const path = parseApiBoardTaskMapPath({ board })
     const query = parseApiBoardTaskMapQuery({
       active_only: options.activeOnly,
       context_depth: options.contextDepth,
@@ -584,14 +510,7 @@ export function buildTaskMapRequest(board: string, options: TaskMapQueryOptions 
       hide_isolated: options.hideIsolated,
       limit_nodes: options.limitNodes,
     })
-    const params = new URLSearchParams()
-    if (query.active_only !== undefined) params.set("active_only", String(query.active_only))
-    if (query.context_depth !== undefined) params.set("context_depth", String(query.context_depth))
-    if (query.include_done_context !== undefined) params.set("include_done_context", String(query.include_done_context))
-    if (query.include_archived_context !== undefined) params.set("include_archived_context", String(query.include_archived_context))
-    if (query.hide_isolated !== undefined) params.set("hide_isolated", String(query.hide_isolated))
-    if (query.limit_nodes !== undefined) params.set("limit_nodes", String(query.limit_nodes))
-    return `/api/v1/boards/${encodedSegment(path)}/task-map?${params.toString()}`
+    return { method: "BoardTaskMap", path, query }
   } catch (error) {
     if (error instanceof ExplorerReadError) throw error
     if (error instanceof ContractValidationError) {
@@ -665,11 +584,11 @@ export function validateRunSelector(value: string): void {
   }
 }
 
-export function buildTaskRunsRequest(taskId: string): string {
+export function buildTaskRunsRequest(taskId: string): RpcCall {
   try {
     validateCanonicalTaskSelector(taskId)
-    const path = parseApiListRunsPath({ task_id: taskId }).task_id
-    return `/api/v1/tasks/${encodedSegment(path)}/runs`
+    const path = parseApiListRunsPath({ task_id: taskId })
+    return { method: "ListRuns", path }
   } catch (error) {
     if (error instanceof ExplorerReadError) throw error
     if (error instanceof ContractValidationError) {
@@ -679,11 +598,11 @@ export function buildTaskRunsRequest(taskId: string): string {
   }
 }
 
-export function buildRunLogRequest(runId: string): string {
+export function buildRunLogRequest(runId: string): RpcCall {
   try {
     validateRunSelector(runId)
-    const path = parseApiGetRunLogPath({ run_id: runId }).run_id
-    return `/api/v1/runs/${encodedSegment(path)}/log`
+    const path = parseApiGetRunLogPath({ run_id: runId })
+    return { method: "GetRunLog", path }
   } catch (error) {
     if (error instanceof ExplorerReadError) throw error
     if (error instanceof ContractValidationError) {
@@ -729,48 +648,31 @@ export type TaskInspectorTask = Omit<ApiGetTaskResponseContract["data"], "labels
 }
 
 export interface TaskInspectorRequests {
-  readonly task: string
-  readonly labels: string
-  readonly neighborhood: string
-  readonly dependencies: string
-  readonly steps: string
-  readonly runs: string
-  readonly comments: string
-  readonly attachments: string
-  readonly events: string
+  readonly task: RpcCall
+  readonly labels: RpcCall
+  readonly neighborhood: RpcCall
+  readonly dependencies: RpcCall
+  readonly steps: RpcCall
+  readonly runs: RpcCall
+  readonly comments: RpcCall
+  readonly attachments: RpcCall
 }
 
-export function listEventsRequest(board: string, taskId: string): string {
-  validateCanonicalTaskSelector(taskId)
-  const query = parseApiListEventsQuery({ board, task_id: taskId, after: 0, limit: 50 })
-  const params = new URLSearchParams()
-  if (query.board !== undefined) params.set("board", query.board)
-  if (query.task_id !== undefined && query.task_id !== null) params.set("task_id", query.task_id)
-  if (query.after !== undefined) params.set("after", String(query.after))
-  if (query.limit !== undefined) params.set("limit", String(query.limit))
-  return `/api/v1/events?${params.toString()}`
-}
-
-export function buildTaskInspectorRequests(board: string, taskId: string): TaskInspectorRequests {
+export function buildTaskInspectorRequests(taskId: string): TaskInspectorRequests {
   try {
     validateCanonicalTaskSelector(taskId)
     const task = parseApiGetTaskPath({ task_id: taskId }).task_id
-    const neighborhoodPath = parseApiTaskNeighborhoodPath({ task_id: task }).task_id
+    const neighborhoodPath = parseApiTaskNeighborhoodPath({ task_id: task })
     const neighborhoodQuery = parseApiTaskNeighborhoodQuery({ depth: 1, include_archived_context: false, limit_nodes: 40 })
-    const neighborhoodParams = new URLSearchParams()
-    if (neighborhoodQuery.depth !== undefined) neighborhoodParams.set("depth", String(neighborhoodQuery.depth))
-    if (neighborhoodQuery.include_archived_context !== undefined) neighborhoodParams.set("include_archived_context", String(neighborhoodQuery.include_archived_context))
-    if (neighborhoodQuery.limit_nodes !== undefined) neighborhoodParams.set("limit_nodes", String(neighborhoodQuery.limit_nodes))
     return {
-      task: `/api/v1/tasks/${encodedSegment(task)}`,
-      labels: `/api/v1/tasks/${encodedSegment(parseApiListTaskLabelsPath({ task_id: task }).task_id)}/labels`,
-      neighborhood: `/api/v1/tasks/${encodedSegment(neighborhoodPath)}/neighborhood?${neighborhoodParams.toString()}`,
-      dependencies: `/api/v1/tasks/${encodedSegment(parseApiListDependenciesPath({ task_id: task }).task_id)}/dependencies`,
-      steps: `/api/v1/tasks/${encodedSegment(parseApiListStepsPath({ task_id: task }).task_id)}/steps`,
-      runs: `/api/v1/tasks/${encodedSegment(parseApiListRunsPath({ task_id: task }).task_id)}/runs`,
-      comments: `/api/v1/tasks/${encodedSegment(parseApiListCommentsPath({ task_id: task }).task_id)}/comments`,
-      attachments: `/api/v1/tasks/${encodedSegment(parseApiListAttachmentsPath({ task_id: task }).task_id)}/attachments`,
-      events: listEventsRequest(board, task),
+      task: { method: "GetTask", path: parseApiGetTaskPath({ task_id: task }) },
+      labels: { method: "ListTaskLabels", path: parseApiListTaskLabelsPath({ task_id: task }) },
+      neighborhood: { method: "TaskNeighborhood", path: neighborhoodPath, query: neighborhoodQuery },
+      dependencies: { method: "ListDependencies", path: parseApiListDependenciesPath({ task_id: task }) },
+      steps: { method: "ListSteps", path: parseApiListStepsPath({ task_id: task }) },
+      runs: { method: "ListRuns", path: parseApiListRunsPath({ task_id: task }) },
+      comments: { method: "ListComments", path: parseApiListCommentsPath({ task_id: task }) },
+      attachments: { method: "ListAttachments", path: parseApiListAttachmentsPath({ task_id: task }) },
     }
   } catch (error) {
     if (error instanceof ExplorerReadError) throw error
@@ -887,51 +789,4 @@ export function parseTaskListQuery(input: string | URLSearchParams): TaskListQue
     limit: parseInteger(params.get("limit"), defaultTaskListQuery.limit, 1, 1000),
     includeArchived: params.get("include_archived") === "true",
   })
-}
-
-export function mergeBoardEvents(
-  existing: readonly ExplorerEvent[],
-  incoming: readonly ExplorerEvent[],
-  boardId: CanonicalBoardId,
-): readonly ExplorerEvent[] {
-  const byId = new Map<number, ExplorerEvent>()
-  const byEventId = new Map<string, ExplorerEvent>()
-
-  const add = (event: ExplorerEvent): void => {
-    if (!safeEventId(event.id) || event.event_id.trim().length === 0) {
-      throw new ExplorerReadError("anomaly", "事件 batch 含有无效 canonical id。")
-    }
-    if (event.board_id !== boardId) {
-      throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 越过当前 board scope。`)
-    }
-    const byIdMatch = byId.get(event.id)
-    const byEventIdMatch = byEventId.get(event.event_id)
-    if (byIdMatch !== undefined && byIdMatch.event_id !== event.event_id) {
-      throw new ExplorerReadError("anomaly", `事件 id ${String(event.id)} 对应多个 event_id。`)
-    }
-    if (byEventIdMatch !== undefined && byEventIdMatch.id !== event.id) {
-      throw new ExplorerReadError("anomaly", `事件 event_id ${event.event_id} 对应多个数字 id。`)
-    }
-    if (byIdMatch !== undefined || byEventIdMatch !== undefined) {
-      const previous = byIdMatch ?? byEventIdMatch
-      if (previous && eventFingerprint(previous) !== eventFingerprint(event)) {
-        throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 的重复内容不一致。`)
-      }
-      return
-    }
-    byId.set(event.id, event)
-    byEventId.set(event.event_id, event)
-  }
-
-  for (const event of existing) add(event)
-  let previousIncomingId = -1
-  for (const event of incoming) {
-    if (!safeEventId(event.id) || event.id <= previousIncomingId) {
-      throw new ExplorerReadError("anomaly", "事件 batch 的 id 必须严格递增。")
-    }
-    add(event)
-    previousIncomingId = event.id
-  }
-  const sorted = [...byId.values()].sort((left, right) => left.id - right.id)
-  return Object.freeze(sorted.slice(-BOARD_EVENTS_PAGE_LIMIT).map((event) => Object.freeze({ ...event })))
 }

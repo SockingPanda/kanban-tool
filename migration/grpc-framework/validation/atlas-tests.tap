@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: branch pin and backend hashes are preserved
+ok 1 - branch pin and backend hashes are preserved
+  ---
+  duration_ms: 0.916575
+  type: 'test'
+  ...
+# Subtest: patch never touches visual components, themes, or bootstrap
+ok 2 - patch never touches visual components, themes, or bootstrap
+  ---
+  duration_ms: 0.453987
+  type: 'test'
+  ...
+# Subtest: source port has no transport or generated type dependency
+ok 3 - source port has no transport or generated type dependency
+  ---
+  duration_ms: 0.444639
+  type: 'test'
+  ...
+# Subtest: query metadata-only option is preserved
+ok 4 - query metadata-only option is preserved
+  ---
+  duration_ms: 0.210099
+  type: 'test'
+  ...
+# Subtest: source binding does not publish data or forge audit events
+ok 5 - source binding does not publish data or forge audit events
+  ---
+  duration_ms: 0.669261
+  type: 'test'
+  ...
+# Subtest: late callbacks after release are ignored
+ok 6 - late callbacks after release are ignored
+  ---
+  duration_ms: 0.16298
+  type: 'test'
+  ...
+# Subtest: source binding maps failures to existing UI states
+ok 7 - source binding maps failures to existing UI states
+  ---
+  duration_ms: 1.106418
+  type: 'test'
+  ...
+# Subtest: manual retry reuses source controller
+ok 8 - manual retry reuses source controller
+  ---
+  duration_ms: 0.168397
+  type: 'test'
+  ...
+# Subtest: refresh telemetry enters query invalidation but not event parsing
+ok 9 - refresh telemetry enters query invalidation but not event parsing
+  ---
+  duration_ms: 0.863793
+  type: 'test'
+  ...
+# Subtest: actual registry replacement chooses RPC without constructing legacy helpers
+ok 10 - actual registry replacement chooses RPC without constructing legacy helpers
+  ---
+  duration_ms: 13.751342
+  type: 'test'
+  ...
+# Subtest: actual registry replacement keeps unconfigured legacy path available
+ok 11 - actual registry replacement keeps unconfigured legacy path available
+  ---
+  duration_ms: 10.750886
+  type: 'test'
+  ...
+# Subtest: RPC construction error does not fall back to SSE
+ok 12 - RPC construction error does not fall back to SSE
+  ---
+  duration_ms: 6.894475
+  type: 'test'
+  ...
+# Subtest: metadata scope mixing guard exists before reuse
+ok 13 - metadata scope mixing guard exists before reuse
+  ---
+  duration_ms: 0.168611
+  type: 'test'
+  ...
+# Subtest: new helper typechecks against the registry state and telemetry shape fixture
+ok 14 - new helper typechecks against the registry state and telemetry shape fixture
+  ---
+  duration_ms: 641.651412
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1031.695922

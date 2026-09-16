@@ -1,0 +1,84 @@
+--- a/dist/esm/create.js
++++ b/dist/esm/create.js
+@@ -99,7 +99,17 @@
+                         const converted = {};
+                         const keys = Object.keys(initValue);
+                         for (let k = 0; k < keys.length; k++) {
+-                            converted[keys[k]] = property.convert(initValue[keys[k]]);
++                            if (keys[k] === "__proto__") {
++                                Object.defineProperty(converted, keys[k], {
++                                    value: property.convert(initValue[keys[k]]),
++                                    enumerable: true,
++                                    configurable: true,
++                                    writable: true,
++                                });
++                            }
++                            else {
++                                converted[keys[k]] = property.convert(initValue[keys[k]]);
++                            }
+                         }
+                         message[name] = converted;
+                     }
+--- a/dist/esm/from-binary.js
++++ b/dist/esm/from-binary.js
+@@ -350,7 +350,17 @@
+         }
+         // Object property keys are always strings or symbols. Assigning with a
+         // boolean, number, or bigint key implicitly converts it to a string.
+-        record[key] = val;
++        if (key === "__proto__") {
++            Object.defineProperty(record, key, {
++                value: val,
++                enumerable: true,
++                configurable: true,
++                writable: true,
++            });
++        }
++        else {
++            record[key] = val;
++        }
+     };
+ }
+ /**
+--- a/dist/commonjs/create.js
++++ b/dist/commonjs/create.js
+@@ -102,7 +102,17 @@
+                         const converted = {};
+                         const keys = Object.keys(initValue);
+                         for (let k = 0; k < keys.length; k++) {
+-                            converted[keys[k]] = property.convert(initValue[keys[k]]);
++                            if (keys[k] === "__proto__") {
++                                Object.defineProperty(converted, keys[k], {
++                                    value: property.convert(initValue[keys[k]]),
++                                    enumerable: true,
++                                    configurable: true,
++                                    writable: true,
++                                });
++                            }
++                            else {
++                                converted[keys[k]] = property.convert(initValue[keys[k]]);
++                            }
+                         }
+                         message[name] = converted;
+                     }
+--- a/dist/commonjs/from-binary.js
++++ b/dist/commonjs/from-binary.js
+@@ -356,7 +356,17 @@
+         }
+         // Object property keys are always strings or symbols. Assigning with a
+         // boolean, number, or bigint key implicitly converts it to a string.
+-        record[key] = val;
++        if (key === "__proto__") {
++            Object.defineProperty(record, key, {
++                value: val,
++                enumerable: true,
++                configurable: true,
++                writable: true,
++            });
++        }
++        else {
++            record[key] = val;
++        }
+     };
+ }
+ /**

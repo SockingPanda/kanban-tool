@@ -1,6 +1,6 @@
-import { useLayoutEffect } from "react";
+import { integerDate, type Integer } from '../../domain/integer'
+import { useAsyncRead } from '../../application/query/use-async-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
-import { useEffect, useRef, useState } from "react"
 
 import { ExplorerReadError, type TaskRunsReadModel } from "../../application/data/explorer-read-model";
 import type { Locale } from "../../platform/preferences/preferences"
@@ -24,7 +24,6 @@ export interface TaskRunsPresentationProps {
 export interface TaskRunsViewProps {
   readonly runtime: WebRuntimeConfig
   readonly taskId: string | null
-  readonly invalidationRevision?: number
   readonly online?: boolean
 }
 
@@ -101,10 +100,12 @@ function errorKind(error: Error | null): string | null {
   return typeof kind === "string" ? kind : null
 }
 
-function timestamp(value: number | null, locale: Locale): string {
+function timestamp(value: Integer | null, locale: Locale): string {
   if (value === null) return "—"
+  const date = integerDate(value)
+  if (date === null) return String(value)
   try {
-    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
+    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", { dateStyle: "short", timeStyle: "short" }).format(date)
   } catch {
     return String(value)
   }
@@ -187,51 +188,15 @@ function ReadyRuns({locale,taskId,state,onRetry}: TaskRunsPresentationProps & {s
   )
 }
 
-function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, invalidationRevision: number, online: boolean): TaskRunsReadState & { readonly retry: () => void } {
+function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, online: boolean): TaskRunsReadState & { readonly retry: () => void } {
   const { loadTaskRuns } = useWorkspaceOperations();
-
-  const loadRef = useRef<((signal: AbortSignal) => Promise<TaskRunsReadModel>) | null>(null)
-  useLayoutEffect(() => { loadRef.current = taskId ? (signal) => loadTaskRuns(runtime, taskId, { signal }) : null });
-  const [generation, setGeneration] = useState(0)
-  const [state, setState] = useState<TaskRunsReadState>({ data: null, loading: false, error: null })
-
-  useEffect(() => {
-    if (!taskId) {
-      setState({ data: null, loading: false, error: null })
-      return
-    }
-    if (!online) {
-      setState((current) => ({
-        data: current.data?.taskId === taskId ? current.data : null,
-        loading: false,
-        error: new ExplorerReadError("offline", "当前离线，无法加载运行记录。"),
-      }))
-      return
-    }
-    const controller = new AbortController()
-    let active = true
-    setState((current) => ({ data: current.data?.taskId === taskId ? current.data : null, loading: true, error: null }))
-    void loadRef.current?.(controller.signal).then(
-      (data) => {
-        if (active) setState({ data, loading: false, error: null })
-      },
-      (error: unknown) => {
-        if (active && !(error instanceof Error && error.name === "AbortError")) {
-          setState((current) => ({ data: current.data?.taskId === taskId ? current.data : null, loading: false, error: error instanceof Error ? error : new Error(String(error)) }))
-        }
-      },
-    )
-    return () => {
-      active = false
-      controller.abort()
-    }
-  }, [generation, invalidationRevision, online, taskId])
-
-  return { ...state, retry: () => setGeneration((current) => current + 1) }
+  return useAsyncRead(Boolean(taskId), runtime.webBuildId + '|' + taskId,
+    signal => taskId ? loadTaskRuns(runtime, taskId, { signal }) : Promise.reject(new Error('尚未选择任务。')),
+    online);
 }
 
-export function TaskRunsView({ runtime, taskId, invalidationRevision = 0, online = typeof navigator === "undefined" || navigator.onLine }: TaskRunsViewProps) {
+export function TaskRunsView({ runtime, taskId, online = typeof navigator === "undefined" || navigator.onLine }: TaskRunsViewProps) {
   const { locale } = usePreferences()
-  const state = useTaskRunsRead(runtime, taskId, invalidationRevision, online)
+  const state = useTaskRunsRead(runtime, taskId, online)
   return <TaskRunsPresentation locale={locale} taskId={taskId} state={state} onRetry={state.retry} />
 }

@@ -1,28 +1,31 @@
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_protocol::{ApiTask, ReopenTaskRequest, ReopenTaskResponse};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
+use kanban_protocol::{ApiTask, ReopenTaskRequest};
 
 impl KanbanClient {
-    pub fn reopen_task(
+    pub async fn reopen_task(
         &self,
         task_id: &str,
         request: &ReopenTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let response: ReopenTaskResponse = self.post(
-            &format!(
-                "/api/v1/tasks/{}/transitions/reopen",
-                encode_path_segment(task_id.trim())
-            ),
-            request,
+        let response: kanban_protocol::ReopenTaskResponse = rpc!(
+            self,
+            reopen_task,
+            ReopenTaskRequest,
+            kanban_protocol::ReopenTaskPath {
+                task_id: task_id.trim().to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
-    pub fn reopen_task_by_selector(
+    pub async fn reopen_task_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &ReopenTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.reopen_task(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.reopen_task(&task_id, request).await
     }
 }

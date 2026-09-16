@@ -1,3 +1,5 @@
+import { integerDate, type Integer } from '../../domain/integer'
+import { observeRead } from '../../application/query/observe-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 import { AlertDialog } from "../../components/ui/alert-dialog"
 import { Button } from "../../components/ui/button"
@@ -6,7 +8,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import type { Locale } from "../../platform/preferences/preferences"
 import { createTranslator } from "../../application/i18n"
-import { requestHealthRefresh } from "../../application/workspace/health-refresh"
 import { usePreferences } from "../../platform/preferences/use-preferences"
 import { MaintenanceApiError, type BackupReport, type CheckpointReport, type DoctorReport, type ExportReport, type ImportReport, type MaintenanceApi, type MaintenanceRunReport, type MaintenanceStatus, type QueueStats, type SearchStatus, type VacuumReport } from "../../application/data/maintenance-api";
 import { maintenanceOwnerForAction } from "./maintenance-intents"
@@ -48,7 +49,6 @@ export type MaintenancePageProps = {
   readonly api?: MaintenanceApi
   readonly initial?: MaintenanceInitialState
   /** Integration seam used to refresh the health query after a successful host mutation. */
-  readonly onHealthRefresh?: () => void
 }
 
 type ConfirmAction =
@@ -63,9 +63,7 @@ type ConfirmAction =
 
 const emptyState = <T,>(): LoadState<T> => ({ kind: "loading" })
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError"
-}
+
 
 function errorCode(error: unknown): string {
   if (error instanceof MaintenanceApiError) return error.code ?? error.kind
@@ -98,7 +96,7 @@ function safeErrorText(error: unknown, t: ReturnType<typeof createTranslator>): 
   return messages[errorCode(error)] ?? t("maintenanceErrorUnknown")
 }
 
-function reported(value: string | number | boolean | null | undefined): string {
+function reported(value: string | Integer | boolean | null | undefined): string {
   if (value === null || value === undefined) return "—"
   if (typeof value === "string") return value.trim() || "—"
   return String(value)
@@ -112,20 +110,20 @@ function diagnosticSummary(value: string | null | undefined, t: ReturnType<typeo
   return value?.trim() ? t("serverMessagePresent") : t("none")
 }
 
-function formatTimestamp(value: number | null | undefined, locale: Locale): string {
+function formatTimestamp(value: Integer | null | undefined, locale: Locale): string {
   if (value === null || value === undefined) return "—"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "—"
+  const date = integerDate(value)
+  if (date === null) return String(value)
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date)
 }
 
-function statusTone(status: { dirty: boolean; degraded: boolean; failed: number; last_error: string | null; lifecycle_status: string }): string {
+function statusTone(status: { dirty: boolean; degraded: boolean; failed: Integer; last_error: string | null; lifecycle_status: string }): string {
   return status.degraded || status.dirty || status.failed > 0 || Boolean(status.last_error) || /degraded|error|failed/i.test(status.lifecycle_status)
     ? styles.degraded
     : styles.ready
 }
 
-function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial, onHealthRefresh }: MaintenancePageProps) {
+function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial }: MaintenancePageProps) {
   const { createMaintenanceApi } = useWorkspaceOperations();
   const { locale, actor } = usePreferences()
   const t = createTranslator(locale)
@@ -160,54 +158,46 @@ function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial
   const isCurrent = useCallback((generation: number) => mountedRef.current && generationRef.current === generation, [])
 
   const loadStatus = useCallback((options: QueryLoadOptions): Promise<boolean> => {
-    const current = statusRequestRef.current
-    if (!options.fresh && current?.generation === options.generation) return current.promise
-    current?.controller.abort()
-    const controller = new AbortController()
-    const promise = (async () => {
-      if (!options.silent && isCurrent(options.generation)) setStatus((state) => state.kind === "ready" ? state : { kind: "loading" })
-      try {
-        const value = await api.status(controller.signal)
-        if (isCurrent(options.generation)) {
-          setStatus({ kind: "ready", value })
-          setSyncNotice((notice) => notice === "stale" ? null : notice)
-          return true
+    const current = statusRequestRef.current;
+    if (!options.fresh && current?.generation === options.generation) return current.promise;
+    current?.controller.abort();
+    const controller = new AbortController();
+    const promise = new Promise<boolean>(resolve => {
+      observeRead(signal => api.status(signal), controller.signal, value => {
+        if (isCurrent(options.generation)) { setStatus({ kind: 'ready', value }); setSyncNotice(null); resolve(true); }
+        else resolve(false);
+      }, error => {
+        if (isCurrent(options.generation) && !controller.signal.aborted) {
+          setStatus(state => state.kind === 'ready' ? state : { kind: 'error', error });
+          setSyncNotice('stale');
         }
-        return false
-      } catch (error) {
-        if (controller.signal.aborted || isAbortError(error) || !isCurrent(options.generation)) return false
-        setStatus((state) => options.silent && state.kind === "ready" ? state : { kind: "error", error })
-        if (options.silent) setSyncNotice((notice) => notice === "mutation" ? notice : "stale")
-        return false
-      } finally {
-        if (statusRequestRef.current?.controller === controller) statusRequestRef.current = null
-      }
-    })()
-    statusRequestRef.current = { generation: options.generation, controller, promise }
-    return promise
-  }, [api, isCurrent])
+        resolve(false);
+      }, options.fresh === true);
+      controller.signal.addEventListener('abort', () => resolve(false), { once: true });
+    });
+    statusRequestRef.current = { generation: options.generation, controller, promise };
+    return promise;
+  }, [api, isCurrent]);
 
   const loadBoardDiagnostics = useCallback((options: QueryLoadOptions): Promise<boolean> => {
-    const current = diagnosticsRequestRef.current
-    if (!options.fresh && current?.generation === options.generation) return current.promise
-    current?.controller.abort()
-    const controller = new AbortController()
-    const promise = (async () => {
-      try {
-        const [statsResult, searchResult] = await Promise.allSettled([api.stats(boardSlug, controller.signal), api.searchStatus(boardSlug, controller.signal)])
-        if (!isCurrent(options.generation) || controller.signal.aborted) return false
-        if (statsResult.status === "fulfilled") setStats({ kind: "ready", value: statsResult.value })
-        else if (!isAbortError(statsResult.reason)) setStats({ kind: "error", error: statsResult.reason })
-        if (searchResult.status === "fulfilled") setSearchStatus({ kind: "ready", value: searchResult.value })
-        else if (!isAbortError(searchResult.reason)) setSearchStatus({ kind: "error", error: searchResult.reason })
-        return statsResult.status === "fulfilled" && searchResult.status === "fulfilled"
-      } finally {
-        if (diagnosticsRequestRef.current?.controller === controller) diagnosticsRequestRef.current = null
-      }
-    })()
-    diagnosticsRequestRef.current = { generation: options.generation, controller, promise }
-    return promise
-  }, [api, boardSlug, isCurrent])
+    const current = diagnosticsRequestRef.current;
+    if (!options.fresh && current?.generation === options.generation) return current.promise;
+    current?.controller.abort();
+    const controller = new AbortController();
+    const promise = new Promise<boolean>(resolve => {
+      observeRead(signal => Promise.allSettled([api.stats(boardSlug, signal), api.searchStatus(boardSlug, signal)]), controller.signal, ([statsResult, searchResult]) => {
+        if (!isCurrent(options.generation) || controller.signal.aborted) { resolve(false); return; }
+        if (statsResult.status === 'fulfilled') setStats({ kind: 'ready', value: statsResult.value });
+        else setStats({ kind: 'error', error: statsResult.reason });
+        if (searchResult.status === 'fulfilled') setSearchStatus({ kind: 'ready', value: searchResult.value });
+        else setSearchStatus({ kind: 'error', error: searchResult.reason });
+        resolve(statsResult.status === 'fulfilled' && searchResult.status === 'fulfilled');
+      }, () => resolve(false), options.fresh === true);
+      controller.signal.addEventListener('abort', () => resolve(false), { once: true });
+    });
+    diagnosticsRequestRef.current = { generation: options.generation, controller, promise };
+    return promise;
+  }, [api, boardSlug, isCurrent]);
 
   useEffect(() => {
     mountedRef.current = true
@@ -234,8 +224,8 @@ function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial
     setPendingAction(null)
     pendingActionRef.current = null
     setSyncNotice(null)
-    void loadStatus({ generation, fresh: true })
-    void loadBoardDiagnostics({ generation, fresh: true })
+    void loadStatus({ generation })
+    void loadBoardDiagnostics({ generation })
     return () => {
       if (generationRef.current === generation) {
         pendingActionRef.current = null
@@ -244,20 +234,6 @@ function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial
     }
   }, [abortRequests, api, boardSlug, initial, loadBoardDiagnostics, loadStatus])
 
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState !== "hidden") void loadStatus({ generation: generationRef.current, silent: true })
-    }
-    const onVisibility = () => refresh()
-    window.addEventListener("focus", refresh)
-    document.addEventListener("visibilitychange", onVisibility)
-    const interval = window.setInterval(refresh, 5_000)
-    return () => {
-      window.removeEventListener("focus", refresh)
-      document.removeEventListener("visibilitychange", onVisibility)
-      window.clearInterval(interval)
-    }
-  }, [loadStatus])
 
   const refreshAll = useCallback(async () => {
     const generation = generationRef.current
@@ -305,15 +281,13 @@ function useMaintenancePageState({ runtime, boardSlug, api: providedApi, initial
         if (isMutationCurrent()) {
           if (committed) {
             if (!statusFresh || !diagnosticsFresh) setSyncNotice("mutation")
-            const refreshHealth = onHealthRefresh ?? requestHealthRefresh
-            refreshHealth()
           }
           setPendingAction(null)
           if (pendingActionRef.current === action) pendingActionRef.current = null
         }
       }
     }
-  }, [abortRequests, isCurrent, loadBoardDiagnostics, loadStatus, onHealthRefresh, pendingAction])
+  }, [abortRequests, isCurrent, loadBoardDiagnostics, loadStatus, pendingAction])
 
   const runDoctor = () => {
     if (pendingActionRef.current !== null || pendingAction !== null) return
@@ -580,7 +554,7 @@ function DoctorContent({ report, t }: { report: DoctorReport; t: ReturnType<type
 }
 
 function Metric({ label, value, tone, labelTranslateNo = false }: { label: string; value: unknown; tone?: string; labelTranslateNo?: boolean }) {
-  return <div className={styles.metric}><dt translate={labelTranslateNo ? "no" : undefined}>{label}</dt><dd className={tone ?? styles.value} translate="no">{reported(value as string | number | boolean | null | undefined)}</dd></div>
+  return <div className={styles.metric}><dt translate={labelTranslateNo ? "no" : undefined}>{label}</dt><dd className={tone ?? styles.value} translate="no">{reported(value as string | Integer | boolean | null | undefined)}</dd></div>
 }
 
 function Boundary({ text }: { text: string }) { return <div className={styles.boundary} role="status" aria-live="polite">{text}</div> }

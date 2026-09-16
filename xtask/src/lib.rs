@@ -21,6 +21,7 @@ use kanban_protocol::{
 
 pub type ToolResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
+pub mod rpc_contracts;
 pub mod web_assets;
 pub mod web_contracts;
 
@@ -29,8 +30,9 @@ pub const ARTIFACT_DIRECTORY: &str = "schemas/json-schema/draft-2020-12";
 #[derive(Debug, Serialize)]
 struct ArtifactManifest<'a> {
     schema_dialect: &'static str,
-    contract_inventory: ArtifactIndex,
-    surface_catalog: ArtifactIndex,
+    dto_contract_inventory: ArtifactIndex,
+    dto_operation_bindings: ArtifactIndex,
+    rpc_catalog: ArtifactIndex,
     roots: Vec<RootManifest<'a>>,
 }
 
@@ -515,11 +517,15 @@ pub fn expected_artifacts() -> ToolResult<BTreeMap<String, Vec<u8>>> {
 
     let contract_inventory_bytes = canonical_json_bytes(operation_inventory())?;
     let contract_inventory_hash = sha256(&contract_inventory_bytes);
-    artifacts.insert("operations.json".to_owned(), contract_inventory_bytes);
+    artifacts.insert("dto-contracts.json".to_owned(), contract_inventory_bytes);
 
     let surface_catalog_bytes = canonical_json_bytes(&surface_operation_catalog())?;
     let surface_catalog_hash = sha256(&surface_catalog_bytes);
-    artifacts.insert("surface-operations.json".to_owned(), surface_catalog_bytes);
+    artifacts.insert("dto-bindings.json".to_owned(), surface_catalog_bytes);
+
+    let rpc_catalog_bytes = canonical_json_bytes(kanban_protocol::rpc::catalog::methods())?;
+    let rpc_catalog_hash = sha256(&rpc_catalog_bytes);
+    artifacts.insert("rpc-catalog.json".to_owned(), rpc_catalog_bytes);
 
     let mut seen_hashes = BTreeSet::new();
     let mut roots = Vec::new();
@@ -542,13 +548,17 @@ pub fn expected_artifacts() -> ToolResult<BTreeMap<String, Vec<u8>>> {
 
     let manifest = ArtifactManifest {
         schema_dialect: DRAFT_2020_12,
-        contract_inventory: ArtifactIndex {
-            path: "operations.json",
+        dto_contract_inventory: ArtifactIndex {
+            path: "dto-contracts.json",
             sha256: contract_inventory_hash,
         },
-        surface_catalog: ArtifactIndex {
-            path: "surface-operations.json",
+        dto_operation_bindings: ArtifactIndex {
+            path: "dto-bindings.json",
             sha256: surface_catalog_hash,
+        },
+        rpc_catalog: ArtifactIndex {
+            path: "rpc-catalog.json",
+            sha256: rpc_catalog_hash,
         },
         roots,
     };
@@ -822,7 +832,7 @@ mod tests {
         assert!(error.to_string().contains("未知 contract"), "{error}");
 
         let mut wrong_surface = surface(vec![exact.id]);
-        wrong_surface.surface = ContractSurface::Sse;
+        wrong_surface.surface = ContractSurface::Cli;
         let error = audit_surface_entries(&[wrong_surface], &operations)
             .expect_err("跨 surface linkage 必须被拒绝");
         assert!(error.to_string().contains("漂移"), "{error}");
@@ -870,3 +880,5 @@ mod tests {
         assert!(error.to_string().contains("excluded surface"), "{error}");
     }
 }
+
+pub mod rpc_codegen;

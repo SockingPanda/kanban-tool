@@ -25,8 +25,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<GraphStatusArgs>,
     ) -> Result<Json<GraphStatusResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let status = call_client_internal(move || client.graph_status(&board)).await?;
+        let client = &self.client;
+        let status = call_client_internal(client.graph_status(&board)).await?;
         Ok(Json(DataEnvelope::new(GraphStatus {
             backend: status.backend,
             enabled: status.enabled,

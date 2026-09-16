@@ -70,10 +70,9 @@ impl KanbanMcp {
         let board = args.board.or_else(|| Some(self.default_board.to_string()));
         let kind = args.kind;
         let limit = args.limit;
-        let client = self.client.clone();
+        let client = &self.client;
         let entities =
-            call_client(move || client.list_entities(board.as_deref(), kind.as_deref(), limit))
-                .await?;
+            call_client(client.list_entities(board.as_deref(), kind.as_deref(), limit)).await?;
         Ok(Json(DataEnvelope::new(entities)))
     }
 
@@ -82,8 +81,8 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<EntityShowArgs>,
     ) -> Result<Json<EntityResponse>, McpError> {
-        let client = self.client.clone();
-        let entity = call_client(move || client.get_entity(&args.uri)).await?;
+        let client = &self.client;
+        let entity = call_client(client.get_entity(&args.uri)).await?;
         Ok(Json(DataEnvelope::new(entity)))
     }
 
@@ -95,9 +94,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<EntityUpsertArgs>,
     ) -> Result<Json<EntityResponse>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let request: kanban_client::EntityUpsertRequest = args.into();
-        let entity = call_client(move || client.upsert_entity(request)).await?;
+        let entity = call_client(client.upsert_entity(request)).await?;
         Ok(Json(DataEnvelope::new(entity)))
     }
 }

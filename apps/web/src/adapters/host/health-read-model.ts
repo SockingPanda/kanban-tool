@@ -2,21 +2,26 @@ import { parseApiHealthResponse } from "../../lib/api/generated/contracts/api-he
 
 import { ContractValidationError } from "../../lib/api/generated/runtime";
 
-import { createHttpTransport } from "./http-transport";
+import { createRpcTransport } from "./rpc-transport";
 
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
 import { type HealthReadDependencies, type HealthReport, HealthReadError, wrapError } from "../../application/data/health-read-model";
+import type { RpcTransport } from '../../application/data/rpc-transport';
+
+export async function readQueryHealth(transport: RpcTransport, signal?: AbortSignal): Promise<HealthReport> {
+  return readHealth({ transport, signal })
+}
 
 export async function readHealth(
   options: HealthReadDependencies & { readonly runtime?: WebRuntimeConfig; readonly signal?: AbortSignal } = {},
 ): Promise<HealthReport> {
-  const transport = options.transport ?? (options.runtime ? createHttpTransport(options.runtime, options) : null)
+  const transport = options.transport ?? (options.runtime ? createRpcTransport(options.runtime, options) : null)
   if (!transport) throw new HealthReadError("offline", "Web health read 缺少 runtime transport。")
 
   let payload: unknown
   try {
-    payload = (await transport.get("/health", options.signal)).payload
+    payload = (await transport.call({ method: "GetHealth", signal: options.signal })).payload
   } catch (error) {
     return wrapError(error)
   }

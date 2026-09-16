@@ -1,3 +1,5 @@
+import { stringifyJson } from '../../lib/lossless-json'
+import { compactInteger, isInteger, integerDate, type Integer } from '../../domain/integer'
 import type { Locale } from "../../platform/preferences/preferences"
 import type { BoardTaskViewModel } from "../../domain/tasks/board"
 import {
@@ -40,7 +42,7 @@ function stableIntentValue(value: unknown): unknown {
 }
 
 function sameIntentValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(stableIntentValue(left)) === JSON.stringify(stableIntentValue(right))
+  return stringifyJson(stableIntentValue(left)) === stringifyJson(stableIntentValue(right))
 }
 
 function userIntentValue(value: unknown): unknown {
@@ -57,7 +59,7 @@ function userIntentValue(value: unknown): unknown {
 }
 
 function sameUserIntentValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(userIntentValue(left)) === JSON.stringify(userIntentValue(right))
+  return stringifyJson(userIntentValue(left)) === stringifyJson(userIntentValue(right))
 }
 
 /**
@@ -149,16 +151,24 @@ export interface InspectorActionCopy {
   }
 }
 
-function parseDateTimeInput(value: string): number | null {
+function parseDateTimeInput(value: string, original: Integer | null | undefined): Integer | null | undefined {
+  if (value === dateTimeInputValue(original)) return original ?? null
+  if (/^-?(?:0|[1-9]\d*)$/.test(value)) {
+    const integer = compactInteger(BigInt(value))
+    if (isInteger(integer)) return integer
+    return undefined
+  }
   if (value.trim().length === 0) return null
   const parsed = Date.parse(value)
-  return Number.isFinite(parsed) ? parsed : null
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
-function dateTimeInputValue(value: number | null | undefined): string {
+export function isInspectorDateInput(value: string): boolean { return parseDateTimeInput(value, null) !== undefined }
+
+function dateTimeInputValue(value: Integer | null | undefined): string {
   if (value === null || value === undefined) return ""
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
+  const date = integerDate(value)
+  if (date === null || date.getFullYear() < 1 || date.getFullYear() > 9999) return String(value)
   const offset = date.getTimezoneOffset() * 60_000
   return new Date(date.getTime() - offset).toISOString().slice(0, 16)
 }
@@ -174,14 +184,17 @@ export function inspectorEditDraft(task: TaskInspectorViewModel["task"]): Inspec
   }
 }
 
-export function buildInspectorSaveTaskInput(task: TaskInspectorViewModel["task"], draft: InspectorEditDraft): InspectorSaveTaskInput {
+export function buildInspectorSaveTaskInput(task: TaskInspectorViewModel["task"], draft: InspectorEditDraft): InspectorSaveTaskInput | null {
+  const scheduled = parseDateTimeInput(draft.scheduledAt, task.scheduledAt)
+  const due = parseDateTimeInput(draft.dueAt, task.dueAt)
+  if (scheduled === undefined || due === undefined) return null
   return {
     title: draft.title.trim(),
     description: draft.description.trim() || null,
     assignee: draft.assignee.trim() || null,
     priority: draft.priority,
-    scheduled_at: parseDateTimeInput(draft.scheduledAt),
-    due_at: parseDateTimeInput(draft.dueAt),
+    scheduled_at: scheduled,
+    due_at: due,
     expected_lock_version: task.lockVersion ?? 0,
   }
 }

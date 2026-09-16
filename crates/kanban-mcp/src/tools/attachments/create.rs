@@ -32,22 +32,20 @@ impl KanbanMcp {
     ) -> Result<Json<CreateAttachmentResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
-        let attachment = call_client(move || {
-            let task_id = client.resolve_task_id(&board, &task_ref)?;
-            client.create_attachment(
-                &task_id,
-                &CreateAttachmentRequest {
-                    id: args.attachment_id,
-                    filename: args.filename,
-                    content: args.content,
-                    content_type: args.content_type,
-                    rel_path: None,
-                    sha256: None,
-                    actor: None,
-                },
-            )
-        })
+        let client = &self.client;
+        let task_id = call_client(client.resolve_task_id(&board, &task_ref)).await?;
+        let attachment = call_client(client.create_attachment(
+            &task_id,
+            &CreateAttachmentRequest {
+                id: args.attachment_id,
+                filename: args.filename,
+                content: args.content,
+                content_type: args.content_type,
+                rel_path: None,
+                sha256: None,
+                actor: None,
+            },
+        ))
         .await?;
         Ok(Json(CreateAttachmentResponse { data: attachment }))
     }

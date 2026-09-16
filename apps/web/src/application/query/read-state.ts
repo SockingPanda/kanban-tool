@@ -21,12 +21,13 @@ export function visibleAsyncReadState<T>(
   state: AsyncReadInternalState<T>,
   token: AsyncReadToken,
   enabled: boolean,
+  keepErrorWhileLoading = false,
 ): AsyncReadState<T> {
   const sameIdentity = state.identityKey === token.identityKey
   const currentRequest = sameIdentity && state.requestKey === token.requestKey
   return {
     data: sameIdentity ? state.data : null,
-    error: currentRequest ? state.error : null,
+    error: sameIdentity && (currentRequest || keepErrorWhileLoading) ? state.error : null,
     loading: sameIdentity ? (currentRequest ? state.loading : true) : enabled,
   }
 }

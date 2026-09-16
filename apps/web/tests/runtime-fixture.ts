@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs"
 
-import type { Page, Route } from "@playwright/test"
+import type { Page } from "@playwright/test"
+
+import { installRpcFixture, type RpcFixture } from "./rpc-fixture"
 
 import type { WebRuntimeConfig } from "../src/lib/runtime"
 
@@ -24,12 +26,13 @@ export interface BoardFixtureOptions {
 }
 
 export interface BoardFixture {
+  readonly rpc: RpcFixture
   readonly apiRequests: string[]
   setReadyTaskTitle(title: string): void
-  getSseConnectionCount(): Promise<number>
-  waitForSseConnection(afterCount: number): Promise<void>
-  cancelSseConnection(connectionCount: number): Promise<void>
-  closeSse(): Promise<void>
+  getQueryConnectionCount(): Promise<number>
+  waitForQueryConnection(afterCount: number): Promise<void>
+  cancelQueryConnection(connectionCount: number): Promise<void>
+  closeQuery(): Promise<void>
   emitHeartbeat(): Promise<void>
   emitTaskUpdated(): Promise<void>
 }
@@ -82,211 +85,38 @@ function task(status: TaskStatus, position: number, title: string) {
   }
 }
 
-function sseFrame(eventName: string, data: unknown, id: number | null = null): string {
-  const lines = [`event: ${eventName}`]
-  if (id !== null) lines.push(`id: ${id}`)
-  lines.push(`data: ${JSON.stringify(data)}`, "", "")
-  return lines.join("\n")
-}
-
-async function fulfillJSON(route: Route, payload: unknown): Promise<void> {
-  await route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify(payload),
-  })
-}
-
-/** Install a persistent fetch-backed SSE stream before page navigation. */
-export async function installPersistentSse(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
-    let streamConnectionCount = 0
-    const streamCancels = new Map<number, () => void>()
-    let activeClose: (() => void) | null = null
-    const pendingFrames: string[] = []
-    const encoder = new TextEncoder()
-    const pushFrame = (frame: string) => {
-      if (streamController === null) pendingFrames.push(frame)
-      else streamController.enqueue(encoder.encode(frame))
-    }
-    Object.defineProperty(window, "__kanbanPushSse", { configurable: true, value: pushFrame })
-    Object.defineProperty(window, "__kanbanCloseSse", { configurable: true, value: () => activeClose?.() })
-    Object.defineProperty(window, "__kanbanLateCancelSse", {
-      configurable: true,
-      value: (connectionCount: number) => {
-        const cancel = streamCancels.get(connectionCount)
-        if (cancel === undefined) throw new Error(`SSE fixture connection ${connectionCount} is not installed`)
-        cancel()
-      },
-    })
-    Object.defineProperty(window, "__kanbanSseConnectionCount", { configurable: true, get: () => streamConnectionCount })
-
-    const nativeFetch = window.fetch.bind(window)
-    window.fetch = async (input, init) => {
-      const inputURL = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-      const target = new URL(inputURL, window.location.href)
-      if (target.pathname !== "/api/v1/stream/events") return nativeFetch(input, init)
-
-      let ownController: ReadableStreamDefaultController<Uint8Array> | null = null
-      let ownClosed = false
-      const connectionCount = streamConnectionCount + 1
-      const clearOwnController = () => {
-        const controller = ownController
-        if (controller !== null && streamController === controller) streamController = null
-        if (activeClose === closeOwn) activeClose = null
-        ownController = null
-      }
-      const closeOwn = () => {
-        const controller = ownController
-        if (controller === null || ownClosed) return
-        ownClosed = true
-        if (streamController === controller) streamController = null
-        controller.error(new Error("fixture SSE disconnect"))
-      }
-      streamCancels.set(connectionCount, clearOwnController)
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          ownController = controller
-          streamController = controller
-          streamConnectionCount += 1
-          for (const frame of pendingFrames.splice(0)) controller.enqueue(encoder.encode(frame))
-        },
-        cancel() {
-          clearOwnController()
-        },
-      })
-      activeClose = closeOwn
-      const response = new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } })
-      Object.defineProperty(response, "url", { configurable: true, value: target.toString() })
-      return response
-    }
-  })
-}
-
-/**
- * Install coherent board API fixtures and a real fetch-backed SSE stream.
- * The production WebSyncController and FetchSseTransport stay untouched.
- */
+/** Preview 使用正式 QueryService 完整查询；业务 fixture 只负责产生领域 DTO。 */
 export async function installBoardFixture(page: Page, options: BoardFixtureOptions = {}): Promise<BoardFixture> {
   await installRuntimeFixture(page)
-  await installPersistentSse(page)
+  const rpc = await installRpcFixture(page)
   const apiRequests: string[] = []
   let readyTaskTitle = "Ready task"
-
-  await page.route("**/api/v1/**", async (route) => {
-    const url = new URL(route.request().url())
-    apiRequests.push(`${url.pathname}${url.search}`)
-
-    if (url.pathname === "/api/v1/boards") {
-      await fulfillJSON(route, options.emptyBoards ? { data: [] } : {
-        data: [{
-          id: BOARD_ID,
-          slug: BOARD_SLUG,
-          name: "Default Board",
-          description: null,
-          created_at: 1,
-          updated_at: 2,
-          archived_at: null,
-        }],
-      })
-      return
+  rpc.handle("*", call => {
+    apiRequests.push(call.method)
+    switch (call.method) {
+      case "ListBoards": return { data: options.emptyBoards ? [] : [{ id: BOARD_ID, slug: BOARD_SLUG, name: "Default Board", description: null, created_at: 1, updated_at: 2, archived_at: null }] }
+      case "ListBoardColumns": return { data: TASK_STATUSES.map((status, index) => ({ id: 'col_' + status, board_id: BOARD_ID, status, title: status[0]?.toUpperCase() + status.slice(1), position: index + 1, hidden: status === "archived", wip_limit: null, created_at: 1, updated_at: 2 })) }
+      case "ListTasks": {
+        const tasks = TASK_STATUSES.filter(status => status !== "archived").map((status, index) => task(status, index + 1, status === "ready" ? readyTaskTitle : status + " task"))
+        return { data: tasks, meta: { limit: Number(call.query.limit ?? 100), offset: Number(call.query.offset ?? 0), total: tasks.length } }
+      }
+      case "ListTasksByStatus": {
+        const status = call.query.status as TaskStatus
+        const tasks = [task(status, TASK_STATUSES.indexOf(status) + 1, status === "ready" ? readyTaskTitle : status + " task")]
+        const limit = Number(call.query.limit ?? 1000), offset = Number(call.query.offset ?? 0)
+        return { data: { statuses: [{ status, tasks, page: { limit, offset, total: tasks.length } }] }, meta: { limit, offset } }
+      }
+      case "ListEvents": case "RecentEvents": return { data: [], meta: { next_after: Number(call.query.after ?? 0) } }
     }
-
-    if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/columns`) {
-      await fulfillJSON(route, {
-        data: TASK_STATUSES.map((status, index) => ({
-          id: `col_${status}`,
-          board_id: BOARD_ID,
-          status,
-          title: status[0]?.toUpperCase() + status.slice(1),
-          position: index + 1,
-          hidden: status === "archived",
-          wip_limit: null,
-          created_at: 1,
-          updated_at: 2,
-        })),
-      })
-      return
-    }
-
-    if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/tasks/by-status`) {
-      const status = url.searchParams.get("status") as TaskStatus | null
-      const limit = Number(url.searchParams.get("limit") ?? 1000)
-      const offset = Number(url.searchParams.get("offset") ?? 0)
-      const validStatus = status !== null && TASK_STATUSES.includes(status)
-      const tasks = validStatus && offset === 0
-        ? [task(status, TASK_STATUSES.indexOf(status) + 1, status === "ready" ? readyTaskTitle : `${status} task`)]
-        : []
-      await fulfillJSON(route, {
-        data: { statuses: [{ status: validStatus ? status : "ready", tasks, page: { limit, offset, total: tasks.length } }] },
-        meta: { limit, offset },
-      })
-      return
-    }
-
-    if (url.pathname === `/api/v1/boards/${BOARD_SLUG}/tasks`) {
-      const tasks = TASK_STATUSES.filter(status=>status!=='archived').map((status,index)=>task(status,index+1,status==='ready'?readyTaskTitle:`${status} task`));
-      await fulfillJSON(route,{data:tasks,meta:{limit:Number(url.searchParams.get('limit')??100),offset:0,total:tasks.length}});
-      return;
-    }
-    if (url.pathname === "/api/v1/events") {
-      const after = Number(url.searchParams.get("after") ?? 0)
-      await fulfillJSON(route, { data: [], meta: { next_after: Number.isSafeInteger(after) ? after : 0 } })
-      return
-    }
-
-    await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "not_found", message: "fixture route not found" } }) })
   })
-
-  async function emit(frame: string): Promise<void> {
-    await page.evaluate((value) => {
-      const push = (window as unknown as { __kanbanPushSse?: (next: string) => void }).__kanbanPushSse
-      if (push === undefined) throw new Error("SSE fixture is not installed")
-      push(value)
-    }, frame)
-  }
-
   return {
-    apiRequests,
-    setReadyTaskTitle(title) {
-      readyTaskTitle = title
-    },
-    getSseConnectionCount() {
-      return page.evaluate(() => (window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0)
-    },
-    waitForSseConnection(afterCount) {
-      return page.waitForFunction((count) => ((window as unknown as { __kanbanSseConnectionCount?: number }).__kanbanSseConnectionCount ?? 0) > count, afterCount)
-    },
-    cancelSseConnection(connectionCount) {
-      return page.evaluate((count) => {
-        const cancel = (window as unknown as { __kanbanLateCancelSse?: (value: number) => void }).__kanbanLateCancelSse
-        if (cancel === undefined) throw new Error("SSE fixture is not installed")
-        cancel(count)
-      }, connectionCount)
-    },
-    closeSse() {
-      return page.evaluate(() => {
-        const close = (window as unknown as { __kanbanCloseSse?: () => void }).__kanbanCloseSse
-        if (close === undefined) throw new Error("SSE fixture is not installed")
-        close()
-      })
-    },
-    emitHeartbeat() {
-      return emit(sseFrame("kb-heartbeat", {}))
-    },
-    emitTaskUpdated() {
-      return emit(sseFrame("task.updated", {
-        id: 1,
-        event_id: "evt-playwright-1",
-        board_id: BOARD_ID,
-        task_id: "t_ready",
-        run_id: null,
-        kind: "task.updated",
-        actor: "playwright",
-        payload: {},
-        created_at: 3,
-      }, 1))
-    },
+    rpc, apiRequests,
+    setReadyTaskTitle(title) { readyTaskTitle = title },
+    getQueryConnectionCount: () => rpc.connectionCount(),
+    waitForQueryConnection: count => rpc.waitForConnection(count),
+    cancelQueryConnection: count => rpc.close(count),
+    closeQuery: () => rpc.close(),
+    emitHeartbeat: () => rpc.heartbeat(),
+    emitTaskUpdated: () => rpc.publish(),
   }
 }

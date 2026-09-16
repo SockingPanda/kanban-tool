@@ -37,23 +37,25 @@ pub(crate) enum CommentAuthorTypeArg {
     Agent,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let metadata = parse_metadata(args.metadata_json.as_deref())?;
-    let comment = client.create_comment_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &CreateCommentRequest {
-            idempotency_key: args.idempotency_key.clone(),
-            author: args.author.clone(),
-            body: args.body.clone(),
-            kind: args.kind.map(api_comment_kind),
-            author_type: args.author_type.map(api_comment_author_type),
-            agent_type: args.agent_type.clone(),
-            metadata: metadata
-                .map(|metadata| serde_json::Value::Object(metadata.into_iter().collect())),
-        },
-    )?;
+    let comment = client
+        .create_comment_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &CreateCommentRequest {
+                idempotency_key: args.idempotency_key.clone(),
+                author: args.author.clone(),
+                body: args.body.clone(),
+                kind: args.kind.map(api_comment_kind),
+                author_type: args.author_type.map(api_comment_author_type),
+                agent_type: args.agent_type.clone(),
+                metadata: metadata
+                    .map(|metadata| serde_json::Value::Object(metadata.into_iter().collect())),
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&kanban_protocol::CliCommentAddOutput::new(comment));
     } else {

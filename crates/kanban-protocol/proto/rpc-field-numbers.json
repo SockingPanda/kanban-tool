@@ -1,0 +1,2632 @@
+{
+  "AcceptLabelProposalRequest": {
+    "actor": 3,
+    "allow_retarget": 6,
+    "ontology_actor": 5,
+    "proposal_id": 1,
+    "reason": 2,
+    "retarget_reason": 7,
+    "source_signal_ids": 4
+  },
+  "AcceptLabelProposalResponse": {
+    "data": 1
+  },
+  "AddDependencyRequest": {
+    "actor": 3,
+    "parent_task_id": 2,
+    "task_id": 1
+  },
+  "AddDependencyResponse": {
+    "data": 1
+  },
+  "AddTaskLabelRequest": {
+    "actor": 5,
+    "create_missing": 4,
+    "name": 2,
+    "names": 3,
+    "task_id": 1
+  },
+  "AddTaskLabelResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "ApplyLabelOntologyAtomRequest": {
+    "actor": 2,
+    "allow_retarget": 8,
+    "board": 1,
+    "kind": 5,
+    "label_ref": 4,
+    "reason": 7,
+    "retarget_reason": 9,
+    "signal_ids": 3,
+    "text": 6
+  },
+  "ApplyLabelOntologyAtomResponse": {
+    "data": 1
+  },
+  "ArchiveBoardRequest": {
+    "actor": 2,
+    "board": 1
+  },
+  "ArchiveBoardResponse": {
+    "data": 1
+  },
+  "ArchiveTaskRequest": {
+    "actor": 2,
+    "force": 3,
+    "task_id": 1
+  },
+  "ArchiveTaskResponse": {
+    "data": 1
+  },
+  "BlockTaskRequest": {
+    "actor": 2,
+    "claim_token": 4,
+    "force": 5,
+    "reason": 3,
+    "task_id": 1
+  },
+  "BlockTaskResponse": {
+    "data": 1
+  },
+  "BoardTaskMapRequest": {
+    "active_only": 2,
+    "board": 1,
+    "context_depth": 3,
+    "hide_isolated": 7,
+    "include_archived_context": 6,
+    "include_done_context": 5,
+    "limit_nodes": 4
+  },
+  "BoardTaskMapResponse": {
+    "data": 1
+  },
+  "BootstrapTaskLabelRequest": {
+    "actor": 11,
+    "applies_when": 4,
+    "description": 3,
+    "excludes_when": 5,
+    "min_verify_score": 9,
+    "name": 2,
+    "negative_examples": 7,
+    "positive_examples": 6,
+    "task_id": 1,
+    "vector_config": 10,
+    "verify": 8
+  },
+  "BootstrapTaskLabelResponse": {
+    "data": 1
+  },
+  "BuildContextRequest": {
+    "board": 2,
+    "budget": 11,
+    "depth": 10,
+    "graph_limit": 4,
+    "lexical_limit": 3,
+    "max_items": 6,
+    "query": 9,
+    "reference": 8,
+    "task": 7,
+    "task_id": 1,
+    "vector_limit": 5
+  },
+  "BuildContextResponse": {
+    "data": 1
+  },
+  "CheckpointResponse": {
+    "data": 1
+  },
+  "ClaimTaskRequest": {
+    "actor": 2,
+    "metadata": 5,
+    "task_id": 1,
+    "ttl_ms": 3,
+    "worker_profile": 4
+  },
+  "ClaimTaskResponse": {
+    "data": 1
+  },
+  "CompleteStepRequest": {
+    "actor": 4,
+    "note": 3,
+    "step_id": 2,
+    "task_id": 1
+  },
+  "CompleteStepResponse": {
+    "data": 1
+  },
+  "CompleteTaskRequest": {
+    "actor": 2,
+    "claim_token": 3,
+    "force": 4,
+    "result": 6,
+    "summary": 5,
+    "task_id": 1
+  },
+  "CompleteTaskResponse": {
+    "data": 1
+  },
+  "ConfirmSignalsRequest": {
+    "actor": 5,
+    "board": 1,
+    "expected_updated_at": 6,
+    "reason": 3,
+    "replacement_signal_id": 4,
+    "signal_ids": 2
+  },
+  "ConfirmSignalsResponse": {
+    "data": 1
+  },
+  "CreateAttachmentRequest": {
+    "actor": 8,
+    "content": 4,
+    "content_type": 5,
+    "filename": 3,
+    "id": 2,
+    "rel_path": 6,
+    "sha256": 7,
+    "task_id": 1
+  },
+  "CreateAttachmentResponse": {
+    "data": 1
+  },
+  "CreateBoardLabelRequest": {
+    "board": 1,
+    "color": 3,
+    "name": 2
+  },
+  "CreateBoardLabelResponse": {
+    "data": 1
+  },
+  "CreateBoardRequest": {
+    "actor": 4,
+    "description": 3,
+    "name": 2,
+    "slug": 1
+  },
+  "CreateBoardResponse": {
+    "data": 1
+  },
+  "CreateCommentRequest": {
+    "agent_type": 7,
+    "author": 3,
+    "author_type": 6,
+    "body": 4,
+    "idempotency_key": 2,
+    "kind": 5,
+    "metadata": 8,
+    "task_id": 1
+  },
+  "CreateCommentResponse": {
+    "data": 1
+  },
+  "CreateLabelOntologyActionRequest": {
+    "action_type": 4,
+    "actor": 2,
+    "board": 1,
+    "canonical_after_hash": 15,
+    "canonical_before_hash": 14,
+    "change": 16,
+    "idempotency_key": 3,
+    "parent_action_id": 8,
+    "reason": 6,
+    "result_atom_content_hash": 12,
+    "result_atom_id": 11,
+    "result_label_ref": 10,
+    "result_proposal_id": 13,
+    "signal_ids": 5,
+    "superseded_by_signal_id": 7,
+    "target_label_ref": 9,
+    "validation": 18,
+    "validation_status": 17
+  },
+  "CreateLabelOntologyActionResponse": {
+    "data": 1
+  },
+  "CreateStepRequest": {
+    "actor": 8,
+    "body": 4,
+    "idempotency_key": 2,
+    "linked_task_ref": 5,
+    "position": 6,
+    "required": 7,
+    "task_id": 1,
+    "title": 3
+  },
+  "CreateStepResponse": {
+    "data": 1
+  },
+  "CreateTaskRequest": {
+    "actor": 15,
+    "assignee": 7,
+    "board": 1,
+    "depends_on": 14,
+    "description": 5,
+    "due_at": 10,
+    "idempotency_key": 3,
+    "labels": 13,
+    "max_retries": 11,
+    "metadata": 12,
+    "priority": 8,
+    "scheduled_at": 9,
+    "status": 6,
+    "task_id": 2,
+    "title": 4
+  },
+  "CreateTaskResponse": {
+    "data": 1
+  },
+  "DeleteAttachmentRequest": {
+    "attachment_id": 2,
+    "task_id": 1
+  },
+  "DeleteAttachmentResponse": {
+    "data": 1
+  },
+  "DeleteBoardLabelRequest": {
+    "board": 1,
+    "force": 3,
+    "label_id": 2
+  },
+  "DeleteBoardLabelResponse": {
+    "data": 1
+  },
+  "DeleteLabelSemanticsRequest": {
+    "board": 1,
+    "expected_semantics_hash": 3,
+    "label_id": 2,
+    "reason": 4
+  },
+  "DeleteLabelSemanticsResponse": {
+    "data": 1
+  },
+  "DoctorResponse": {
+    "data": 1
+  },
+  "DownloadAttachmentRequest": {
+    "attachment_id": 2,
+    "task_id": 1
+  },
+  "DownloadAttachmentResponse": {
+    "attachment": 1,
+    "content": 2
+  },
+  "DtoApiAttachment": {
+    "board_id": 2,
+    "content_type": 6,
+    "created_at": 10,
+    "created_by": 9,
+    "filename": 4,
+    "id": 1,
+    "rel_path": 5,
+    "sha256": 8,
+    "size_bytes": 7,
+    "task_id": 3
+  },
+  "DtoApiBoard": {
+    "archived_at": 7,
+    "created_at": 5,
+    "description": 4,
+    "id": 1,
+    "name": 3,
+    "slug": 2,
+    "updated_at": 6
+  },
+  "DtoApiBoardColumn": {
+    "board_id": 2,
+    "created_at": 8,
+    "hidden": 6,
+    "id": 1,
+    "position": 5,
+    "status": 3,
+    "title": 4,
+    "updated_at": 9,
+    "wip_limit": 7
+  },
+  "DtoApiClaim": {
+    "claim_expires_at": 4,
+    "claim_token": 3,
+    "run": 2,
+    "task": 1
+  },
+  "DtoApiComment": {
+    "agent_type": 6,
+    "author": 4,
+    "author_type": 5,
+    "board_id": 2,
+    "body": 7,
+    "created_at": 10,
+    "id": 1,
+    "kind": 8,
+    "metadata": 9,
+    "task_id": 3
+  },
+  "DtoApiCreateTaskStatus": {
+    "DTO_API_CREATE_TASK_STATUS_READY": 4,
+    "DTO_API_CREATE_TASK_STATUS_SCHEDULED": 3,
+    "DTO_API_CREATE_TASK_STATUS_TODO": 2,
+    "DTO_API_CREATE_TASK_STATUS_TRIAGE": 1,
+    "DTO_API_CREATE_TASK_STATUS_UNSPECIFIED": 0
+  },
+  "DtoApiDependencies": {
+    "children": 3,
+    "edges": 4,
+    "parents": 2,
+    "task": 1
+  },
+  "DtoApiDependencyEdge": {
+    "child": 2,
+    "parent": 1
+  },
+  "DtoApiDependencyTask": {
+    "board_id": 2,
+    "board_slug": 3,
+    "id": 1,
+    "status": 6,
+    "task_ref": 4,
+    "title": 5
+  },
+  "DtoApiErrorCode": {
+    "DTO_API_ERROR_CODE_CLAIM_CONFLICT": 12,
+    "DTO_API_ERROR_CODE_CLAIM_TOKEN_MISMATCH": 10,
+    "DTO_API_ERROR_CODE_CONFLICT": 2,
+    "DTO_API_ERROR_CODE_DEPENDENCY_BLOCKED": 11,
+    "DTO_API_ERROR_CODE_DEPENDENCY_CYCLE": 4,
+    "DTO_API_ERROR_CODE_EXECUTION_PLAN_REQUIRED": 8,
+    "DTO_API_ERROR_CODE_FEATURE_NOT_AVAILABLE": 6,
+    "DTO_API_ERROR_CODE_IDEMPOTENCY_CONFLICT": 3,
+    "DTO_API_ERROR_CODE_INTERNAL": 14,
+    "DTO_API_ERROR_CODE_INVALID_INPUT": 5,
+    "DTO_API_ERROR_CODE_INVALID_TRANSITION": 13,
+    "DTO_API_ERROR_CODE_NOT_FOUND": 1,
+    "DTO_API_ERROR_CODE_SERVER_UNAVAILABLE": 7,
+    "DTO_API_ERROR_CODE_STEPS_INCOMPLETE": 9,
+    "DTO_API_ERROR_CODE_UNSPECIFIED": 0
+  },
+  "DtoApiExecutionPlan": {
+    "board_id": 1,
+    "reason": 4,
+    "state": 3,
+    "task_id": 2,
+    "updated_at": 6,
+    "updated_by": 5
+  },
+  "DtoApiExecutionPlanState": {
+    "DTO_API_EXECUTION_PLAN_STATE_NOT_REQUIRED": 3,
+    "DTO_API_EXECUTION_PLAN_STATE_PLANNED": 2,
+    "DTO_API_EXECUTION_PLAN_STATE_UNPLANNED": 1,
+    "DTO_API_EXECUTION_PLAN_STATE_UNSPECIFIED": 0
+  },
+  "DtoApiLabel": {
+    "board_id": 2,
+    "color": 4,
+    "created_at": 5,
+    "id": 1,
+    "name": 3,
+    "updated_at": 6
+  },
+  "DtoApiRelation": {
+    "created_at": 7,
+    "graph_uri": 4,
+    "metadata": 6,
+    "object_uri": 3,
+    "predicate": 2,
+    "provenance": 5,
+    "subject_uri": 1,
+    "updated_at": 8
+  },
+  "DtoApiRelationProvenance": {
+    "authoritative_store": 4,
+    "source_event_id": 3,
+    "source_id": 2,
+    "source_table": 1
+  },
+  "DtoApiRun": {
+    "claim_owner": 6,
+    "error": 11,
+    "exit_code": 9,
+    "finished_at": 8,
+    "has_log": 12,
+    "id": 1,
+    "metadata": 13,
+    "started_at": 7,
+    "status": 3,
+    "summary": 10,
+    "task_id": 2,
+    "worker_pid": 5,
+    "worker_profile": 4
+  },
+  "DtoApiRunLog": {
+    "content": 2,
+    "run_id": 1,
+    "truncated": 3
+  },
+  "DtoApiRunStatus": {
+    "DTO_API_RUN_STATUS_CANCELED": 4,
+    "DTO_API_RUN_STATUS_EXPIRED": 5,
+    "DTO_API_RUN_STATUS_FAILED": 3,
+    "DTO_API_RUN_STATUS_RUNNING": 1,
+    "DTO_API_RUN_STATUS_SUCCEEDED": 2,
+    "DTO_API_RUN_STATUS_UNSPECIFIED": 0
+  },
+  "DtoApiStepStatus": {
+    "DTO_API_STEP_STATUS_DONE": 2,
+    "DTO_API_STEP_STATUS_SKIPPED": 3,
+    "DTO_API_STEP_STATUS_TODO": 1,
+    "DTO_API_STEP_STATUS_UNSPECIFIED": 0
+  },
+  "DtoApiTask": {
+    "archived_at": 20,
+    "assignee": 10,
+    "board_id": 2,
+    "board_slug": 3,
+    "claim_expires_at": 22,
+    "claim_owner": 21,
+    "completed_at": 19,
+    "completed_required_step_count": 35,
+    "created_at": 16,
+    "created_by": 15,
+    "current_run_id": 24,
+    "dependency_blocked": 31,
+    "description": 7,
+    "due_at": 14,
+    "execution_plan_state": 33,
+    "id": 1,
+    "labels": 37,
+    "last_heartbeat_at": 23,
+    "lock_version": 30,
+    "max_retries": 26,
+    "metadata": 29,
+    "optional_step_count": 36,
+    "position": 12,
+    "priority": 11,
+    "required_step_count": 34,
+    "result": 28,
+    "result_summary": 27,
+    "retry_count": 25,
+    "scheduled_at": 13,
+    "seq": 5,
+    "started_at": 18,
+    "status": 8,
+    "status_reason": 9,
+    "task_ref": 4,
+    "title": 6,
+    "unfinished_parent_count": 32,
+    "updated_at": 17
+  },
+  "DtoApiTaskGraphEdgeKind": {
+    "DTO_API_TASK_GRAPH_EDGE_KIND_DEPENDENCY": 1,
+    "DTO_API_TASK_GRAPH_EDGE_KIND_STEP": 2,
+    "DTO_API_TASK_GRAPH_EDGE_KIND_UNSPECIFIED": 0
+  },
+  "DtoApiTaskGraphNodeRole": {
+    "DTO_API_TASK_GRAPH_NODE_ROLE_ACTIVE": 6,
+    "DTO_API_TASK_GRAPH_NODE_ROLE_CENTER": 1,
+    "DTO_API_TASK_GRAPH_NODE_ROLE_CONTEXT": 7,
+    "DTO_API_TASK_GRAPH_NODE_ROLE_DEPENDENCY_CHILD": 3,
+    "DTO_API_TASK_GRAPH_NODE_ROLE_DEPENDENCY_PARENT": 2,
+    "DTO_API_TASK_GRAPH_NODE_ROLE_STEP_CHILD": 5,
+    "DTO_API_TASK_GRAPH_NODE_ROLE_STEP_PARENT": 4,
+    "DTO_API_TASK_GRAPH_NODE_ROLE_UNSPECIFIED": 0
+  },
+  "DtoApiTaskPriority": {
+    "value": 1
+  },
+  "DtoApiTaskStatus": {
+    "DTO_API_TASK_STATUS_ARCHIVED": 9,
+    "DTO_API_TASK_STATUS_BLOCKED": 6,
+    "DTO_API_TASK_STATUS_DONE": 8,
+    "DTO_API_TASK_STATUS_READY": 4,
+    "DTO_API_TASK_STATUS_REVIEW": 7,
+    "DTO_API_TASK_STATUS_RUNNING": 5,
+    "DTO_API_TASK_STATUS_SCHEDULED": 3,
+    "DTO_API_TASK_STATUS_TODO": 2,
+    "DTO_API_TASK_STATUS_TRIAGE": 1,
+    "DTO_API_TASK_STATUS_UNSPECIFIED": 0
+  },
+  "DtoApiTaskStep": {
+    "body": 4,
+    "created_at": 13,
+    "created_by": 12,
+    "id": 1,
+    "linked_task": 5,
+    "parent_task_id": 2,
+    "position": 6,
+    "required": 7,
+    "resolution_note": 9,
+    "resolved_at": 11,
+    "resolved_by": 10,
+    "status": 8,
+    "title": 3,
+    "updated_at": 15,
+    "updated_by": 14
+  },
+  "DtoApiTaskSteps": {
+    "execution_plan": 3,
+    "steps": 2,
+    "task_id": 1
+  },
+  "DtoBackupReport": {
+    "bytes": 3,
+    "checksum_sha256": 2,
+    "out_path": 1,
+    "source_fingerprint": 4
+  },
+  "DtoBlockedReasonCount": {
+    "count": 2,
+    "reason": 1
+  },
+  "DtoBoardCreatedPayload": {
+    "slug": 1
+  },
+  "DtoBoardTaskMap": {
+    "edges": 2,
+    "meta": 3,
+    "nodes": 1
+  },
+  "DtoBootstrapTaskLabelData": {
+    "semantics": 2,
+    "task": 1,
+    "verification": 3
+  },
+  "DtoBootstrapTaskLabelVerification": {
+    "degraded": 5,
+    "diagnostics": 6,
+    "label_name": 1,
+    "min_score": 4,
+    "score": 2,
+    "source": 3
+  },
+  "DtoCheckpointReport": {
+    "busy": 1,
+    "checkpointed_frames": 3,
+    "log_frames": 2
+  },
+  "DtoCliEntity": {
+    "archived_at": 12,
+    "board_id": 5,
+    "content_hash": 9,
+    "created_at": 10,
+    "kind": 2,
+    "source_id": 4,
+    "source_table": 3,
+    "summary": 8,
+    "task_id": 6,
+    "title": 7,
+    "updated_at": 11,
+    "uri": 1
+  },
+  "DtoCliGraphQueryBinding": {
+    "name": 1,
+    "value": 2
+  },
+  "DtoCliGraphQueryRow": {
+    "bindings": 1
+  },
+  "DtoCliLabelOntologyPrecisionRecall": {
+    "available": 1,
+    "reason": 2
+  },
+  "DtoCliLabelOntologyQuality": {
+    "board_id": 1,
+    "denominator": 2,
+    "disagreement": 3,
+    "precision_recall": 5,
+    "rates": 4,
+    "warnings": 6
+  },
+  "DtoCliLabelOntologyQualityDenominator": {
+    "agreement_observation_count": 5,
+    "agreement_task_count": 6,
+    "degraded_observation_count": 7,
+    "description": 2,
+    "distinct_task_count": 4,
+    "first_observed_at": 8,
+    "latest_observed_at": 9,
+    "observation_count": 3,
+    "sample_task_refs": 10,
+    "source": 1
+  },
+  "DtoCliLabelOntologyQualityDisagreement": {
+    "by_kind": 3,
+    "by_status": 4,
+    "distinct_task_count": 2,
+    "signal_count": 1
+  },
+  "DtoCliLabelOntologyQualityRates": {
+    "disagreement_task_rate": 1,
+    "disagreement_task_rate_basis": 2
+  },
+  "DtoCommentsCommentAuthorType": {
+    "DTO_COMMENTS_COMMENT_AUTHOR_TYPE_AGENT": 2,
+    "DTO_COMMENTS_COMMENT_AUTHOR_TYPE_UNSPECIFIED": 0,
+    "DTO_COMMENTS_COMMENT_AUTHOR_TYPE_USER": 1
+  },
+  "DtoCommentsCommentKind": {
+    "DTO_COMMENTS_COMMENT_KIND_DECISION": 2,
+    "DTO_COMMENTS_COMMENT_KIND_NOTE": 1,
+    "DTO_COMMENTS_COMMENT_KIND_SIGNAL": 3,
+    "DTO_COMMENTS_COMMENT_KIND_UNSPECIFIED": 0
+  },
+  "DtoContextDiagnostic": {
+    "code": 2,
+    "message": 3,
+    "source": 1
+  },
+  "DtoContextEvidence": {
+    "entity_uri": 2,
+    "kind": 1,
+    "predicate": 5,
+    "relation_id": 4,
+    "summary": 6,
+    "task_id": 3
+  },
+  "DtoContextItem": {
+    "entity_uri": 1,
+    "evidence": 9,
+    "provenance": 3,
+    "rank": 7,
+    "reason": 8,
+    "score": 4,
+    "snippet": 6,
+    "source": 2,
+    "title": 5
+  },
+  "DtoContextPack": {
+    "degraded": 4,
+    "diagnostics": 5,
+    "items": 3,
+    "policy": 2,
+    "providers": 6,
+    "subject": 1,
+    "truncated": 7,
+    "truncation_reason": 8
+  },
+  "DtoContextPolicy": {
+    "budget": 6,
+    "depth": 1,
+    "graph_limit": 3,
+    "lexical_limit": 2,
+    "max_items": 5,
+    "vector_limit": 4
+  },
+  "DtoContextProviderStatus": {
+    "available": 3,
+    "capability": 2,
+    "degraded": 4,
+    "provider": 1,
+    "reason": 5
+  },
+  "DtoCreatedLabelsMetaOfDtoApiLabel": {
+    "created_labels": 1
+  },
+  "DtoDeleteBoardLabelResult": {
+    "forced": 2,
+    "label": 1,
+    "removed_atoms": 5,
+    "removed_semantics": 4,
+    "removed_task_bindings": 3
+  },
+  "DtoDeleteResult": {
+    "deleted": 1
+  },
+  "DtoDependencyPayload": {
+    "parent_task_id": 1
+  },
+  "DtoDoctorDerivedStore": {
+    "dirty": 4,
+    "failed_outbox": 8,
+    "last_error": 5,
+    "last_event_id": 3,
+    "pending_outbox": 6,
+    "running_outbox": 7,
+    "schema_version": 2,
+    "store_name": 1
+  },
+  "DtoDoctorIssue": {
+    "code": 2,
+    "message": 3,
+    "record_ids": 4,
+    "severity": 1
+  },
+  "DtoDoctorReport": {
+    "active_parents_with_incomplete_required_steps": 16,
+    "archived_dependency_edges": 9,
+    "consistency_errors": 23,
+    "consistency_issues": 25,
+    "consistency_warnings": 24,
+    "dependency_cycles": 8,
+    "derived_dirty_stores": 20,
+    "derived_error_stores": 21,
+    "derived_stores": 22,
+    "executable_dependency_violations": 12,
+    "executable_schedule_violations": 14,
+    "executable_spec_violations": 13,
+    "expired_running_tasks": 5,
+    "integrity_check": 2,
+    "migration_version": 3,
+    "missing_run_logs": 10,
+    "ok": 1,
+    "ontology_ledger_errors": 26,
+    "ontology_ledger_issues": 28,
+    "ontology_ledger_warnings": 27,
+    "orphan_running_runs": 7,
+    "outbox_failed": 19,
+    "outbox_pending": 17,
+    "outbox_running": 18,
+    "running_tasks_without_active_run": 6,
+    "suspicious_run_log_paths": 11,
+    "unplanned_active_tasks": 15,
+    "user_version": 4
+  },
+  "DtoEventPayload": {
+    "board_created": 2,
+    "dependency": 3,
+    "empty": 1,
+    "execution_plan": 17,
+    "heartbeat": 18,
+    "label_created": 4,
+    "label_deleted": 5,
+    "label_ontology_action_created": 7,
+    "label_ontology_observation_recorded": 6,
+    "label_ontology_signal_reviewed": 8,
+    "label_proposal": 20,
+    "retry_policy": 24,
+    "signal_recorded": 9,
+    "signal_reviewed": 10,
+    "task_claimed": 12,
+    "task_comment_created": 13,
+    "task_export_sanitized": 26,
+    "task_label": 19,
+    "task_reason": 11,
+    "task_reclaimed": 21,
+    "task_reopened": 23,
+    "task_result": 14,
+    "task_retry": 22,
+    "task_status": 15,
+    "task_step": 25,
+    "task_to_status": 16,
+    "unknown": 27
+  },
+  "DtoEventPayloadCommentAuthorType": {
+    "DTO_EVENT_PAYLOAD_COMMENT_AUTHOR_TYPE_AGENT": 2,
+    "DTO_EVENT_PAYLOAD_COMMENT_AUTHOR_TYPE_UNSPECIFIED": 0,
+    "DTO_EVENT_PAYLOAD_COMMENT_AUTHOR_TYPE_USER": 1
+  },
+  "DtoEventPayloadCommentKind": {
+    "DTO_EVENT_PAYLOAD_COMMENT_KIND_DECISION": 2,
+    "DTO_EVENT_PAYLOAD_COMMENT_KIND_NOTE": 1,
+    "DTO_EVENT_PAYLOAD_COMMENT_KIND_SIGNAL": 3,
+    "DTO_EVENT_PAYLOAD_COMMENT_KIND_UNSPECIFIED": 0
+  },
+  "DtoExecutionPlanPayload": {
+    "state": 1
+  },
+  "DtoExecutionPlanState": {
+    "DTO_EXECUTION_PLAN_STATE_NOT_REQUIRED": 2,
+    "DTO_EXECUTION_PLAN_STATE_PLANNED": 1,
+    "DTO_EXECUTION_PLAN_STATE_UNPLANNED": 3,
+    "DTO_EXECUTION_PLAN_STATE_UNSPECIFIED": 0
+  },
+  "DtoExportReport": {
+    "bytes": 3,
+    "checksum_sha256": 2,
+    "out_path": 1,
+    "record_count": 4,
+    "source_fingerprint": 5
+  },
+  "DtoGraphMaintenance": {
+    "board_id": 2,
+    "consumed_jobs": 9,
+    "fingerprint": 4,
+    "generation": 3,
+    "message": 11,
+    "mode": 1,
+    "pending_jobs": 8,
+    "updated_at": 10,
+    "validated_entities": 6,
+    "validated_relations": 7,
+    "validated_tasks": 5
+  },
+  "DtoGraphStatus": {
+    "backend": 1,
+    "enabled": 2,
+    "message": 3
+  },
+  "DtoHealthReport": {
+    "db": 2,
+    "db_fingerprint": 5,
+    "db_path": 4,
+    "ok": 1,
+    "version": 3
+  },
+  "DtoHeartbeatPayload": {
+    "note": 1
+  },
+  "DtoImportReport": {
+    "imported_records": 3,
+    "in_path": 1,
+    "journal_id": 6,
+    "phase": 7,
+    "publish_preconditions": 12,
+    "rebuild_jobs_enqueued": 5,
+    "restart_required": 8,
+    "skipped_records": 4,
+    "source_fingerprint": 2,
+    "staged_database_path": 9,
+    "staged_fingerprint": 11,
+    "target_fingerprint_before": 10
+  },
+  "DtoJsonArray": {
+    "value": 1
+  },
+  "DtoLabelAtomExplainActionWire": {
+    "action": 1,
+    "matched_by": 2
+  },
+  "DtoLabelAtomExplainSignalWire": {
+    "observation": 2,
+    "signal": 1,
+    "source_task": 3,
+    "suggest_degraded": 6,
+    "suggest_input_stale": 5,
+    "task_ref_snapshot": 4,
+    "warnings": 7
+  },
+  "DtoLabelAtomExplainValidationWire": {
+    "action": 1,
+    "cases": 6,
+    "manual": 4,
+    "parent_action_id": 2,
+    "summary": 5,
+    "validation_status": 3,
+    "warnings": 7
+  },
+  "DtoLabelAtomExplainWire": {
+    "atom": 2,
+    "current_semantics": 3,
+    "legacy_reason": 8,
+    "legacy_untracked": 7,
+    "provenance_actions": 4,
+    "query": 1,
+    "supporting_signals": 5,
+    "validation_history": 6
+  },
+  "DtoLabelAtomIndexHit": {
+    "atom_id": 1,
+    "board_id": 4,
+    "content_hash": 9,
+    "distance": 11,
+    "embedding_model": 10,
+    "kind": 6,
+    "label_id": 2,
+    "label_name": 3,
+    "ordinal": 8,
+    "polarity": 5,
+    "text": 7
+  },
+  "DtoLabelAtomIndexQueryData": {
+    "data": 1,
+    "degraded": 2,
+    "diagnostics": 3
+  },
+  "DtoLabelAtomWire": {
+    "board_id": 3,
+    "content_hash": 9,
+    "created_at": 10,
+    "id": 1,
+    "kind": 6,
+    "label_id": 2,
+    "label_name": 4,
+    "ordinal": 8,
+    "polarity": 5,
+    "text": 7,
+    "updated_at": 11
+  },
+  "DtoLabelCreatedPayload": {
+    "color": 3,
+    "label": 2,
+    "label_id": 1
+  },
+  "DtoLabelDeletedPayload": {
+    "forced": 3,
+    "label": 2,
+    "label_id": 1,
+    "removed_atoms": 6,
+    "removed_semantics": 5,
+    "removed_task_bindings": 4
+  },
+  "DtoLabelOntologyActionCreatedPayload": {
+    "action_id": 1,
+    "action_type": 2,
+    "signal_ids": 3
+  },
+  "DtoLabelOntologyActionTypeWire": {
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_ADD_NEGATIVE_ATOM": 6,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_ADD_POSITIVE_ATOM": 5,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_ADOPT_EXISTING_ATOM": 7,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_BOOTSTRAP_LABEL": 10,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_CONFIRM": 1,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_CREATE_LABEL_PROPOSAL": 9,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_MERGE_LABELS": 13,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_REJECT": 2,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_RENAME_LABEL": 11,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_RESOLVE_NO_CHANGE": 4,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_REVERT_ONTOLOGY_MUTATION": 14,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_SPLIT_LABEL": 12,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_SUPERSEDE": 3,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_UNSPECIFIED": 0,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_UPDATE_SEMANTICS": 8,
+    "DTO_LABEL_ONTOLOGY_ACTION_TYPE_WIRE_VALIDATE": 15
+  },
+  "DtoLabelOntologyActionWire": {
+    "action_type": 4,
+    "agent_type": 21,
+    "board_id": 2,
+    "canonical_after_hash": 12,
+    "canonical_before_hash": 11,
+    "change": 13,
+    "created_at": 22,
+    "created_by": 19,
+    "created_by_type": 20,
+    "id": 1,
+    "parent_action_id": 3,
+    "reason": 5,
+    "result_atom_content_hash": 9,
+    "result_atom_id": 8,
+    "result_label_id": 7,
+    "result_proposal_id": 10,
+    "signal_ids": 23,
+    "target_label_id": 6,
+    "validation": 18,
+    "validation_effective_outcome": 16,
+    "validation_latest_attempt_id": 17,
+    "validation_requirement": 14,
+    "validation_status": 15
+  },
+  "DtoLabelOntologyActorWire": {
+    "actor_type": 2,
+    "agent_type": 3,
+    "name": 1
+  },
+  "DtoLabelOntologyCandidateAtomRequest": {
+    "kind": 2,
+    "polarity": 1,
+    "text": 3
+  },
+  "DtoLabelOntologyObservationRecordedPayload": {
+    "observation_id": 1,
+    "signal_ids": 2
+  },
+  "DtoLabelOntologyObservationWire": {
+    "agent_candidates": 7,
+    "agent_type": 19,
+    "board_id": 2,
+    "capture_fingerprint": 16,
+    "created_at": 20,
+    "created_by": 17,
+    "created_by_type": 18,
+    "diagnostics": 15,
+    "final_decision": 9,
+    "id": 1,
+    "signals": 21,
+    "suggest_coverage": 10,
+    "suggest_coverage_cosine": 11,
+    "suggest_degraded": 14,
+    "suggest_input_hash": 6,
+    "suggest_needs_new_label": 13,
+    "suggest_residual_norm": 12,
+    "suggestion_snapshot": 8,
+    "task_id": 3,
+    "task_ref_snapshot": 4,
+    "task_snapshot": 5
+  },
+  "DtoLabelOntologyProposedActionWire": {
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_ADD_NEGATIVE_ATOM": 3,
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_ADD_POSITIVE_ATOM": 2,
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_BOOTSTRAP_LABEL": 5,
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_MERGE_LABELS": 8,
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_OBSERVE": 1,
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_RENAME_LABEL": 6,
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_SPLIT_LABEL": 7,
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_UNSPECIFIED": 0,
+    "DTO_LABEL_ONTOLOGY_PROPOSED_ACTION_WIRE_UPDATE_SEMANTICS": 4
+  },
+  "DtoLabelOntologyReviewAtomVariantWire": {
+    "content_hash": 1,
+    "kind": 3,
+    "polarity": 2,
+    "signal_count": 5,
+    "text": 4
+  },
+  "DtoLabelOntologyReviewGroupByWire": {
+    "DTO_LABEL_ONTOLOGY_REVIEW_GROUP_BY_WIRE_CANDIDATE_ATOM": 2,
+    "DTO_LABEL_ONTOLOGY_REVIEW_GROUP_BY_WIRE_LABEL": 1,
+    "DTO_LABEL_ONTOLOGY_REVIEW_GROUP_BY_WIRE_PROPOSED_LABEL": 3,
+    "DTO_LABEL_ONTOLOGY_REVIEW_GROUP_BY_WIRE_UNSPECIFIED": 0
+  },
+  "DtoLabelOntologyReviewGroupWire": {
+    "action_count": 27,
+    "action_ids": 28,
+    "average_score": 21,
+    "candidate_atom_kind": 6,
+    "candidate_atom_polarity": 5,
+    "candidate_atom_variants": 31,
+    "candidate_content_hash": 8,
+    "candidate_text": 7,
+    "cluster_key": 11,
+    "cluster_reason": 12,
+    "confirmed_count": 16,
+    "degraded_count": 20,
+    "group_by": 1,
+    "key": 2,
+    "label_id": 3,
+    "label_name": 4,
+    "labels": 30,
+    "latest_signal_at": 24,
+    "median_score": 22,
+    "oldest_signal_at": 23,
+    "open_count": 15,
+    "proposal_ids": 29,
+    "proposed_label_name": 9,
+    "proposed_label_name_normalized": 10,
+    "rejected_count": 18,
+    "resolved_count": 17,
+    "sample_task_refs": 25,
+    "signal_count": 14,
+    "signal_ids": 26,
+    "superseded_count": 19,
+    "task_count": 13
+  },
+  "DtoLabelOntologyReviewLabelRefWire": {
+    "id": 1,
+    "name": 2
+  },
+  "DtoLabelOntologyReviewMeta": {
+    "group_by": 1,
+    "include_all": 2,
+    "limit": 3
+  },
+  "DtoLabelOntologySignalDetailWire": {
+    "actions": 3,
+    "observation": 2,
+    "signal": 1
+  },
+  "DtoLabelOntologySignalKindWire": {
+    "DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_BOUNDARY_ISSUE": 5,
+    "DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_FALSE_NEGATIVE": 1,
+    "DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_FALSE_POSITIVE": 2,
+    "DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_NAME_ISSUE": 4,
+    "DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_STRUCTURE_ISSUE": 6,
+    "DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_UNSPECIFIED": 0,
+    "DTO_LABEL_ONTOLOGY_SIGNAL_KIND_WIRE_VOCABULARY_GAP": 3
+  },
+  "DtoLabelOntologySignalRequest": {
+    "agent_selected": 8,
+    "candidate_atom": 5,
+    "confidence": 14,
+    "final_selected": 12,
+    "kind": 1,
+    "proposal": 7,
+    "proposed_action": 4,
+    "proposed_label_name": 6,
+    "rationale": 13,
+    "related_labels": 3,
+    "signal_key": 15,
+    "suggest_rank": 11,
+    "suggest_score": 10,
+    "suggest_state": 9,
+    "target_label_ref": 2
+  },
+  "DtoLabelOntologySignalReviewedPayload": {
+    "action_id": 2,
+    "reason": 4,
+    "signal_id": 1,
+    "status": 3
+  },
+  "DtoLabelOntologySignalWire": {
+    "agent_selected": 17,
+    "board_id": 3,
+    "candidate_atom_kind": 11,
+    "candidate_atom_polarity": 10,
+    "candidate_content_hash": 13,
+    "candidate_text": 12,
+    "closed_at": 30,
+    "confidence": 23,
+    "created_at": 27,
+    "final_selected": 21,
+    "id": 1,
+    "kind": 4,
+    "observation_id": 2,
+    "proposal": 16,
+    "proposed_action": 9,
+    "proposed_label_name": 14,
+    "proposed_label_name_normalized": 15,
+    "rationale": 22,
+    "related_labels": 8,
+    "reviewed_at": 29,
+    "signal_key": 24,
+    "status": 5,
+    "status_reason": 26,
+    "suggest_rank": 20,
+    "suggest_score": 19,
+    "suggest_state": 18,
+    "superseded_by_signal_id": 25,
+    "target_label_id": 6,
+    "target_label_name_snapshot": 7,
+    "updated_at": 28
+  },
+  "DtoLabelOntologySuggestStateWire": {
+    "DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_ABSENT": 3,
+    "DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_CANDIDATE": 2,
+    "DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_SELECTED": 1,
+    "DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_UNAVAILABLE": 4,
+    "DTO_LABEL_ONTOLOGY_SUGGEST_STATE_WIRE_UNSPECIFIED": 0
+  },
+  "DtoLabelOntologyValidationEffectiveOutcomeWire": {
+    "DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_FAILED": 5,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_NOT_REQUIRED": 1,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_PARTIAL": 6,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_PASSED": 4,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_PENDING": 3,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_UNSPECIFIED": 0,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_EFFECTIVE_OUTCOME_WIRE_UNSUPPORTED": 2
+  },
+  "DtoLabelOntologyValidationRequirementWire": {
+    "DTO_LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_WIRE_NONE": 1,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_WIRE_REQUIRED": 2,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_WIRE_UNSPECIFIED": 0,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_WIRE_UNSUPPORTED": 3
+  },
+  "DtoLabelOntologyValidationStatusWire": {
+    "DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_FAILED": 4,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_NOT_REQUIRED": 1,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_PARTIAL": 5,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_PASSED": 3,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_PENDING": 2,
+    "DTO_LABEL_ONTOLOGY_VALIDATION_STATUS_WIRE_UNSPECIFIED": 0
+  },
+  "DtoLabelProposalAttemptWire": {
+    "board_id": 2,
+    "degraded": 4,
+    "diagnostics": 5,
+    "heuristic_coverage": 6,
+    "heuristic_coverage_cosine": 7,
+    "heuristic_residual_norm": 8,
+    "proposal": 3,
+    "task_id": 1,
+    "top1_existing_label_id": 9,
+    "top1_existing_label_name": 10
+  },
+  "DtoLabelProposalCandidateWire": {
+    "applies_when": 3,
+    "description": 2,
+    "excludes_when": 4,
+    "name": 1,
+    "negative_examples": 6,
+    "positive_examples": 5
+  },
+  "DtoLabelProposalPayload": {
+    "name": 2,
+    "proposal_id": 1,
+    "status": 3
+  },
+  "DtoLabelProposalStatus": {
+    "DTO_LABEL_PROPOSAL_STATUS_ACCEPTED": 2,
+    "DTO_LABEL_PROPOSAL_STATUS_PROPOSED": 1,
+    "DTO_LABEL_PROPOSAL_STATUS_REJECTED": 3,
+    "DTO_LABEL_PROPOSAL_STATUS_UNSPECIFIED": 0
+  },
+  "DtoLabelProposalStatusWire": {
+    "DTO_LABEL_PROPOSAL_STATUS_WIRE_ACCEPTED": 2,
+    "DTO_LABEL_PROPOSAL_STATUS_WIRE_PROPOSED": 1,
+    "DTO_LABEL_PROPOSAL_STATUS_WIRE_REJECTED": 3,
+    "DTO_LABEL_PROPOSAL_STATUS_WIRE_UNSPECIFIED": 0
+  },
+  "DtoLabelSemanticProposalWire": {
+    "applies_when": 7,
+    "board_id": 2,
+    "created_at": 20,
+    "created_by": 17,
+    "decided_at": 22,
+    "decision_reason": 18,
+    "description": 6,
+    "diagnostics": 16,
+    "excludes_when": 8,
+    "heuristic_coverage": 11,
+    "heuristic_coverage_cosine": 12,
+    "heuristic_residual_norm": 13,
+    "id": 1,
+    "name": 5,
+    "negative_examples": 10,
+    "positive_examples": 9,
+    "resolved_label_id": 19,
+    "status": 4,
+    "task_id": 3,
+    "top1_existing_label_id": 14,
+    "top1_existing_label_name": 15,
+    "updated_at": 21
+  },
+  "DtoLabelSemanticsWire": {
+    "applies_when": 6,
+    "atoms": 12,
+    "board_id": 2,
+    "created_at": 10,
+    "description": 5,
+    "excludes_when": 7,
+    "label_id": 1,
+    "label_name": 3,
+    "negative_examples": 9,
+    "positive_examples": 8,
+    "semantics_hash": 4,
+    "updated_at": 11
+  },
+  "DtoLabelSuggestionCandidateWire": {
+    "already_applied": 5,
+    "evidence_atoms": 6,
+    "label_id": 1,
+    "label_name": 2,
+    "negative_evidence_atoms": 7,
+    "score": 3,
+    "weight": 4
+  },
+  "DtoLabelSuggestionEvidenceAtomWire": {
+    "atom_id": 1,
+    "kind": 5,
+    "label_id": 2,
+    "label_name": 3,
+    "polarity": 4,
+    "score": 7,
+    "text": 6
+  },
+  "DtoLabelSuggestionResultWire": {
+    "board_id": 2,
+    "candidates": 4,
+    "coverage": 5,
+    "coverage_cosine": 6,
+    "degraded": 10,
+    "diagnostics": 11,
+    "needs_new_label": 8,
+    "reason_codes": 9,
+    "residual_norm": 7,
+    "selected_labels": 3,
+    "task_id": 1
+  },
+  "DtoLegacyImportReport": {
+    "attachment_count": 7,
+    "journal_id": 1,
+    "phase": 2,
+    "resumed": 6,
+    "schema_fingerprint": 5,
+    "source_fingerprint": 4,
+    "source_path": 3,
+    "table_counts": 8
+  },
+  "DtoLegacyImportTableCount": {
+    "source_rows": 2,
+    "table": 1,
+    "target_rows": 3
+  },
+  "DtoLimitMeta": {
+    "limit": 1
+  },
+  "DtoListTasksByStatusData": {
+    "statuses": 1
+  },
+  "DtoListTasksStatusWindow": {
+    "page": 3,
+    "status": 1,
+    "tasks": 2
+  },
+  "DtoMaintenanceOwnerStatus": {
+    "active": 7,
+    "build_identity": 5,
+    "fence_epoch": 4,
+    "last_heartbeat_at": 6,
+    "lease_expires_at": 3,
+    "mode": 2,
+    "owner": 1
+  },
+  "DtoMaintenanceRunReport": {
+    "action": 5,
+    "database_instance_id": 1,
+    "degraded": 8,
+    "errors": 9,
+    "mode": 4,
+    "owner": 3,
+    "phase": 7,
+    "processed": 6,
+    "protocol_version": 2,
+    "stores": 10
+  },
+  "DtoMaintenanceStatusReport": {
+    "database_instance_id": 1,
+    "owner": 3,
+    "protocol_version": 2,
+    "stores": 4
+  },
+  "DtoNextAfterMeta": {
+    "next_after": 1
+  },
+  "DtoOffsetPaginationMeta": {
+    "limit": 1,
+    "offset": 2
+  },
+  "DtoProjectionStoreStatus": {
+    "active_fingerprint": 3,
+    "active_generation": 2,
+    "building_generation": 5,
+    "degraded": 15,
+    "dirty": 9,
+    "errors": 16,
+    "failed": 12,
+    "fence_epoch": 7,
+    "last_error": 13,
+    "last_event_id": 8,
+    "lifecycle_status": 6,
+    "pending": 10,
+    "phase": 14,
+    "previous_generation": 4,
+    "running": 11,
+    "store_name": 1,
+    "updated_at": 17
+  },
+  "DtoQueueStats": {
+    "active_parents_with_incomplete_required_steps": 7,
+    "blocked_reasons": 5,
+    "board_id": 1,
+    "generated_at": 2,
+    "stale_claims": 4,
+    "status_counts": 3,
+    "unplanned_active_tasks": 6
+  },
+  "DtoReclaimTargetStatus": {
+    "DTO_RECLAIM_TARGET_STATUS_BLOCKED": 2,
+    "DTO_RECLAIM_TARGET_STATUS_READY": 1,
+    "DTO_RECLAIM_TARGET_STATUS_UNSPECIFIED": 0
+  },
+  "DtoRetryPolicyPayload": {
+    "max_retries": 1
+  },
+  "DtoRunStatus": {
+    "DTO_RUN_STATUS_CANCELED": 1,
+    "DTO_RUN_STATUS_UNSPECIFIED": 0
+  },
+  "DtoSearchMeta": {
+    "backend": 1,
+    "database_instance_id": 3,
+    "fallback_reason": 7,
+    "generation": 5,
+    "index_lag_events": 10,
+    "index_version": 8,
+    "last_event_id": 9,
+    "protocol_version": 4,
+    "resolved_board_id": 6,
+    "stale": 2
+  },
+  "DtoSearchPageMeta": {
+    "limit": 1,
+    "offset": 2,
+    "total": 3
+  },
+  "DtoSearchStatus": {
+    "backend": 1,
+    "database_instance_id": 4,
+    "derived_index": 2,
+    "fallback_reason": 8,
+    "generation": 6,
+    "index_lag_events": 11,
+    "index_version": 9,
+    "last_event_id": 10,
+    "message": 12,
+    "protocol_version": 5,
+    "resolved_board_id": 7,
+    "stale": 3
+  },
+  "DtoSearchTaskHit": {
+    "score": 3,
+    "seq": 2,
+    "snippet": 4,
+    "task": 5,
+    "task_id": 1
+  },
+  "DtoSearchTaskStatusWindow": {
+    "page": 4,
+    "search_meta": 3,
+    "status": 1,
+    "tasks": 2
+  },
+  "DtoSearchTaskStatusWindows": {
+    "statuses": 1
+  },
+  "DtoSearchTasksData": {
+    "hits": 1,
+    "meta": 2
+  },
+  "DtoSignalCommentRequest": {
+    "body": 1
+  },
+  "DtoSignalFilterMeta": {
+    "include_all": 1,
+    "limit": 2
+  },
+  "DtoSignalObservationWire": {
+    "actor": 7,
+    "agent_type": 8,
+    "board_id": 2,
+    "comment_id": 6,
+    "created_at": 11,
+    "evidence": 10,
+    "id": 1,
+    "run_id": 5,
+    "source": 9,
+    "task_id": 3,
+    "task_ref_snapshot": 4
+  },
+  "DtoSignalRecordResult": {
+    "backlink_comment": 2,
+    "signal": 1
+  },
+  "DtoSignalRecordedPayload": {
+    "kind": 3,
+    "observation_id": 2,
+    "signal_id": 1,
+    "status": 4
+  },
+  "DtoSignalReviewedPayload": {
+    "reason": 3,
+    "signal_id": 1,
+    "status": 2
+  },
+  "DtoSignalStatus": {
+    "DTO_SIGNAL_STATUS_CONFIRMED": 2,
+    "DTO_SIGNAL_STATUS_OPEN": 1,
+    "DTO_SIGNAL_STATUS_REJECTED": 3,
+    "DTO_SIGNAL_STATUS_RESOLVED": 5,
+    "DTO_SIGNAL_STATUS_SUPERSEDED": 4,
+    "DTO_SIGNAL_STATUS_UNSPECIFIED": 0
+  },
+  "DtoSignalWire": {
+    "board_id": 2,
+    "created_at": 14,
+    "dedupe_key": 9,
+    "id": 1,
+    "kind": 4,
+    "observation": 16,
+    "observation_id": 3,
+    "review_reason": 13,
+    "reviewed_at": 12,
+    "reviewed_by": 11,
+    "severity": 7,
+    "status": 8,
+    "summary": 6,
+    "superseded_by_signal_id": 10,
+    "title": 5,
+    "updated_at": 15
+  },
+  "DtoStaleClaim": {
+    "claim_expires_at": 5,
+    "claim_owner": 4,
+    "current_run_id": 7,
+    "last_heartbeat_at": 6,
+    "max_retries": 9,
+    "retry_count": 8,
+    "seq": 2,
+    "task_id": 1,
+    "title": 3
+  },
+  "DtoStatusCount": {
+    "count": 2,
+    "status": 1
+  },
+  "DtoStepStatus": {
+    "DTO_STEP_STATUS_DONE": 2,
+    "DTO_STEP_STATUS_SKIPPED": 3,
+    "DTO_STEP_STATUS_TODO": 1,
+    "DTO_STEP_STATUS_UNSPECIFIED": 0
+  },
+  "DtoStreamEventData": {
+    "actor": 7,
+    "board_id": 3,
+    "created_at": 9,
+    "event_id": 2,
+    "id": 1,
+    "kind": 6,
+    "payload": 8,
+    "run_id": 5,
+    "task_id": 4
+  },
+  "DtoStructuredMetadataJsonObject": {
+    "value": 1
+  },
+  "DtoTaskClaimedPayload": {
+    "claim_owner": 1,
+    "metadata": 2
+  },
+  "DtoTaskCommentCreatedPayload": {
+    "agent_type": 4,
+    "author_type": 3,
+    "comment_id": 1,
+    "kind": 2
+  },
+  "DtoTaskDetailAggregate": {
+    "comments": 6,
+    "dependencies": 3,
+    "events": 8,
+    "execution_plan": 4,
+    "labels": 2,
+    "ontology": 9,
+    "runs": 7,
+    "steps": 5,
+    "task": 1
+  },
+  "DtoTaskDetailOntology": {
+    "degraded": 2,
+    "diagnostics": 3,
+    "summary": 1
+  },
+  "DtoTaskExportSanitizedPayload": {
+    "claim_expires_at": 6,
+    "claim_owner": 5,
+    "from_status": 1,
+    "original_run_id": 4,
+    "reason": 7,
+    "run_status": 3,
+    "to_status": 2
+  },
+  "DtoTaskGraphEdge": {
+    "blocking": 6,
+    "id": 1,
+    "kind": 4,
+    "required": 5,
+    "source_task_id": 2,
+    "target_task_id": 3
+  },
+  "DtoTaskGraphMeta": {
+    "active_only": 8,
+    "active_statuses": 7,
+    "context_depth": 2,
+    "depth": 1,
+    "edge_count": 5,
+    "generated_at": 3,
+    "hide_isolated": 11,
+    "include_archived_context": 10,
+    "include_done_context": 9,
+    "limit_nodes": 12,
+    "node_count": 4,
+    "truncated": 6
+  },
+  "DtoTaskGraphNode": {
+    "context_only": 3,
+    "role": 2,
+    "task": 1
+  },
+  "DtoTaskLabelPayload": {
+    "label": 2,
+    "label_id": 1
+  },
+  "DtoTaskNeighborhood": {
+    "center_task_id": 1,
+    "edges": 3,
+    "meta": 4,
+    "nodes": 2
+  },
+  "DtoTaskOntologyDetailsMetaOfOptionalDtoTaskOntologySummary": {
+    "details": 1
+  },
+  "DtoTaskOntologyDetailsOfOptionalDtoTaskOntologySummary": {
+    "ontology_summary": 1
+  },
+  "DtoTaskOntologySignalSummary": {
+    "action_count": 22,
+    "candidate_atom_kind": 8,
+    "candidate_atom_polarity": 7,
+    "candidate_content_hash": 10,
+    "candidate_text": 9,
+    "created_at": 19,
+    "degraded": 15,
+    "id": 1,
+    "kind": 2,
+    "latest_action_at": 21,
+    "legacy_incomparable": 17,
+    "proposed_action": 4,
+    "proposed_label_name": 11,
+    "proposed_label_name_normalized": 12,
+    "stale": 16,
+    "status": 3,
+    "suggest_input_drift": 18,
+    "suggest_rank": 14,
+    "suggest_score": 13,
+    "target_label_id": 5,
+    "target_label_name": 6,
+    "updated_at": 20
+  },
+  "DtoTaskOntologySummary": {
+    "action_count": 14,
+    "confirmed_count": 5,
+    "current_suggest_input_hash": 19,
+    "degraded_count": 9,
+    "incomparable_count": 13,
+    "latest_action_at": 18,
+    "latest_signal_at": 17,
+    "legacy_incomparable_count": 12,
+    "observation_count": 2,
+    "oldest_open_confirmed_signal_age_ms": 16,
+    "oldest_open_confirmed_signal_at": 15,
+    "open_count": 4,
+    "rejected_count": 7,
+    "resolved_count": 6,
+    "sample_signals": 20,
+    "signal_count": 3,
+    "stale_count": 10,
+    "suggest_input_drift_count": 11,
+    "superseded_count": 8,
+    "task_id": 1
+  },
+  "DtoTaskReadLabel": {
+    "value": 1
+  },
+  "DtoTaskReadPlanFilter": {
+    "DTO_TASK_READ_PLAN_FILTER_HAS_STEPS": 2,
+    "DTO_TASK_READ_PLAN_FILTER_INCOMPLETE_REQUIRED_STEPS": 3,
+    "DTO_TASK_READ_PLAN_FILTER_PLAN_NEEDED": 1,
+    "DTO_TASK_READ_PLAN_FILTER_UNSPECIFIED": 0
+  },
+  "DtoTaskReadSort": {
+    "DTO_TASK_READ_SORT_ASSIGNEE": 11,
+    "DTO_TASK_READ_SORT_ASSIGNEE_DESC": 12,
+    "DTO_TASK_READ_SORT_CREATED_AT": 17,
+    "DTO_TASK_READ_SORT_CREATED_AT_DESC": 18,
+    "DTO_TASK_READ_SORT_DUE_AT": 15,
+    "DTO_TASK_READ_SORT_DUE_AT_DESC": 16,
+    "DTO_TASK_READ_SORT_POSITION": 7,
+    "DTO_TASK_READ_SORT_POSITION_DESC": 8,
+    "DTO_TASK_READ_SORT_PRIORITY": 9,
+    "DTO_TASK_READ_SORT_PRIORITY_DESC": 10,
+    "DTO_TASK_READ_SORT_SCHEDULED_AT": 13,
+    "DTO_TASK_READ_SORT_SCHEDULED_AT_DESC": 14,
+    "DTO_TASK_READ_SORT_SEQ": 1,
+    "DTO_TASK_READ_SORT_SEQ_DESC": 2,
+    "DTO_TASK_READ_SORT_STATUS": 5,
+    "DTO_TASK_READ_SORT_STATUS_DESC": 6,
+    "DTO_TASK_READ_SORT_TITLE": 3,
+    "DTO_TASK_READ_SORT_TITLE_DESC": 4,
+    "DTO_TASK_READ_SORT_UNSPECIFIED": 0,
+    "DTO_TASK_READ_SORT_UPDATED_AT": 19,
+    "DTO_TASK_READ_SORT_UPDATED_AT_DESC": 20
+  },
+  "DtoTaskReasonPayload": {
+    "reason": 1
+  },
+  "DtoTaskReclaimedPayload": {
+    "max_retries": 2,
+    "reason": 4,
+    "retry_count": 1,
+    "to_status": 3
+  },
+  "DtoTaskReopenedPayload": {
+    "from": 1,
+    "original_completed_at": 4,
+    "reason": 3,
+    "to": 2
+  },
+  "DtoTaskResultPayload": {
+    "result": 1
+  },
+  "DtoTaskRetryPayload": {
+    "max_retries": 2,
+    "retry_count": 1
+  },
+  "DtoTaskStatus": {
+    "DTO_TASK_STATUS_ARCHIVED": 9,
+    "DTO_TASK_STATUS_BLOCKED": 6,
+    "DTO_TASK_STATUS_DONE": 8,
+    "DTO_TASK_STATUS_READY": 4,
+    "DTO_TASK_STATUS_REVIEW": 7,
+    "DTO_TASK_STATUS_RUNNING": 5,
+    "DTO_TASK_STATUS_SCHEDULED": 3,
+    "DTO_TASK_STATUS_TODO": 2,
+    "DTO_TASK_STATUS_TRIAGE": 1,
+    "DTO_TASK_STATUS_UNSPECIFIED": 0
+  },
+  "DtoTaskStatusPayload": {
+    "status": 1
+  },
+  "DtoTaskStepPayload": {
+    "linked_task_id": 2,
+    "position": 3,
+    "required": 4,
+    "status": 5,
+    "step_id": 1
+  },
+  "DtoTaskToStatusPayload": {
+    "to_status": 1
+  },
+  "DtoTotalPaginationMeta": {
+    "limit": 1,
+    "offset": 2,
+    "total": 3
+  },
+  "DtoVacuumReport": {
+    "after_bytes": 3,
+    "before_bytes": 2,
+    "ok": 1,
+    "source_fingerprint": 4
+  },
+  "DtoVectorChunkResult": {
+    "content": 4,
+    "content_hash": 5,
+    "distance": 7,
+    "embedding_model": 6,
+    "entity_uri": 2,
+    "id": 1,
+    "score": 8,
+    "source_kind": 3
+  },
+  "DtoVectorConfigureRequest": {
+    "dimensions": 4,
+    "endpoint": 2,
+    "model": 3,
+    "provider": 1
+  },
+  "DtoVectorLabelAtomResult": {
+    "atom_id": 1,
+    "board_id": 4,
+    "content_hash": 9,
+    "distance": 11,
+    "embedding_model": 10,
+    "kind": 6,
+    "label_id": 2,
+    "label_name": 3,
+    "ordinal": 8,
+    "polarity": 5,
+    "text": 7,
+    "vector": 12
+  },
+  "DtoVectorStatus": {
+    "backend": 1,
+    "board_dirty": 6,
+    "diagnostics": 4,
+    "dirty": 5,
+    "enabled": 2,
+    "generation": 7,
+    "message": 3
+  },
+  "DtoVectorStoreStatusWire": {
+    "backend": 1,
+    "board_dirty": 6,
+    "diagnostics": 4,
+    "dirty": 5,
+    "enabled": 2,
+    "generation": 7,
+    "message": 3
+  },
+  "ErrorDetail": {
+    "code": 1,
+    "message": 2,
+    "retryable": 3
+  },
+  "ExplainLabelAtomRequest": {
+    "atom_ref": 2,
+    "board": 1
+  },
+  "ExplainLabelAtomResponse": {
+    "data": 1
+  },
+  "GetBoardRequest": {
+    "board": 1
+  },
+  "GetBoardResponse": {
+    "data": 1
+  },
+  "GetEntityRequest": {
+    "uri": 1
+  },
+  "GetEntityResponse": {
+    "data": 1
+  },
+  "GetHealthResponse": {
+    "data": 1
+  },
+  "GetLabelOntologyQualityRequest": {
+    "board": 1,
+    "sample_limit": 2
+  },
+  "GetLabelOntologyQualityResponse": {
+    "data": 1
+  },
+  "GetLabelOntologySignalRequest": {
+    "signal_id": 1
+  },
+  "GetLabelOntologySignalResponse": {
+    "data": 1
+  },
+  "GetLabelProposalRequest": {
+    "proposal_id": 1
+  },
+  "GetLabelProposalResponse": {
+    "data": 1
+  },
+  "GetLabelSemanticsRequest": {
+    "board": 1,
+    "label_id": 2
+  },
+  "GetLabelSemanticsResponse": {
+    "data": 1
+  },
+  "GetRunLogRequest": {
+    "run_id": 1
+  },
+  "GetRunLogResponse": {
+    "data": 1
+  },
+  "GetRunRequest": {
+    "run_id": 1
+  },
+  "GetRunResponse": {
+    "data": 1
+  },
+  "GetSignalRequest": {
+    "signal_id": 1
+  },
+  "GetSignalResponse": {
+    "data": 1
+  },
+  "GetStatsRequest": {
+    "board": 1
+  },
+  "GetStatsResponse": {
+    "data": 1
+  },
+  "GetTaskDetailsRequest": {
+    "task_id": 1
+  },
+  "GetTaskDetailsResponse": {
+    "data": 1
+  },
+  "GetTaskRequest": {
+    "include": 2,
+    "task_id": 1
+  },
+  "GetTaskResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "GraphNeighborsRequest": {
+    "board": 1,
+    "entity_uri": 2,
+    "limit": 4,
+    "predicate": 3
+  },
+  "GraphNeighborsResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "GraphQueryRequest": {
+    "board": 1,
+    "limit": 3,
+    "query": 2
+  },
+  "GraphQueryResponse": {
+    "data": 1
+  },
+  "GraphRebuildRequest": {
+    "board": 1
+  },
+  "GraphRebuildResponse": {
+    "data": 1
+  },
+  "GraphStatusRequest": {
+    "board": 1
+  },
+  "GraphStatusResponse": {
+    "data": 1
+  },
+  "GraphSyncRequest": {
+    "board": 1
+  },
+  "GraphSyncResponse": {
+    "data": 1
+  },
+  "HeartbeatTaskRequest": {
+    "actor": 2,
+    "claim_token": 3,
+    "note": 5,
+    "task_id": 1,
+    "ttl_ms": 4
+  },
+  "HeartbeatTaskResponse": {
+    "data": 1
+  },
+  "LabelAtomIndexStatusRequest": {
+    "board": 1
+  },
+  "LabelAtomIndexStatusResponse": {
+    "data": 1
+  },
+  "ListAttachmentsRequest": {
+    "task_id": 1
+  },
+  "ListAttachmentsResponse": {
+    "data": 1
+  },
+  "ListBoardColumnsRequest": {
+    "board": 1
+  },
+  "ListBoardColumnsResponse": {
+    "data": 1
+  },
+  "ListBoardLabelProposalsRequest": {
+    "board": 1,
+    "status": 2
+  },
+  "ListBoardLabelProposalsResponse": {
+    "data": 1
+  },
+  "ListBoardLabelsRequest": {
+    "board": 1
+  },
+  "ListBoardLabelsResponse": {
+    "data": 1
+  },
+  "ListBoardsRequest": {
+    "include_archived": 1
+  },
+  "ListBoardsResponse": {
+    "data": 1
+  },
+  "ListCommentsRequest": {
+    "task_id": 1
+  },
+  "ListCommentsResponse": {
+    "data": 1
+  },
+  "ListDependenciesRequest": {
+    "task_id": 1
+  },
+  "ListDependenciesResponse": {
+    "data": 1
+  },
+  "ListEntitiesRequest": {
+    "board": 1,
+    "kind": 2,
+    "limit": 3
+  },
+  "ListEntitiesResponse": {
+    "data": 1
+  },
+  "ListEventsRequest": {
+    "after": 3,
+    "board": 1,
+    "limit": 4,
+    "task_id": 2
+  },
+  "ListEventsResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "ListLabelAtomsRequest": {
+    "board": 1
+  },
+  "ListLabelAtomsResponse": {
+    "data": 1
+  },
+  "ListLabelOntologySignalsRequest": {
+    "board": 1,
+    "include_all": 7,
+    "kind": 3,
+    "limit": 8,
+    "proposed_label_name": 6,
+    "status": 2,
+    "target_label_ref": 5,
+    "task_ref": 4
+  },
+  "ListLabelOntologySignalsResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "ListLabelSemanticsRequest": {
+    "board": 1
+  },
+  "ListLabelSemanticsResponse": {
+    "data": 1
+  },
+  "ListOfF32": {
+    "items": 1
+  },
+  "ListOfString": {
+    "items": 1
+  },
+  "ListRunsRequest": {
+    "task_id": 1
+  },
+  "ListRunsResponse": {
+    "data": 1
+  },
+  "ListSignalsRequest": {
+    "board": 1,
+    "include_all": 5,
+    "kind": 3,
+    "limit": 6,
+    "status": 2,
+    "task_ref": 4
+  },
+  "ListSignalsResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "ListStepsRequest": {
+    "task_id": 1
+  },
+  "ListStepsResponse": {
+    "data": 1
+  },
+  "ListTaskLabelProposalsRequest": {
+    "board": 2,
+    "status": 3,
+    "task_id": 1
+  },
+  "ListTaskLabelProposalsResponse": {
+    "data": 1
+  },
+  "ListTaskLabelsRequest": {
+    "task_id": 1
+  },
+  "ListTaskLabelsResponse": {
+    "data": 1
+  },
+  "ListTasksByStatusRequest": {
+    "assignee": 6,
+    "board": 1,
+    "include_archived": 8,
+    "label": 4,
+    "limit": 9,
+    "offset": 10,
+    "plan_filter": 5,
+    "priority": 3,
+    "q": 7,
+    "sort": 11,
+    "status": 2
+  },
+  "ListTasksByStatusResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "ListTasksRequest": {
+    "assignee": 6,
+    "board": 1,
+    "include_archived": 8,
+    "label": 4,
+    "limit": 9,
+    "offset": 10,
+    "plan_filter": 5,
+    "priority": 3,
+    "q": 7,
+    "sort": 11,
+    "status": 2
+  },
+  "ListTasksResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "MaintenanceBackupRequest": {
+    "path": 1
+  },
+  "MaintenanceBackupResponse": {
+    "data": 1
+  },
+  "MaintenanceCleanupRequest": {
+    "action": 2,
+    "owner": 1
+  },
+  "MaintenanceCleanupResponse": {
+    "data": 1
+  },
+  "MaintenanceExportRequest": {
+    "path": 1
+  },
+  "MaintenanceExportResponse": {
+    "data": 1
+  },
+  "MaintenanceImportRequest": {
+    "path": 1,
+    "replace": 2
+  },
+  "MaintenanceImportResponse": {
+    "data": 1
+  },
+  "MaintenanceImportV30Request": {
+    "canonical_attachment_root": 2,
+    "path": 1
+  },
+  "MaintenanceImportV30Response": {
+    "data": 1
+  },
+  "MaintenanceRebuildRequest": {
+    "action": 2,
+    "owner": 1
+  },
+  "MaintenanceRebuildResponse": {
+    "data": 1
+  },
+  "MaintenanceRunRequest": {
+    "action": 2,
+    "owner": 1
+  },
+  "MaintenanceRunResponse": {
+    "data": 1
+  },
+  "MaintenanceStatusResponse": {
+    "data": 1
+  },
+  "MaintenanceVacuumResponse": {
+    "data": 1
+  },
+  "MapOfJsonValue": {
+    "entries": 1
+  },
+  "MarkExecutionPlanNotRequiredRequest": {
+    "actor": 3,
+    "reason": 2,
+    "task_id": 1
+  },
+  "MarkExecutionPlanNotRequiredResponse": {
+    "data": 1
+  },
+  "PatchI64": {
+    "clear": 1,
+    "value": 2
+  },
+  "PatchJsonValue": {
+    "clear": 1,
+    "value": 2
+  },
+  "PatchString": {
+    "clear": 1,
+    "value": 2
+  },
+  "PromoteTaskRequest": {
+    "actor": 2,
+    "task_id": 1
+  },
+  "PromoteTaskResponse": {
+    "data": 1
+  },
+  "ProposeTaskLabelRequest": {
+    "actor": 9,
+    "allow_retarget": 12,
+    "atom_limit": 5,
+    "board": 2,
+    "candidate_limit": 4,
+    "limit": 3,
+    "max_selected_labels": 6,
+    "min_score": 7,
+    "ontology_actor": 11,
+    "proposal": 8,
+    "retarget_reason": 13,
+    "source_signal_ids": 10,
+    "task_id": 1
+  },
+  "ProposeTaskLabelResponse": {
+    "data": 1
+  },
+  "QueryLabelAtomIndexRequest": {
+    "board": 1,
+    "embedding_model": 4,
+    "include_vector": 5,
+    "limit": 7,
+    "polarity": 6,
+    "q": 2,
+    "vector_json": 3
+  },
+  "QueryLabelAtomIndexResponse": {
+    "data": 1
+  },
+  "RebuildLabelAtomIndexRequest": {
+    "board": 1
+  },
+  "RebuildLabelAtomIndexResponse": {
+    "data": 1
+  },
+  "RebuildSearchIndexRequest": {
+    "board": 1
+  },
+  "RebuildSearchIndexResponse": {
+    "data": 1
+  },
+  "ReclaimTaskRequest": {
+    "actor": 2,
+    "force": 3,
+    "reason": 5,
+    "task_id": 1,
+    "to_status": 4
+  },
+  "ReclaimTaskResponse": {
+    "data": 1
+  },
+  "RecordLabelOntologyObservationRequest": {
+    "actor": 3,
+    "agent_candidates": 4,
+    "board": 2,
+    "capture_fingerprint": 13,
+    "diagnostics": 12,
+    "final_decision": 6,
+    "signals": 14,
+    "suggest_coverage": 7,
+    "suggest_coverage_cosine": 8,
+    "suggest_degraded": 11,
+    "suggest_needs_new_label": 10,
+    "suggest_residual_norm": 9,
+    "suggestion_snapshot": 5,
+    "task_id": 1
+  },
+  "RecordLabelOntologyObservationResponse": {
+    "data": 1
+  },
+  "RecordSignalRequest": {
+    "actor": 10,
+    "agent_type": 11,
+    "board": 1,
+    "comment": 15,
+    "comment_id": 9,
+    "dedupe_key": 12,
+    "evidence": 14,
+    "kind": 2,
+    "run_id": 8,
+    "severity": 5,
+    "source": 13,
+    "summary": 4,
+    "task_id": 7,
+    "task_ref": 6,
+    "title": 3
+  },
+  "RecordSignalResponse": {
+    "data": 1
+  },
+  "RejectLabelProposalRequest": {
+    "actor": 3,
+    "allow_retarget": 6,
+    "ontology_actor": 5,
+    "proposal_id": 1,
+    "reason": 2,
+    "retarget_reason": 7,
+    "source_signal_ids": 4
+  },
+  "RejectLabelProposalResponse": {
+    "data": 1
+  },
+  "RejectSignalsRequest": {
+    "actor": 5,
+    "board": 1,
+    "expected_updated_at": 6,
+    "reason": 3,
+    "replacement_signal_id": 4,
+    "signal_ids": 2
+  },
+  "RejectSignalsResponse": {
+    "data": 1
+  },
+  "ReleaseTaskRequest": {
+    "actor": 2,
+    "claim_token": 3,
+    "task_id": 1
+  },
+  "ReleaseTaskResponse": {
+    "data": 1
+  },
+  "RemoveDependencyRequest": {
+    "child_task_id": 1,
+    "parent_task_id": 2
+  },
+  "RemoveDependencyResponse": {
+    "data": 1
+  },
+  "RemoveStepRequest": {
+    "step_id": 2,
+    "task_id": 1
+  },
+  "RemoveStepResponse": {
+    "data": 1
+  },
+  "RemoveTaskLabelRequest": {
+    "label_id": 2,
+    "task_id": 1
+  },
+  "RemoveTaskLabelResponse": {
+    "data": 1
+  },
+  "ReopenStepRequest": {
+    "actor": 4,
+    "reason": 3,
+    "step_id": 2,
+    "task_id": 1
+  },
+  "ReopenStepResponse": {
+    "data": 1
+  },
+  "ReopenTaskRequest": {
+    "actor": 2,
+    "reason": 3,
+    "task_id": 1
+  },
+  "ReopenTaskResponse": {
+    "data": 1
+  },
+  "ResolveSignalsRequest": {
+    "actor": 5,
+    "board": 1,
+    "expected_updated_at": 6,
+    "reason": 3,
+    "replacement_signal_id": 4,
+    "signal_ids": 2
+  },
+  "ResolveSignalsResponse": {
+    "data": 1
+  },
+  "RevertLabelOntologyMutationRequest": {
+    "actor": 2,
+    "board": 1,
+    "expected_current_hash": 4,
+    "reason": 5,
+    "target_action_id": 3
+  },
+  "RevertLabelOntologyMutationResponse": {
+    "data": 1
+  },
+  "ReviewLabelOntologyRequest": {
+    "board": 1,
+    "group_by": 2,
+    "include_all": 3,
+    "limit": 4
+  },
+  "ReviewLabelOntologyResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "ReviewSignalsRequest": {
+    "board": 1,
+    "include_all": 5,
+    "kind": 3,
+    "limit": 6,
+    "status": 2,
+    "task_ref": 4
+  },
+  "ReviewSignalsResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "SearchStatusRequest": {
+    "board": 1
+  },
+  "SearchStatusResponse": {
+    "data": 1
+  },
+  "SearchTasksByStatusRequest": {
+    "assignee": 8,
+    "board": 1,
+    "include_archived": 5,
+    "label": 4,
+    "limit": 6,
+    "offset": 7,
+    "q": 2,
+    "status": 3
+  },
+  "SearchTasksByStatusResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "SearchTasksRequest": {
+    "assignee": 8,
+    "board": 1,
+    "include_archived": 5,
+    "label": 4,
+    "limit": 6,
+    "offset": 7,
+    "q": 2,
+    "status": 3
+  },
+  "SearchTasksResponse": {
+    "data": 1,
+    "meta": 2
+  },
+  "SkipStepRequest": {
+    "actor": 4,
+    "reason": 3,
+    "step_id": 2,
+    "task_id": 1
+  },
+  "SkipStepResponse": {
+    "data": 1
+  },
+  "SpecifyTaskRequest": {
+    "actor": 2,
+    "description": 3,
+    "scheduled_at": 4,
+    "task_id": 1
+  },
+  "SpecifyTaskResponse": {
+    "data": 1
+  },
+  "SubmitReviewTaskRequest": {
+    "actor": 2,
+    "claim_token": 3,
+    "force": 4,
+    "summary": 5,
+    "task_id": 1
+  },
+  "SubmitReviewTaskResponse": {
+    "data": 1
+  },
+  "SuggestTaskLabelsRequest": {
+    "atom_limit": 5,
+    "board": 2,
+    "candidate_limit": 4,
+    "limit": 3,
+    "max_selected_labels": 6,
+    "min_score": 7,
+    "task_id": 1
+  },
+  "SuggestTaskLabelsResponse": {
+    "data": 1
+  },
+  "SupersedeSignalsRequest": {
+    "actor": 5,
+    "board": 1,
+    "expected_updated_at": 6,
+    "reason": 3,
+    "replacement_signal_id": 4,
+    "signal_ids": 2
+  },
+  "SupersedeSignalsResponse": {
+    "data": 1
+  },
+  "SyncSearchIndexRequest": {
+    "board": 1
+  },
+  "SyncSearchIndexResponse": {
+    "data": 1
+  },
+  "TaskNeighborhoodRequest": {
+    "depth": 2,
+    "include_archived_context": 4,
+    "limit_nodes": 3,
+    "task_id": 1
+  },
+  "TaskNeighborhoodResponse": {
+    "data": 1
+  },
+  "UnblockTaskRequest": {
+    "actor": 2,
+    "task_id": 1
+  },
+  "UnblockTaskResponse": {
+    "data": 1
+  },
+  "UpdateStepRequest": {
+    "actor": 9,
+    "body": 4,
+    "linked_task_ref": 5,
+    "position": 7,
+    "required": 8,
+    "step_id": 2,
+    "task_id": 1,
+    "title": 3,
+    "unlink_task": 6
+  },
+  "UpdateStepResponse": {
+    "data": 1
+  },
+  "UpdateTaskRequest": {
+    "actor": 10,
+    "assignee": 4,
+    "description": 3,
+    "due_at": 7,
+    "expected_lock_version": 11,
+    "max_retries": 8,
+    "metadata": 9,
+    "priority": 5,
+    "scheduled_at": 6,
+    "task_id": 1,
+    "title": 2
+  },
+  "UpdateTaskResponse": {
+    "data": 1
+  },
+  "UpsertEntityRequest": {
+    "archived_at": 10,
+    "board": 5,
+    "content_hash": 9,
+    "kind": 2,
+    "source_id": 4,
+    "source_table": 3,
+    "summary": 8,
+    "task_id": 6,
+    "title": 7,
+    "uri": 1
+  },
+  "UpsertEntityResponse": {
+    "data": 1
+  },
+  "UpsertLabelSemanticsRequest": {
+    "actor": 3,
+    "applies_when": 9,
+    "board": 1,
+    "description": 8,
+    "excludes_when": 10,
+    "expected_semantics_hash": 4,
+    "label_id": 2,
+    "negative_examples": 12,
+    "positive_examples": 11,
+    "reason": 6,
+    "remove_applies_when": 13,
+    "remove_excludes_when": 14,
+    "remove_negative_examples": 16,
+    "remove_positive_examples": 15,
+    "replace": 5,
+    "source_signal_ids": 7
+  },
+  "UpsertLabelSemanticsResponse": {
+    "data": 1
+  },
+  "ValidateLabelOntologyActionRequest": {
+    "actor": 2,
+    "board": 1,
+    "parent_action_id": 3,
+    "reason": 5,
+    "signal_ids": 4,
+    "validation": 7,
+    "validation_status": 6
+  },
+  "ValidateLabelOntologyActionResponse": {
+    "data": 1
+  },
+  "VectorConfigureRequest": {
+    "dimensions": 4,
+    "endpoint": 2,
+    "model": 3,
+    "provider": 1
+  },
+  "VectorConfigureResponse": {
+    "data": 1
+  },
+  "VectorQueryChunksRequest": {
+    "board": 1,
+    "embedding_model": 4,
+    "include_vector": 6,
+    "limit": 3,
+    "polarity": 5,
+    "q": 2
+  },
+  "VectorQueryChunksResponse": {
+    "data": 1
+  },
+  "VectorQueryLabelAtomsRequest": {
+    "board": 1,
+    "embedding_model": 4,
+    "include_vector": 6,
+    "limit": 3,
+    "polarity": 5,
+    "q": 2
+  },
+  "VectorQueryLabelAtomsResponse": {
+    "data": 1
+  },
+  "VectorRebuildRequest": {
+    "board": 1
+  },
+  "VectorRebuildResponse": {
+    "data": 1
+  },
+  "VectorStatusRequest": {
+    "board": 1
+  },
+  "VectorStatusResponse": {
+    "data": 1
+  },
+  "VectorSyncRequest": {
+    "board": 1
+  },
+  "VectorSyncResponse": {
+    "data": 1
+  }
+}

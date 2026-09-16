@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import type { BoardReadModel } from "../data/board-read-model";
-import { asCanonicalBoardId } from "../sync/contracts"
+import { asCanonicalBoardId } from "../../domain/board-id"
 import { toBoardViewModel } from "./board-model"
 
 const readModel: BoardReadModel = {

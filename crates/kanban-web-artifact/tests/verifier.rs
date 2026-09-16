@@ -82,7 +82,7 @@ fn valid_snapshot_has_known_digest_and_sorted_lookup() {
     assert_eq!(artifact.manifest().server_version, SERVER_VERSION);
     assert_eq!(
         artifact.manifest().build_id,
-        "sha256:e08ed69384e5d70472d70590d8d449359636002cba68847dee50a9d5eb496b0b"
+        "sha256:dc6451ee550711005641dfe74ed972a8cd80f2e5c6aab85d5805417486805095"
     );
     assert_eq!(
         artifact.manifest_sha256(),

@@ -6,12 +6,18 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+prost.workspace = true
+sha2.workspace = true
 kanban-protocol = { workspace = true, default-features = false }
 kanban-core.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
-ureq = { workspace = true, default-features = false, features = ["json"] }
+tonic = { workspace = true, features = ["transport", "codegen"] }
+tokio = { workspace = true, features = ["sync", "time", "net"] }
 
 [dev-dependencies]
 serde_json.workspace = true
+kanban-server.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util", "io-util"] }

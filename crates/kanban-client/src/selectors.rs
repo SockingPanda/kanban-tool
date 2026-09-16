@@ -3,7 +3,11 @@ use kanban_protocol::{ApiErrorCode, ListTasksQuery};
 use crate::{KanbanClient, error::ClientError};
 
 impl KanbanClient {
-    pub fn resolve_task_id(&self, board: &str, selector: &str) -> Result<String, ClientError> {
+    pub async fn resolve_task_id(
+        &self,
+        board: &str,
+        selector: &str,
+    ) -> Result<String, ClientError> {
         let selector = selector.trim();
         if selector.starts_with("t_") && selector.len() > 2 {
             return Ok(selector.to_owned());
@@ -13,15 +17,17 @@ impl KanbanClient {
                 "任务选择器必须是全局 t_... ID、board#seq、#seq 或数字序号".to_owned(),
             ));
         }
-        let response = self.list_tasks(
-            board,
-            &ListTasksQuery {
-                q: Some(selector.to_owned()),
-                include_archived: true,
-                limit: 2,
-                ..ListTasksQuery::default()
-            },
-        )?;
+        let response = self
+            .list_tasks(
+                board,
+                &ListTasksQuery {
+                    q: Some(selector.to_owned()),
+                    include_archived: true,
+                    limit: 2,
+                    ..ListTasksQuery::default()
+                },
+            )
+            .await?;
         match response.data.as_slice() {
             [task] => Ok(task.id.clone()),
             [] => Err(ClientError::Api {
@@ -35,7 +41,7 @@ impl KanbanClient {
         }
     }
 
-    pub(crate) fn resolve_step_id(
+    pub(crate) async fn resolve_step_id(
         &self,
         task_id: &str,
         selector: &str,
@@ -52,7 +58,7 @@ impl KanbanClient {
             .ok_or_else(|| {
                 ClientError::InvalidInput("步骤选择器必须是全局 step_... ID 或 S<n>".to_owned())
             })?;
-        let steps = self.list_steps(task_id)?;
+        let steps = self.list_steps(task_id).await?;
         steps
             .steps
             .get(index - 1)

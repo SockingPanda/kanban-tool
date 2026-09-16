@@ -1,4 +1,5 @@
-import type { HttpTransportError } from "../data/http-transport";
+import { addInteger, I64_MAX, type Integer } from '../../domain/integer'
+import type { RpcTransportError } from "../data/rpc-transport";
 import type { ArchiveTaskIntent, BlockTaskIntent, ClaimTaskIntent, HeartbeatTaskIntent, CompleteTaskIntent, PromoteTaskIntent, SpecifyTaskIntent, SubmitReviewTaskIntent, TaskMutationClient, TaskTransitionAction, UnblockTaskIntent } from "../data/task-mutations";
 import type { BoardTaskStatus, BoardTaskViewModel, BoardViewModel } from "../../domain/tasks/board"
 
@@ -269,7 +270,10 @@ export function moveTaskOptimistically(
   if (transition === null || transition.action === "unblock") return model
 
   const targetTasks = groups[targetStatus] ?? []
-  const nextPosition = targetTasks.reduce((maximum, task) => Math.max(maximum, task.position), -1) + 1
+  const maximum = targetTasks.reduce<Integer>((maximum, task) => task.position > maximum ? task.position : maximum, -1)
+  // 没有可表示的尾部位置时等待 canonical 响应，不制造越界的乐观数据。
+  if (maximum >= I64_MAX) return model
+  const nextPosition = addInteger(maximum, 1)
   const nextTask = { ...sourceTask, status: targetStatus, position: nextPosition }
   groups[targetStatus] = [...targetTasks, nextTask]
   return { ...model, tasksByStatus: groups }
@@ -340,7 +344,7 @@ export function rollbackTaskOptimistically(
 /** 409 and typed conflict codes require canonical reload before an explicit retry. */
 export function isMutationConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false
-  const candidate = error as Partial<Pick<HttpTransportError, "status" | "apiError">>
+  const candidate = error as Partial<Pick<RpcTransportError, "status" | "apiError">>
   const code = candidate.apiError?.code
   return candidate.status === 409
     || code === "conflict"
@@ -351,7 +355,7 @@ export function isMutationConflict(error: unknown): boolean {
 
 export function isClaimTokenConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false
-  const candidate = error as Partial<Pick<HttpTransportError, "status" | "apiError">>
+  const candidate = error as Partial<Pick<RpcTransportError, "status" | "apiError">>
   return candidate.apiError?.code === "claim_token_mismatch"
     || (candidate.status === 403 && candidate.apiError?.code === "claim_conflict")
 }

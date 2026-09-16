@@ -1,6 +1,6 @@
-import { useLayoutEffect } from "react";
+import { useAsyncRead } from '../../application/query/use-async-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo } from "react"
 
 import { ExplorerReadError, type ExplorerBoardIdentity, type ExplorerTaskMapReadModel } from "../../application/data/explorer-read-model";
 import type { Locale } from "../../platform/preferences/preferences"
@@ -16,7 +16,6 @@ import {
   MIN_MAP_ZOOM,
   resolveSelectedNode,
   stepMapZoom,
-  taskMapIdentityKey,
   type BoardMapFilter,
   type TaskMapUrlState,
 } from "./TaskMapView.logic"
@@ -39,7 +38,6 @@ export interface TaskMapViewProps {
   readonly identityLoading?: boolean
   readonly identityError?: ExplorerReadError | Error | null
   readonly onRetryIdentity?: () => void
-  readonly invalidationRevision?: number
   readonly online?: boolean
   readonly taskId: string | null
   readonly onSelectTask: (taskId: string) => void
@@ -68,10 +66,7 @@ export interface TaskMapPresentationProps {
 
 type MapNode = NonNullable<ReturnType<typeof resolveSelectedNode>>
 
-type TaskMapReadInternalState = TaskMapReadState & {
-  readonly requestKey: string
-  readonly identityToken: string
-}
+
 
 const MAP_LIMIT_NODES = 240
 
@@ -252,95 +247,15 @@ function errorReason(error: Error | null): string | null {
 }
 
 function useTaskMapRead(
-  runtime: WebRuntimeConfig,
-  board: string,
-  boardIdentity: ExplorerBoardIdentity | null,
-  includeDoneContext: boolean,
-  hideIsolated: boolean,
-  invalidationRevision: number,
-  online: boolean,
+  runtime: WebRuntimeConfig, board: string, boardIdentity: ExplorerBoardIdentity | null,
+  includeDoneContext: boolean, hideIsolated: boolean, online: boolean,
 ): TaskMapReadState & { readonly retry: () => void } {
   const { loadTaskMap } = useWorkspaceOperations();
-
-  const loadRef = useRef<((signal: AbortSignal) => Promise<ExplorerTaskMapReadModel>) | null>(null)
-  useLayoutEffect(() => { loadRef.current = boardIdentity
-    ? (signal) => loadTaskMap(runtime, board, {
-      boardIdentity,
-      activeOnly: true,
-      contextDepth: 1,
-      includeDoneContext,
-      includeArchivedContext: false,
-      hideIsolated,
-      limitNodes: MAP_LIMIT_NODES,
-      signal,
-    })
-    : null });
-  const [generation, setGeneration] = useState(0)
-  const key = `${board}|${boardIdentity?.id ?? "identity-pending"}|${includeDoneContext ? "done" : "active"}|${hideIsolated ? "connected" : "all"}`
-  const identityToken = `${board}|${boardIdentity ? taskMapIdentityKey(boardIdentity) : "identity-pending"}`
-  const requestKey = `${key}|${generation}|${invalidationRevision}`
-  const [state, setState] = useState<TaskMapReadInternalState>(() => ({
-    data: null,
-    loading: false,
-    error: null,
-    requestKey,
-    identityToken,
-  }))
-
-  useEffect(() => {
-    if (!boardIdentity) {
-      setState({ data: null, loading: false, error: null, requestKey, identityToken })
-      return
-    }
-    if (!online) {
-      setState((current) => ({
-        data: current.identityToken === identityToken ? current.data : null,
-        loading: false,
-        error: new ExplorerReadError("offline", "当前离线，无法加载关系图。"),
-        requestKey,
-        identityToken,
-      }))
-      return
-    }
-    const controller = new AbortController()
-    let active = true
-    setState((current) => ({
-      data: current.identityToken === identityToken ? current.data : null,
-      loading: true,
-      error: null,
-      requestKey,
-      identityToken,
-    }))
-    void loadRef.current?.(controller.signal).then(
-      (data) => {
-        if (active) setState({ data, loading: false, error: null, requestKey, identityToken })
-      },
-      (error: unknown) => {
-        if (active && !(error instanceof Error && error.name === "AbortError")) {
-          setState((current) => ({
-            data: current.identityToken === identityToken ? current.data : null,
-            loading: false,
-            error: error instanceof Error ? error : new Error(String(error)),
-            requestKey,
-            identityToken,
-          }))
-        }
-      },
-    )
-    return () => {
-      active = false
-      controller.abort()
-    }
-  }, [boardIdentity, generation, identityToken, invalidationRevision, key, online, requestKey])
-
-  const sameIdentity = state.identityToken === identityToken
-  const currentRequest = sameIdentity && state.requestKey === requestKey
-  return {
-    data: sameIdentity ? state.data : null,
-    loading: sameIdentity ? (currentRequest ? state.loading : true) : true,
-    error: currentRequest ? state.error : null,
-    retry: () => setGeneration((current) => current + 1),
-  }
+  const key = JSON.stringify([runtime.webBuildId, board, boardIdentity?.id, includeDoneContext, hideIsolated]);
+  return useAsyncRead(Boolean(boardIdentity), key, signal => loadTaskMap(runtime, board, {
+    ...(boardIdentity ? { boardIdentity } : {}), activeOnly: true, contextDepth: 1,
+    includeDoneContext, includeArchivedContext: false, hideIsolated, limitNodes: MAP_LIMIT_NODES, signal,
+  }), online);
 }
 
 function TaskMapToolbar({
@@ -562,7 +477,6 @@ export function TaskMapView({
   identityLoading = false,
   identityError = null,
   onRetryIdentity,
-  invalidationRevision = 0,
   online = typeof navigator === "undefined" || navigator.onLine,
   taskId,
   onSelectTask,
@@ -571,7 +485,7 @@ export function TaskMapView({
 }: TaskMapViewProps) {
   const { locale } = usePreferences()
   const routeIdentity = boardIdentity && boardIdentity.slug === board ? boardIdentity : null
-  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated, invalidationRevision, online)
+  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated, online)
   const fencedData = fenceTaskMapReadModel(board, routeIdentity, mapRead.data)
   const state = useMemo<TaskMapReadState>(() => {
     if (!routeIdentity) return { data: null, loading: identityLoading, error: identityError }

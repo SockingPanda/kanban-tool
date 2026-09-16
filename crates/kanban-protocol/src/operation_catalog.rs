@@ -1,8 +1,8 @@
 //! operation declaration source 与 deterministic projection facade。
 //!
-//! 该模块刻意不复制现有 endpoint/inventory/schema rows。第一阶段只提供一个可供后续
-//! domain 文件填充的 declaration source，以及把 source 投影到既有 public shapes 的
-//! 薄 facade。声明数组的书写顺序就是 canonical order；projection 不经过无序 map，也
+//! 各领域声明提供 DTO/schema、CLI machine output 与 MCP policy 的共同来源。
+//! API 声明中的历史 HTTP 绑定只保留 DTO parts 语义，实际 RPC 路由由 `rpc::catalog`
+//! 持有。声明数组的书写顺序就是 canonical order；projection 不经过无序 map，也
 //! 不按 operation id 猜测 schema/type。
 
 use crate::{EndpointDescriptor, OperationContract, OperationDeclaration, SurfaceOperation};
@@ -19,16 +19,11 @@ impl<'a> CatalogProjection<'a> {
         Self { declarations }
     }
 
-    /// 逐项投影 API/SSE parent；结果保留 declaration source 的顺序。
+    /// 逐项投影 API DTO parent；结果保留 declaration source 的顺序。
     pub fn endpoints(&self) -> Vec<EndpointDescriptor> {
         self.declarations
             .iter()
-            .filter(|declaration| {
-                matches!(
-                    declaration.surface,
-                    crate::ContractSurface::Api | crate::ContractSurface::Sse
-                )
-            })
+            .filter(|declaration| matches!(declaration.surface, crate::ContractSurface::Api))
             .map(OperationDeclaration::endpoint_descriptor)
             .collect()
     }
@@ -263,7 +258,7 @@ mod tests {
 
     #[test]
     fn migrated_domain_source_is_exposed_without_legacy_duplication() {
-        assert_eq!(operation_catalog().len(), 277);
+        assert_eq!(operation_catalog().len(), 276);
         assert_eq!(
             operation_catalog()
                 .iter()

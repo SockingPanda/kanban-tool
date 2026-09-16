@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ExplorerReadError } from '../data/explorer-read-model';
 import { asyncReadToken, visibleAsyncReadState, type AsyncReadInternalState, type AsyncReadState } from './read-state';
+import { observeRead } from './observe-read';
 export function useAsyncRead<T>(
   enabled: boolean,
   key: string,
   load: (signal: AbortSignal) => Promise<T>,
-  refreshRevision = 0,
   online = true,
+  keepErrorWhileLoading = false,
 ): AsyncReadState<T> & { readonly retry: () => void; readonly reload: () => Promise<T> } {
   const loadRef = useRef(load)
   useLayoutEffect(() => { loadRef.current = load });
   const reloadWaitersRef = useRef<Array<{ readonly identityKey: string; readonly minimumGeneration: number; readonly resolve: (data: T) => void; readonly reject: (error: unknown) => void }>>([])
   const settledRef = useRef<{ readonly identityKey: string; readonly requestKey: string; readonly generation: number; readonly data: T } | null>(null)
   const [generation, setGeneration] = useState(0)
-  const { identityKey, requestKey: baseRequestKey } = asyncReadToken(enabled, key, generation)
-  // A session event/poll boundary is a new request for the same visible
-  // identity. Keep the last usable data while the coalesced refresh is in flight.
-  const requestKey = `${baseRequestKey}\u0000${refreshRevision}`
+  const { identityKey, requestKey } = asyncReadToken(enabled, key, generation)
   const [state, setState] = useState<AsyncReadInternalState<T>>(() => ({
     data: null,
     error: null,
@@ -59,12 +57,12 @@ export function useAsyncRead<T>(
     let active = true
     setState((current) => ({
       data: current.identityKey === identityKey ? current.data : null,
-      error: null,
+      error: keepErrorWhileLoading && current.identityKey === identityKey ? current.error : null,
       loading: true,
       identityKey,
       requestKey,
     }))
-    void loadRef.current(controller.signal).then(
+    observeRead((signal) => loadRef.current(signal), controller.signal,
       (data) => {
         if (active) {
           settledRef.current = { data, identityKey, requestKey, generation }
@@ -82,13 +80,14 @@ export function useAsyncRead<T>(
           }))
         }
       },
+      generation > 0,
     )
     return () => {
       active = false
       controller.abort()
-      // SSE 或显式刷新替换同项目请求时，等待者继续等待新请求；切换项目与卸载另行终结。
+      // 显式刷新替换同项目请求时，等待者继续等待新请求；切换项目与卸载另行终结。
     }
-  }, [enabled, generation, identityKey, key, online, requestKey])
+  }, [enabled, generation, identityKey, key, keepErrorWhileLoading, online, requestKey])
 
   useEffect(() => () => {
     const pending = reloadWaitersRef.current.splice(0)
@@ -99,10 +98,11 @@ export function useAsyncRead<T>(
     reloadWaitersRef.current.push({ identityKey, minimumGeneration: generation + 1, resolve, reject })
     setGeneration((current) => current + 1)
   }), [generation, identityKey])
+  const retry = useCallback(() => setGeneration(current => current + 1), [])
 
   return {
-    ...visibleAsyncReadState(state, { identityKey, requestKey }, enabled),
-    retry: () => setGeneration((current) => current + 1),
+    ...visibleAsyncReadState(state, { identityKey, requestKey }, enabled, keepErrorWhileLoading),
+    retry,
     reload,
   }
 }

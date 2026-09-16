@@ -1,3 +1,4 @@
+import { compareInteger, integerDate, type Integer } from '../../domain/integer'
 import type {
   InspectorMutationOutcome,
   InspectorCreateStepInput,
@@ -8,7 +9,7 @@ export type CommentSortOrder = "newest" | "oldest"
 
 export interface CommentPageItem {
   readonly id: string
-  readonly createdAt: number
+  readonly createdAt: Integer
 }
 
 export interface CommentPageResult<T extends CommentPageItem> {
@@ -99,7 +100,7 @@ export function shouldClearRetryDraft(outcome: InspectorMutationOutcome, draftMa
 
 export function sortedComments<T extends CommentPageItem>(comments: readonly T[], sortOrder: CommentSortOrder): T[] {
   return [...comments].sort((left, right) => {
-    const createdDiff = left.createdAt - right.createdAt
+    const createdDiff = compareInteger(left.createdAt, right.createdAt)
     const idDiff = left.id.localeCompare(right.id)
     const diff = createdDiff || idDiff
     return sortOrder === "newest" ? -diff : diff
@@ -120,9 +121,9 @@ export function commentPageState<T extends CommentPageItem>(comments: readonly T
   }
 }
 
-export function formatCommentDateTime(value: number, locale: "zh" | "en"): { readonly label: string; readonly iso: string } {
-  const date = new Date(value)
-  if (!Number.isFinite(date.getTime())) return { label: "—", iso: "" }
+export function formatCommentDateTime(value: Integer, locale: "zh" | "en"): { readonly label: string; readonly iso: string } {
+  const date = integerDate(value)
+  if (date === null) return { label: typeof value === "number" && !Number.isFinite(value) ? "—" : String(value), iso: "" }
   const formatter = new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium", timeStyle: "short" })
   return { label: formatter.format(date), iso: date.toISOString() }
 }

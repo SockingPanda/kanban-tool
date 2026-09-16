@@ -1,0 +1,5611 @@
+[
+  {
+    "fields": [],
+    "input_dto": null,
+    "method": "GetHealth",
+    "operation_id": "api.health",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "GetHealthRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::wire::HealthReport>",
+    "response": "GetHealthResponse",
+    "response_dto": "crate::HealthResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListBoardsQuery",
+        "field": "include_archived",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListBoards",
+    "operation_id": "api.list-boards",
+    "path_dto": null,
+    "query_dto": "crate::ListBoardsQuery",
+    "request": "ListBoardsRequest",
+    "resolved_parts": [
+      "()",
+      "crate::boards::ListBoardsQuery",
+      "()"
+    ],
+    "resolved_response": "crate::boards::ListBoardsResponse",
+    "response": "ListBoardsResponse",
+    "response_dto": "crate::ListBoardsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::CreateBoardRequest",
+        "field": "slug",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateBoardRequest",
+        "field": "name",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateBoardRequest",
+        "field": "description",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateBoardRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::CreateBoardRequest",
+    "method": "CreateBoard",
+    "operation_id": "api.create-board",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "CreateBoardRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::boards::CreateBoardRequest"
+    ],
+    "resolved_response": "crate::boards::CreateBoardResponse",
+    "response": "CreateBoardResponse",
+    "response_dto": "crate::CreateBoardResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::GetBoardPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetBoard",
+    "operation_id": "api.get-board",
+    "path_dto": "crate::GetBoardPath",
+    "query_dto": null,
+    "request": "GetBoardRequest",
+    "resolved_parts": [
+      "crate::boards::GetBoardPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::boards::GetBoardResponse",
+    "response": "GetBoardResponse",
+    "response_dto": "crate::GetBoardResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ArchiveBoardPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ArchiveBoardRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::ArchiveBoardRequest",
+    "method": "ArchiveBoard",
+    "operation_id": "api.archive-board",
+    "path_dto": "crate::ArchiveBoardPath",
+    "query_dto": null,
+    "request": "ArchiveBoardRequest",
+    "resolved_parts": [
+      "crate::boards::ArchiveBoardPath",
+      "()",
+      "crate::lifecycle::ArchiveBoardRequest"
+    ],
+    "resolved_response": "crate::boards::ArchiveBoardResponse",
+    "response": "ArchiveBoardResponse",
+    "response_dto": "crate::ArchiveBoardResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListBoardColumnsPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListBoardColumns",
+    "operation_id": "api.list-board-columns",
+    "path_dto": "crate::ListBoardColumnsPath",
+    "query_dto": null,
+    "request": "ListBoardColumnsRequest",
+    "resolved_parts": [
+      "crate::boards::ListBoardColumnsPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::boards::ListBoardColumnsResponse",
+    "response": "ListBoardColumnsResponse",
+    "response_dto": "crate::ListBoardColumnsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListTasksPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::api_components::ApiTaskStatus>"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "priority",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::api_components::ApiTaskPriority>"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "label",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::task_read::TaskReadLabel>"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "plan_filter",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::task_read::TaskReadPlanFilter>"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "assignee",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "include_archived",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "offset",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "sort",
+        "nested": false,
+        "part": "query",
+        "rust_type": "crate::task_read::TaskReadSort"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListTasks",
+    "operation_id": "api.list-tasks",
+    "path_dto": "crate::ListTasksPath",
+    "query_dto": "crate::ListTasksQuery",
+    "request": "ListTasksRequest",
+    "resolved_parts": [
+      "crate::task_read::ListTasksPath",
+      "crate::task_read::ListTasksQuery",
+      "()"
+    ],
+    "resolved_response": "crate::api_components::ListTasksResponse",
+    "response": "ListTasksResponse",
+    "response_dto": "crate::ListTasksResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListTasksByStatusPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::api_components::ApiTaskStatus>"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "priority",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::api_components::ApiTaskPriority>"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "label",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::task_read::TaskReadLabel>"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "plan_filter",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::task_read::TaskReadPlanFilter>"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "assignee",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "include_archived",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "offset",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "sort",
+        "nested": false,
+        "part": "query",
+        "rust_type": "crate::task_read::TaskReadSort"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListTasksByStatus",
+    "operation_id": "api.list-tasks-by-status",
+    "path_dto": "crate::ListTasksByStatusPath",
+    "query_dto": "crate::ListTasksByStatusQuery",
+    "request": "ListTasksByStatusRequest",
+    "resolved_parts": [
+      "crate::task_read::ListTasksByStatusPath",
+      "crate::task_read::ListTasksByStatusQuery",
+      "()"
+    ],
+    "resolved_response": "crate::api_components::ListTasksByStatusResponse",
+    "response": "ListTasksByStatusResponse",
+    "response_dto": "crate::ListTasksByStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::CreateTaskPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "task_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "idempotency_key",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "description",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "status",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::create_task::ApiCreateTaskStatus>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "assignee",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "priority",
+        "nested": false,
+        "part": "input",
+        "rust_type": "i64"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "scheduled_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "due_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "max_retries",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "metadata",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<std::collections::BTreeMap<String,serde_json::Value>>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "labels",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "depends_on",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::CreateTaskRequest",
+    "method": "CreateTask",
+    "operation_id": "api.create-task",
+    "path_dto": "crate::CreateTaskPath",
+    "query_dto": null,
+    "request": "CreateTaskRequest",
+    "resolved_parts": [
+      "crate::create_task::CreateTaskPath",
+      "()",
+      "crate::create_task::CreateTaskRequest"
+    ],
+    "resolved_response": "crate::create_task::CreateTaskResponse",
+    "response": "CreateTaskResponse",
+    "response_dto": "crate::CreateTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::GetTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::GetTaskQuery",
+        "field": "include",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetTask",
+    "operation_id": "api.get-task",
+    "path_dto": "crate::GetTaskPath",
+    "query_dto": "crate::GetTaskQuery",
+    "request": "GetTaskRequest",
+    "resolved_parts": [
+      "crate::task_core::GetTaskPath",
+      "crate::task_core::GetTaskQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::OptionalMetadataEnvelope<crate::api_components::ApiTask,crate::wire::TaskOntologyDetailsMeta<Option<crate::task_core::TaskOntologySummary>>>",
+    "response": "GetTaskResponse",
+    "response_dto": "crate::GetTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::UpdateTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "description",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<String>>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "assignee",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<String>>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "priority",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "scheduled_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<i64>>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "due_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<i64>>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "max_retries",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<i64>>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "metadata",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<serde_json::Value>>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "expected_lock_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::UpdateTaskRequest",
+    "method": "UpdateTask",
+    "operation_id": "api.update-task",
+    "path_dto": "crate::UpdateTaskPath",
+    "query_dto": null,
+    "request": "UpdateTaskRequest",
+    "resolved_parts": [
+      "crate::task_core::UpdateTaskPath",
+      "()",
+      "crate::task_core::UpdateTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "UpdateTaskResponse",
+    "response_dto": "crate::UpdateTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::SpecifyTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SpecifyTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::SpecifyTaskRequest",
+        "field": "description",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::SpecifyTaskRequest",
+        "field": "scheduled_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::SpecifyTaskRequest",
+    "method": "SpecifyTask",
+    "operation_id": "api.specify-task",
+    "path_dto": "crate::SpecifyTaskPath",
+    "query_dto": null,
+    "request": "SpecifyTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::SpecifyTaskPath",
+      "()",
+      "crate::lifecycle::SpecifyTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "SpecifyTaskResponse",
+    "response_dto": "crate::SpecifyTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PromoteTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PromoteTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::PromoteTaskRequest",
+    "method": "PromoteTask",
+    "operation_id": "api.promote-task",
+    "path_dto": "crate::PromoteTaskPath",
+    "query_dto": null,
+    "request": "PromoteTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::PromoteTaskPath",
+      "()",
+      "crate::lifecycle::PromoteTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "PromoteTaskResponse",
+    "response_dto": "crate::PromoteTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ClaimTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ClaimTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ClaimTaskRequest",
+        "field": "ttl_ms",
+        "nested": false,
+        "part": "input",
+        "rust_type": "i64"
+      },
+      {
+        "dto": "crate::ClaimTaskRequest",
+        "field": "worker_profile",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ClaimTaskRequest",
+        "field": "metadata",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<serde_json::Value>"
+      }
+    ],
+    "input_dto": "crate::ClaimTaskRequest",
+    "method": "ClaimTask",
+    "operation_id": "api.claim-task",
+    "path_dto": "crate::ClaimTaskPath",
+    "query_dto": null,
+    "request": "ClaimTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::ClaimTaskPath",
+      "()",
+      "crate::lifecycle::ClaimTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::runs::ApiClaim>",
+    "response": "ClaimTaskResponse",
+    "response_dto": "crate::ClaimTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ReopenTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReopenTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReopenTaskRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": "crate::ReopenTaskRequest",
+    "method": "ReopenTask",
+    "operation_id": "api.reopen-task",
+    "path_dto": "crate::ReopenTaskPath",
+    "query_dto": null,
+    "request": "ReopenTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::ReopenTaskPath",
+      "()",
+      "crate::lifecycle::ReopenTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "ReopenTaskResponse",
+    "response_dto": "crate::ReopenTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ReclaimTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReclaimTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReclaimTaskRequest",
+        "field": "force",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::ReclaimTaskRequest",
+        "field": "to_status",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::lifecycle::ReclaimTargetStatus>"
+      },
+      {
+        "dto": "crate::ReclaimTaskRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::ReclaimTaskRequest",
+    "method": "ReclaimTask",
+    "operation_id": "api.reclaim-task",
+    "path_dto": "crate::ReclaimTaskPath",
+    "query_dto": null,
+    "request": "ReclaimTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::ReclaimTaskPath",
+      "()",
+      "crate::lifecycle::ReclaimTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "ReclaimTaskResponse",
+    "response_dto": "crate::ReclaimTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::HeartbeatTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::HeartbeatTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::HeartbeatTaskRequest",
+        "field": "claim_token",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::HeartbeatTaskRequest",
+        "field": "ttl_ms",
+        "nested": false,
+        "part": "input",
+        "rust_type": "i64"
+      },
+      {
+        "dto": "crate::HeartbeatTaskRequest",
+        "field": "note",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::HeartbeatTaskRequest",
+    "method": "HeartbeatTask",
+    "operation_id": "api.heartbeat-task",
+    "path_dto": "crate::HeartbeatTaskPath",
+    "query_dto": null,
+    "request": "HeartbeatTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::HeartbeatTaskPath",
+      "()",
+      "crate::lifecycle::HeartbeatTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "HeartbeatTaskResponse",
+    "response_dto": "crate::HeartbeatTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ReleaseTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReleaseTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReleaseTaskRequest",
+        "field": "claim_token",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": "crate::ReleaseTaskRequest",
+    "method": "ReleaseTask",
+    "operation_id": "api.release-task",
+    "path_dto": "crate::ReleaseTaskPath",
+    "query_dto": null,
+    "request": "ReleaseTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::ReleaseTaskPath",
+      "()",
+      "crate::lifecycle::ReleaseTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "ReleaseTaskResponse",
+    "response_dto": "crate::ReleaseTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::CompleteTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CompleteTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CompleteTaskRequest",
+        "field": "claim_token",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CompleteTaskRequest",
+        "field": "force",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::CompleteTaskRequest",
+        "field": "summary",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CompleteTaskRequest",
+        "field": "result",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<serde_json::Value>"
+      }
+    ],
+    "input_dto": "crate::CompleteTaskRequest",
+    "method": "CompleteTask",
+    "operation_id": "api.complete-task",
+    "path_dto": "crate::CompleteTaskPath",
+    "query_dto": null,
+    "request": "CompleteTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::CompleteTaskPath",
+      "()",
+      "crate::lifecycle::CompleteTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "CompleteTaskResponse",
+    "response_dto": "crate::CompleteTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::SubmitReviewTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SubmitReviewTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::SubmitReviewTaskRequest",
+        "field": "claim_token",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::SubmitReviewTaskRequest",
+        "field": "force",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::SubmitReviewTaskRequest",
+        "field": "summary",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::SubmitReviewTaskRequest",
+    "method": "SubmitReviewTask",
+    "operation_id": "api.submit-review-task",
+    "path_dto": "crate::SubmitReviewTaskPath",
+    "query_dto": null,
+    "request": "SubmitReviewTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::SubmitReviewTaskPath",
+      "()",
+      "crate::lifecycle::SubmitReviewTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "SubmitReviewTaskResponse",
+    "response_dto": "crate::SubmitReviewTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BlockTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::BlockTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::BlockTaskRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::BlockTaskRequest",
+        "field": "claim_token",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::BlockTaskRequest",
+        "field": "force",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": "crate::BlockTaskRequest",
+    "method": "BlockTask",
+    "operation_id": "api.block-task",
+    "path_dto": "crate::BlockTaskPath",
+    "query_dto": null,
+    "request": "BlockTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::BlockTaskPath",
+      "()",
+      "crate::lifecycle::BlockTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "BlockTaskResponse",
+    "response_dto": "crate::BlockTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::UnblockTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::UnblockTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::UnblockTaskRequest",
+    "method": "UnblockTask",
+    "operation_id": "api.unblock-task",
+    "path_dto": "crate::UnblockTaskPath",
+    "query_dto": null,
+    "request": "UnblockTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::UnblockTaskPath",
+      "()",
+      "crate::lifecycle::UnblockTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "UnblockTaskResponse",
+    "response_dto": "crate::UnblockTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ArchiveTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ArchiveTaskRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ArchiveTaskRequest",
+        "field": "force",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": "crate::ArchiveTaskRequest",
+    "method": "ArchiveTask",
+    "operation_id": "api.archive-task",
+    "path_dto": "crate::ArchiveTaskPath",
+    "query_dto": null,
+    "request": "ArchiveTaskRequest",
+    "resolved_parts": [
+      "crate::transitions::ArchiveTaskPath",
+      "()",
+      "crate::lifecycle::ArchiveTaskRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiTask>",
+    "response": "ArchiveTaskResponse",
+    "response_dto": "crate::ArchiveTaskResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListStepsPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListSteps",
+    "operation_id": "api.list-steps",
+    "path_dto": "crate::ListStepsPath",
+    "query_dto": null,
+    "request": "ListStepsRequest",
+    "resolved_parts": [
+      "crate::steps::ListStepsPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::steps::ListStepsResponse",
+    "response": "ListStepsResponse",
+    "response_dto": "crate::ListStepsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::CreateStepPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateStepRequest",
+        "field": "idempotency_key",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateStepRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateStepRequest",
+        "field": "body",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateStepRequest",
+        "field": "linked_task_ref",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateStepRequest",
+        "field": "position",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::CreateStepRequest",
+        "field": "required",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::CreateStepRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::CreateStepRequest",
+    "method": "CreateStep",
+    "operation_id": "api.create-step",
+    "path_dto": "crate::CreateStepPath",
+    "query_dto": null,
+    "request": "CreateStepRequest",
+    "resolved_parts": [
+      "crate::steps::CreateStepPath",
+      "()",
+      "crate::steps::CreateStepRequest"
+    ],
+    "resolved_response": "crate::steps::CreateStepResponse",
+    "response": "CreateStepResponse",
+    "response_dto": "crate::CreateStepResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::UpdateStepPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::UpdateStepPath",
+        "field": "step_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::UpdateStepRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateStepRequest",
+        "field": "body",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateStepRequest",
+        "field": "linked_task_ref",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateStepRequest",
+        "field": "unlink_task",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::UpdateStepRequest",
+        "field": "position",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::UpdateStepRequest",
+        "field": "required",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<bool>"
+      },
+      {
+        "dto": "crate::UpdateStepRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::UpdateStepRequest",
+    "method": "UpdateStep",
+    "operation_id": "api.update-step",
+    "path_dto": "crate::UpdateStepPath",
+    "query_dto": null,
+    "request": "UpdateStepRequest",
+    "resolved_parts": [
+      "crate::steps::UpdateStepPath",
+      "()",
+      "crate::steps::UpdateStepRequest"
+    ],
+    "resolved_response": "crate::steps::UpdateStepResponse",
+    "response": "UpdateStepResponse",
+    "response_dto": "crate::UpdateStepResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::RemoveStepPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RemoveStepPath",
+        "field": "step_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "RemoveStep",
+    "operation_id": "api.remove-step",
+    "path_dto": "crate::RemoveStepPath",
+    "query_dto": null,
+    "request": "RemoveStepRequest",
+    "resolved_parts": [
+      "crate::steps::RemoveStepPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::steps::RemoveStepResponse",
+    "response": "RemoveStepResponse",
+    "response_dto": "crate::RemoveStepResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::CompleteStepPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CompleteStepPath",
+        "field": "step_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CompleteStepRequest",
+        "field": "note",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CompleteStepRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::CompleteStepRequest",
+    "method": "CompleteStep",
+    "operation_id": "api.complete-step",
+    "path_dto": "crate::CompleteStepPath",
+    "query_dto": null,
+    "request": "CompleteStepRequest",
+    "resolved_parts": [
+      "crate::steps::CompleteStepPath",
+      "()",
+      "crate::steps::CompleteStepRequest"
+    ],
+    "resolved_response": "crate::steps::CompleteStepResponse",
+    "response": "CompleteStepResponse",
+    "response_dto": "crate::CompleteStepResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::SkipStepPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SkipStepPath",
+        "field": "step_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SkipStepRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SkipStepRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::SkipStepRequest",
+    "method": "SkipStep",
+    "operation_id": "api.skip-step",
+    "path_dto": "crate::SkipStepPath",
+    "query_dto": null,
+    "request": "SkipStepRequest",
+    "resolved_parts": [
+      "crate::steps::SkipStepPath",
+      "()",
+      "crate::steps::SkipStepRequest"
+    ],
+    "resolved_response": "crate::steps::SkipStepResponse",
+    "response": "SkipStepResponse",
+    "response_dto": "crate::SkipStepResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ReopenStepPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReopenStepPath",
+        "field": "step_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReopenStepRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReopenStepRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::ReopenStepRequest",
+    "method": "ReopenStep",
+    "operation_id": "api.reopen-step",
+    "path_dto": "crate::ReopenStepPath",
+    "query_dto": null,
+    "request": "ReopenStepRequest",
+    "resolved_parts": [
+      "crate::steps::ReopenStepPath",
+      "()",
+      "crate::steps::ReopenStepRequest"
+    ],
+    "resolved_response": "crate::steps::ReopenStepResponse",
+    "response": "ReopenStepResponse",
+    "response_dto": "crate::ReopenStepResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::MarkExecutionPlanNotRequiredPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::MarkExecutionPlanNotRequiredRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::MarkExecutionPlanNotRequiredRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::MarkExecutionPlanNotRequiredRequest",
+    "method": "MarkExecutionPlanNotRequired",
+    "operation_id": "api.mark-execution-plan-not-required",
+    "path_dto": "crate::MarkExecutionPlanNotRequiredPath",
+    "query_dto": null,
+    "request": "MarkExecutionPlanNotRequiredRequest",
+    "resolved_parts": [
+      "crate::steps::MarkExecutionPlanNotRequiredPath",
+      "()",
+      "crate::steps::MarkExecutionPlanNotRequiredRequest"
+    ],
+    "resolved_response": "crate::steps::MarkExecutionPlanNotRequiredResponse",
+    "response": "MarkExecutionPlanNotRequiredResponse",
+    "response_dto": "crate::MarkExecutionPlanNotRequiredResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListDependenciesPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListDependencies",
+    "operation_id": "api.list-dependencies",
+    "path_dto": "crate::ListDependenciesPath",
+    "query_dto": null,
+    "request": "ListDependenciesRequest",
+    "resolved_parts": [
+      "crate::dependencies::ListDependenciesPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::dependencies::ListDependenciesResponse",
+    "response": "ListDependenciesResponse",
+    "response_dto": "crate::ListDependenciesResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::AddDependencyPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::AddDependencyRequest",
+        "field": "parent_task_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::AddDependencyRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::AddDependencyRequest",
+    "method": "AddDependency",
+    "operation_id": "api.add-dependency",
+    "path_dto": "crate::AddDependencyPath",
+    "query_dto": null,
+    "request": "AddDependencyRequest",
+    "resolved_parts": [
+      "crate::dependencies::AddDependencyPath",
+      "()",
+      "crate::lifecycle::AddDependencyRequest"
+    ],
+    "resolved_response": "crate::dependencies::AddDependencyResponse",
+    "response": "AddDependencyResponse",
+    "response_dto": "crate::AddDependencyResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::RemoveDependencyPath",
+        "field": "child_task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RemoveDependencyPath",
+        "field": "parent_task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "RemoveDependency",
+    "operation_id": "api.remove-dependency",
+    "path_dto": "crate::RemoveDependencyPath",
+    "query_dto": null,
+    "request": "RemoveDependencyRequest",
+    "resolved_parts": [
+      "crate::dependencies::RemoveDependencyPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::dependencies::RemoveDependencyResponse",
+    "response": "RemoveDependencyResponse",
+    "response_dto": "crate::RemoveDependencyResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListRunsPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListRuns",
+    "operation_id": "api.list-runs",
+    "path_dto": "crate::ListRunsPath",
+    "query_dto": null,
+    "request": "ListRunsRequest",
+    "resolved_parts": [
+      "crate::runs::ListRunsPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::runs::ListRunsResponse",
+    "response": "ListRunsResponse",
+    "response_dto": "crate::ListRunsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::GetRunPath",
+        "field": "run_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetRun",
+    "operation_id": "api.get-run",
+    "path_dto": "crate::GetRunPath",
+    "query_dto": null,
+    "request": "GetRunRequest",
+    "resolved_parts": [
+      "crate::runs::GetRunPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::runs::GetRunResponse",
+    "response": "GetRunResponse",
+    "response_dto": "crate::GetRunResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::GetRunLogPath",
+        "field": "run_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetRunLog",
+    "operation_id": "api.get-run-log",
+    "path_dto": "crate::GetRunLogPath",
+    "query_dto": null,
+    "request": "GetRunLogRequest",
+    "resolved_parts": [
+      "crate::runs::GetRunLogPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::runs::GetRunLogResponse",
+    "response": "GetRunLogResponse",
+    "response_dto": "crate::GetRunLogResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListCommentsPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListComments",
+    "operation_id": "api.list-comments",
+    "path_dto": "crate::ListCommentsPath",
+    "query_dto": null,
+    "request": "ListCommentsRequest",
+    "resolved_parts": [
+      "crate::comments::ListCommentsPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::comments::ListCommentsResponse",
+    "response": "ListCommentsResponse",
+    "response_dto": "crate::ListCommentsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::CreateCommentPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateCommentRequest",
+        "field": "idempotency_key",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateCommentRequest",
+        "field": "author",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateCommentRequest",
+        "field": "body",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateCommentRequest",
+        "field": "kind",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::comments::CommentKind>"
+      },
+      {
+        "dto": "crate::CreateCommentRequest",
+        "field": "author_type",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::comments::CommentAuthorType>"
+      },
+      {
+        "dto": "crate::CreateCommentRequest",
+        "field": "agent_type",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateCommentRequest",
+        "field": "metadata",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<serde_json::Value>"
+      }
+    ],
+    "input_dto": "crate::CreateCommentRequest",
+    "method": "CreateComment",
+    "operation_id": "api.create-comment",
+    "path_dto": "crate::CreateCommentPath",
+    "query_dto": null,
+    "request": "CreateCommentRequest",
+    "resolved_parts": [
+      "crate::comments::CreateCommentPath",
+      "()",
+      "crate::comments::CreateCommentRequest"
+    ],
+    "resolved_response": "crate::comments::CreateCommentResponse",
+    "response": "CreateCommentResponse",
+    "response_dto": "crate::CreateCommentResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListAttachmentsPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListAttachments",
+    "operation_id": "api.list-attachments",
+    "path_dto": "crate::ListAttachmentsPath",
+    "query_dto": null,
+    "request": "ListAttachmentsRequest",
+    "resolved_parts": [
+      "crate::attachments::ListAttachmentsPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::attachments::ApiAttachment>>",
+    "response": "ListAttachmentsResponse",
+    "response_dto": "crate::ListAttachmentsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::CreateAttachmentPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateAttachmentRequest",
+        "field": "id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateAttachmentRequest",
+        "field": "filename",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateAttachmentRequest",
+        "field": "content",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<u8>"
+      },
+      {
+        "dto": "crate::CreateAttachmentRequest",
+        "field": "content_type",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateAttachmentRequest",
+        "field": "rel_path",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateAttachmentRequest",
+        "field": "sha256",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateAttachmentRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::CreateAttachmentRequest",
+    "method": "CreateAttachment",
+    "operation_id": "api.create-attachment",
+    "path_dto": "crate::CreateAttachmentPath",
+    "query_dto": null,
+    "request": "CreateAttachmentRequest",
+    "resolved_parts": [
+      "crate::attachments::CreateAttachmentPath",
+      "()",
+      "crate::attachments::CreateAttachmentRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::attachments::ApiAttachment>",
+    "response": "CreateAttachmentResponse",
+    "response_dto": "crate::CreateAttachmentResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::GetAttachmentPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::GetAttachmentPath",
+        "field": "attachment_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "DownloadAttachment",
+    "operation_id": "api.download-attachment",
+    "path_dto": "crate::GetAttachmentPath",
+    "query_dto": null,
+    "request": "DownloadAttachmentRequest",
+    "resolved_parts": [
+      "crate::attachments::GetAttachmentPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::rpc::dto::AttachmentDownload",
+    "response": "DownloadAttachmentResponse",
+    "response_dto": "crate::rpc::dto::AttachmentDownload"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::DeleteAttachmentPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::DeleteAttachmentPath",
+        "field": "attachment_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "DeleteAttachment",
+    "operation_id": "api.delete-attachment",
+    "path_dto": "crate::DeleteAttachmentPath",
+    "query_dto": null,
+    "request": "DeleteAttachmentRequest",
+    "resolved_parts": [
+      "crate::attachments::GetAttachmentPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::wire::DeleteResult>",
+    "response": "DeleteAttachmentResponse",
+    "response_dto": "crate::DeleteAttachmentResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListEventsQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ListEventsQuery",
+        "field": "task_id",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListEventsQuery",
+        "field": "after",
+        "nested": false,
+        "part": "query",
+        "rust_type": "i64"
+      },
+      {
+        "dto": "crate::ListEventsQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListEvents",
+    "operation_id": "api.list-events",
+    "path_dto": null,
+    "query_dto": "crate::ListEventsQuery",
+    "request": "ListEventsRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::ListEventsQuery",
+      "()"
+    ],
+    "resolved_response": "crate::events::ListEventsResponse",
+    "response": "ListEventsResponse",
+    "response_dto": "crate::ListEventsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListTaskLabelsPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListTaskLabels",
+    "operation_id": "api.list-task-labels",
+    "path_dto": "crate::ListTaskLabelsPath",
+    "query_dto": null,
+    "request": "ListTaskLabelsRequest",
+    "resolved_parts": [
+      "crate::labels::ListTaskLabelsPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::labels::ListTaskLabelsResponse",
+    "response": "ListTaskLabelsResponse",
+    "response_dto": "crate::ListTaskLabelsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::AddTaskLabelPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::AddTaskLabelRequest",
+        "field": "name",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::AddTaskLabelRequest",
+        "field": "names",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Vec<String>>"
+      },
+      {
+        "dto": "crate::AddTaskLabelRequest",
+        "field": "create_missing",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::AddTaskLabelRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::AddTaskLabelRequest",
+    "method": "AddTaskLabel",
+    "operation_id": "api.add-task-label",
+    "path_dto": "crate::AddTaskLabelPath",
+    "query_dto": null,
+    "request": "AddTaskLabelRequest",
+    "resolved_parts": [
+      "crate::labels::AddTaskLabelPath",
+      "()",
+      "crate::labels::AddTaskLabelRequest"
+    ],
+    "resolved_response": "crate::wire::OptionalMetadataEnvelope<crate::api_components::ApiTask,crate::wire::CreatedLabelsMeta<crate::api_components::ApiLabel>>",
+    "response": "AddTaskLabelResponse",
+    "response_dto": "crate::AddTaskLabelResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::TaskLabelSurfacePath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "name",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "description",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "applies_when",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "excludes_when",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "positive_examples",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "negative_examples",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "verify",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "min_verify_score",
+        "nested": false,
+        "part": "input",
+        "rust_type": "f32"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "vector_config",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::protocols::VectorConfigureRequest>"
+      },
+      {
+        "dto": "crate::BootstrapTaskLabelRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::BootstrapTaskLabelRequest",
+    "method": "BootstrapTaskLabel",
+    "operation_id": "api.bootstrap-task-label",
+    "path_dto": "crate::TaskLabelSurfacePath",
+    "query_dto": null,
+    "request": "BootstrapTaskLabelRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::TaskLabelSurfacePath",
+      "()",
+      "crate::label_surfaces::BootstrapTaskLabelRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::BootstrapTaskLabelData>",
+    "response": "BootstrapTaskLabelResponse",
+    "response_dto": "crate::BootstrapTaskLabelResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::RemoveTaskLabelPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RemoveTaskLabelPath",
+        "field": "label_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "RemoveTaskLabel",
+    "operation_id": "api.remove-task-label",
+    "path_dto": "crate::RemoveTaskLabelPath",
+    "query_dto": null,
+    "request": "RemoveTaskLabelRequest",
+    "resolved_parts": [
+      "crate::labels::RemoveTaskLabelPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::labels::RemoveTaskLabelResponse",
+    "response": "RemoveTaskLabelResponse",
+    "response_dto": "crate::RemoveTaskLabelResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListBoardLabels",
+    "operation_id": "api.list-board-labels",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "ListBoardLabelsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::api_components::ApiLabel>>",
+    "response": "ListBoardLabelsResponse",
+    "response_dto": "crate::ListBoardLabelsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ListBoardLabelProposalsPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ListBoardLabelProposalsQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<crate::label_surfaces::LabelProposalStatusWire>"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListBoardLabelProposals",
+    "operation_id": "api.list-board-label-proposals",
+    "path_dto": "crate::ListBoardLabelProposalsPath",
+    "query_dto": "crate::ListBoardLabelProposalsQuery",
+    "request": "ListBoardLabelProposalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::ListBoardLabelProposalsPath",
+      "crate::label_surfaces::ListBoardLabelProposalsQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelSemanticProposalWire>>",
+    "response": "ListBoardLabelProposalsResponse",
+    "response_dto": "crate::ListBoardLabelProposalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateBoardLabelRequest",
+        "field": "name",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateBoardLabelRequest",
+        "field": "color",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::CreateBoardLabelRequest",
+    "method": "CreateBoardLabel",
+    "operation_id": "api.create-board-label",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "CreateBoardLabelRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::label_surfaces::CreateBoardLabelRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::api_components::ApiLabel>",
+    "response": "CreateBoardLabelResponse",
+    "response_dto": "crate::CreateBoardLabelResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::DeleteBoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::DeleteBoardLabelPath",
+        "field": "label_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::DeleteBoardLabelQuery",
+        "field": "force",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": null,
+    "method": "DeleteBoardLabel",
+    "operation_id": "api.delete-board-label",
+    "path_dto": "crate::DeleteBoardLabelPath",
+    "query_dto": "crate::DeleteBoardLabelQuery",
+    "request": "DeleteBoardLabelRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::DeleteBoardLabelPath",
+      "crate::label_surfaces::DeleteBoardLabelQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::DeleteBoardLabelResult>",
+    "response": "DeleteBoardLabelResponse",
+    "response_dto": "crate::DeleteBoardLabelResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListLabelSemantics",
+    "operation_id": "api.list-label-semantics",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "ListLabelSemanticsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelSemanticsWire>>",
+    "response": "ListLabelSemanticsResponse",
+    "response_dto": "crate::ListLabelSemanticsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::LabelSemanticsPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelSemanticsPath",
+        "field": "label_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetLabelSemantics",
+    "operation_id": "api.get-label-semantics",
+    "path_dto": "crate::LabelSemanticsPath",
+    "query_dto": null,
+    "request": "GetLabelSemanticsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::LabelSemanticsPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticsWire>",
+    "response": "GetLabelSemanticsResponse",
+    "response_dto": "crate::GetLabelSemanticsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::LabelSemanticsPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelSemanticsPath",
+        "field": "label_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "expected_semantics_hash",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "replace",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "source_signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "description",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "applies_when",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Vec<String>>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "excludes_when",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Vec<String>>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "positive_examples",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Vec<String>>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "negative_examples",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Vec<String>>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "remove_applies_when",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "remove_excludes_when",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "remove_positive_examples",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::UpsertLabelSemanticsRequest",
+        "field": "remove_negative_examples",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      }
+    ],
+    "input_dto": "crate::UpsertLabelSemanticsRequest",
+    "method": "UpsertLabelSemantics",
+    "operation_id": "api.upsert-label-semantics",
+    "path_dto": "crate::LabelSemanticsPath",
+    "query_dto": null,
+    "request": "UpsertLabelSemanticsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::LabelSemanticsPath",
+      "()",
+      "crate::label_surfaces::UpsertLabelSemanticsRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticsWire>",
+    "response": "UpsertLabelSemanticsResponse",
+    "response_dto": "crate::UpsertLabelSemanticsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::LabelSemanticsPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelSemanticsPath",
+        "field": "label_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::DeleteLabelSemanticsQuery",
+        "field": "expected_semantics_hash",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::DeleteLabelSemanticsQuery",
+        "field": "reason",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "DeleteLabelSemantics",
+    "operation_id": "api.delete-label-semantics",
+    "path_dto": "crate::LabelSemanticsPath",
+    "query_dto": "crate::DeleteLabelSemanticsQuery",
+    "request": "DeleteLabelSemanticsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::LabelSemanticsPath",
+      "crate::label_surfaces::DeleteLabelSemanticsQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::wire::DeleteResult>",
+    "response": "DeleteLabelSemanticsResponse",
+    "response_dto": "crate::DeleteResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListLabelAtoms",
+    "operation_id": "api.list-label-atoms",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "ListLabelAtomsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelAtomWire>>",
+    "response": "ListLabelAtomsResponse",
+    "response_dto": "crate::ListLabelAtomsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::LabelAtomPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelAtomPath",
+        "field": "atom_ref",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "ExplainLabelAtom",
+    "operation_id": "api.explain-label-atom",
+    "path_dto": "crate::LabelAtomPath",
+    "query_dto": null,
+    "request": "ExplainLabelAtomRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::LabelAtomPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelAtomExplainWire>",
+    "response": "ExplainLabelAtomResponse",
+    "response_dto": "crate::ExplainLabelAtomResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "LabelAtomIndexStatus",
+    "operation_id": "api.label-atom-index-status",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "LabelAtomIndexStatusRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::VectorStoreStatusWire>",
+    "response": "LabelAtomIndexStatusResponse",
+    "response_dto": "crate::LabelAtomIndexStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "RebuildLabelAtomIndex",
+    "operation_id": "api.rebuild-label-atom-index",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "RebuildLabelAtomIndexRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::VectorStoreStatusWire>",
+    "response": "RebuildLabelAtomIndexResponse",
+    "response_dto": "crate::RebuildLabelAtomIndexResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelAtomIndexQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelAtomIndexQuery",
+        "field": "vector_json",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelAtomIndexQuery",
+        "field": "embedding_model",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelAtomIndexQuery",
+        "field": "include_vector",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::LabelAtomIndexQuery",
+        "field": "polarity",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelAtomIndexQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "QueryLabelAtomIndex",
+    "operation_id": "api.query-label-atom-index",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": "crate::LabelAtomIndexQuery",
+    "request": "QueryLabelAtomIndexRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "crate::label_surfaces::LabelAtomIndexQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::rpc::dto::LabelAtomIndexQueryData>",
+    "response": "QueryLabelAtomIndexResponse",
+    "response_dto": "crate::rpc::dto::LabelAtomIndexQueryResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "kind",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "task_ref",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "include_all",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListSignals",
+    "operation_id": "api.list-signals",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": "crate::SignalQuery",
+    "request": "ListSignalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "crate::label_surfaces::SignalQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::MetadataEnvelope<Vec<crate::label_surfaces::SignalWire>,crate::wire::SignalFilterMeta>",
+    "response": "ListSignalsResponse",
+    "response_dto": "crate::ListSignalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "kind",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "task_ref",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "include_all",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::SignalQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "ReviewSignals",
+    "operation_id": "api.review-signals",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": "crate::SignalQuery",
+    "request": "ReviewSignalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "crate::label_surfaces::SignalQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::MetadataEnvelope<Vec<crate::label_surfaces::SignalWire>,crate::wire::SignalFilterMeta>",
+    "response": "ReviewSignalsResponse",
+    "response_dto": "crate::ReviewSignalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::SignalPath",
+        "field": "signal_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetSignal",
+    "operation_id": "api.get-signal",
+    "path_dto": "crate::SignalPath",
+    "query_dto": null,
+    "request": "GetSignalRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::SignalPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::SignalWire>",
+    "response": "GetSignalResponse",
+    "response_dto": "crate::GetSignalResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "kind",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "summary",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "severity",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "task_ref",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "task_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "run_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "comment_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "agent_type",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "dedupe_key",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "source",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "evidence",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::structured_metadata::JsonObject>"
+      },
+      {
+        "dto": "crate::RecordSignalRequest",
+        "field": "comment",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::signals::SignalCommentRequest>"
+      }
+    ],
+    "input_dto": "crate::RecordSignalRequest",
+    "method": "RecordSignal",
+    "operation_id": "api.record-signal",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "RecordSignalRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::signals::RecordSignalRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::signals::SignalRecordResult>",
+    "response": "RecordSignalResponse",
+    "response_dto": "crate::RecordSignalResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "replacement_signal_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "expected_updated_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::ReviewSignalsRequest",
+    "method": "ConfirmSignals",
+    "operation_id": "api.confirm-signals",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "ConfirmSignalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::signals::ReviewSignalsRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>",
+    "response": "ConfirmSignalsResponse",
+    "response_dto": "crate::ConfirmSignalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "replacement_signal_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "expected_updated_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::ReviewSignalsRequest",
+    "method": "RejectSignals",
+    "operation_id": "api.reject-signals",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "RejectSignalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::signals::ReviewSignalsRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>",
+    "response": "RejectSignalsResponse",
+    "response_dto": "crate::RejectSignalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "replacement_signal_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "expected_updated_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::ReviewSignalsRequest",
+    "method": "ResolveSignals",
+    "operation_id": "api.resolve-signals",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "ResolveSignalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::signals::ReviewSignalsRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>",
+    "response": "ResolveSignalsResponse",
+    "response_dto": "crate::ResolveSignalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "replacement_signal_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ReviewSignalsRequest",
+        "field": "expected_updated_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::ReviewSignalsRequest",
+    "method": "SupersedeSignals",
+    "operation_id": "api.supersede-signals",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "SupersedeSignalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::signals::ReviewSignalsRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>",
+    "response": "SupersedeSignalsResponse",
+    "response_dto": "crate::SupersedeSignalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::TaskLabelSurfacePath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "candidate_limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "atom_limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "max_selected_labels",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "min_score",
+        "nested": false,
+        "part": "query",
+        "rust_type": "f32"
+      }
+    ],
+    "input_dto": null,
+    "method": "SuggestTaskLabels",
+    "operation_id": "api.suggest-task-labels",
+    "path_dto": "crate::TaskLabelSurfacePath",
+    "query_dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+    "request": "SuggestTaskLabelsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::TaskLabelSurfacePath",
+      "crate::rpc::dto::TaskLabelSuggestionQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelSuggestionResultWire>",
+    "response": "SuggestTaskLabelsResponse",
+    "response_dto": "crate::SuggestTaskLabelsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::TaskLabelSurfacePath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelProposalQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelProposalQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListTaskLabelProposals",
+    "operation_id": "api.list-task-label-proposals",
+    "path_dto": "crate::TaskLabelSurfacePath",
+    "query_dto": "crate::rpc::dto::TaskLabelProposalQuery",
+    "request": "ListTaskLabelProposalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::TaskLabelSurfacePath",
+      "crate::rpc::dto::TaskLabelProposalQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelSemanticProposalWire>>",
+    "response": "ListTaskLabelProposalsResponse",
+    "response_dto": "crate::ListTaskLabelProposalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::TaskLabelSurfacePath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "candidate_limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "atom_limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "max_selected_labels",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+        "field": "min_score",
+        "nested": false,
+        "part": "query",
+        "rust_type": "f32"
+      },
+      {
+        "dto": "crate::ProposeTaskLabelRequest",
+        "field": "proposal",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::label_surfaces::LabelProposalCandidateWire>"
+      },
+      {
+        "dto": "crate::ProposeTaskLabelRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ProposeTaskLabelRequest",
+        "field": "source_signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ProposeTaskLabelRequest",
+        "field": "ontology_actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::label_surfaces::LabelOntologyActorWire>"
+      },
+      {
+        "dto": "crate::ProposeTaskLabelRequest",
+        "field": "allow_retarget",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::ProposeTaskLabelRequest",
+        "field": "retarget_reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::ProposeTaskLabelRequest",
+    "method": "ProposeTaskLabel",
+    "operation_id": "api.propose-task-label",
+    "path_dto": "crate::TaskLabelSurfacePath",
+    "query_dto": "crate::rpc::dto::TaskLabelSuggestionQuery",
+    "request": "ProposeTaskLabelRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::TaskLabelSurfacePath",
+      "crate::rpc::dto::TaskLabelSuggestionQuery",
+      "crate::label_surfaces::ProposeTaskLabelRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelProposalAttemptWire>",
+    "response": "ProposeTaskLabelResponse",
+    "response_dto": "crate::ProposeTaskLabelResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::TaskLabelSurfacePath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::rpc::dto::TaskLabelBoardQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::LabelOntologyActorWire"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "agent_candidates",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::JsonBodyFieldWire"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "suggestion_snapshot",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::JsonBodyFieldWire"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "final_decision",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::JsonBodyFieldWire"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "suggest_coverage",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<f64>"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "suggest_coverage_cosine",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<f64>"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "suggest_residual_norm",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<f64>"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "suggest_needs_new_label",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<bool>"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "suggest_degraded",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<bool>"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "diagnostics",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::JsonBodyFieldWire"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "capture_fingerprint",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RecordLabelOntologyObservationRequest",
+        "field": "signals",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<crate::label_surfaces::LabelOntologySignalRequest>"
+      }
+    ],
+    "input_dto": "crate::RecordLabelOntologyObservationRequest",
+    "method": "RecordLabelOntologyObservation",
+    "operation_id": "api.record-label-ontology-observation",
+    "path_dto": "crate::TaskLabelSurfacePath",
+    "query_dto": "crate::rpc::dto::TaskLabelBoardQuery",
+    "request": "RecordLabelOntologyObservationRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::TaskLabelSurfacePath",
+      "crate::rpc::dto::TaskLabelBoardQuery",
+      "crate::label_surfaces::RecordLabelOntologyObservationRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyObservationWire>",
+    "response": "RecordLabelOntologyObservationResponse",
+    "response_dto": "crate::RecordLabelOntologyObservationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelOntologySignalQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::LabelOntologySignalQuery",
+        "field": "kind",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::LabelOntologySignalQuery",
+        "field": "task_ref",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologySignalQuery",
+        "field": "target_label_ref",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologySignalQuery",
+        "field": "proposed_label_name",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologySignalQuery",
+        "field": "include_all",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::LabelOntologySignalQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListLabelOntologySignals",
+    "operation_id": "api.list-label-ontology-signals",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": "crate::LabelOntologySignalQuery",
+    "request": "ListLabelOntologySignalsRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "crate::label_surfaces::LabelOntologySignalQuery",
+      "()"
+    ],
+    "resolved_response": "crate::ontology::LabelOntologySignalsResponse",
+    "response": "ListLabelOntologySignalsResponse",
+    "response_dto": "crate::LabelOntologySignalsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelOntologyReviewQuery",
+        "field": "group_by",
+        "nested": false,
+        "part": "query",
+        "rust_type": "crate::label_surfaces::LabelOntologyReviewGroupByWire"
+      },
+      {
+        "dto": "crate::LabelOntologyReviewQuery",
+        "field": "include_all",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::LabelOntologyReviewQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "ReviewLabelOntology",
+    "operation_id": "api.review-label-ontology",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": "crate::LabelOntologyReviewQuery",
+    "request": "ReviewLabelOntologyRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "crate::label_surfaces::LabelOntologyReviewQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::MetadataEnvelope<Vec<crate::label_surfaces::LabelOntologyReviewGroupWire>,crate::wire::LabelOntologyReviewMeta>",
+    "response": "ReviewLabelOntologyResponse",
+    "response_dto": "crate::ReviewLabelOntologyResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::LabelOntologyActorWire"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "idempotency_key",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "action_type",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::LabelOntologyActionTypeWire"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "superseded_by_signal_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "parent_action_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "target_label_ref",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "result_label_ref",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "result_atom_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "result_atom_content_hash",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "result_proposal_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "canonical_before_hash",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "canonical_after_hash",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "change",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::JsonBodyFieldWire"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "validation_status",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::label_surfaces::LabelOntologyValidationStatusWire>"
+      },
+      {
+        "dto": "crate::LabelOntologyActionRequest",
+        "field": "validation",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::JsonBodyFieldWire"
+      }
+    ],
+    "input_dto": "crate::LabelOntologyActionRequest",
+    "method": "CreateLabelOntologyAction",
+    "operation_id": "api.create-label-ontology-action",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "CreateLabelOntologyActionRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::label_surfaces::LabelOntologyActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>",
+    "response": "CreateLabelOntologyActionResponse",
+    "response_dto": "crate::LabelOntologyActionResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ApplyLabelOntologyAtomRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::LabelOntologyActorWire"
+      },
+      {
+        "dto": "crate::ApplyLabelOntologyAtomRequest",
+        "field": "signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ApplyLabelOntologyAtomRequest",
+        "field": "label_ref",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ApplyLabelOntologyAtomRequest",
+        "field": "kind",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ApplyLabelOntologyAtomRequest",
+        "field": "text",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ApplyLabelOntologyAtomRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ApplyLabelOntologyAtomRequest",
+        "field": "allow_retarget",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::ApplyLabelOntologyAtomRequest",
+        "field": "retarget_reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::ApplyLabelOntologyAtomRequest",
+    "method": "ApplyLabelOntologyAtom",
+    "operation_id": "api.apply-label-ontology-atom",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "ApplyLabelOntologyAtomRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::label_surfaces::ApplyLabelOntologyAtomRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>",
+    "response": "ApplyLabelOntologyAtomResponse",
+    "response_dto": "crate::LabelOntologyActionResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RevertLabelOntologyMutationRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::LabelOntologyActorWire"
+      },
+      {
+        "dto": "crate::RevertLabelOntologyMutationRequest",
+        "field": "target_action_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::RevertLabelOntologyMutationRequest",
+        "field": "expected_current_hash",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::RevertLabelOntologyMutationRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": "crate::RevertLabelOntologyMutationRequest",
+    "method": "RevertLabelOntologyMutation",
+    "operation_id": "api.revert-label-ontology-mutation",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "RevertLabelOntologyMutationRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::label_surfaces::RevertLabelOntologyMutationRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>",
+    "response": "RevertLabelOntologyMutationResponse",
+    "response_dto": "crate::LabelOntologyActionResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ValidateLabelOntologyActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::LabelOntologyActorWire"
+      },
+      {
+        "dto": "crate::ValidateLabelOntologyActionRequest",
+        "field": "parent_action_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ValidateLabelOntologyActionRequest",
+        "field": "signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ValidateLabelOntologyActionRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ValidateLabelOntologyActionRequest",
+        "field": "validation_status",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::LabelOntologyValidationStatusWire"
+      },
+      {
+        "dto": "crate::ValidateLabelOntologyActionRequest",
+        "field": "validation",
+        "nested": false,
+        "part": "input",
+        "rust_type": "crate::label_surfaces::JsonBodyFieldWire"
+      }
+    ],
+    "input_dto": "crate::ValidateLabelOntologyActionRequest",
+    "method": "ValidateLabelOntologyAction",
+    "operation_id": "api.validate-label-ontology-action",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": null,
+    "request": "ValidateLabelOntologyActionRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "()",
+      "crate::label_surfaces::ValidateLabelOntologyActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>",
+    "response": "ValidateLabelOntologyActionResponse",
+    "response_dto": "crate::LabelOntologyActionResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::SignalPath",
+        "field": "signal_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetLabelOntologySignal",
+    "operation_id": "api.get-label-ontology-signal",
+    "path_dto": "crate::SignalPath",
+    "query_dto": null,
+    "request": "GetLabelOntologySignalRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::SignalPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologySignalDetailWire>",
+    "response": "GetLabelOntologySignalResponse",
+    "response_dto": "crate::GetLabelOntologySignalResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ProposalPath",
+        "field": "proposal_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetLabelProposal",
+    "operation_id": "api.get-label-proposal",
+    "path_dto": "crate::ProposalPath",
+    "query_dto": null,
+    "request": "GetLabelProposalRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::ProposalPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticProposalWire>",
+    "response": "GetLabelProposalResponse",
+    "response_dto": "crate::GetLabelProposalResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ProposalPath",
+        "field": "proposal_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "source_signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "ontology_actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::label_surfaces::LabelOntologyActorWire>"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "allow_retarget",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "retarget_reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::LabelProposalDecisionRequest",
+    "method": "AcceptLabelProposal",
+    "operation_id": "api.accept-label-proposal",
+    "path_dto": "crate::ProposalPath",
+    "query_dto": null,
+    "request": "AcceptLabelProposalRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::ProposalPath",
+      "()",
+      "crate::label_surfaces::LabelProposalDecisionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticProposalWire>",
+    "response": "AcceptLabelProposalResponse",
+    "response_dto": "crate::LabelProposalDecisionResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::ProposalPath",
+        "field": "proposal_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "source_signal_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "ontology_actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<crate::label_surfaces::LabelOntologyActorWire>"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "allow_retarget",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::LabelProposalDecisionRequest",
+        "field": "retarget_reason",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::LabelProposalDecisionRequest",
+    "method": "RejectLabelProposal",
+    "operation_id": "api.reject-label-proposal",
+    "path_dto": "crate::ProposalPath",
+    "query_dto": null,
+    "request": "RejectLabelProposalRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::ProposalPath",
+      "()",
+      "crate::label_surfaces::LabelProposalDecisionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticProposalWire>",
+    "response": "RejectLabelProposalResponse",
+    "response_dto": "crate::LabelProposalDecisionResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardTaskMapPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::BoardTaskMapQuery",
+        "field": "active_only",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::BoardTaskMapQuery",
+        "field": "context_depth",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::BoardTaskMapQuery",
+        "field": "limit_nodes",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::BoardTaskMapQuery",
+        "field": "include_done_context",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::BoardTaskMapQuery",
+        "field": "include_archived_context",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::BoardTaskMapQuery",
+        "field": "hide_isolated",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": null,
+    "method": "BoardTaskMap",
+    "operation_id": "api.board-task-map",
+    "path_dto": "crate::BoardTaskMapPath",
+    "query_dto": "crate::BoardTaskMapQuery",
+    "request": "BoardTaskMapRequest",
+    "resolved_parts": [
+      "crate::task_graph::BoardTaskMapPath",
+      "crate::task_graph::BoardTaskMapQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::task_graph::BoardTaskMap>",
+    "response": "BoardTaskMapResponse",
+    "response_dto": "crate::BoardTaskMapResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::TaskNeighborhoodPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::TaskNeighborhoodQuery",
+        "field": "depth",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::TaskNeighborhoodQuery",
+        "field": "limit_nodes",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::TaskNeighborhoodQuery",
+        "field": "include_archived_context",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": null,
+    "method": "TaskNeighborhood",
+    "operation_id": "api.task-neighborhood",
+    "path_dto": "crate::TaskNeighborhoodPath",
+    "query_dto": "crate::TaskNeighborhoodQuery",
+    "request": "TaskNeighborhoodRequest",
+    "resolved_parts": [
+      "crate::task_graph::TaskNeighborhoodPath",
+      "crate::task_graph::TaskNeighborhoodQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::task_graph::TaskNeighborhood>",
+    "response": "TaskNeighborhoodResponse",
+    "response_dto": "crate::TaskNeighborhoodResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::api_components::ApiTaskStatus>"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "label",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "include_archived",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "offset",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "assignee",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": null,
+    "method": "SearchTasks",
+    "operation_id": "api.search-tasks",
+    "path_dto": null,
+    "query_dto": "crate::SearchTasksQuery",
+    "request": "SearchTasksRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::SearchTasksQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::MetadataEnvelope<crate::derived::SearchTasksData,crate::wire::OffsetPaginationMeta>",
+    "response": "SearchTasksResponse",
+    "response_dto": "crate::SearchTasksResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<crate::api_components::ApiTaskStatus>"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "label",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "include_archived",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "offset",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::SearchTasksQuery",
+        "field": "assignee",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": null,
+    "method": "SearchTasksByStatus",
+    "operation_id": "api.search-tasks-by-status",
+    "path_dto": null,
+    "query_dto": "crate::SearchTasksQuery",
+    "request": "SearchTasksByStatusRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::SearchTasksQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::MetadataEnvelope<crate::derived::SearchTaskStatusWindows,crate::wire::OffsetPaginationMeta>",
+    "response": "SearchTasksByStatusResponse",
+    "response_dto": "crate::SearchTasksByStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "SearchStatus",
+    "operation_id": "api.search-status",
+    "path_dto": null,
+    "query_dto": "crate::BoardQuery",
+    "request": "SearchStatusRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::BoardQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::SearchStatus>",
+    "response": "SearchStatusResponse",
+    "response_dto": "crate::SearchStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "RebuildSearchIndex",
+    "operation_id": "api.rebuild-search-index",
+    "path_dto": null,
+    "query_dto": "crate::BoardQuery",
+    "request": "RebuildSearchIndexRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::BoardQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::SearchStatus>",
+    "response": "RebuildSearchIndexResponse",
+    "response_dto": "crate::SearchStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "SyncSearchIndex",
+    "operation_id": "api.sync-search-index",
+    "path_dto": null,
+    "query_dto": "crate::BoardQuery",
+    "request": "SyncSearchIndexRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::BoardQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::SearchStatus>",
+    "response": "SyncSearchIndexResponse",
+    "response_dto": "crate::SearchStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BuildContextPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "lexical_limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "graph_limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "vector_limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "max_items",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "task",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "reference",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "query",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "depth",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::BuildContextQuery",
+        "field": "budget",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<usize>"
+      }
+    ],
+    "input_dto": null,
+    "method": "BuildContext",
+    "operation_id": "api.build-context",
+    "path_dto": "crate::BuildContextPath",
+    "query_dto": "crate::BuildContextQuery",
+    "request": "BuildContextRequest",
+    "resolved_parts": [
+      "crate::derived::BuildContextPath",
+      "crate::derived::BuildContextQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::ContextPack>",
+    "response": "BuildContextResponse",
+    "response_dto": "crate::BuildContextResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GraphStatus",
+    "operation_id": "api.graph-status",
+    "path_dto": null,
+    "query_dto": "crate::BoardQuery",
+    "request": "GraphStatusRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::BoardQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::GraphStatus>",
+    "response": "GraphStatusResponse",
+    "response_dto": "crate::GraphStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::GraphNeighborsQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::GraphNeighborsQuery",
+        "field": "entity_uri",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::GraphNeighborsQuery",
+        "field": "predicate",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::GraphNeighborsQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "GraphNeighbors",
+    "operation_id": "api.graph-neighbors",
+    "path_dto": null,
+    "query_dto": "crate::GraphNeighborsQuery",
+    "request": "GraphNeighborsRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::GraphNeighborsQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::MetadataEnvelope<Vec<crate::derived::ApiRelation>,crate::wire::LimitMeta>",
+    "response": "GraphNeighborsResponse",
+    "response_dto": "crate::GraphNeighborsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::GraphQueryQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::GraphQueryQuery",
+        "field": "query",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::GraphQueryQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "GraphQuery",
+    "operation_id": "api.graph-query",
+    "path_dto": null,
+    "query_dto": "crate::GraphQueryQuery",
+    "request": "GraphQueryRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::GraphQueryQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::cli_helpers::CliGraphQueryRow>>",
+    "response": "GraphQueryResponse",
+    "response_dto": "crate::cli_helpers::CliGraphQueryOutput"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GraphRebuild",
+    "operation_id": "api.graph-rebuild",
+    "path_dto": null,
+    "query_dto": "crate::BoardQuery",
+    "request": "GraphRebuildRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::BoardQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::GraphMaintenance>",
+    "response": "GraphRebuildResponse",
+    "response_dto": "crate::GraphMaintenanceResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GraphSync",
+    "operation_id": "api.graph-sync",
+    "path_dto": null,
+    "query_dto": "crate::BoardQuery",
+    "request": "GraphSyncRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::BoardQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::GraphMaintenance>",
+    "response": "GraphSyncResponse",
+    "response_dto": "crate::GraphMaintenanceResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::EntityListQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::EntityListQuery",
+        "field": "kind",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::EntityListQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListEntities",
+    "operation_id": "api.list-entities",
+    "path_dto": null,
+    "query_dto": "crate::EntityListQuery",
+    "request": "ListEntitiesRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::EntityListQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::cli::CliEntity>>",
+    "response": "ListEntitiesResponse",
+    "response_dto": "crate::EntityListResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "uri",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "kind",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "source_table",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "source_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "board",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "task_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "summary",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "content_hash",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::EntityUpsertRequest",
+        "field": "archived_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::EntityUpsertRequest",
+    "method": "UpsertEntity",
+    "operation_id": "api.upsert-entity",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "UpsertEntityRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::derived::EntityUpsertRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::cli::CliEntity>",
+    "response": "UpsertEntityResponse",
+    "response_dto": "crate::EntityResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::EntityPath",
+        "field": "uri",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetEntity",
+    "operation_id": "api.get-entity",
+    "path_dto": "crate::EntityPath",
+    "query_dto": null,
+    "request": "GetEntityRequest",
+    "resolved_parts": [
+      "crate::derived::EntityPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::cli::CliEntity>",
+    "response": "GetEntityResponse",
+    "response_dto": "crate::EntityResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::VectorStatusQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "VectorStatus",
+    "operation_id": "api.vector-status",
+    "path_dto": null,
+    "query_dto": "crate::VectorStatusQuery",
+    "request": "VectorStatusRequest",
+    "resolved_parts": [
+      "()",
+      "crate::protocols::VectorStatusQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::VectorStatus>",
+    "response": "VectorStatusResponse",
+    "response_dto": "crate::VectorStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::VectorConfigureRequest",
+        "field": "provider",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::VectorConfigureRequest",
+        "field": "endpoint",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::VectorConfigureRequest",
+        "field": "model",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::VectorConfigureRequest",
+        "field": "dimensions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": "crate::VectorConfigureRequest",
+    "method": "VectorConfigure",
+    "operation_id": "api.vector-configure",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "VectorConfigureRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::protocols::VectorConfigureRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::protocols::VectorConfigureRequest>",
+    "response": "VectorConfigureResponse",
+    "response_dto": "crate::VectorConfigureResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::VectorProjectionRequest",
+        "field": "board",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": "crate::VectorProjectionRequest",
+    "method": "VectorRebuild",
+    "operation_id": "api.vector-rebuild",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "VectorRebuildRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::protocols::VectorProjectionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::VectorStatus>",
+    "response": "VectorRebuildResponse",
+    "response_dto": "crate::VectorProjectionResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::VectorProjectionRequest",
+        "field": "board",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": "crate::VectorProjectionRequest",
+    "method": "VectorSync",
+    "operation_id": "api.vector-sync",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "VectorSyncRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::protocols::VectorProjectionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::VectorStatus>",
+    "response": "VectorSyncResponse",
+    "response_dto": "crate::VectorProjectionResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::VectorQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "embedding_model",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "polarity",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "include_vector",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": null,
+    "method": "VectorQueryChunks",
+    "operation_id": "api.vector-query-chunks",
+    "path_dto": null,
+    "query_dto": "crate::VectorQuery",
+    "request": "VectorQueryChunksRequest",
+    "resolved_parts": [
+      "()",
+      "crate::protocols::VectorQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::protocols::VectorChunkResult>>",
+    "response": "VectorQueryChunksResponse",
+    "response_dto": "crate::VectorQueryChunksResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::VectorQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "embedding_model",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "polarity",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::VectorQuery",
+        "field": "include_vector",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": null,
+    "method": "VectorQueryLabelAtoms",
+    "operation_id": "api.vector-query-label-atoms",
+    "path_dto": null,
+    "query_dto": "crate::VectorQuery",
+    "request": "VectorQueryLabelAtomsRequest",
+    "resolved_parts": [
+      "()",
+      "crate::protocols::VectorQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<Vec<crate::protocols::VectorLabelAtomResult>>",
+    "response": "VectorQueryLabelAtomsResponse",
+    "response_dto": "crate::VectorQueryLabelAtomsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardQuery",
+        "field": "board",
+        "nested": false,
+        "part": "query",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetStats",
+    "operation_id": "api.get-stats",
+    "path_dto": null,
+    "query_dto": "crate::BoardQuery",
+    "request": "GetStatsRequest",
+    "resolved_parts": [
+      "()",
+      "crate::derived::BoardQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::derived::QueueStats>",
+    "response": "GetStatsResponse",
+    "response_dto": "crate::StatsResponse"
+  },
+  {
+    "fields": [],
+    "input_dto": null,
+    "method": "Doctor",
+    "operation_id": "api.doctor",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "DoctorRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::DoctorReport>",
+    "response": "DoctorResponse",
+    "response_dto": "crate::DoctorResponse"
+  },
+  {
+    "fields": [],
+    "input_dto": null,
+    "method": "Checkpoint",
+    "operation_id": "api.checkpoint",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "CheckpointRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::CheckpointReport>",
+    "response": "CheckpointResponse",
+    "response_dto": "crate::CheckpointResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::MaintenancePathRequest",
+        "field": "path",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": "crate::MaintenancePathRequest",
+    "method": "MaintenanceBackup",
+    "operation_id": "api.maintenance-backup",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceBackupRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::maintenance::MaintenancePathRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::BackupReport>",
+    "response": "MaintenanceBackupResponse",
+    "response_dto": "crate::BackupResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::MaintenancePathRequest",
+        "field": "path",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": "crate::MaintenancePathRequest",
+    "method": "MaintenanceExport",
+    "operation_id": "api.maintenance-export",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceExportRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::maintenance::MaintenancePathRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::ExportReport>",
+    "response": "MaintenanceExportResponse",
+    "response_dto": "crate::ExportResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::MaintenanceImportRequest",
+        "field": "path",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::MaintenanceImportRequest",
+        "field": "replace",
+        "nested": false,
+        "part": "input",
+        "rust_type": "bool"
+      }
+    ],
+    "input_dto": "crate::MaintenanceImportRequest",
+    "method": "MaintenanceImport",
+    "operation_id": "api.maintenance-import",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceImportRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::maintenance::MaintenanceImportRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::ImportReport>",
+    "response": "MaintenanceImportResponse",
+    "response_dto": "crate::ImportResponse"
+  },
+  {
+    "fields": [],
+    "input_dto": null,
+    "method": "MaintenanceVacuum",
+    "operation_id": "api.maintenance-vacuum",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceVacuumRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::VacuumReport>",
+    "response": "MaintenanceVacuumResponse",
+    "response_dto": "crate::VacuumResponse"
+  },
+  {
+    "fields": [],
+    "input_dto": null,
+    "method": "MaintenanceStatus",
+    "operation_id": "api.maintenance-status",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceStatusRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::MaintenanceStatusReport>",
+    "response": "MaintenanceStatusResponse",
+    "response_dto": "crate::MaintenanceStatusResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::MaintenanceRunRequest",
+        "field": "owner",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::MaintenanceRunRequest",
+        "field": "action",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::MaintenanceRunRequest",
+    "method": "MaintenanceRun",
+    "operation_id": "api.maintenance-run",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceRunRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::maintenance::MaintenanceRunRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::MaintenanceRunReport>",
+    "response": "MaintenanceRunResponse",
+    "response_dto": "crate::MaintenanceRunResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::MaintenanceRunRequest",
+        "field": "owner",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::MaintenanceRunRequest",
+        "field": "action",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::MaintenanceRunRequest",
+    "method": "MaintenanceRebuild",
+    "operation_id": "api.maintenance-rebuild",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceRebuildRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::maintenance::MaintenanceRunRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::MaintenanceRunReport>",
+    "response": "MaintenanceRebuildResponse",
+    "response_dto": "crate::MaintenanceRunResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::MaintenanceRunRequest",
+        "field": "owner",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::MaintenanceRunRequest",
+        "field": "action",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::MaintenanceRunRequest",
+    "method": "MaintenanceCleanup",
+    "operation_id": "api.maintenance-cleanup",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceCleanupRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::maintenance::MaintenanceRunRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::MaintenanceRunReport>",
+    "response": "MaintenanceCleanupResponse",
+    "response_dto": "crate::MaintenanceRunResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::LegacyImportRequest",
+        "field": "path",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::LegacyImportRequest",
+        "field": "canonical_attachment_root",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": "crate::LegacyImportRequest",
+    "method": "MaintenanceImportV30",
+    "operation_id": "api.maintenance-import-v30",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "MaintenanceImportV30Request",
+    "resolved_parts": [
+      "()",
+      "()",
+      "crate::maintenance::LegacyImportRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::maintenance::LegacyImportReport>",
+    "response": "MaintenanceImportV30Response",
+    "response_dto": "crate::LegacyImportResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::GetTaskPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetTaskDetails",
+    "operation_id": "rpc.get-task-details",
+    "path_dto": "crate::GetTaskPath",
+    "query_dto": null,
+    "request": "GetTaskDetailsRequest",
+    "resolved_parts": [
+      "crate::task_core::GetTaskPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::task_core::GetTaskDetailsResponse",
+    "response": "GetTaskDetailsResponse",
+    "response_dto": "crate::GetTaskDetailsResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::BoardLabelPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::rpc::dto::LabelOntologyQualityQuery",
+        "field": "sample_limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetLabelOntologyQuality",
+    "operation_id": "rpc.get-label-ontology-quality",
+    "path_dto": "crate::BoardLabelPath",
+    "query_dto": "crate::rpc::dto::LabelOntologyQualityQuery",
+    "request": "GetLabelOntologyQualityRequest",
+    "resolved_parts": [
+      "crate::label_surfaces::BoardLabelPath",
+      "crate::rpc::dto::LabelOntologyQualityQuery",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::cli_labels::CliLabelOntologyQuality>",
+    "response": "GetLabelOntologyQualityResponse",
+    "response_dto": "crate::cli_labels::CliLabelOntologyQualityOutput"
+  }
+]

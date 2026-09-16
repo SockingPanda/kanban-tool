@@ -1,0 +1,962 @@
+[
+  {
+    "method": "GetHealth",
+    "operation_id": "api.health",
+    "request": "GetHealthRequest",
+    "response": "GetHealthResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListBoards",
+    "operation_id": "api.list-boards",
+    "request": "ListBoardsRequest",
+    "response": "ListBoardsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateBoard",
+    "operation_id": "api.create-board",
+    "request": "CreateBoardRequest",
+    "response": "CreateBoardResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetBoard",
+    "operation_id": "api.get-board",
+    "request": "GetBoardRequest",
+    "response": "GetBoardResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ArchiveBoard",
+    "operation_id": "api.archive-board",
+    "request": "ArchiveBoardRequest",
+    "response": "ArchiveBoardResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListBoardColumns",
+    "operation_id": "api.list-board-columns",
+    "request": "ListBoardColumnsRequest",
+    "response": "ListBoardColumnsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListTasks",
+    "operation_id": "api.list-tasks",
+    "request": "ListTasksRequest",
+    "response": "ListTasksResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListTasksByStatus",
+    "operation_id": "api.list-tasks-by-status",
+    "request": "ListTasksByStatusRequest",
+    "response": "ListTasksByStatusResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateTask",
+    "operation_id": "api.create-task",
+    "request": "CreateTaskRequest",
+    "response": "CreateTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetTask",
+    "operation_id": "api.get-task",
+    "request": "GetTaskRequest",
+    "response": "GetTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "UpdateTask",
+    "operation_id": "api.update-task",
+    "request": "UpdateTaskRequest",
+    "response": "UpdateTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SpecifyTask",
+    "operation_id": "api.specify-task",
+    "request": "SpecifyTaskRequest",
+    "response": "SpecifyTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "PromoteTask",
+    "operation_id": "api.promote-task",
+    "request": "PromoteTaskRequest",
+    "response": "PromoteTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ClaimTask",
+    "operation_id": "api.claim-task",
+    "request": "ClaimTaskRequest",
+    "response": "ClaimTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ReopenTask",
+    "operation_id": "api.reopen-task",
+    "request": "ReopenTaskRequest",
+    "response": "ReopenTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ReclaimTask",
+    "operation_id": "api.reclaim-task",
+    "request": "ReclaimTaskRequest",
+    "response": "ReclaimTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "HeartbeatTask",
+    "operation_id": "api.heartbeat-task",
+    "request": "HeartbeatTaskRequest",
+    "response": "HeartbeatTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ReleaseTask",
+    "operation_id": "api.release-task",
+    "request": "ReleaseTaskRequest",
+    "response": "ReleaseTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CompleteTask",
+    "operation_id": "api.complete-task",
+    "request": "CompleteTaskRequest",
+    "response": "CompleteTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SubmitReviewTask",
+    "operation_id": "api.submit-review-task",
+    "request": "SubmitReviewTaskRequest",
+    "response": "SubmitReviewTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "BlockTask",
+    "operation_id": "api.block-task",
+    "request": "BlockTaskRequest",
+    "response": "BlockTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "UnblockTask",
+    "operation_id": "api.unblock-task",
+    "request": "UnblockTaskRequest",
+    "response": "UnblockTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ArchiveTask",
+    "operation_id": "api.archive-task",
+    "request": "ArchiveTaskRequest",
+    "response": "ArchiveTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListSteps",
+    "operation_id": "api.list-steps",
+    "request": "ListStepsRequest",
+    "response": "ListStepsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateStep",
+    "operation_id": "api.create-step",
+    "request": "CreateStepRequest",
+    "response": "CreateStepResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "UpdateStep",
+    "operation_id": "api.update-step",
+    "request": "UpdateStepRequest",
+    "response": "UpdateStepResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RemoveStep",
+    "operation_id": "api.remove-step",
+    "request": "RemoveStepRequest",
+    "response": "RemoveStepResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CompleteStep",
+    "operation_id": "api.complete-step",
+    "request": "CompleteStepRequest",
+    "response": "CompleteStepResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SkipStep",
+    "operation_id": "api.skip-step",
+    "request": "SkipStepRequest",
+    "response": "SkipStepResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ReopenStep",
+    "operation_id": "api.reopen-step",
+    "request": "ReopenStepRequest",
+    "response": "ReopenStepResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MarkExecutionPlanNotRequired",
+    "operation_id": "api.mark-execution-plan-not-required",
+    "request": "MarkExecutionPlanNotRequiredRequest",
+    "response": "MarkExecutionPlanNotRequiredResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListDependencies",
+    "operation_id": "api.list-dependencies",
+    "request": "ListDependenciesRequest",
+    "response": "ListDependenciesResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "AddDependency",
+    "operation_id": "api.add-dependency",
+    "request": "AddDependencyRequest",
+    "response": "AddDependencyResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RemoveDependency",
+    "operation_id": "api.remove-dependency",
+    "request": "RemoveDependencyRequest",
+    "response": "RemoveDependencyResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListRuns",
+    "operation_id": "api.list-runs",
+    "request": "ListRunsRequest",
+    "response": "ListRunsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetRun",
+    "operation_id": "api.get-run",
+    "request": "GetRunRequest",
+    "response": "GetRunResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetRunLog",
+    "operation_id": "api.get-run-log",
+    "request": "GetRunLogRequest",
+    "response": "GetRunLogResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListComments",
+    "operation_id": "api.list-comments",
+    "request": "ListCommentsRequest",
+    "response": "ListCommentsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateComment",
+    "operation_id": "api.create-comment",
+    "request": "CreateCommentRequest",
+    "response": "CreateCommentResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListAttachments",
+    "operation_id": "api.list-attachments",
+    "request": "ListAttachmentsRequest",
+    "response": "ListAttachmentsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateAttachment",
+    "operation_id": "api.create-attachment",
+    "request": "CreateAttachmentRequest",
+    "response": "CreateAttachmentResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "DownloadAttachment",
+    "operation_id": "api.download-attachment",
+    "request": "DownloadAttachmentRequest",
+    "response": "DownloadAttachmentResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "DeleteAttachment",
+    "operation_id": "api.delete-attachment",
+    "request": "DeleteAttachmentRequest",
+    "response": "DeleteAttachmentResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListEvents",
+    "operation_id": "api.list-events",
+    "request": "ListEventsRequest",
+    "response": "ListEventsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListTaskLabels",
+    "operation_id": "api.list-task-labels",
+    "request": "ListTaskLabelsRequest",
+    "response": "ListTaskLabelsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "AddTaskLabel",
+    "operation_id": "api.add-task-label",
+    "request": "AddTaskLabelRequest",
+    "response": "AddTaskLabelResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "BootstrapTaskLabel",
+    "operation_id": "api.bootstrap-task-label",
+    "request": "BootstrapTaskLabelRequest",
+    "response": "BootstrapTaskLabelResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RemoveTaskLabel",
+    "operation_id": "api.remove-task-label",
+    "request": "RemoveTaskLabelRequest",
+    "response": "RemoveTaskLabelResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListBoardLabels",
+    "operation_id": "api.list-board-labels",
+    "request": "ListBoardLabelsRequest",
+    "response": "ListBoardLabelsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListBoardLabelProposals",
+    "operation_id": "api.list-board-label-proposals",
+    "request": "ListBoardLabelProposalsRequest",
+    "response": "ListBoardLabelProposalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateBoardLabel",
+    "operation_id": "api.create-board-label",
+    "request": "CreateBoardLabelRequest",
+    "response": "CreateBoardLabelResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "DeleteBoardLabel",
+    "operation_id": "api.delete-board-label",
+    "request": "DeleteBoardLabelRequest",
+    "response": "DeleteBoardLabelResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListLabelSemantics",
+    "operation_id": "api.list-label-semantics",
+    "request": "ListLabelSemanticsRequest",
+    "response": "ListLabelSemanticsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetLabelSemantics",
+    "operation_id": "api.get-label-semantics",
+    "request": "GetLabelSemanticsRequest",
+    "response": "GetLabelSemanticsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "UpsertLabelSemantics",
+    "operation_id": "api.upsert-label-semantics",
+    "request": "UpsertLabelSemanticsRequest",
+    "response": "UpsertLabelSemanticsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "DeleteLabelSemantics",
+    "operation_id": "api.delete-label-semantics",
+    "request": "DeleteLabelSemanticsRequest",
+    "response": "DeleteLabelSemanticsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListLabelAtoms",
+    "operation_id": "api.list-label-atoms",
+    "request": "ListLabelAtomsRequest",
+    "response": "ListLabelAtomsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ExplainLabelAtom",
+    "operation_id": "api.explain-label-atom",
+    "request": "ExplainLabelAtomRequest",
+    "response": "ExplainLabelAtomResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "LabelAtomIndexStatus",
+    "operation_id": "api.label-atom-index-status",
+    "request": "LabelAtomIndexStatusRequest",
+    "response": "LabelAtomIndexStatusResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RebuildLabelAtomIndex",
+    "operation_id": "api.rebuild-label-atom-index",
+    "request": "RebuildLabelAtomIndexRequest",
+    "response": "RebuildLabelAtomIndexResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "QueryLabelAtomIndex",
+    "operation_id": "api.query-label-atom-index",
+    "request": "QueryLabelAtomIndexRequest",
+    "response": "QueryLabelAtomIndexResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListSignals",
+    "operation_id": "api.list-signals",
+    "request": "ListSignalsRequest",
+    "response": "ListSignalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ReviewSignals",
+    "operation_id": "api.review-signals",
+    "request": "ReviewSignalsRequest",
+    "response": "ReviewSignalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetSignal",
+    "operation_id": "api.get-signal",
+    "request": "GetSignalRequest",
+    "response": "GetSignalResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RecordSignal",
+    "operation_id": "api.record-signal",
+    "request": "RecordSignalRequest",
+    "response": "RecordSignalResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ConfirmSignals",
+    "operation_id": "api.confirm-signals",
+    "request": "ConfirmSignalsRequest",
+    "response": "ConfirmSignalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RejectSignals",
+    "operation_id": "api.reject-signals",
+    "request": "RejectSignalsRequest",
+    "response": "RejectSignalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ResolveSignals",
+    "operation_id": "api.resolve-signals",
+    "request": "ResolveSignalsRequest",
+    "response": "ResolveSignalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SupersedeSignals",
+    "operation_id": "api.supersede-signals",
+    "request": "SupersedeSignalsRequest",
+    "response": "SupersedeSignalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SuggestTaskLabels",
+    "operation_id": "api.suggest-task-labels",
+    "request": "SuggestTaskLabelsRequest",
+    "response": "SuggestTaskLabelsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListTaskLabelProposals",
+    "operation_id": "api.list-task-label-proposals",
+    "request": "ListTaskLabelProposalsRequest",
+    "response": "ListTaskLabelProposalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ProposeTaskLabel",
+    "operation_id": "api.propose-task-label",
+    "request": "ProposeTaskLabelRequest",
+    "response": "ProposeTaskLabelResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RecordLabelOntologyObservation",
+    "operation_id": "api.record-label-ontology-observation",
+    "request": "RecordLabelOntologyObservationRequest",
+    "response": "RecordLabelOntologyObservationResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListLabelOntologySignals",
+    "operation_id": "api.list-label-ontology-signals",
+    "request": "ListLabelOntologySignalsRequest",
+    "response": "ListLabelOntologySignalsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ReviewLabelOntology",
+    "operation_id": "api.review-label-ontology",
+    "request": "ReviewLabelOntologyRequest",
+    "response": "ReviewLabelOntologyResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateLabelOntologyAction",
+    "operation_id": "api.create-label-ontology-action",
+    "request": "CreateLabelOntologyActionRequest",
+    "response": "CreateLabelOntologyActionResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ApplyLabelOntologyAtom",
+    "operation_id": "api.apply-label-ontology-atom",
+    "request": "ApplyLabelOntologyAtomRequest",
+    "response": "ApplyLabelOntologyAtomResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RevertLabelOntologyMutation",
+    "operation_id": "api.revert-label-ontology-mutation",
+    "request": "RevertLabelOntologyMutationRequest",
+    "response": "RevertLabelOntologyMutationResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ValidateLabelOntologyAction",
+    "operation_id": "api.validate-label-ontology-action",
+    "request": "ValidateLabelOntologyActionRequest",
+    "response": "ValidateLabelOntologyActionResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetLabelOntologySignal",
+    "operation_id": "api.get-label-ontology-signal",
+    "request": "GetLabelOntologySignalRequest",
+    "response": "GetLabelOntologySignalResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetLabelProposal",
+    "operation_id": "api.get-label-proposal",
+    "request": "GetLabelProposalRequest",
+    "response": "GetLabelProposalResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "AcceptLabelProposal",
+    "operation_id": "api.accept-label-proposal",
+    "request": "AcceptLabelProposalRequest",
+    "response": "AcceptLabelProposalResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RejectLabelProposal",
+    "operation_id": "api.reject-label-proposal",
+    "request": "RejectLabelProposalRequest",
+    "response": "RejectLabelProposalResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "BoardTaskMap",
+    "operation_id": "api.board-task-map",
+    "request": "BoardTaskMapRequest",
+    "response": "BoardTaskMapResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "TaskNeighborhood",
+    "operation_id": "api.task-neighborhood",
+    "request": "TaskNeighborhoodRequest",
+    "response": "TaskNeighborhoodResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SearchTasks",
+    "operation_id": "api.search-tasks",
+    "request": "SearchTasksRequest",
+    "response": "SearchTasksResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SearchTasksByStatus",
+    "operation_id": "api.search-tasks-by-status",
+    "request": "SearchTasksByStatusRequest",
+    "response": "SearchTasksByStatusResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SearchStatus",
+    "operation_id": "api.search-status",
+    "request": "SearchStatusRequest",
+    "response": "SearchStatusResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RebuildSearchIndex",
+    "operation_id": "api.rebuild-search-index",
+    "request": "RebuildSearchIndexRequest",
+    "response": "RebuildSearchIndexResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "SyncSearchIndex",
+    "operation_id": "api.sync-search-index",
+    "request": "SyncSearchIndexRequest",
+    "response": "SyncSearchIndexResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "BuildContext",
+    "operation_id": "api.build-context",
+    "request": "BuildContextRequest",
+    "response": "BuildContextResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GraphStatus",
+    "operation_id": "api.graph-status",
+    "request": "GraphStatusRequest",
+    "response": "GraphStatusResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GraphNeighbors",
+    "operation_id": "api.graph-neighbors",
+    "request": "GraphNeighborsRequest",
+    "response": "GraphNeighborsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GraphQuery",
+    "operation_id": "api.graph-query",
+    "request": "GraphQueryRequest",
+    "response": "GraphQueryResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GraphRebuild",
+    "operation_id": "api.graph-rebuild",
+    "request": "GraphRebuildRequest",
+    "response": "GraphRebuildResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GraphSync",
+    "operation_id": "api.graph-sync",
+    "request": "GraphSyncRequest",
+    "response": "GraphSyncResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListEntities",
+    "operation_id": "api.list-entities",
+    "request": "ListEntitiesRequest",
+    "response": "ListEntitiesResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "UpsertEntity",
+    "operation_id": "api.upsert-entity",
+    "request": "UpsertEntityRequest",
+    "response": "UpsertEntityResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetEntity",
+    "operation_id": "api.get-entity",
+    "request": "GetEntityRequest",
+    "response": "GetEntityResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "VectorStatus",
+    "operation_id": "api.vector-status",
+    "request": "VectorStatusRequest",
+    "response": "VectorStatusResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "VectorConfigure",
+    "operation_id": "api.vector-configure",
+    "request": "VectorConfigureRequest",
+    "response": "VectorConfigureResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "VectorRebuild",
+    "operation_id": "api.vector-rebuild",
+    "request": "VectorRebuildRequest",
+    "response": "VectorRebuildResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "VectorSync",
+    "operation_id": "api.vector-sync",
+    "request": "VectorSyncRequest",
+    "response": "VectorSyncResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "VectorQueryChunks",
+    "operation_id": "api.vector-query-chunks",
+    "request": "VectorQueryChunksRequest",
+    "response": "VectorQueryChunksResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "VectorQueryLabelAtoms",
+    "operation_id": "api.vector-query-label-atoms",
+    "request": "VectorQueryLabelAtomsRequest",
+    "response": "VectorQueryLabelAtomsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetStats",
+    "operation_id": "api.get-stats",
+    "request": "GetStatsRequest",
+    "response": "GetStatsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "Doctor",
+    "operation_id": "api.doctor",
+    "request": "DoctorRequest",
+    "response": "DoctorResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "Checkpoint",
+    "operation_id": "api.checkpoint",
+    "request": "CheckpointRequest",
+    "response": "CheckpointResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceBackup",
+    "operation_id": "api.maintenance-backup",
+    "request": "MaintenanceBackupRequest",
+    "response": "MaintenanceBackupResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceExport",
+    "operation_id": "api.maintenance-export",
+    "request": "MaintenanceExportRequest",
+    "response": "MaintenanceExportResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceImport",
+    "operation_id": "api.maintenance-import",
+    "request": "MaintenanceImportRequest",
+    "response": "MaintenanceImportResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceVacuum",
+    "operation_id": "api.maintenance-vacuum",
+    "request": "MaintenanceVacuumRequest",
+    "response": "MaintenanceVacuumResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceStatus",
+    "operation_id": "api.maintenance-status",
+    "request": "MaintenanceStatusRequest",
+    "response": "MaintenanceStatusResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceRun",
+    "operation_id": "api.maintenance-run",
+    "request": "MaintenanceRunRequest",
+    "response": "MaintenanceRunResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceRebuild",
+    "operation_id": "api.maintenance-rebuild",
+    "request": "MaintenanceRebuildRequest",
+    "response": "MaintenanceRebuildResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceCleanup",
+    "operation_id": "api.maintenance-cleanup",
+    "request": "MaintenanceCleanupRequest",
+    "response": "MaintenanceCleanupResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "MaintenanceImportV30",
+    "operation_id": "api.maintenance-import-v30",
+    "request": "MaintenanceImportV30Request",
+    "response": "MaintenanceImportV30Response",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetTaskDetails",
+    "operation_id": "rpc.get-task-details",
+    "request": "GetTaskDetailsRequest",
+    "response": "GetTaskDetailsResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetLabelOntologyQuality",
+    "operation_id": "rpc.get-label-ontology-quality",
+    "request": "GetLabelOntologyQualityRequest",
+    "response": "GetLabelOntologyQualityResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "WatchQueries",
+    "operation_id": "rpc.watch-queries",
+    "request": "WatchQueriesRequest",
+    "response": "QueryFrame",
+    "server_streaming": true,
+    "service": "kanban.v1.QueryService"
+  }
+]

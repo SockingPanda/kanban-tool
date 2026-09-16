@@ -23,8 +23,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<StatsArgs>,
     ) -> Result<Json<StatsResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let stats = call_client(move || client.stats(&board)).await?;
+        let client = &self.client;
+        let stats = call_client(client.stats(&board)).await?;
         Ok(Json(DataEnvelope::new(stats)))
     }
 }

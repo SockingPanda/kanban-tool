@@ -1040,18 +1040,6 @@ fn receipt(root: &Path, options: &Options) -> ToolResult<()> {
     {
         return Err(error("live host security probes 未通过"));
     }
-    let live_doctor = curl_json(&format!("{host_url}/api/v1/maintenance/doctor"))?;
-    let doctor_data = live_doctor
-        .get("data")
-        .ok_or_else(|| error("doctor 缺少 data"))?;
-    let migration_after = i64_field(doctor_data, "migration_version")?;
-    let migration_before = i64_field(&host_evidence, "migration_before")?;
-    let migration_unchanged = migration_before == migration_after;
-    if !migration_unchanged {
-        return Err(error(
-            "canonical DB migration version changed during release proof",
-        ));
-    }
     let db_path_before_restart = string_field(&host_evidence, "db_path_before_restart")?.to_owned();
     let db_path_after_restart = string_field(&host_evidence, "db_path_after_restart")?.to_owned();
     let db_path_after_browser = string_field(&host_evidence, "db_path_after_browser")?.to_owned();
@@ -1112,11 +1100,19 @@ fn receipt(root: &Path, options: &Options) -> ToolResult<()> {
     {
         return Err(error("live host executable 未与 launcher binary SHA 绑定"));
     }
+    let migration_after = live_migration_version(&binary_path, &host_url)?;
+    let migration_before = i64_field(&host_evidence, "migration_before")?;
+    let migration_unchanged = migration_before == migration_after;
+    if !migration_unchanged {
+        return Err(error(
+            "canonical DB migration version changed during release proof",
+        ));
+    }
     let task_receipts = created_tasks
         .iter()
-        .map(|task| live_task_receipt(&host_url, task))
+        .map(|task| live_task_receipt(&binary_path, &host_url, task))
         .collect::<ToolResult<Vec<_>>>()?;
-    let seed_task = live_seed_task(&host_url)?;
+    let seed_task = live_seed_task(&binary_path, &host_url)?;
     let package_sha = collect_evidence_hashes(&evidence_root)?;
     let start_sha = string_field(&host_evidence, "start_sha")?.to_owned();
     let start_clean = bool_field(&host_evidence, "start_clean")?;
@@ -1611,8 +1607,22 @@ fn validate_task_id(value: &str) -> ToolResult<()> {
     }
     Ok(())
 }
-fn live_task_receipt(base_url: &str, task: &TaskEvidence) -> ToolResult<TaskReceipt> {
-    let live_task = curl_json(&format!("{base_url}/api/v1/tasks/{}", task.id))?;
+fn live_migration_version(binary_path: &Path, base_url: &str) -> ToolResult<i64> {
+    let live_doctor = live_cli_json(binary_path, base_url, "default", &["doctor"])?;
+    i64_field(object_field(&live_doctor, "data")?, "migration_version")
+}
+
+fn live_task_receipt(
+    binary_path: &Path,
+    base_url: &str,
+    task: &TaskEvidence,
+) -> ToolResult<TaskReceipt> {
+    let live_task = live_cli_json(
+        binary_path,
+        base_url,
+        &task.board_slug,
+        &["task", "show", &task.id],
+    )?;
     let live_data = object_field(&live_task, "data")?;
     if string_field(live_data, "id")? != task.id
         || string_field(live_data, "title")? != task.title
@@ -1630,7 +1640,7 @@ fn live_task_receipt(base_url: &str, task: &TaskEvidence) -> ToolResult<TaskRece
         project: task.project.clone(),
     })
 }
-fn live_seed_task(base_url: &str) -> ToolResult<TaskReceipt> {
+fn live_seed_task(binary_path: &Path, base_url: &str) -> ToolResult<TaskReceipt> {
     let seed = TaskEvidence {
         browser: "launcher".to_owned(),
         id: "t_release_seed".to_owned(),
@@ -1638,7 +1648,7 @@ fn live_seed_task(base_url: &str) -> ToolResult<TaskReceipt> {
         project: "launcher".to_owned(),
         board_slug: "default".to_owned(),
     };
-    live_task_receipt(base_url, &seed)
+    live_task_receipt(binary_path, base_url, &seed)
 }
 
 fn task_arrays(evidence: &Value) -> ToolResult<Vec<TaskEvidence>> {
@@ -1750,6 +1760,28 @@ fn collect_evidence_hashes(root: &Path) -> ToolResult<BTreeMap<String, String>> 
 
 fn curl_json(url: &str) -> ToolResult<Value> {
     Ok(serde_json::from_slice(&curl_bytes(url)?)?)
+}
+
+fn live_cli_json(
+    binary_path: &Path,
+    base_url: &str,
+    board_slug: &str,
+    arguments: &[&str],
+) -> ToolResult<Value> {
+    validate_loopback_url(base_url)?;
+    // 使用已绑定 live Host SHA 的候选 CLI；显式参数覆盖环境和项目的 Host/board 选择。
+    let output = Command::new(binary_path)
+        .args(["--server-url", base_url, "--json", "--board", board_slug])
+        .args(arguments)
+        .output()?;
+    if !output.status.success() {
+        return Err(error(format!(
+            "候选 CLI live host 读取失败 ({}): {}",
+            arguments.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    Ok(serde_json::from_slice(&output.stdout)?)
 }
 
 fn curl_bytes(url: &str) -> ToolResult<Vec<u8>> {
@@ -2443,6 +2475,121 @@ mod tests {
         let mut reordered = exact;
         reordered.swap(1, 3);
         assert!(validate_host_argv(&reordered, 18721, db, web_dir, binary).is_err());
+    }
+
+    #[cfg(unix)]
+    fn write_cli_fixture(binary: &Path, body: &str) {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::write(binary, format!("#!/bin/sh\nset -eu\n{body}\n")).expect("candidate CLI");
+        fs::set_permissions(binary, fs::Permissions::from_mode(0o700)).expect("executable CLI");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn live_cli_readbacks_bind_candidate_host_and_board() {
+        let root = env::temp_dir().join(format!("release-proof-cli-scope-{}", std::process::id()));
+        fs::create_dir(&root).expect("test root");
+        let binary = root.join("candidate kanban");
+        write_cli_fixture(
+            &binary,
+            r#"
+[ "$1" = '--server-url' ]
+[ "$2" = 'http://127.0.0.1:18721' ]
+[ "$3" = '--json' ]
+[ "$4" = '--board' ]
+board="$5"
+shift 5
+case "$1" in
+  doctor)
+    [ "$#" = 1 ]
+    [ "$board" = default ]
+    printf '%s\n' '{"data":{"migration_version":42}}'
+    ;;
+  task)
+    [ "$#" = 3 ]
+    [ "$2" = show ]
+    case "$3" in
+      t_browser)
+        [ "$board" = proof-board ]
+        printf '%s\n' '{"data":{"id":"t_browser","title":"浏览器验收任务","board_slug":"proof-board"}}'
+        ;;
+      t_release_seed)
+        [ "$board" = default ]
+        printf '%s\n' '{"data":{"id":"t_release_seed","title":"Seed release task","board_slug":"default"}}'
+        ;;
+      *) exit 91 ;;
+    esac
+    ;;
+  *) exit 92 ;;
+esac
+"#,
+        );
+        let base_url = "http://127.0.0.1:18721";
+        assert_eq!(live_migration_version(&binary, base_url).unwrap(), 42);
+        let task = TaskEvidence {
+            browser: "firefox".to_owned(),
+            id: "t_browser".to_owned(),
+            title: "浏览器验收任务".to_owned(),
+            project: "firefox".to_owned(),
+            board_slug: "proof-board".to_owned(),
+        };
+        let receipt = live_task_receipt(&binary, base_url, &task).unwrap();
+        assert_eq!(
+            serde_json::to_value(receipt).unwrap(),
+            serde_json::json!({
+                "browser": "firefox", "id": "t_browser", "title": "浏览器验收任务",
+                "project": "firefox"
+            })
+        );
+        let seed = live_seed_task(&binary, base_url).unwrap();
+        assert_eq!(seed.id, "t_release_seed");
+        assert_eq!(seed.title, "Seed release task");
+        fs::remove_dir_all(&root).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn live_cli_readbacks_reject_failed_commands_and_forged_json() {
+        let root =
+            env::temp_dir().join(format!("release-proof-cli-invalid-{}", std::process::id()));
+        fs::create_dir(&root).expect("test root");
+        let binary = root.join("candidate kanban");
+        let base_url = "http://127.0.0.1:18721";
+        write_cli_fixture(
+            &binary,
+            "printf '%s\\n' '{\"data\":{\"migration_version\":42}}'\nexit 23",
+        );
+        assert!(
+            live_migration_version(&binary, base_url)
+                .unwrap_err()
+                .to_string()
+                .contains("候选 CLI live host 读取失败")
+        );
+        for output in [
+            "not json",
+            r#"{"migration_version":42}"#,
+            r#"{"data":{"migration_version":"42"}}"#,
+        ] {
+            write_cli_fixture(&binary, &format!("printf '%s\\n' '{output}'"));
+            assert!(live_migration_version(&binary, base_url).is_err());
+        }
+        let task = TaskEvidence {
+            browser: "chromium".to_owned(),
+            id: "t_browser".to_owned(),
+            title: "Stage09 real task chromium".to_owned(),
+            project: "chromium".to_owned(),
+            board_slug: "default".to_owned(),
+        };
+        for field in ["id", "title", "board_slug"] {
+            let mut output = serde_json::json!({"data": {
+                "id": task.id, "title": task.title, "board_slug": task.board_slug
+            }});
+            output["data"][field] = Value::String("forged".to_owned());
+            write_cli_fixture(&binary, &format!("printf '%s\\n' '{output}'"));
+            assert!(live_task_receipt(&binary, base_url, &task).is_err());
+        }
+        fs::remove_dir_all(&root).expect("cleanup");
     }
 
     #[cfg(unix)]

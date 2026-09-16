@@ -16,10 +16,10 @@ pub(crate) enum EntityCommand {
     Upsert(upsert::UpsertArgs),
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &EntityCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &EntityCommand) -> Result<(), CliFailure> {
     match command {
-        EntityCommand::List(args) => list::run(ctx, args),
-        EntityCommand::Show(args) => show::run(ctx, args),
-        EntityCommand::Upsert(args) => upsert::run(ctx, args),
+        EntityCommand::List(args) => list::run(ctx, args).await,
+        EntityCommand::Show(args) => show::run(ctx, args).await,
+        EntityCommand::Upsert(args) => upsert::run(ctx, args).await,
     }
 }

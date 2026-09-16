@@ -134,10 +134,7 @@ import { ApiDeleteAttachmentResponseSchema, apiDeleteAttachmentResponseValidator
 import { ApiListEventsQuerySchema, apiListEventsQueryValidator } from "./contracts/api-list-events-query";
 import { ApiListEventsHeadersSchema, apiListEventsHeadersValidator } from "./contracts/api-list-events-headers";
 import { ApiListEventsResponseSchema, apiListEventsResponseValidator } from "./contracts/api-list-events-response";
-import { SseStreamEventsHeadersSchema, sseStreamEventsHeadersValidator } from "./contracts/sse-stream-events-headers";
-import { SseStreamEventsQuerySchema, sseStreamEventsQueryValidator } from "./contracts/sse-stream-events-query";
-import { SseEventDataSchema, sseEventDataValidator } from "./contracts/sse-event-data";
-import { SseEventHeartbeatSchema, sseEventHeartbeatValidator } from "./contracts/sse-event-heartbeat";
+import { ApiEventDataSchema, apiEventDataValidator } from "./contracts/api-event-data";
 import { ApiListTaskLabelsPathSchema, apiListTaskLabelsPathValidator } from "./contracts/api-list-task-labels-path";
 import { ApiListTaskLabelsHeadersSchema, apiListTaskLabelsHeadersValidator } from "./contracts/api-list-task-labels-headers";
 import { ApiListTaskLabelsResponseSchema, apiListTaskLabelsResponseValidator } from "./contracts/api-list-task-labels-response";
@@ -359,10 +356,7 @@ export const schemas = {
   "api.list-events.query": ApiListEventsQuerySchema,
   "api.list-events.headers": ApiListEventsHeadersSchema,
   "api.list-events.response": ApiListEventsResponseSchema,
-  "sse.stream-events.headers": SseStreamEventsHeadersSchema,
-  "sse.stream-events.query": SseStreamEventsQuerySchema,
-  "sse.event.data": SseEventDataSchema,
-  "sse.event.heartbeat": SseEventHeartbeatSchema,
+  "api.event.data": ApiEventDataSchema,
   "api.list-task-labels.path": ApiListTaskLabelsPathSchema,
   "api.list-task-labels.headers": ApiListTaskLabelsHeadersSchema,
   "api.list-task-labels.response": ApiListTaskLabelsResponseSchema,
@@ -583,10 +577,7 @@ export const validators = {
   "api.list-events.query": apiListEventsQueryValidator,
   "api.list-events.headers": apiListEventsHeadersValidator,
   "api.list-events.response": apiListEventsResponseValidator,
-  "sse.stream-events.headers": sseStreamEventsHeadersValidator,
-  "sse.stream-events.query": sseStreamEventsQueryValidator,
-  "sse.event.data": sseEventDataValidator,
-  "sse.event.heartbeat": sseEventHeartbeatValidator,
+  "api.event.data": apiEventDataValidator,
   "api.list-task-labels.path": apiListTaskLabelsPathValidator,
   "api.list-task-labels.headers": apiListTaskLabelsHeadersValidator,
   "api.list-task-labels.response": apiListTaskLabelsResponseValidator,
@@ -817,10 +808,7 @@ export { parseApiDeleteAttachmentResponse } from "./contracts/api-delete-attachm
 export { parseApiListEventsQuery } from "./contracts/api-list-events-query";
 export { parseApiListEventsHeaders } from "./contracts/api-list-events-headers";
 export { parseApiListEventsResponse } from "./contracts/api-list-events-response";
-export { parseSseStreamEventsHeaders } from "./contracts/sse-stream-events-headers";
-export { parseSseStreamEventsQuery } from "./contracts/sse-stream-events-query";
-export { parseSseEventData } from "./contracts/sse-event-data";
-export { parseSseEventHeartbeat } from "./contracts/sse-event-heartbeat";
+export { parseApiEventData } from "./contracts/api-event-data";
 export { parseApiListTaskLabelsPath } from "./contracts/api-list-task-labels-path";
 export { parseApiListTaskLabelsHeaders } from "./contracts/api-list-task-labels-headers";
 export { parseApiListTaskLabelsResponse } from "./contracts/api-list-task-labels-response";

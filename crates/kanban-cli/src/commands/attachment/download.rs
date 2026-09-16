@@ -11,10 +11,12 @@ pub(crate) struct DownloadArgs {
     pub(crate) out: PathBuf,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &DownloadArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &DownloadArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let task_id = client.resolve_task_id(&ctx.board, &args.task_ref)?;
-    let downloaded = client.download_attachment(&task_id, &args.attachment_id)?;
+    let task_id = client.resolve_task_id(&ctx.board, &args.task_ref).await?;
+    let downloaded = client
+        .download_attachment(&task_id, &args.attachment_id)
+        .await?;
     std::fs::write(&args.out, downloaded.content).map_err(|error| CliFailure {
         code: "storage",
         message: format!("写入 {} 失败：{error}", args.out.display()),

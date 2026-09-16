@@ -1,9 +1,9 @@
-use kanban_protocol::{ApiTaskSteps, UpdateStepRequest, UpdateStepResponse};
+use kanban_protocol::{ApiTaskSteps, UpdateStepRequest};
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
 
 impl KanbanClient {
-    pub fn update_step(
+    pub async fn update_step(
         &self,
         task_id: &str,
         step_id: &str,
@@ -23,31 +23,34 @@ impl KanbanClient {
         }
         let mut request = request.clone();
         request.actor = Some(self.actor.clone());
-        let response: UpdateStepResponse = self.patch(
-            &format!(
-                "/api/v1/tasks/{}/steps/{}",
-                encode_path_segment(task_id),
-                encode_path_segment(step_id)
-            ),
-            &request,
+        let response: kanban_protocol::UpdateStepResponse = rpc!(
+            self,
+            update_step,
+            UpdateStepRequest,
+            kanban_protocol::UpdateStepPath {
+                task_id: task_id.to_owned(),
+                step_id: step_id.to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
 
-    pub fn update_step_by_selector(
+    pub async fn update_step_by_selector(
         &self,
         board: &str,
         task_selector: &str,
         step_selector: &str,
         request: &UpdateStepRequest,
     ) -> Result<ApiTaskSteps, ClientError> {
-        let task_id = self.resolve_task_id(board, task_selector)?;
-        let step_id = self.resolve_step_id(&task_id, step_selector)?;
+        let task_id = self.resolve_task_id(board, task_selector).await?;
+        let step_id = self.resolve_step_id(&task_id, step_selector).await?;
         let mut request = request.clone();
         if let Some(linked_task_ref) = request.linked_task_ref.as_deref() {
-            let linked_task_id = self.resolve_task_id(board, linked_task_ref)?;
+            let linked_task_id = self.resolve_task_id(board, linked_task_ref).await?;
             request.linked_task_ref = Some(linked_task_id);
         }
-        self.update_step(&task_id, &step_id, &request)
+        self.update_step(&task_id, &step_id, &request).await
     }
 }

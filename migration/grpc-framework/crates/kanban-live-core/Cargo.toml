@@ -1,0 +1,11 @@
+[package]
+name = "kanban-live-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
+thiserror.workspace = true
+ulid.workspace = true
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }

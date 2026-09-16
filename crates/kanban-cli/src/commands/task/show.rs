@@ -12,13 +12,15 @@ pub(crate) struct ShowArgs {
     pub(crate) details: bool,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ShowArgs,
 ) -> Result<(), CliFailure> {
     if args.details {
-        let detail = client.get_task_details_by_selector(&ctx.board, &args.task_ref)?;
+        let detail = client
+            .get_task_details_by_selector(&ctx.board, &args.task_ref)
+            .await?;
         if ctx.json {
             output::print_json(&GetTaskDetailsResponse { data: detail });
         } else {
@@ -37,7 +39,9 @@ pub(crate) fn run(
         }
         return Ok(());
     }
-    let task = client.get_task_by_selector(&ctx.board, &args.task_ref)?;
+    let task = client
+        .get_task_by_selector(&ctx.board, &args.task_ref)
+        .await?;
     if ctx.json {
         output::print_json(&GetTaskResponse::new(task, None));
     } else {

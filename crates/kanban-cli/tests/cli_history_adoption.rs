@@ -90,7 +90,9 @@ async fn history_cli_covers_runs_logs_comments_attachments_events_and_stats() {
     assert_eq!(comments["data"][0]["body"], "line one\nline two");
 
     let source_path = host.project_path().join("artifact.txt");
-    std::fs::write(&source_path, b"ab").expect("写入 attachment fixture");
+    // 超过 gRPC 默认的 4 MiB，验证 CLI 沿共享 channel 保留完整 binary 内容。
+    let attachment_content = vec![0xab; 5 * 1024 * 1024];
+    std::fs::write(&source_path, &attachment_content).expect("写入 attachment fixture");
     let attachment = host
         .command()
         .args([
@@ -100,7 +102,7 @@ async fn history_cli_covers_runs_logs_comments_attachments_events_and_stats() {
             "t_history",
             "artifact.txt",
             "--filename",
-            "artifact.txt",
+            "原生附件.bin",
             "--content-type",
             "text/plain",
             "--attachment-id",
@@ -115,8 +117,8 @@ async fn history_cli_covers_runs_logs_comments_attachments_events_and_stats() {
     let attachment: Value = serde_json::from_slice(&attachment.stdout).expect("attachment JSON");
     assert_contract("attachment add", "attachment-add");
     assert_fixture_shape(&attachment, "attachment-add");
-    assert_eq!(attachment["data"]["filename"], "artifact.txt");
-    assert_eq!(attachment["data"]["size_bytes"], 2);
+    assert_eq!(attachment["data"]["filename"], "原生附件.bin");
+    assert_eq!(attachment["data"]["size_bytes"], attachment_content.len());
 
     let attachments = host.json(&["--json", "attachment", "list", "t_history"]);
     assert_contract("attachment list", "attachment-list");
@@ -136,7 +138,7 @@ async fn history_cli_covers_runs_logs_comments_attachments_events_and_stats() {
     );
     assert_eq!(
         std::fs::read(&downloaded_path).expect("读取下载 attachment"),
-        b"ab"
+        attachment_content
     );
 
     let removed = host.json(&["--json", "attachment", "remove", "t_history", "a_history"]);

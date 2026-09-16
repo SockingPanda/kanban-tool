@@ -1,0 +1,195 @@
+{
+  "baseCommit": "f53e7b884b440f782020587c6f08a7e451757484",
+  "files": [
+    {
+      "path": "crates/kanban-service/src/lib.rs",
+      "blob": "f9065c9d1f07afb1786b341e4280b4c90c35b3aa",
+      "edits": [
+        {
+          "before": "mod migration;\n",
+          "after": "mod migration;\nmod mutation_gate;\npub mod realtime;\n",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "crates/kanban-service/src/service.rs",
+      "blob": "24736cce35b7d5f2bea3da2fb5ef154ed05bf7d8",
+      "edits": [
+        {
+          "before": "use tokio::sync::Mutex;",
+          "after": "use crate::mutation_gate::MutationGate;",
+          "count": 1
+        },
+        {
+          "before": "Arc<Mutex<()>>",
+          "after": "Arc<MutationGate>",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "crates/kanban-service/src/db.rs",
+      "blob": "47ff6549951e7ce430c0418cec82bbc9b707fd89",
+      "edits": [
+        {
+          "before": "use tokio::sync::Mutex;",
+          "after": "use crate::mutation_gate::MutationGate;",
+          "count": 1
+        },
+        {
+          "before": "Arc<Mutex<()>>",
+          "after": "Arc<MutationGate>",
+          "count": 2
+        },
+        {
+          "before": "mutation_gate: Arc::new(Mutex::new(())),",
+          "after": "mutation_gate: Arc::new(MutationGate::new()),",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "apps/web/src/application/workspace/data-source.ts",
+      "blob": "37ccbbbffedce7d3a4ea401e0f60dc95ea786d04",
+      "edits": [
+        {
+          "before": "import type { SseTransport } from '../sync/contracts';",
+          "after": "import type { SseTransport } from '../sync/contracts';\nimport type { BoardRealtimeSource } from \"../realtime/source\";",
+          "count": 1
+        },
+        {
+          "before": "  readonly streamTransport: SseTransport;\n  readonly streamUrl: string;",
+          "after": "  /** 配置 RPC source 后不再创建 SSE controller；禁止自动协议回退。 */\n  readonly boardRealtime?: BoardRealtimeSource;\n  /** 仅供尚未迁移的旧宿主使用。 */\n  readonly streamTransport?: SseTransport;\n  readonly streamUrl?: string;",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "apps/web/src/application/workspace/use-board-session.tsx",
+      "blob": "d9d70825885edc8c10b2e0ee5e1b2c8b34bddcaa",
+      "edits": [
+        {
+          "before": "    streamTransport: source.streamTransport,\n    streamUrl: source.streamUrl,",
+          "after": "    ...(source.streamTransport ? { streamTransport: source.streamTransport } : {}),\n    ...(source.streamUrl ? { streamUrl: source.streamUrl } : {}),\n    ...(source.boardRealtime ? { boardRealtime: source.boardRealtime } : {}),",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "apps/web/src/application/workspace/board-session-registry.ts",
+      "blob": "26cb15fd1b089e35dfb1ac1754fb4363a395aa38",
+      "edits": [
+        {
+          "before": "import type { BoardReadModel, BoardReadQuery } from \"../data/board-read-model\";",
+          "after": "import type { BoardReadModel, BoardReadQuery } from \"../data/board-read-model\";\nimport type { BoardRealtimeSource } from \"../realtime/source\";\nimport { bindBoardRealtime } from \"../realtime/bind\";",
+          "count": 1
+        },
+        {
+          "before": "  readonly selector: string\n  readonly streamTransport?: SseTransport",
+          "after": "  readonly selector: string\n  readonly boardRealtime?: BoardRealtimeSource\n  readonly streamTransport?: SseTransport",
+          "count": 1
+        },
+        {
+          "before": "interface BoardSession {\n  readonly key: string",
+          "after": "interface BoardSession {\n  readonly key: string\n  readonly realtimeKey: string",
+          "count": 1
+        },
+        {
+          "before": "if (snapshot !== undefined && snapshot.state !== \"circuit-open\") return \"already-live\"",
+          "after": "if (snapshot?.state === \"live\") return \"already-live\"",
+          "count": 1
+        },
+        {
+          "before": "  if (session === undefined) {\n    const listeners",
+          "after": "  const realtimeKey = resource.boardRealtime?.key ?? \"legacy-sse\"\n  if (session && session.realtimeKey !== realtimeKey) throw new Error(\"同一看板仍有其他实时数据源的会话，请先释放旧会话\")\n  if (session === undefined) {\n    const listeners",
+          "count": 1
+        },
+        {
+          "before": "    const eventsApi = createEventsApiClient({ transport: resource.transport })\n    const sink = createBoardSyncSink({\n      identity: { canonicalBoardId: boardId, selector: model.board.slug },\n      query: resource.query,\n      eventsApi,\n      adapter: resource.adapter,\n      publish: (nextModel) => {\n        for (const listener of listeners) listener(nextModel)\n      },\n    })\n    const controllerOptions = {\n      boardSelector: model.board.slug,\n      canonicalBoardId: boardId,\n      streamUrl: resource.streamUrl ?? \"/api/v1/stream/events\",\n      transport: dependencies.streamTransport ?? resource.streamTransport ?? (() => { throw new Error(\"Host stream transport 未提供\") }),\n      adapter: resource.adapter,\n      sink,\n      telemetry: {\n        record: (entry: SyncTelemetryEntry) => {\n          for (const listener of telemetryListeners) listener(entry)\n          for (const observer of sessionTelemetryObservers.get(key) ?? []) observer(entry)\n        },\n      },\n    } satisfies ConstructorParameters<typeof WebSyncController>[0]\n    const controller = dependencies.createController?.(controllerOptions) ?? new WebSyncController(controllerOptions)",
+          "after": "    const record = (entry: SyncTelemetryEntry): void => {\n      for (const listener of telemetryListeners) listener(entry)\n      for (const observer of sessionTelemetryObservers.get(key) ?? []) observer(entry)\n    }\n    let controller: BoardSessionController\n    if (resource.boardRealtime) {\n      controller = bindBoardRealtime(resource.boardRealtime, {\n        boardId, boardSelector: model.board.slug, record,\n      })\n    } else {\n      // 旧入口显式保留，RPC 失败不会进入这个分支。\n      const eventsApi = createEventsApiClient({ transport: resource.transport })\n      const sink = createBoardSyncSink({\n        identity: { canonicalBoardId: boardId, selector: model.board.slug },\n        query: resource.query,\n        eventsApi,\n        adapter: resource.adapter,\n        publish: (nextModel) => {\n          for (const listener of listeners) listener(nextModel)\n        },\n      })\n      const controllerOptions = {\n        boardSelector: model.board.slug,\n        canonicalBoardId: boardId,\n        streamUrl: resource.streamUrl ?? \"/api/v1/stream/events\",\n        transport: dependencies.streamTransport ?? resource.streamTransport ?? (() => { throw new Error(\"Host stream transport 未提供\") }),\n        adapter: resource.adapter,\n        sink,\n        telemetry: { record },\n      } satisfies ConstructorParameters<typeof WebSyncController>[0]\n      controller = dependencies.createController?.(controllerOptions) ?? new WebSyncController(controllerOptions)\n    }",
+          "count": 1
+        },
+        {
+          "before": "    session = {\n      key,",
+          "after": "    session = {\n      key,\n      realtimeKey,",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "apps/web/src/application/workspace/session-events.ts",
+      "blob": "879beaafcd553387898f2e51eec12dae39058283",
+      "edits": [
+        {
+          "before": "const explorerBoundaryTelemetry = new Set([",
+          "after": "const explorerBoundaryTelemetry = new Set([\n  // RPC 查询刷新提示不经过 audit event parser。分页、total 与表单草稿沿用原逻辑。\n  \"rpc-refresh-required\",",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "apps/web/src/application/workspace/board-live-state.ts",
+      "blob": "444d0d72bc24e5b9dd63703bb49c211506f02702",
+      "edits": [
+        {
+          "before": "  switch (type) {\n    case \"connection-live\":",
+          "after": "  switch (type) {\n    case \"rpc-connecting\":\n      return \"connecting\"\n    case \"connection-live\":",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "crates/kanban-server/Cargo.toml",
+      "blob": "1143167c5a41a53fecd4a1f2c5e72f73f1c9e497",
+      "edits": [
+        {
+          "before": "legacy-sqlite-import = [\"kanban-service/legacy-sqlite-import\"]",
+          "after": "legacy-sqlite-import = [\"kanban-service/legacy-sqlite-import\"]\n# 装配接口就绪后由唯一 host 显式启用；默认入口仍维持现状。\ngrpc-framework = [\"dep:kanban-rpc-host\", \"dep:kanban-grpc-adapter\", \"axum/http2\"]",
+          "count": 1
+        },
+        {
+          "before": "[dependencies]\n",
+          "after": "[dependencies]\nkanban-rpc-host = { path = \"../../migration/grpc-framework/crates/kanban-rpc-host\", optional = true }\nkanban-grpc-adapter = { path = \"../../migration/grpc-framework/integration/kanban-adapter\", optional = true }\n",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "crates/kanban-server/src/lib.rs",
+      "blob": "ff3a9562792aab64baa476a8d29c4c528615e248",
+      "edits": [
+        {
+          "before": "mod http;\n",
+          "after": "mod http;\n#[cfg(feature = \"grpc-framework\")]\npub mod grpc;\n",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "additions": [
+    {
+      "source": "integration/service-src/mutation_gate.rs",
+      "path": "crates/kanban-service/src/mutation_gate.rs"
+    },
+    {
+      "source": "integration/service-src/realtime.rs",
+      "path": "crates/kanban-service/src/realtime.rs"
+    },
+    {
+      "source": "integration/atlas-web/source.ts",
+      "path": "apps/web/src/application/realtime/source.ts"
+    },
+    {
+      "source": "integration/atlas-web/bind.ts",
+      "path": "apps/web/src/application/realtime/bind.ts"
+    },
+    {
+      "source": "integration/atlas-server/grpc.rs",
+      "path": "crates/kanban-server/src/grpc.rs"
+    }
+  ],
+  "baseBranch": "codex/v4-atlas-paper",
+  "previousBase": "6340d58b4b74ed301b80c6c1dd112b55b5009a57",
+  "requiredPackagePath": "migration/grpc-framework"
+}

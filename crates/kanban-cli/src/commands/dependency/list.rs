@@ -8,9 +8,11 @@ pub(crate) struct ListArgs {
     pub(crate) task_ref: String,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let dependencies = client.list_dependencies_by_selector(&ctx.board, &args.task_ref)?;
+    let dependencies = client
+        .list_dependencies_by_selector(&ctx.board, &args.task_ref)
+        .await?;
     if ctx.json {
         output::print_json(&kanban_protocol::CliDependencyListOutput {
             data: cli_dependency_snapshot(&dependencies),

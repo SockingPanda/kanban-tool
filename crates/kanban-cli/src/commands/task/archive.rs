@@ -10,19 +10,21 @@ pub(crate) struct ArchiveArgs {
     #[arg(long, help = "强制归档 running 任务或未完成必需步骤")]
     pub(crate) force: bool,
 }
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ArchiveArgs,
 ) -> Result<(), CliFailure> {
-    let task = client.archive_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &ArchiveTaskRequest {
-            actor: None,
-            force: args.force,
-        },
-    )?;
+    let task = client
+        .archive_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &ArchiveTaskRequest {
+                actor: None,
+                force: args.force,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&ArchiveTaskResponse::new(task));
     } else {

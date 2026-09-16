@@ -32,4 +32,17 @@ describe('前端分层边界', () => {
     expect(issues).toContain('反向依赖');
     expect(issues).toContain('直接读写网络或存储');
   });
+  test('正式生成协议允许 adapter 消费，application 保持协议无关', () => {
+    const generated = ['generated/rpc/kanban/v1/kanban_pb.ts', 'export const Schema = {};'] as const;
+    expect(checkBoundaries(new Map([
+      generated,
+      ['adapters/host/realtime.ts', "import '../../generated/rpc/kanban/v1/kanban_pb';"],
+    ]))).toEqual([]);
+    const issues = checkBoundaries(new Map([
+      generated,
+      ['application/data/read.ts', "import '../../generated/rpc/kanban/v1/kanban_pb'; import { createClient } from '@connectrpc/connect'; import { create } from '@bufbuild/protobuf';"],
+    ])).join('\n');
+    expect(issues).toContain('反向依赖');
+    expect(issues).toContain('不能依赖 Protobuf 或 Connect');
+  });
 });

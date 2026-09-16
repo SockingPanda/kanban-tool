@@ -8,9 +8,11 @@ pub(crate) struct RemoveArgs {
     pub(crate) label: String,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let task = client.remove_task_label_by_selector(&ctx.board, &args.task_ref, &args.label)?;
+    let task = client
+        .remove_task_label_by_selector(&ctx.board, &args.task_ref, &args.label)
+        .await?;
     if ctx.json {
         output::print_json(&kanban_protocol::cli_labels::CliLabelRemoveOutput { data: task });
     } else {

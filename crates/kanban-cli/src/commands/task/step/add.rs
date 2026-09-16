@@ -22,24 +22,26 @@ pub(crate) struct AddArgs {
     pub(crate) idempotency_key: Option<String>,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &AddArgs,
 ) -> Result<(), CliFailure> {
-    let steps = client.create_step_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &CreateStepRequest {
-            idempotency_key: args.idempotency_key.clone(),
-            title: args.title.clone(),
-            body: args.body.clone(),
-            linked_task_ref: args.linked_task_ref.clone(),
-            position: args.position,
-            required: !args.optional,
-            actor: None,
-        },
-    )?;
+    let steps = client
+        .create_step_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &CreateStepRequest {
+                idempotency_key: args.idempotency_key.clone(),
+                title: args.title.clone(),
+                body: args.body.clone(),
+                linked_task_ref: args.linked_task_ref.clone(),
+                position: args.position,
+                required: !args.optional,
+                actor: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CreateStepResponse { data: steps });
     } else {

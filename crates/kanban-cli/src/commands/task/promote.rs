@@ -9,16 +9,18 @@ pub(crate) struct PromoteArgs {
     pub(crate) task_ref: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &PromoteArgs,
 ) -> Result<(), CliFailure> {
-    let task = client.promote_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &PromoteTaskRequest { actor: None },
-    )?;
+    let task = client
+        .promote_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &PromoteTaskRequest { actor: None },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&PromoteTaskResponse::new(task));
     } else {

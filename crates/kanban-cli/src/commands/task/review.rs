@@ -13,21 +13,23 @@ pub(crate) struct ReviewArgs {
     pub(crate) force: bool,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ReviewArgs,
 ) -> Result<(), CliFailure> {
-    let task = client.submit_review_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &SubmitReviewTaskRequest {
-            actor: None,
-            claim_token: args.claim_token.clone(),
-            force: args.force,
-            summary: None,
-        },
-    )?;
+    let task = client
+        .submit_review_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &SubmitReviewTaskRequest {
+                actor: None,
+                claim_token: args.claim_token.clone(),
+                force: args.force,
+                summary: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&SubmitReviewTaskResponse::new(task));
     } else {

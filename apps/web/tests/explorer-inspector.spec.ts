@@ -19,10 +19,10 @@ test('刷新恢复筛选、搜索、选中任务和依赖图缩放',async({page}
   await page.goto('/app/boards/default/map?filter=ready&zoom=1.2&task=t_ready');await expect(page.getByTestId('task-map-zoom')).toHaveText('120%');
   await page.reload();await expect(page.getByTestId('task-map-zoom')).toHaveText('120%');
 });
-test('Events 复用一个持久 SSE 连接，Run 深链接读取真实形状日志',async({page})=>{
+test('Events 复用一个持久 QueryService 连接，Run 深链接读取真实形状日志',async({page})=>{
   const fixture=await installExplorerFixture(page);await page.goto('/app/boards/default/events');await expect(page.getByTestId('event-row')).toHaveCount(1);
-  await fixture.waitForSseConnection(0);const connections=await fixture.getSseConnectionCount();
-  await fixture.emitTaskUpdated();await expect(page.getByTestId('event-row')).toHaveCount(2);expect(await fixture.getSseConnectionCount()).toBe(connections);
+  await fixture.waitForQueryConnection(0);const connections=await fixture.getQueryConnectionCount();
+  await fixture.emitTaskUpdated();await expect(page.getByTestId('event-row')).toHaveCount(2);expect(await fixture.getQueryConnectionCount()).toBe(connections);
   await page.goto('/app/boards/default/runs?task=t_ready');await expect(page.getByTestId('runs-log')).toContainText('playwright fixture log');await expect(page).toHaveURL(/task=t_ready/);
 });
 test('读取失败和空数据具有可操作边界',async({page})=>{

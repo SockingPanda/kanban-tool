@@ -6,8 +6,12 @@ use kanban_protocol::cli_helpers::{CliVectorRebuildOutput, CliVectorStatus};
 #[derive(Debug, ClapArgs)]
 pub(crate) struct Args {}
 
-pub(crate) fn run(ctx: &CliContext, client: &KanbanClient, _args: &Args) -> Result<(), CliFailure> {
-    let value = client.rebuild_vector(&ctx.board)?;
+pub(crate) async fn run(
+    ctx: &CliContext,
+    client: &KanbanClient,
+    _args: &Args,
+) -> Result<(), CliFailure> {
+    let value = client.rebuild_vector(&ctx.board).await?;
     let status = CliVectorStatus {
         backend: value.backend,
         enabled: value.enabled,

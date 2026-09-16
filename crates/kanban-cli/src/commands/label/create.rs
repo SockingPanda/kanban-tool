@@ -10,15 +10,17 @@ pub(crate) struct CreateArgs {
     pub(crate) color: Option<String>,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &CreateArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &CreateArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let label = client.create_board_label(
-        &ctx.board,
-        &CreateBoardLabelRequest {
-            name: args.name.clone(),
-            color: args.color.clone(),
-        },
-    )?;
+    let label = client
+        .create_board_label(
+            &ctx.board,
+            &CreateBoardLabelRequest {
+                name: args.name.clone(),
+                color: args.color.clone(),
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&kanban_protocol::cli_labels::CliLabelCreateOutput { data: label });
     } else {

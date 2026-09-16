@@ -10,6 +10,8 @@ mod domain;
 mod error;
 mod maintenance;
 mod migration;
+mod mutation_gate;
+pub mod realtime;
 mod schema;
 mod shared;
 mod store_operations;
@@ -69,6 +71,22 @@ pub use operations::{
     UnblockTaskCommand, UpdateTaskCommand, VectorChunkQueryCommand, VectorChunkResult,
     VectorConfigureCommand, VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
+pub use operations::{
+    DeleteLabelSemanticsCommand, LabelAtomExplainActionRecord, LabelAtomExplainRecord,
+    LabelAtomExplainSignalRecord, LabelAtomExplainValidationRecord, LabelAtomIndexHitRecord,
+    LabelAtomIndexQuery, LabelAtomIndexQueryRecord, LabelAtomIndexStatusRecord,
+    LabelOntologyActionRecord, LabelOntologyObservationRecord, LabelOntologyPrecisionRecall,
+    LabelOntologyQualityDenominator, LabelOntologyQualityDisagreement, LabelOntologyQualityRates,
+    LabelOntologyQualityRecord, LabelOntologyReviewAtomVariantRecord,
+    LabelOntologyReviewGroupRecord, LabelOntologyReviewLabelRefRecord, LabelOntologyReviewQuery,
+    LabelOntologySignalDetailRecord, LabelOntologySignalQuery, LabelOntologySignalRecord,
+    LabelProposalAttemptRecord, LabelProposalCommand, LabelProposalDecisionCommand,
+    LabelSemanticProposalRecord, LabelSuggestionCandidateRecord, LabelSuggestionEvidenceRecord,
+    LabelSuggestionOptions, LabelSuggestionResultRecord, OntologyActionCommand,
+    OntologyActorCommand, OntologyApplyAtomCommand, OntologyObservationCommand,
+    OntologyRevertCommand, OntologySignalCommand, OntologyValidateCommand,
+    UpsertLabelSemanticsCommand,
+};
 pub use service::KanbanService;
 
 // 规范持久化入口只在 service crate 内可见；host 只能使用上面的 KanbanService。
@@ -83,10 +101,10 @@ pub(crate) use error::StoreError;
 pub(crate) use store_operations::{
     AddTaskLabelsInput, ArchiveBoardInput, BootstrapTaskLabelInput, CreateAttachmentInput,
     CreateBoardInput, CreateCommentInput, CreateLabelInput, DeleteBoardLabelInput,
-    EntityUpsertInput, LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
-    OntologyActionInput, OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput,
-    OntologyValidateInput, RelationDeleteInput, RelationPredicateInput, RelationUpsertInput,
-    RemoveTaskLabelInput, UpsertLabelSemanticsInput,
+    EntityUpsertInput, LabelProposalDecisionInput, LabelProposalInput, OntologyActionInput,
+    OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
+    RelationDeleteInput, RelationPredicateInput, RelationUpsertInput, RemoveTaskLabelInput,
+    UpsertLabelSemanticsInput,
 };
 
 #[cfg(feature = "legacy-sqlite-import")]

@@ -1,4 +1,5 @@
-import { mergeBoardEvents } from "../../application/data/explorer-read-model";
+import type { RpcCall } from "../../application/data/rpc-transport";
+import { inheritReadScope } from '../../application/query/observe-read';
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
 
@@ -29,19 +30,21 @@ import { parseApiListAttachmentsResponse, type ApiListAttachmentsResponseContrac
 
 import { parseApiListEventsResponse, type ApiListEventsResponseContract } from "../../lib/api/generated/contracts/api-list-events-response";
 
-import { createHttpTransport } from "./http-transport";
-import { type HttpReadTransport, type HttpTransportResponse } from "../../application/data/http-transport";
+import { createRpcTransport } from "./rpc-transport";
+import { type RpcTransport, type RpcTransportResponse } from "../../application/data/rpc-transport";
 
-import { type TaskListQueryState, ExplorerReadBudget, ExplorerReadError, wrapTransportError, type ExplorerReadOptions, type ExplorerBoardIdentity, parseContract, boardListPath, resolveBoard, type ExplorerEvent, BOARD_EVENTS_PAGE_LIMIT, type BoardEventsReadModel, validateCanonicalTaskSelector, throwIfAborted, MAX_BOARD_EVENTS_PAGES, buildBoardEventsRequest, validateEventBatch, type ExplorerTaskListPage, buildTaskListRequest, validateTaskBoard, type TaskMapQueryOptions, type ExplorerTaskMapReadModel, defaultTaskMapQuery, validateTaskMapOptions, validateProvidedBoardIdentity, buildTaskMapRequest, validateMapBoard, type TaskRunsReadModel, buildTaskRunsRequest, validateRunScope, buildRunLogRequest, type TaskInspectorReadOptions, type TaskInspectorReadModel, buildTaskInspectorRequests, validateInspectorTask, validateInspectorScope, validateNeighborhoodScope } from "../../application/data/explorer-read-model";
+import { type TaskListQueryState, ExplorerReadBudget, ExplorerReadError, wrapTransportError, type ExplorerReadOptions, type ExplorerBoardIdentity, parseContract, boardListPath, resolveBoard, BOARD_EVENTS_PAGE_LIMIT, type BoardEventsReadModel, validateCanonicalTaskSelector, throwIfAborted, validateEventBatch, type ExplorerTaskListPage, buildTaskListRequest, validateTaskBoard, type TaskMapQueryOptions, type ExplorerTaskMapReadModel, defaultTaskMapQuery, validateTaskMapOptions, validateProvidedBoardIdentity, buildTaskMapRequest, validateMapBoard, type TaskRunsReadModel, buildTaskRunsRequest, validateRunScope, buildRunLogRequest, type TaskInspectorReadOptions, type TaskInspectorReadModel, buildTaskInspectorRequests, validateInspectorTask, validateInspectorScope, validateNeighborhoodScope } from "../../application/data/explorer-read-model";
 
 export async function getPayload(
-  transport: Pick<HttpReadTransport, "get">,
-  path: string,
+  transport: RpcTransport,
+  request: RpcCall,
   signal: AbortSignal | undefined,
   budget = new ExplorerReadBudget(),
 ): Promise<unknown> {
   try {
-    const response: HttpTransportResponse = await transport.get(path, signal)
+    throwIfAborted(signal)
+    const response: RpcTransportResponse = await transport.call({ ...request, signal })
+    throwIfAborted(signal)
     if (
       response === null
       || typeof response !== "object"
@@ -65,9 +68,9 @@ export async function loadExplorerBoardIdentity(
   options: ExplorerReadOptions = {},
 ): Promise<ExplorerBoardIdentity> {
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -84,6 +87,18 @@ export async function loadExplorerBoardIdentity(
   }
 }
 
+/** 最近审计窗口由服务端有界查询提供，不从历史事件头部翻页追赶。 */
+async function readRecentEvents(transport: RpcTransport, board: ExplorerBoardIdentity, taskId: string | null, limit: number, signal: AbortSignal | undefined, budget: ExplorerReadBudget): Promise<ApiListEventsResponseContract> {
+  if (!transport.recentEvents) throw new ExplorerReadError('anomaly', '审计窗口需要 QueryService 数据源。')
+  throwIfAborted(signal)
+  const result = await transport.recentEvents({ board: board.id, ...(taskId ? { task_id: taskId } : {}), limit }, signal)
+  throwIfAborted(signal)
+  budget.consume(result.bytes)
+  const response = parseContract('api.list-events.response', parseApiListEventsResponse, result.payload)
+  validateEventBatch(response.data, board, taskId, 0, response.meta.next_after, limit)
+  return response
+}
+
 export async function loadBoardEvents(
   runtime: WebRuntimeConfig,
   selector = runtime.defaultBoard,
@@ -92,51 +107,17 @@ export async function loadBoardEvents(
   const taskId = options.taskId?.trim() || null
   if (taskId !== null) validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
   try {
     const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
-    const afterOption = options.after ?? 0
-    if (!Number.isSafeInteger(afterOption) || afterOption < 0) throw new ExplorerReadError("anomaly", "事件读取 after 必须是非负安全整数。")
-    let after = afterOption
-    let pageCount = 0
-    let events: readonly ExplorerEvent[] = []
-    while (true) {
-      throwIfAborted(options.signal)
-      if (pageCount >= MAX_BOARD_EVENTS_PAGES) {
-        throw new ExplorerReadError("anomaly", `事件读取超过 ${MAX_BOARD_EVENTS_PAGES} 页预算。`)
-      }
-      pageCount += 1
-      throwIfAborted(options.signal)
-      const payload = await getPayload(transport, buildBoardEventsRequest(board.slug, taskId, after), options.signal, budget)
-      throwIfAborted(options.signal)
-      const response = parseContract(
-        "api.list-events.response",
-        parseApiListEventsResponse,
-        payload,
-      )
-      const nextAfter = response.meta.next_after
-      validateEventBatch(response.data, board, taskId, after, nextAfter, BOARD_EVENTS_PAGE_LIMIT)
-      events = mergeBoardEvents(events, response.data, board.id)
-      if (response.data.length < BOARD_EVENTS_PAGE_LIMIT) {
-        after = nextAfter
-        break
-      }
-      if (nextAfter <= after) {
-        throw new ExplorerReadError("anomaly", "事件响应的 next_after 必须在完整 page 后前进。")
-      }
-      after = nextAfter
-    }
-    return Object.freeze({
-      board,
-      taskId,
-      events,
-      meta: Object.freeze({ count: events.length, nextAfter: after, limit: BOARD_EVENTS_PAGE_LIMIT }),
-    })
+    const response = await readRecentEvents(transport, board, taskId, BOARD_EVENTS_PAGE_LIMIT, options.signal, budget)
+    return Object.freeze({ board, taskId, events: response.data,
+      meta: Object.freeze({ count: response.data.length, nextAfter: response.meta.next_after, limit: BOARD_EVENTS_PAGE_LIMIT }) })
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -150,9 +131,9 @@ export async function loadTaskListPage(
 ): Promise<ExplorerTaskListPage> {
   const budget = options.budget ?? new ExplorerReadBudget()
   const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, budget })
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -175,9 +156,9 @@ export async function loadTaskMap(
   options: ExplorerReadOptions & Partial<TaskMapQueryOptions> & { readonly boardIdentity?: ExplorerBoardIdentity } = {},
 ): Promise<ExplorerTaskMapReadModel> {
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -212,10 +193,10 @@ export async function loadTaskRuns(
   options: ExplorerReadOptions = {},
 ): Promise<TaskRunsReadModel> {
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
     validateCanonicalTaskSelector(taskId)
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -249,6 +230,7 @@ export async function loadTaskRuns(
 
 export function linkedAbortSignal(signal: AbortSignal | undefined): { signal: AbortSignal; cleanup: () => void; abort: () => void } {
   const controller = new AbortController()
+  inheritReadScope(signal, controller.signal)
   if (signal?.aborted) controller.abort()
   const abort = () => controller.abort()
   signal?.addEventListener("abort", abort, { once: true })
@@ -265,16 +247,16 @@ export async function loadTaskInspector(
   // constructing a transport request. Invalid selectors are local errors.
   validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
-  let transport: Pick<HttpReadTransport, "get">
+  let transport: RpcTransport
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
+    transport = options.transport ?? createRpcTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
   }
   const linked = linkedAbortSignal(options.signal)
   try {
     const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, signal: linked.signal, budget })
-    const requests = buildTaskInspectorRequests(board.slug, taskId)
+    const requests = buildTaskInspectorRequests(taskId)
     let taskResponse: ApiGetTaskResponseContract
     try {
       taskResponse = parseContract(
@@ -298,7 +280,7 @@ export async function loadTaskInspector(
       : getPayload(transport, requests.runs, linked.signal, budget).then((payload) => parseContract("api.list-runs.response", parseApiListRunsResponse, payload).data)
     const eventsPromise: Promise<ApiListEventsResponseContract["data"]> = options.includeEvents === false
       ? Promise.resolve([])
-      : getPayload(transport, requests.events, linked.signal, budget).then((payload) => parseContract("api.list-events.response", parseApiListEventsResponse, payload).data)
+      : readRecentEvents(transport, board, taskId, 50, linked.signal, budget).then(response => response.data)
     const attachmentsPromise: Promise<ApiListAttachmentsResponseContract["data"]> = options.includeAttachments === false
       ? Promise.resolve([])
       : getPayload(transport, requests.attachments, linked.signal, budget).then((payload) => parseContract("api.list-attachments.response", parseApiListAttachmentsResponse, payload).data)
@@ -346,10 +328,10 @@ export async function loadInspectorSectionContext(
   selector: string,
   taskId: string,
   options: ExplorerReadOptions,
-): Promise<{ readonly board: ExplorerBoardIdentity; readonly transport: Pick<HttpReadTransport, "get">; readonly budget: ExplorerReadBudget }> {
+): Promise<{ readonly board: ExplorerBoardIdentity; readonly transport: RpcTransport; readonly budget: ExplorerReadBudget }> {
   validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
-  const transport = options.transport ?? createHttpTransport(runtime, options)
+  const transport = options.transport ?? createRpcTransport(runtime, options)
   const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
   return { board, transport, budget }
 }
@@ -362,7 +344,7 @@ export async function loadTaskInspectorNeighborhood(
 ): Promise<ApiTaskNeighborhoodResponseContract["data"]> {
   try {
     const { board, transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
-    const requests = buildTaskInspectorRequests(board.slug, taskId)
+    const requests = buildTaskInspectorRequests(taskId)
     const neighborhood = parseContract(
       "api.task-neighborhood.response",
       parseApiTaskNeighborhoodResponse,
@@ -382,8 +364,8 @@ export async function loadTaskInspectorRuns(
   options: ExplorerReadOptions = {},
 ): Promise<ApiListRunsResponseContract["data"]> {
   try {
-    const { board, transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
-    const requests = buildTaskInspectorRequests(board.slug, taskId)
+    const { transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
+    const requests = buildTaskInspectorRequests(taskId)
     const runs = parseContract(
       "api.list-runs.response",
       parseApiListRunsResponse,
@@ -404,13 +386,7 @@ export async function loadTaskInspectorEvents(
 ): Promise<ApiListEventsResponseContract["data"]> {
   try {
     const { board, transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
-    const requests = buildTaskInspectorRequests(board.slug, taskId)
-    const response = parseContract(
-      "api.list-events.response",
-      parseApiListEventsResponse,
-      await getPayload(transport, requests.events, options.signal, budget),
-    )
-    validateEventBatch(response.data, board, taskId, 0, response.meta.next_after, 50)
+    const response = await readRecentEvents(transport, board, taskId, 50, options.signal, budget)
     return response.data
   } catch (error) {
     return wrapTransportError(error)
@@ -425,7 +401,7 @@ export async function loadTaskInspectorAttachments(
 ): Promise<ApiListAttachmentsResponseContract["data"]> {
   try {
     const { board, transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
-    const requests = buildTaskInspectorRequests(board.slug, taskId)
+    const requests = buildTaskInspectorRequests(taskId)
     const attachments = parseContract(
       "api.list-attachments.response",
       parseApiListAttachmentsResponse,

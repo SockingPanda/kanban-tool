@@ -8,9 +8,11 @@ pub(crate) struct ShowArgs {
     pub(crate) board: Option<String>,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &ShowArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &ShowArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let board = client.get_board(args.board.as_deref().unwrap_or(&ctx.board))?;
+    let board = client
+        .get_board(args.board.as_deref().unwrap_or(&ctx.board))
+        .await?;
     if ctx.json {
         output::print_json(&GetBoardResponse { data: board });
     } else {

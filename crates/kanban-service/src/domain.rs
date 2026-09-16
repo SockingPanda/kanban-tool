@@ -415,6 +415,28 @@ pub struct LabelAtomIndexStatusRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct LabelAtomIndexQueryRecord {
+    pub data: Vec<LabelAtomIndexHitRecord>,
+    pub degraded: bool,
+    pub diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct LabelAtomIndexHitRecord {
+    pub atom_id: String,
+    pub label_id: String,
+    pub label_name: String,
+    pub board_id: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub ordinal: i64,
+    pub content_hash: String,
+    pub embedding_model: String,
+    pub distance: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelSuggestionResultRecord {
     pub task_id: String,
     pub board_id: String,

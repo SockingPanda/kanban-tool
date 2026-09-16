@@ -1,11 +1,11 @@
-use std::{env, fmt::Display, sync::Arc};
+use std::{env, fmt::Display, future::Future, sync::Arc};
 
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use rmcp::ErrorData as McpError;
 
 #[derive(Clone)]
 pub(crate) struct KanbanMcp {
-    pub(crate) client: Arc<KanbanClient>,
+    pub(crate) client: KanbanClient,
     pub(crate) default_board: Arc<str>,
 }
 
@@ -17,7 +17,7 @@ impl KanbanMcp {
         let default_board = env::var("KB_BOARD").unwrap_or_else(|_| "default".to_owned());
 
         Ok(Self {
-            client: Arc::new(KanbanClient::new(server_url, actor)?),
+            client: KanbanClient::new(server_url, actor)?,
             default_board: Arc::from(default_board),
         })
     }
@@ -29,24 +29,20 @@ impl KanbanMcp {
 
 pub(crate) async fn call_client<T, E, F>(operation: F) -> Result<T, McpError>
 where
-    T: Send + 'static,
-    E: Display + Send + 'static,
-    F: FnOnce() -> Result<T, E> + Send + 'static,
+    E: Display,
+    F: Future<Output = Result<T, E>>,
 {
-    tokio::task::spawn_blocking(operation)
+    operation
         .await
-        .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))
 }
 
 pub(crate) async fn call_client_internal<T, E, F>(operation: F) -> Result<T, McpError>
 where
-    T: Send + 'static,
-    E: Display + Send + 'static,
-    F: FnOnce() -> Result<T, E> + Send + 'static,
+    E: Display,
+    F: Future<Output = Result<T, E>>,
 {
-    tokio::task::spawn_blocking(operation)
+    operation
         .await
-        .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::internal_error(error.to_string(), None))
 }

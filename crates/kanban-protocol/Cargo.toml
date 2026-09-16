@@ -9,7 +9,7 @@ autoexamples = false
 autotests = false
 autobenches = false
 autolib = false
-build = false
+build = "build.rs"
 
 [lib]
 name = "kanban_protocol"
@@ -36,3 +36,16 @@ schemars = { workspace = true, default-features = false, features = ["std", "der
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true
+prost.workspace = true
+tonic = { workspace = true, features = ["codegen", "transport"] }
+tonic-prost.workspace = true
+
+[build-dependencies]
+tonic-prost-build.workspace = true
+
+[[test]]
+name = "rpc"
+path = "tests/rpc.rs"
+
+[dev-dependencies]
+prost-types.workspace = true

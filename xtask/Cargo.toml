@@ -24,6 +24,9 @@ kanban-web-artifact = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true
+syn = { workspace = true, features = ["full", "parsing", "printing", "clone-impls", "extra-traits"] }
+quote.workspace = true
+prettyplease.workspace = true
 
 [[bin]]
 name = "xtask"

@@ -216,13 +216,13 @@ describe("TaskInspectorAssetsPanel", () => {
     await expect(createAttachmentUploadIntent(file)).resolves.toEqual({
       filename: "bytes.bin",
       content_type: "application/octet-stream",
-      content: [1, 2, 255],
+      content: new Uint8Array([1, 2, 255]),
     })
     expect(file.arrayBuffer).toHaveBeenCalledTimes(1)
-    expect(MAX_ATTACHMENT_UPLOAD_BYTES).toBe(384 * 1024)
+    expect(MAX_ATTACHMENT_UPLOAD_BYTES).toBe(256 * 1024 * 1024)
 
     const oversized = { ...file, size: MAX_ATTACHMENT_UPLOAD_BYTES + 1, arrayBuffer: vi.fn(async () => bytes.buffer) } as unknown as File
-    await expect(createAttachmentUploadIntent(oversized)).rejects.toThrow("384 KiB")
+    await expect(createAttachmentUploadIntent(oversized)).rejects.toThrow("256 MiB")
     expect(oversized.arrayBuffer).toHaveBeenCalledTimes(0)
   })
 

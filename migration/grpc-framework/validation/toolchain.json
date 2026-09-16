@@ -1,0 +1,28 @@
+{
+  "node": {
+    "available": true,
+    "version": "v22.16.0",
+    "error": null
+  },
+  "typescript": {
+    "available": true,
+    "version": "Version 5.8.3",
+    "error": null
+  },
+  "protoc": {
+    "available": true,
+    "version": "libprotoc 3.13.0",
+    "error": null
+  },
+  "cargo": {
+    "available": false,
+    "version": null,
+    "error": "ENOENT"
+  },
+  "rustc": {
+    "available": false,
+    "version": null,
+    "error": "ENOENT"
+  },
+  "note": "工具可用性与版本；未将编译器源码测试代替整仓构建。"
+}

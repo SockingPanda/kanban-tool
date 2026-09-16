@@ -63,25 +63,25 @@ pub(crate) enum TaskCommand {
     Archive(archive::ArchiveArgs),
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &TaskCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &TaskCommand) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     match command {
-        TaskCommand::Create(args) => create::run(ctx, &client, args),
-        TaskCommand::List(args) => list::run(ctx, &client, args),
-        TaskCommand::Show(args) => show::run(ctx, &client, args),
-        TaskCommand::Step { command } => step::run(ctx, &client, command),
-        TaskCommand::Promote(args) => promote::run(ctx, &client, args),
-        TaskCommand::Claim(args) => claim::run(ctx, &client, args),
-        TaskCommand::Heartbeat(args) => heartbeat::run(ctx, &client, args),
-        TaskCommand::Release(args) => release::run(ctx, &client, args),
-        TaskCommand::Review(args) => review::run(ctx, &client, args),
-        TaskCommand::Done(args) => done::run(ctx, &client, args),
-        TaskCommand::Block(args) => block::run(ctx, &client, args),
-        TaskCommand::Update(args) => update::run(ctx, &client, args),
-        TaskCommand::Specify(args) => specify::run(ctx, &client, args),
-        TaskCommand::Unblock(args) => unblock::run(ctx, &client, args),
-        TaskCommand::Reopen(args) => reopen::run(ctx, &client, args),
-        TaskCommand::Reclaim(args) => reclaim::run(ctx, &client, args),
-        TaskCommand::Archive(args) => archive::run(ctx, &client, args),
+        TaskCommand::Create(args) => create::run(ctx, &client, args).await,
+        TaskCommand::List(args) => list::run(ctx, &client, args).await,
+        TaskCommand::Show(args) => show::run(ctx, &client, args).await,
+        TaskCommand::Step { command } => step::run(ctx, &client, command).await,
+        TaskCommand::Promote(args) => promote::run(ctx, &client, args).await,
+        TaskCommand::Claim(args) => claim::run(ctx, &client, args).await,
+        TaskCommand::Heartbeat(args) => heartbeat::run(ctx, &client, args).await,
+        TaskCommand::Release(args) => release::run(ctx, &client, args).await,
+        TaskCommand::Review(args) => review::run(ctx, &client, args).await,
+        TaskCommand::Done(args) => done::run(ctx, &client, args).await,
+        TaskCommand::Block(args) => block::run(ctx, &client, args).await,
+        TaskCommand::Update(args) => update::run(ctx, &client, args).await,
+        TaskCommand::Specify(args) => specify::run(ctx, &client, args).await,
+        TaskCommand::Unblock(args) => unblock::run(ctx, &client, args).await,
+        TaskCommand::Reopen(args) => reopen::run(ctx, &client, args).await,
+        TaskCommand::Reclaim(args) => reclaim::run(ctx, &client, args).await,
+        TaskCommand::Archive(args) => archive::run(ctx, &client, args).await,
     }
 }

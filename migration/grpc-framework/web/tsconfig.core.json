@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/model.ts",
+    "src/reducer.ts",
+    "src/watch.ts",
+    "src/realtime-port.ts",
+    "src/changes.ts",
+    "src/endpoint.ts"
+  ],
+  "exclude": [
+    "src/client.ts",
+    "src/gen"
+  ]
+}

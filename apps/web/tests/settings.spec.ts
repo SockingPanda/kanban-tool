@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 import { installRuntimeFixture } from "./runtime-fixture"
+import { installRpcFixture } from "./rpc-fixture"
 import { installExplorerFixture } from "./explorer-fixture"
 
 const healthFixture = {
@@ -16,17 +17,11 @@ const healthFixture = {
 test.describe("Kanban Settings", () => {
   test.beforeEach(async ({ page }) => {
     await installRuntimeFixture(page)
-    await page.route("http://127.0.0.1:4173/health", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(healthFixture) })
-    })
+    ;(await installRpcFixture(page)).handle("GetHealth", () => healthFixture)
   })
 
   test("persists appearance, language and actor preferences in the Web namespace", async ({ page }) => {
-    let streamRequests = 0
-    await page.route("**/api/v1/stream/events**", async (route) => {
-      streamRequests += 1
-      await route.abort()
-    })
+    const rpc = await installRpcFixture(page)
     await page.goto("/app/settings", { waitUntil: "networkidle" })
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
@@ -52,7 +47,7 @@ test.describe("Kanban Settings", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.getByRole("status")).toHaveText("Operation name saved.")
     await expect(page.evaluate(() => localStorage.getItem("kb:web:actor"))).resolves.toBe("")
-    expect(streamRequests).toBe(0)
+    expect(rpc.subscriptions.flat().some(query => query.query.case !== "getHealth")).toBe(false)
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))
       .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
@@ -109,7 +104,7 @@ test.describe("Kanban Settings", () => {
           actor: "local",
           defaultBoard: "",
           serverVersion: "3.0.0",
-          protocolVersion: "v1",
+          protocolVersion: "v2",
           webBuildId: "dev",
         }),
       })
@@ -126,7 +121,7 @@ test.describe("Kanban Settings", () => {
 
     await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("nav-settings")).toBeVisible()
-    await expect.poll(fixture.getSseConnectionCount).toBe(1)
+    await expect.poll(() => fixture.rpc.activeConnectionCount()).toBe(1)
 
     await page.getByTestId("nav-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
@@ -134,11 +129,11 @@ test.describe("Kanban Settings", () => {
     await expect(page.getByTestId("connection-reconnect")).toBeEnabled()
     await page.getByTestId("connection-reconnect").click()
     await expect(page.getByRole("status").filter({ hasText: "仍在连接" })).toBeVisible()
-    await expect.poll(fixture.getSseConnectionCount).toBe(1)
+    await expect.poll(() => fixture.rpc.activeConnectionCount()).toBe(1)
 
     await page.getByRole("link", { name: "返回任务" }).click()
     await expect(page).toHaveURL(/\/app\/boards\/default\/list$/)
-    await expect.poll(fixture.getSseConnectionCount).toBe(1)
+    await expect.poll(() => fixture.rpc.activeConnectionCount()).toBe(1)
   })
 
   test("设置下拉框展开时屏蔽全局快捷键，关闭后恢复", async ({ page }) => {

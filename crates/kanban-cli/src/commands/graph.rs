@@ -28,14 +28,14 @@ pub(crate) enum GraphCommand {
     Sync,
 }
 
-pub(crate) fn run(ctx: &CliContext, command: &GraphCommand) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, command: &GraphCommand) -> Result<(), CliFailure> {
     match command {
-        GraphCommand::Status => status::run(ctx),
-        GraphCommand::Neighbors(args) => neighbors::run(ctx, args),
-        GraphCommand::Query(args) => query::run(ctx, args),
-        GraphCommand::Neighborhood(args) => neighborhood::run(ctx, args),
-        GraphCommand::Map(args) => map::run(ctx, args),
-        GraphCommand::Rebuild => rebuild::run(ctx),
-        GraphCommand::Sync => sync::run(ctx),
+        GraphCommand::Status => status::run(ctx).await,
+        GraphCommand::Neighbors(args) => neighbors::run(ctx, args).await,
+        GraphCommand::Query(args) => query::run(ctx, args).await,
+        GraphCommand::Neighborhood(args) => neighborhood::run(ctx, args).await,
+        GraphCommand::Map(args) => map::run(ctx, args).await,
+        GraphCommand::Rebuild => rebuild::run(ctx).await,
+        GraphCommand::Sync => sync::run(ctx).await,
     }
 }

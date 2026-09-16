@@ -2,7 +2,7 @@
 //!
 //! `/app/runtime.json` 是同源 host metadata，不是 `/api/v1` operation。使用 `Config`
 //! surface 让它进入现有 contract/schema registry，同时保持 endpoint catalog 只投影
-//! API/SSE transport；因此 host metadata 不会伪装成 API endpoint。
+//! 业务 RPC；因此 host metadata 不会伪装成 API endpoint。
 
 use crate::{
     ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,

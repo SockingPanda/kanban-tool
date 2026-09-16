@@ -27,19 +27,17 @@ impl KanbanMcp {
         Parameters(args): Parameters<TaskReclaimArgs>,
     ) -> Result<Json<ReclaimTaskResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let task = call_client(move || {
-            client.reclaim_task_by_selector(
-                &board,
-                &args.task_ref,
-                &ReclaimTaskRequest {
-                    actor: None,
-                    force: args.force,
-                    to_status: args.to_status,
-                    reason: args.reason,
-                },
-            )
-        })
+        let client = &self.client;
+        let task = call_client(client.reclaim_task_by_selector(
+            &board,
+            &args.task_ref,
+            &ReclaimTaskRequest {
+                actor: None,
+                force: args.force,
+                to_status: args.to_status,
+                reason: args.reason,
+            },
+        ))
         .await?;
         Ok(Json(ReclaimTaskResponse::new(task)))
     }

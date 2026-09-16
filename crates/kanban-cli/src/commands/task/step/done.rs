@@ -12,20 +12,22 @@ pub(crate) struct DoneArgs {
     pub(crate) note: String,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &DoneArgs,
 ) -> Result<(), CliFailure> {
-    let step = client.complete_step_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &args.step_ref,
-        &CompleteStepRequest {
-            note: args.note.clone(),
-            actor: None,
-        },
-    )?;
+    let step = client
+        .complete_step_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &args.step_ref,
+            &CompleteStepRequest {
+                note: args.note.clone(),
+                actor: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CliTaskStepDoneOutput::new(step));
     } else {

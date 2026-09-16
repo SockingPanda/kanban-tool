@@ -33,7 +33,7 @@ function ReadyTaskDetail({workspace}:{workspace:ReadyWorkspace}) {
   const [tab,setTab]=useState('detail');
   const model=workspace.inspectorModel,task=model.task,handlers=workspace.inspectorMutationHandlers;
   const claimToken=workspace.taskMutations?.claimTokens?.get(task.id)??null;
-  const actions=useTaskInspectorState({model,identity:workspace.inspectorIdentity,onSelectTask:workspace.selectTask,locale:workspace.locale,claimToken,mutationHandlers:handlers,mutationSnapshot:workspace.inspectorMutationSnapshot,refreshRevision:workspace.inspectorRevision,online:workspace.online!==false,onLoadRuns:workspace.loadInspectorRuns,onLoadEvents:workspace.loadInspectorEvents,onLoadNeighborhood:workspace.loadInspectorNeighborhood});
+  const actions=useTaskInspectorState({model,identity:workspace.inspectorIdentity,onSelectTask:workspace.selectTask,locale:workspace.locale,claimToken,mutationHandlers:handlers,mutationSnapshot:workspace.inspectorMutationSnapshot,online:workspace.online!==false,onLoadRuns:workspace.loadInspectorRuns,onLoadEvents:workspace.loadInspectorEvents,onLoadNeighborhood:workspace.loadInspectorNeighborhood});
   const busy=!handlers||Boolean(workspace.inspectorMutationSnapshot?.pending.size);
   const titleSave=(title:string)=>handlers?handlers.saveTask({title:title.trim(),expected_lock_version:task.lockVersion??0}):Promise.resolve({committed:false,reconciled:false});
   return <><DetailSheet open title={task.ref} description="任务详情" className="task-detail-dialog" dismissDisabled={busy} onClose={workspace.closeInspector} closeLabel="关闭任务检查器" footer={<><Button variant="default" disabled={busy} onClick={workspace.closeInspector}>关闭</Button></>}>

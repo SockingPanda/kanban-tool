@@ -17,7 +17,7 @@ pub(crate) struct AddArgs {
     pub(crate) attachment_id: Option<String>,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
     let content = std::fs::read(&args.path).map_err(|error| CliFailure {
         code: "invalid_input",
         message: format!("读取附件文件 {} 失败：{error}", args.path.display()),
@@ -37,18 +37,20 @@ pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
             exit_code: 2,
         })?;
     let client = ctx.client()?;
-    let attachment = client.create_attachment(
-        &client.resolve_task_id(&ctx.board, &args.task_ref)?,
-        &CreateAttachmentRequest {
-            id: args.attachment_id.clone(),
-            filename,
-            content,
-            content_type: args.content_type.clone(),
-            rel_path: None,
-            sha256: None,
-            actor: Some(ctx.actor()),
-        },
-    )?;
+    let attachment = client
+        .create_attachment(
+            &client.resolve_task_id(&ctx.board, &args.task_ref).await?,
+            &CreateAttachmentRequest {
+                id: args.attachment_id.clone(),
+                filename,
+                content,
+                content_type: args.content_type.clone(),
+                rel_path: None,
+                sha256: None,
+                actor: Some(ctx.actor()),
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CliAttachmentAddOutput { data: attachment });
     } else {

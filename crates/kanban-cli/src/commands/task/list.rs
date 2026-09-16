@@ -45,13 +45,13 @@ pub(crate) enum ListStatus {
     Archived,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ListArgs,
 ) -> Result<(), CliFailure> {
     let query = list_tasks_query(args)?;
-    let response = client.list_tasks(&ctx.board, &query)?;
+    let response = client.list_tasks(&ctx.board, &query).await?;
     if ctx.json {
         output::print_json(&kanban_protocol::CliTaskListOutput::new(response.data));
     } else {

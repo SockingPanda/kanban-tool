@@ -48,31 +48,33 @@ pub(crate) enum CreateStatus {
     Ready,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &CreateArgs,
 ) -> Result<(), CliFailure> {
     let metadata = parse_metadata(args.metadata.as_deref())?;
-    let task = client.create_task(
-        &ctx.board,
-        CreateTaskRequest {
-            task_id: args.task_id.clone(),
-            idempotency_key: args.idempotency_key.clone(),
-            title: args.title.clone(),
-            description: args.description.clone(),
-            status: args.status.map(api_create_status),
-            assignee: args.assignee.clone(),
-            priority: args.priority,
-            scheduled_at: args.scheduled_at,
-            due_at: args.due_at,
-            max_retries: args.max_retries,
-            metadata,
-            labels: args.labels.clone(),
-            depends_on: args.depends_on.clone(),
-            actor: None,
-        },
-    )?;
+    let task = client
+        .create_task(
+            &ctx.board,
+            CreateTaskRequest {
+                task_id: args.task_id.clone(),
+                idempotency_key: args.idempotency_key.clone(),
+                title: args.title.clone(),
+                description: args.description.clone(),
+                status: args.status.map(api_create_status),
+                assignee: args.assignee.clone(),
+                priority: args.priority,
+                scheduled_at: args.scheduled_at,
+                due_at: args.due_at,
+                max_retries: args.max_retries,
+                metadata,
+                labels: args.labels.clone(),
+                depends_on: args.depends_on.clone(),
+                actor: None,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&CreateTaskResponse { data: task });
     } else {

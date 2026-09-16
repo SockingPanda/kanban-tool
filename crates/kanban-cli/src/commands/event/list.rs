@@ -13,22 +13,23 @@ pub(crate) struct ListArgs {
     pub(crate) limit: usize,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &ListArgs,
 ) -> Result<(), CliFailure> {
-    let task_id = args
-        .task_ref
-        .as_deref()
-        .map(|selector| client.resolve_task_id(&ctx.board, selector))
-        .transpose()?;
-    let response = client.list_events(&ListEventsQuery {
-        board: ctx.board.clone(),
-        task_id,
-        after: args.after,
-        limit: args.limit,
-    })?;
+    let task_id = match args.task_ref.as_deref() {
+        Some(selector) => Some(client.resolve_task_id(&ctx.board, selector).await?),
+        None => None,
+    };
+    let response = client
+        .list_events(&ListEventsQuery {
+            board: ctx.board.clone(),
+            task_id,
+            after: args.after,
+            limit: args.limit,
+        })
+        .await?;
 
     let events = response
         .data

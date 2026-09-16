@@ -6,7 +6,7 @@
 ## 1. 产品边界
 
 - kanban-tool 是本地优先、单机、单用户的看板与 durable work queue。
-- `kanban serve` 是唯一允许触达 canonical Turso 的进程；`kanban-service` 是唯一直接依赖并持有 Turso persistence 的 crate。其他入口通过 typed localhost HTTP/SSE 工作。
+- `kanban serve` 是唯一允许触达 canonical Turso 的进程；`kanban-service` 是唯一直接依赖并持有 Turso persistence 的 crate。CLI/MCP 通过原生 gRPC、Web/Desktop 通过同源 gRPC-Web 工作。
 - CLI、MCP、Desktop 和 dispatcher 共享 application service、状态机、事务和错误语义。
 - 不引入 SaaS、多租户、远程访问、RBAC、云同步或第二条 canonical mutation path。
 
@@ -25,9 +25,10 @@
 - `kanban-service`：application service、Turso schema/migration、repository、事务、projection、
   provider 和只读 importer；是 canonical persistence crate，也是唯一直接依赖并持有 `turso` persistence 的 owner。
 - `kanban-server`：负责 `kanban serve` host 进程生命周期、database/attachment/run-log 路径准备、Axum router、dispatcher 调度与 graceful/force shutdown 编排；Turso 打开、初始化、迁移与持久化由 `kanban-service` 负责。
-- `kanban-protocol`：当前 active wire DTO、error、schema 和 surface catalog；不承载数据库 row 或 store 规则。
+- `kanban-protocol`：正式 Protobuf、wire DTO、error、schema 和 RPC/CLI/MCP catalog；不承载数据库 row 或 store 规则。
 - `kanban-web-artifact`：复用 `kanban-protocol` value contract，负责绝对 Web dist 的 no-follow filesystem 校验与 immutable snapshot；不提供 HTTP/package 语义。
-- `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。
+- `kanban-client`：共享原生异步 gRPC channel；CLI、MCP 和 Desktop 不直连数据库。
+- `kanban-live-core`：纯内存 Hub、快照、delta 与有界历史，不持有 persistence。
 - `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：薄入口或 shell；`xtask` 负责离线仓库工具。
 - 依赖 ownership 和模块边界见 [`docs/architecture.md`](docs/architecture.md) 及 `$style`。
 
@@ -68,7 +69,7 @@
 - CLI、client、server、MCP、Desktop 使用指南：各自 crate/app 的 `README.md`；Desktop layout 见
   [`apps/desktop/docs/layout.md`](apps/desktop/docs/layout.md)。
 - 长期跨模块取舍：[`docs/adr/README.md`](docs/adr/README.md)，一项决定一个 ADR。
-- 精确 CLI syntax 由 Clap help，精确 HTTP/MCP surface 由 catalog，精确 schema 由 migration/生成 artifact
+- 精确 CLI syntax 由 Clap help，精确 RPC/MCP surface 由 catalog，精确 schema 由 migration/生成 artifact
   持有；测试名称、gate 状态、migration 进度和 baseline 留在任务、CI 或 Git history。
 
 ## 7. 验证边界

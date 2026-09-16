@@ -37,7 +37,6 @@ export interface TaskInspectorProps {
   readonly locale?: Locale
   /** Runtime/session + task identity used to fence deferred section reads. */
   readonly identity: string
-  readonly refreshRevision?: number
   readonly refreshError?: string | null
   readonly refreshOffline?: boolean
   readonly online?: boolean
@@ -215,7 +214,7 @@ function retryCommand(task: TaskInspectorViewModel['task'], claimToken: string|n
   return currentTransitionRetryCommand;
 }
 
-export function useTaskInspectorState({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, hideReadOnlyRelations = false, dependencyContent, claimToken = null }: TaskInspectorProps) {
+export function useTaskInspectorState({ model, onSelectTask, locale = "zh", identity, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, hideReadOnlyRelations = false, dependencyContent, claimToken = null }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
   const requestIdentity = identity
@@ -243,9 +242,9 @@ export function useTaskInspectorState({ model, onSelectTask, locale = "zh", iden
   const runsDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const eventsDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const neighborhoodDetailsRef = useRef<HTMLDetailsElement | null>(null)
-  const runsRead = useDeferredRead(requestIdentity, model.runs, model.runs.length > 0, onLoadRuns, refreshRevision, online)
-  const eventsRead = useDeferredRead(requestIdentity, model.events, model.events.length > 0, onLoadEvents, refreshRevision, online)
-  const neighborhoodRead = useDeferredRead(requestIdentity, model.neighborhood, model.neighborhood !== undefined, onLoadNeighborhood, refreshRevision, online)
+  const runsRead = useDeferredRead(requestIdentity, model.runs, model.runs.length > 0, onLoadRuns, online)
+  const eventsRead = useDeferredRead(requestIdentity, model.events, model.events.length > 0, onLoadEvents, online)
+  const neighborhoodRead = useDeferredRead(requestIdentity, model.neighborhood, model.neighborhood !== undefined, onLoadNeighborhood, online)
   const { data: runs, status: runsStatus, retry: startRunsLoad } = runsRead
   const { data: events, status: eventsStatus, retry: startEventsLoad } = eventsRead
   const { data: neighborhood, status: neighborhoodStatus, retry: startNeighborhoodLoad } = neighborhoodRead
@@ -340,9 +339,10 @@ export function useTaskInspectorState({ model, onSelectTask, locale = "zh", iden
   const saveTask = useCallback(async (draft: InspectorEditDraft = editDraft): Promise<InspectorMutationOutcome | null> => {
     if (!mutationHandlers || draft.title.trim().length === 0) return null
     const input = buildInspectorSaveTaskInput(task, draft)
+    if (input === null) { setLocalMutationError("saveTask"); return null }
     const run = () => mutationHandlers.saveTask(input)
     return runMutation("saveTask", run)
-  }, [editDraft, mutationHandlers, runMutation, task])
+  }, [editDraft, mutationHandlers, runMutation, setLocalMutationError, task])
 
   const beginEditor = useCallback(() => {
     setEditDraft(inspectorEditDraft(task))
@@ -359,12 +359,13 @@ export function useTaskInspectorState({ model, onSelectTask, locale = "zh", iden
   const submitEditor = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const submittedInput = buildInspectorSaveTaskInput(task, editDraft)
+    if (submittedInput === null) { setLocalMutationError("saveTask"); return }
     void saveTask(editDraft).then((saved) => {
       const currentInput = buildInspectorSaveTaskInput(taskRef.current, editDraftRef.current)
       const submittedIntent = { operation: "saveTask" as const, taskId: task.id, input: submittedInput }
       if (inspectorMutationCommitted(saved) && inspectorRetryUserIntentMatches(submittedIntent, "saveTask", currentInput)) closeEditor()
     })
-  }, [closeEditor, editDraft, saveTask, task])
+  }, [closeEditor, editDraft, saveTask, setLocalMutationError, task])
 
   const executeTransition = useCallback(async (view: InspectorActionView, context: { readonly description?: string; readonly reason?: string; readonly confirmed?: boolean }): Promise<InspectorMutationOutcome | null> => {
     if (!mutationHandlers) return null

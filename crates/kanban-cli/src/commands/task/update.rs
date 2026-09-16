@@ -27,7 +27,7 @@ pub(crate) struct UpdateArgs {
     pub(crate) expected_lock_version: Option<i64>,
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     args: &UpdateArgs,
@@ -42,22 +42,24 @@ pub(crate) fn run(
             message: format!("metadata JSON 无效: {error}"),
             exit_code: 2,
         })?;
-    let task = client.update_task_by_selector(
-        &ctx.board,
-        &args.task_ref,
-        &UpdateTaskRequest {
-            title: args.title.clone(),
-            description: args.description.clone().map(Some),
-            assignee: args.assignee.clone().map(Some),
-            priority: args.priority,
-            scheduled_at: args.scheduled_at.map(Some),
-            due_at: args.due_at.map(Some),
-            max_retries: args.max_retries.map(Some),
-            metadata: metadata.map(Some),
-            actor: None,
-            expected_lock_version: args.expected_lock_version,
-        },
-    )?;
+    let task = client
+        .update_task_by_selector(
+            &ctx.board,
+            &args.task_ref,
+            &UpdateTaskRequest {
+                title: args.title.clone(),
+                description: args.description.clone().map(Some),
+                assignee: args.assignee.clone().map(Some),
+                priority: args.priority,
+                scheduled_at: args.scheduled_at.map(Some),
+                due_at: args.due_at.map(Some),
+                max_retries: args.max_retries.map(Some),
+                metadata: metadata.map(Some),
+                actor: None,
+                expected_lock_version: args.expected_lock_version,
+            },
+        )
+        .await?;
     if ctx.json {
         output::print_json(&UpdateTaskResponse::new(task));
     } else {

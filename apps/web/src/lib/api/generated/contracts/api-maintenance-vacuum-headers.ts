@@ -1,10 +1,9 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import type { FromSchema } from "json-schema-to-ts";
-import { ContractValidationError, createContractValidator } from "../runtime";
+import { ContractValidationError, createContractValidator, type ContractValue } from "../runtime";
 import staticValidator from "virtual:kanban-contract-validator/api-maintenance-vacuum-headers";
 
 export const ApiMaintenanceVacuumHeadersSchema = {"$id":"urn:kanban-tool:schema:api:maintenance-vacuum-headers:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"Accept-Language":{"type":["string","null"]}},"title":"Kanban api.maintenance-vacuum request headers v1","type":"object"} as const;
-export type ApiMaintenanceVacuumHeadersContract = FromSchema<typeof ApiMaintenanceVacuumHeadersSchema>;
+export type ApiMaintenanceVacuumHeadersContract = ContractValue<typeof ApiMaintenanceVacuumHeadersSchema>;
 
 export const apiMaintenanceVacuumHeadersValidator: ReturnType<typeof createContractValidator<ApiMaintenanceVacuumHeadersContract>> = createContractValidator<ApiMaintenanceVacuumHeadersContract>(
   "api.maintenance-vacuum.headers",

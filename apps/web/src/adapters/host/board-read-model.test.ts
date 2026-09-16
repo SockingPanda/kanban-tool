@@ -2,8 +2,8 @@ import { describe, expect, test, vi } from "vitest"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { BoardReadError } from "../../application/data/board-read-model";
-import { createBoardReadQuery, loadBoardReadModel } from "./board-read-model";
-import { HttpTransportError, type HttpTransportResponse } from "../../application/data/http-transport";
+import { loadBoardReadModel } from "./board-read-model";
+import { RpcTransportError, type RpcTransportResponse, type RpcTransport, type RpcCall } from "../../application/data/rpc-transport";
 
 const runtime = {
   apiBaseUrl: "",
@@ -11,19 +11,14 @@ const runtime = {
   actor: "test-actor",
   defaultBoard: "default",
   serverVersion: "3.0.0",
-  protocolVersion: "v1",
+  protocolVersion: "v2",
   webBuildId: "sha256:test",
 } satisfies WebRuntimeConfig
 
 type ResponseBody = Record<string, unknown>
 
-function jsonResponse(body: ResponseBody, status = 200): Response {
-  const response = new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  })
-  Object.defineProperty(response, "url", { value: "http://127.0.0.1/api/v1/boards" })
-  return response
+function rpcResponse(body: ResponseBody): RpcTransportResponse {
+  return { payload: body, bytes: 1 }
 }
 
 function board(id: string, slug: string, name: string, archivedAt: number | null = null) {
@@ -105,13 +100,12 @@ function task(
   }
 }
 
-function routeResponse(url: string): Response {
-  const parsed = new URL(url)
-  if (parsed.pathname === "/api/v1/boards") {
-    return jsonResponse({ data: [board("b_default", "default", "Default"), board("b_other", "other", "Other")] })
+function routeResponse(request: RpcCall): RpcTransportResponse {
+  if (request.method === "ListBoards") {
+    return rpcResponse({ data: [board("b_default", "default", "Default"), board("b_other", "other", "Other")] })
   }
-  if (parsed.pathname === "/api/v1/boards/default/columns") {
-    return jsonResponse({
+  if (request.method === "ListBoardColumns") {
+    return rpcResponse({
       data: [
         column("c_ready", "b_default", "ready", 20),
         column("c_todo", "b_default", "todo", 10),
@@ -119,20 +113,20 @@ function routeResponse(url: string): Response {
       ],
     })
   }
-  if (parsed.pathname === "/api/v1/boards/default/tasks/by-status") {
-    const status = parsed.searchParams.get("status")
-    if (status === "ready") return jsonResponse({ data: { statuses: [{ status, tasks: [task("t_ready", "b_default", "default", status, 20)], page: { limit: 1000, offset: 0, total: 1 } }] }, meta: { limit: 1000, offset: 0 } })
-    if (status === "todo") return jsonResponse({ data: { statuses: [{ status, tasks: [task("t_todo", "b_default", "default", status, 10)], page: { limit: 1000, offset: 0, total: 1 } }] }, meta: { limit: 1000, offset: 0 } })
-    if (status === "done") return jsonResponse({ data: { statuses: [{ status, tasks: [], page: { limit: 1000, offset: 0, total: 0 } }] }, meta: { limit: 1000, offset: 0 } })
+  if (request.method === "ListTasksByStatus") {
+    const status = (request.query as { status: string[] }).status[0]
+    if (status === "ready") return rpcResponse({ data: { statuses: [{ status, tasks: [task("t_ready", "b_default", "default", status, 20)], page: { limit: 1000, offset: 0, total: 1 } }] }, meta: { limit: 1000, offset: 0 } })
+    if (status === "todo") return rpcResponse({ data: { statuses: [{ status, tasks: [task("t_todo", "b_default", "default", status, 10)], page: { limit: 1000, offset: 0, total: 1 } }] }, meta: { limit: 1000, offset: 0 } })
+    if (status === "done") return rpcResponse({ data: { statuses: [{ status, tasks: [], page: { limit: 1000, offset: 0, total: 0 } }] }, meta: { limit: 1000, offset: 0 } })
   }
-  throw new Error(`unexpected URL ${url}`)
+  throw new Error(`unexpected RPC ${request.method}`)
 }
 
 describe("board read model", () => {
   test("resolves the exact selector, preserves server columns, and groups one request per unique status", async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => routeResponse(String(input)))
+    const call = vi.fn<RpcTransport["call"]>(async (input) => routeResponse(input))
 
-    const model = await loadBoardReadModel(runtime, undefined, { dependencies: { fetcher } })
+    const model = await loadBoardReadModel(runtime, undefined, { dependencies: { transport: { call } } })
 
     expect(model.identity).toEqual({
       selector: "default",
@@ -148,20 +142,20 @@ describe("board read model", () => {
     expect(model.tasksByStatus.ready?.map(({ id }) => id)).toEqual(["t_ready"])
     expect(model.tasksByStatus.todo?.map(({ id }) => id)).toEqual(["t_todo"])
     expect(model.tasksByStatus.done).toEqual([])
-    expect(fetcher).toHaveBeenCalledTimes(5)
-    expect(fetcher.mock.calls.filter(([input]) => String(input).includes("/tasks/by-status")).map(([input]) => String(input))).toHaveLength(3)
-    expect(fetcher.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true)
+    expect(call).toHaveBeenCalledTimes(5)
+    expect(call.mock.calls.filter(([input]) => input.method === "ListTasksByStatus").map(([input]) => input)).toHaveLength(3)
+    expect(call.mock.calls[0]?.[0]).toMatchObject({ method: "ListBoards", query: { include_archived: false } })
   })
 
   test("fails closed when a status window disagrees with the requested server status", async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => {
-      const url = String(input)
-      if (url.includes("/api/v1/boards?")) return jsonResponse({ data: [board("b_default", "default", "Default")] })
-      if (url.endsWith("/columns")) return jsonResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
-      return jsonResponse({ data: { statuses: [{ status: "todo", tasks: [], page: { limit: 1000, offset: 0, total: 0 } }] }, meta: { limit: 1000, offset: 0 } })
+    const call = vi.fn<RpcTransport["call"]>(async (input) => {
+      const request = input
+      if (request.method === "ListBoards") return rpcResponse({ data: [board("b_default", "default", "Default")] })
+      if (request.method === "ListBoardColumns") return rpcResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
+      return rpcResponse({ data: { statuses: [{ status: "todo", tasks: [], page: { limit: 1000, offset: 0, total: 0 } }] }, meta: { limit: 1000, offset: 0 } })
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",
     })
@@ -173,27 +167,27 @@ describe("board read model", () => {
     ["blank label id", [label(" ", "b_default", "valid name")]],
     ["blank label name", [label("l_blank_name", "b_default", " ")]],
   ])("fails closed for %s in a task payload", async (_caseName, labels) => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => {
-      const url = new URL(String(input))
-      if (url.pathname === "/api/v1/boards") return jsonResponse({ data: [board("b_default", "default", "Default")] })
-      if (url.pathname.endsWith("/columns")) return jsonResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
-      return jsonResponse({
+    const call = vi.fn<RpcTransport["call"]>(async (input) => {
+      const request = input
+      if (request.method === "ListBoards") return rpcResponse({ data: [board("b_default", "default", "Default")] })
+      if (request.method === "ListBoardColumns") return rpcResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
+      return rpcResponse({
         data: { statuses: [{ status: "ready", tasks: [task("t_label", "b_default", "default", "ready", 1, labels)], page: { limit: 1000, offset: 0, total: 1 } }] },
         meta: { limit: 1000, offset: 0 },
       })
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",
     })
   })
 
   test("fails closed when canonical columns repeat a status", async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => {
-      const url = String(input)
-      if (url.includes("/api/v1/boards?")) return jsonResponse({ data: [board("b_default", "default", "Default")] })
-      return jsonResponse({
+    const call = vi.fn<RpcTransport["call"]>(async (input) => {
+      const request = input
+      if (request.method === "ListBoards") return rpcResponse({ data: [board("b_default", "default", "Default")] })
+      return rpcResponse({
         data: [
           column("c_ready", "b_default", "ready", 10),
           column("c_ready_hidden", "b_default", "ready", 20, true),
@@ -201,55 +195,55 @@ describe("board read model", () => {
       })
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",
     })
   })
 
   test("classifies network failures as offline without fallback data", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => {
-      throw new TypeError("Failed to fetch")
+    const call = vi.fn<RpcTransport["call"]>(async () => {
+      throw new RpcTransportError("offline", "Failed to fetch")
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "offline",
     })
   })
 
   test("reads every task page and rejects a total that is not fully covered", async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => {
-      const url = new URL(String(input))
-      if (url.pathname === "/api/v1/boards") return jsonResponse({ data: [board("b_default", "default", "Default")] })
-      if (url.pathname.endsWith("/columns")) return jsonResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
-      const offset = Number(url.searchParams.get("offset"))
+    const call = vi.fn<RpcTransport["call"]>(async (input) => {
+      const request = input
+      if (request.method === "ListBoards") return rpcResponse({ data: [board("b_default", "default", "Default")] })
+      if (request.method === "ListBoardColumns") return rpcResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
+      const offset = (request.query as { offset: number }).offset
       const page = offset === 0
         ? { tasks: [task("t_0", "b_default", "default", "ready", 0)], total: 1001 }
         : { tasks: [task("t_1000", "b_default", "default", "ready", 1000)], total: 1001 }
-      return jsonResponse({ data: { statuses: [{ status: "ready", tasks: page.tasks, page: { limit: 1000, offset, total: page.total } }] }, meta: { limit: 1000, offset } })
+      return rpcResponse({ data: { statuses: [{ status: "ready", tasks: page.tasks, page: { limit: 1000, offset, total: page.total } }] }, meta: { limit: 1000, offset } })
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",
     })
-    expect(fetcher.mock.calls.filter(([input]) => String(input).includes("/tasks/by-status"))).toHaveLength(2)
+    expect(call.mock.calls.filter(([input]) => input.method === "ListTasksByStatus")).toHaveLength(2)
   })
 
   test("concatenates complete task pages without losing server order", async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => {
-      const url = new URL(String(input))
-      if (url.pathname === "/api/v1/boards") return jsonResponse({ data: [board("b_default", "default", "Default")] })
-      if (url.pathname.endsWith("/columns")) return jsonResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
-      const offset = Number(url.searchParams.get("offset"))
+    const call = vi.fn<RpcTransport["call"]>(async (input) => {
+      const request = input
+      if (request.method === "ListBoards") return rpcResponse({ data: [board("b_default", "default", "Default")] })
+      if (request.method === "ListBoardColumns") return rpcResponse({ data: [column("c_ready", "b_default", "ready", 10)] })
+      const offset = (request.query as { offset: number }).offset
       const tasks = offset === 0
         ? [task("t_0", "b_default", "default", "ready", 0), task("t_1", "b_default", "default", "ready", 1)]
         : [task("t_2", "b_default", "default", "ready", 2)]
-      return jsonResponse({ data: { statuses: [{ status: "ready", tasks, page: { limit: 2, offset, total: 3 } }] }, meta: { limit: 2, offset } })
+      return rpcResponse({ data: { statuses: [{ status: "ready", tasks, page: { limit: 2, offset, total: 3 } }] }, meta: { limit: 2, offset } })
     })
 
-    const model = await loadBoardReadModel(runtime, "default", { dependencies: { fetcher }, taskPageSize: 2 })
+    const model = await loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } }, taskPageSize: 2 })
 
     expect(model.tasksByStatus.ready?.map(({ id }) => id)).toEqual(["t_0", "t_1", "t_2"])
   })
@@ -266,11 +260,12 @@ describe("board read model", () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+
   test("fails closed on duplicate board identities and invalid canonical slug/id", async () => {
-    const duplicateFetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+    const duplicateCall = vi.fn<RpcTransport["call"]>(async () => rpcResponse({
       data: [board("b_default", "default", "Default"), board("b_default", "other", "Other")],
     }))
-    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher: duplicateFetcher } })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call: duplicateCall } } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",
     })
@@ -279,8 +274,8 @@ describe("board read model", () => {
       board("b_default", "Bads", "Default"),
       board("b_\u0000", "default", "Default"),
     ]) {
-      const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ data: [invalid] }))
-      await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+      const call = vi.fn<RpcTransport["call"]>(async () => rpcResponse({ data: [invalid] }))
+      await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })).rejects.toMatchObject({
         name: "BoardReadError",
         kind: "anomaly",
       })
@@ -288,17 +283,17 @@ describe("board read model", () => {
   })
 
   test("rejects an unsafe task page size before issuing requests", async () => {
-    const fetcher = vi.fn<typeof fetch>()
+    const call = vi.fn<RpcTransport["call"]>()
     await expect(loadBoardReadModel(runtime, "default", {
-      dependencies: { fetcher },
+      dependencies: { transport: { call } },
       taskPageSize: 0,
     })).rejects.toMatchObject({ name: "BoardReadError", kind: "anomaly" })
-    expect(fetcher).not.toHaveBeenCalled()
+    expect(call).not.toHaveBeenCalled()
   })
 
   test("returns a narrow, deeply frozen projection", async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => routeResponse(String(input)))
-    const model = await loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })
+    const call = vi.fn<RpcTransport["call"]>(async (input) => routeResponse(input))
+    const model = await loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })
     const ready = model.tasksByStatus.ready?.[0]
     expect(Object.isFrozen(model)).toBe(true)
     expect(Object.isFrozen(model.identity)).toBe(true)
@@ -321,8 +316,8 @@ describe("board read model", () => {
 
   test("enforces the shared raw-byte budget and reports an anomaly", async () => {
     const transport = {
-      get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
-        if (path.startsWith("/api/v1/boards?")) {
+      call: vi.fn(async (request: RpcCall): Promise<RpcTransportResponse> => {
+        if (request.method === "ListBoards") {
           return { payload: { data: [board("b_default", "default", "Default")] }, bytes: 64 * 1024 * 1024 + 1 }
         }
         return { payload: { data: [] }, bytes: 0 }
@@ -336,7 +331,7 @@ describe("board read model", () => {
 
   test("maps attachment-only invalid byte transport errors to anomaly", async () => {
     const transport = {
-      get: vi.fn().mockRejectedValue(new HttpTransportError("invalid_bytes", "attachment body invalid")),
+      call: vi.fn().mockRejectedValue(new RpcTransportError("invalid_bytes", "attachment body invalid")),
     }
 
     await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport } })).rejects.toMatchObject({
@@ -347,11 +342,10 @@ describe("board read model", () => {
 
   test("enforces the 50k task budget instead of silently truncating pagination", async () => {
     const transport = {
-      get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
-        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board("b_default", "default", "Default")] }, bytes: 0 }
-        if (path.endsWith("/columns")) return { payload: { data: [column("c_ready", "b_default", "ready", 10)] }, bytes: 0 }
-        const url = new URL(path, "http://127.0.0.1")
-        const offset = Number(url.searchParams.get("offset"))
+      call: vi.fn(async (request: RpcCall): Promise<RpcTransportResponse> => {
+        if (request.method === "ListBoards") return { payload: { data: [board("b_default", "default", "Default")] }, bytes: 0 }
+        if (request.method === "ListBoardColumns") return { payload: { data: [column("c_ready", "b_default", "ready", 10)] }, bytes: 0 }
+        const offset = (request.query as { offset: number }).offset
         const count = offset === 50_000 ? 1 : 1_000
         const tasks = Array.from({ length: count }, (_, index) => {
           const position = offset + index
@@ -373,41 +367,21 @@ describe("board read model", () => {
   }, 30_000)
 
   test("uses include_archived only when explicitly requested", async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => {
-      const url = new URL(String(input))
-      if (url.pathname === "/api/v1/boards") return jsonResponse({ data: [board("b_default", "default", "Default")] })
-      if (url.pathname.endsWith("/columns")) return jsonResponse({ data: [] })
-      throw new Error(`unexpected URL ${url}`)
+    const call = vi.fn<RpcTransport["call"]>(async (input) => {
+      const request = input
+      if (request.method === "ListBoards") return rpcResponse({ data: [board("b_default", "default", "Default")] })
+      if (request.method === "ListBoardColumns") return rpcResponse({ data: [] })
+      throw new Error(`unexpected RPC ${request.method}`)
     })
 
-    await loadBoardReadModel(runtime, "default", { dependencies: { fetcher }, includeArchived: true })
-    expect(String(fetcher.mock.calls[0]?.[0])).toContain("include_archived=true")
-  })
-
-  test("deduplicates pending loads and invalidation prevents a stale result from being cached", async () => {
-    let resolveFirst: ((response: Response) => void) | undefined
-    const firstResponse = new Promise<Response>((resolve) => { resolveFirst = resolve })
-    const fetcher = vi.fn<typeof fetch>()
-      .mockReturnValueOnce(firstResponse)
-      .mockImplementation(async (input) => routeResponse(String(input)))
-    const query = createBoardReadQuery(runtime, "default", { dependencies: { fetcher } })
-
-    const first = query.load()
-    expect(query.load()).toBe(first)
-    query.invalidate()
-    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
-    const second = query.load()
-    expect(fetcher).toHaveBeenCalledTimes(2)
-    resolveFirst?.(routeResponse("http://127.0.0.1/api/v1/boards"))
-    await expect(second).resolves.toMatchObject({ identity: { canonicalBoardId: "b_default" } })
-    await expect(first).rejects.toMatchObject({ name: "AbortError" })
-    await expect(query.load()).resolves.toMatchObject({ identity: { canonicalBoardId: "b_default" } })
+    await loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } }, includeArchived: true })
+    expect(call.mock.calls[0]?.[0].query).toEqual({ include_archived: true })
   })
 
   test("exposes an empty-board error for an exact selector miss", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ data: [board("b_other", "other", "Other")] }))
+    const call = vi.fn<RpcTransport["call"]>(async () => rpcResponse({ data: [board("b_other", "other", "Other")] }))
 
-    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "empty",
       reason: "board-not-found",
@@ -415,14 +389,14 @@ describe("board read model", () => {
   })
 
   test("exposes an explicit no-boards error without inventing a board identity", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ data: [] }))
+    const call = vi.fn<RpcTransport["call"]>(async () => rpcResponse({ data: [] }))
 
-    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport: { call } } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "empty",
       reason: "no-boards",
       selector: "default",
     } satisfies Partial<BoardReadError>)
-    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(call).toHaveBeenCalledTimes(1)
   })
 })

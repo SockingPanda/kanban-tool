@@ -29,8 +29,8 @@ impl KanbanMcp {
     ) -> Result<Json<ListStepsResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
-        let steps = call_client(move || client.list_steps_by_selector(&board, &task_ref)).await?;
+        let client = &self.client;
+        let steps = call_client(client.list_steps_by_selector(&board, &task_ref)).await?;
         Ok(Json(ListStepsResponse { data: steps }))
     }
 }

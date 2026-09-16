@@ -1,0 +1,52 @@
+[
+  {
+    "name": "local_markdown_links",
+    "status": "passed",
+    "detail": {
+      "count": 16
+    }
+  },
+  {
+    "name": "task_graph",
+    "status": "passed",
+    "detail": {
+      "tasks": 9,
+      "acyclic": true
+    }
+  },
+  {
+    "name": "rpc_inventory",
+    "status": "passed",
+    "detail": {
+      "methods": [
+        "GetBoard",
+        "WatchBoard",
+        "UpdateTaskTitle",
+        "WatchChanges"
+      ],
+      "services": 3
+    }
+  },
+  {
+    "name": "service_patch_plan",
+    "status": "passed",
+    "detail": {
+      "modifiedFiles": 10,
+      "addedFiles": 5
+    }
+  },
+  {
+    "name": "javascript_syntax",
+    "status": "passed",
+    "detail": {
+      "files": 12
+    }
+  },
+  {
+    "name": "offline_test_receipts",
+    "status": "passed",
+    "detail": {
+      "passedTests": 105
+    }
+  }
+]

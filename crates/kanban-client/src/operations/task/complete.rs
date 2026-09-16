@@ -1,30 +1,33 @@
-use kanban_protocol::{ApiTask, CompleteTaskRequest, CompleteTaskResponse};
+use kanban_protocol::{ApiTask, CompleteTaskRequest};
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{KanbanClient, error::ClientError, transport::rpc};
 
 impl KanbanClient {
-    pub fn complete_task(
+    pub async fn complete_task(
         &self,
         task_id: &str,
         request: &CompleteTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let response: CompleteTaskResponse = self.post(
-            &format!(
-                "/api/v1/tasks/{}/transitions/complete",
-                encode_path_segment(task_id.trim())
-            ),
-            request,
+        let response: kanban_protocol::CompleteTaskResponse = rpc!(
+            self,
+            complete_task,
+            CompleteTaskRequest,
+            kanban_protocol::CompleteTaskPath {
+                task_id: task_id.trim().to_owned()
+            },
+            (),
+            request.clone()
         )?;
         Ok(response.data)
     }
 
-    pub fn complete_task_by_selector(
+    pub async fn complete_task_by_selector(
         &self,
         board: &str,
         selector: &str,
         request: &CompleteTaskRequest,
     ) -> Result<ApiTask, ClientError> {
-        let task_id = self.resolve_task_id(board, selector)?;
-        self.complete_task(&task_id, request)
+        let task_id = self.resolve_task_id(board, selector).await?;
+        self.complete_task(&task_id, request).await
     }
 }

@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from "vitest"
 import type { ExplorerTaskMap, ExplorerTaskMapReadModel } from "../../application/data/explorer-read-model";
 import { assertCanonicalBoardSlug } from "../../domain/board-slug"
 import { PreferencesProvider } from "../../platform/preferences/preferences-provider"
-import { asCanonicalBoardId } from "../../application/sync/contracts"
+import { asCanonicalBoardId } from "../../domain/board-id"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { TaskMapPresentation, TaskMapView, type TaskMapReadState } from "./TaskMapView"
 import { __test, defaultTaskMapUrlState, fenceTaskMapReadModel, parseTaskMapUrlState, serializeTaskMapUrlState } from "./TaskMapView.logic"
@@ -92,7 +92,7 @@ const runtime = {
   actor: "test",
   defaultBoard: "default",
   serverVersion: "3.0.0",
-  protocolVersion: "v1",
+  protocolVersion: "v2",
   webBuildId: "test",
 } satisfies WebRuntimeConfig
 

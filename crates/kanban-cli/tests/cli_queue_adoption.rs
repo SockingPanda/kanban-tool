@@ -10,6 +10,54 @@ use serde_json::Value;
 use support::{TestHost, assert_contract, assert_fixture_shape};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn external_cli_mutation_reaches_the_native_event_subscription() {
+    let host = TestHost::start().await;
+    host.json(&["--json", "board", "create", "fixture", "--name", "Fixture"]);
+    let client = kanban_client::KanbanClient::new(host.server_url(), "event observer").unwrap();
+    let mut stream = client
+        .open_event_stream(
+            &kanban_protocol::StreamEventsQuery {
+                board: "fixture".to_owned(),
+                task_id: None,
+                after: 0,
+                limit: 2,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let created = host.json(&[
+        "--json",
+        "--board",
+        "fixture",
+        "--actor",
+        "CLI 订阅作者🧪",
+        "task",
+        "create",
+        "native event",
+        "--task-id",
+        "t_cli_stream",
+    ]);
+    let event = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if let kanban_client::EventStreamItem::Business(event) =
+                stream.next_item().await.unwrap()
+                && event.task_id.as_deref() == Some("t_cli_stream")
+            {
+                break event;
+            }
+        }
+    })
+    .await
+    .expect("CLI 写入没有进入原生事件订阅");
+    assert_eq!(event.kind, "task.created");
+    assert_eq!(event.actor.as_deref(), Some("CLI 订阅作者🧪"));
+    assert_eq!(event.board_id, created["data"]["board_id"]);
+    assert!(event.id > 0);
+    drop(stream);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn queue_cli_uses_real_host_for_config_board_and_task_commands() {
     let host = TestHost::start().await;
 
@@ -75,6 +123,10 @@ async fn queue_cli_uses_real_host_for_config_board_and_task_commands() {
         "3",
         "--task-id",
         "t_create",
+        "--actor",
+        "原生作者🧪",
+        "--metadata",
+        r#"{"wide_unsigned":18446744073709551615,"wide_signed":-9223372036854775808,"special":{"__proto__":{"kept":true}}}"#,
     ]);
     assert_contract("task create", "task-create");
     assert_fixture_shape(&create, "task-create");
@@ -82,6 +134,13 @@ async fn queue_cli_uses_real_host_for_config_board_and_task_commands() {
     assert_eq!(create["data"]["description"], "initial description");
     assert_eq!(create["data"]["status"], "todo");
     assert_eq!(create["data"]["priority"], 2);
+    assert_eq!(create["data"]["created_by"], "原生作者🧪");
+    assert_eq!(create["data"]["metadata"]["wide_unsigned"], u64::MAX);
+    assert_eq!(create["data"]["metadata"]["wide_signed"], i64::MIN);
+    assert_eq!(
+        create["data"]["metadata"]["special"]["__proto__"]["kept"],
+        true
+    );
 
     let task = host.json(&[
         "--json",

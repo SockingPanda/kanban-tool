@@ -19,7 +19,10 @@
     "ajv": "8.20.0",
     "json-schema-to-ts": "3.1.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "@bufbuild/protobuf": "2.15.0",
+    "@connectrpc/connect": "2.2.0",
+    "@connectrpc/connect-web": "2.2.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
@@ -36,6 +39,7 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.2",
     "vite": "8.2.1",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@bufbuild/protoc-gen-es": "2.15.0"
   }
 }

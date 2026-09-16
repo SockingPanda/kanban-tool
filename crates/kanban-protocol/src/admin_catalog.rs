@@ -22,9 +22,9 @@ const fn contract_direction(location: HttpTransportLocation) -> ContractDirectio
         | HttpTransportLocation::Query
         | HttpTransportLocation::Headers
         | HttpTransportLocation::Body => ContractDirection::Deserialize,
-        HttpTransportLocation::Success
-        | HttpTransportLocation::Error
-        | HttpTransportLocation::Sse => ContractDirection::Serialize,
+        HttpTransportLocation::Success | HttpTransportLocation::Error => {
+            ContractDirection::Serialize
+        }
     }
 }
 

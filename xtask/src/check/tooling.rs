@@ -2,6 +2,8 @@ use std::{ffi::OsStr, fs, path::Path};
 
 use xtask::ToolResult;
 
+use crate::repository::is_vendored_source;
+
 /// 这些目录不是源代码树：它们来自版本控制、构建、前端依赖或生成步骤。
 const SKIPPED_DIRECTORY_NAMES: &[&str] = &[
     ".git",
@@ -98,6 +100,9 @@ pub(crate) fn run(root: &Path) -> ToolResult<()> {
 }
 
 fn scan_path(root: &Path, path: &Path, diagnostics: &mut Vec<Diagnostic>) -> ToolResult<()> {
+    if is_vendored_source(root, path) {
+        return Ok(());
+    }
     let file_type = fs::symlink_metadata(path)?.file_type();
     let is_symlink = file_type.is_symlink();
     let is_python_name = has_python_extension(path);
@@ -532,6 +537,40 @@ mod tests {
         );
         write(&root, "scripts/utf8.sh", b"\xffpython3\n");
         assert!(run(&root).is_ok());
+        fs::remove_dir_all(root).expect("temporary root should be removable");
+    }
+
+    #[test]
+    fn vendored_generator_is_inactive_but_first_party_invocation_is_rejected() {
+        let root = temp_root("vendored-generator");
+        write(
+            &root,
+            "vendor/tantivy-0.26.1/src/tokenizer/stop_word_filter/gen_stopwords.py",
+            "print('upstream generator')\n",
+        );
+        assert!(run(&root).is_ok());
+
+        write(
+            &root,
+            "scripts/generate.sh",
+            "#!/usr/bin/env bash\npython3 vendor/tantivy-0.26.1/src/tokenizer/stop_word_filter/gen_stopwords.py\n",
+        );
+        let message = run(&root)
+            .expect_err("第一方不得调用上游 Python")
+            .to_string();
+        assert!(message.contains("PythonCommand: scripts/generate.sh:2"));
+        assert!(message.contains("PythonPath: scripts/generate.sh:2"));
+
+        fs::remove_file(root.join("scripts/generate.sh")).unwrap();
+        write(
+            &root,
+            "vendor/other/tool.py",
+            "print('not an approved vendor')\n",
+        );
+        let message = run(&root)
+            .expect_err("其他 vendor 内容仍应检查")
+            .to_string();
+        assert!(message.contains("PythonSource: vendor/other/tool.py"));
         fs::remove_dir_all(root).expect("temporary root should be removable");
     }
 }

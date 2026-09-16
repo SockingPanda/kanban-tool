@@ -33,19 +33,19 @@ pub(crate) enum TaskStepCommand {
     NotRequired(plan_not_required::PlanNotRequiredArgs),
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     ctx: &CliContext,
     client: &KanbanClient,
     command: &TaskStepCommand,
 ) -> Result<(), CliFailure> {
     match command {
-        TaskStepCommand::Add(args) => add::run(ctx, client, args),
-        TaskStepCommand::List(args) => list::run(ctx, client, args),
-        TaskStepCommand::Done(args) => done::run(ctx, client, args),
-        TaskStepCommand::Skip(args) => skip::run(ctx, client, args),
-        TaskStepCommand::Reopen(args) => reopen::run(ctx, client, args),
-        TaskStepCommand::Remove(args) => remove::run(ctx, client, args),
-        TaskStepCommand::Update(args) => update::run(ctx, client, args),
-        TaskStepCommand::NotRequired(args) => plan_not_required::run(ctx, client, args),
+        TaskStepCommand::Add(args) => add::run(ctx, client, args).await,
+        TaskStepCommand::List(args) => list::run(ctx, client, args).await,
+        TaskStepCommand::Done(args) => done::run(ctx, client, args).await,
+        TaskStepCommand::Skip(args) => skip::run(ctx, client, args).await,
+        TaskStepCommand::Reopen(args) => reopen::run(ctx, client, args).await,
+        TaskStepCommand::Remove(args) => remove::run(ctx, client, args).await,
+        TaskStepCommand::Update(args) => update::run(ctx, client, args).await,
+        TaskStepCommand::NotRequired(args) => plan_not_required::run(ctx, client, args).await,
     }
 }

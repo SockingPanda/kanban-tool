@@ -38,9 +38,7 @@ impl KanbanMcp {
             predicate: args.predicate,
             limit: args.limit,
         };
-        let client = self.client.clone();
-        Ok(Json(
-            call_client(move || client.graph_neighbors(&query)).await?,
-        ))
+        let client = &self.client;
+        Ok(Json(call_client(client.graph_neighbors(&query)).await?))
     }
 }

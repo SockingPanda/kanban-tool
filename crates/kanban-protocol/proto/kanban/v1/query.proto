@@ -1,0 +1,137 @@
+syntax = "proto3";
+package kanban.v1;
+import "kanban/v1/kanban.proto";
+import "kanban/v1/dto.proto";
+
+// 一个 runtime 的活跃查询复用同一连接，避免浏览器 HTTP/1 同源连接限额。
+service QueryService {
+  rpc WatchQueries(WatchQueriesRequest) returns (stream QueryFrame);
+}
+
+message WatchQueriesRequest {
+  uint32 protocol_version = 1;
+  repeated QueryDefinition queries = 2;
+}
+
+message QueryCursor {
+  string epoch = 1;
+  string scope = 2;
+  uint64 revision = 3;
+}
+
+// cursor 不属于查询身份；scope 由 Host 对完整规范化查询和投影版本计算。
+message QueryDefinition {
+  string client_query_id = 1;
+  uint32 projection_version = 2;
+  QueryCursor resume = 3;
+  // 显式重试或写后确认：收到请求后重新读取，再发送 Ready；不属于查询身份。
+  bool refresh = 4;
+  oneof query {
+    ListBoardsRequest list_boards = 10;
+    ListBoardColumnsRequest list_board_columns = 11;
+    ListTasksRequest list_tasks = 12;
+    ListTasksByStatusRequest list_tasks_by_status = 13;
+    GetTaskRequest get_task = 14;
+    ListTaskLabelsRequest list_task_labels = 15;
+    ListDependenciesRequest list_dependencies = 16;
+    ListStepsRequest list_steps = 17;
+    ListCommentsRequest list_comments = 18;
+    ListAttachmentsRequest list_attachments = 19;
+    TaskNeighborhoodRequest task_neighborhood = 20;
+    BoardTaskMapRequest board_task_map = 21;
+    ListRunsRequest list_runs = 22;
+    GetRunRequest get_run = 23;
+    GetRunLogRequest get_run_log = 24;
+    ListEventsRequest list_events = 25;
+    GetStatsRequest get_stats = 26;
+    GetHealthRequest get_health = 27;
+    MaintenanceStatusRequest maintenance_status = 28;
+    SearchStatusRequest search_status = 29;
+    GetTaskDetailsRequest get_task_details = 30;
+    RecentEventsQuery recent_events = 31;
+    GetBoardRequest get_board = 32;
+    ListBoardLabelsRequest list_board_labels = 33;
+    SearchTasksRequest search_tasks = 34;
+    SearchTasksByStatusRequest search_tasks_by_status = 35;
+  }
+}
+
+// UI 使用最新有界事件窗口；原生 durable event stream 仍使用 ListEvents 的向前窗口。
+message RecentEventsQuery {
+  string board_id = 1;
+  optional string task_id = 2;
+  uint32 limit = 3;
+}
+
+// 完整业务投影；字段编号与 QueryDefinition 的对应 query 保持一致。
+message QueryResult {
+  oneof result {
+    ListBoardsResponse list_boards = 10;
+    ListBoardColumnsResponse list_board_columns = 11;
+    ListTasksResponse list_tasks = 12;
+    ListTasksByStatusResponse list_tasks_by_status = 13;
+    GetTaskResponse get_task = 14;
+    ListTaskLabelsResponse list_task_labels = 15;
+    ListDependenciesResponse list_dependencies = 16;
+    ListStepsResponse list_steps = 17;
+    ListCommentsResponse list_comments = 18;
+    ListAttachmentsResponse list_attachments = 19;
+    TaskNeighborhoodResponse task_neighborhood = 20;
+    BoardTaskMapResponse board_task_map = 21;
+    ListRunsResponse list_runs = 22;
+    GetRunResponse get_run = 23;
+    GetRunLogResponse get_run_log = 24;
+    ListEventsResponse list_events = 25;
+    GetStatsResponse get_stats = 26;
+    GetHealthResponse get_health = 27;
+    MaintenanceStatusResponse maintenance_status = 28;
+    SearchStatusResponse search_status = 29;
+    GetTaskDetailsResponse get_task_details = 30;
+    ListEventsResponse recent_events = 31;
+    GetBoardResponse get_board = 32;
+    ListBoardLabelsResponse list_board_labels = 33;
+    SearchTasksResponse search_tasks = 34;
+    SearchTasksByStatusResponse search_tasks_by_status = 35;
+  }
+}
+
+// snapshot 的 patch 是完整 QueryResult 编码；delta 为基线编码上的单个精确 splice。
+// end 后验证完整大小、SHA-256 和预期 result 类型，才同时发布投影与 cursor。
+message QueryBegin {
+  QueryCursor cursor = 1;
+  QueryCursor base = 2;
+  bool snapshot = 3;
+  uint64 result_size = 4;
+  bytes result_sha256 = 5;
+  uint64 offset = 6;
+  uint64 delete_length = 7;
+  uint64 patch_size = 8;
+  uint32 chunk_count = 9;
+}
+
+message QueryChunk {
+  uint32 index = 1;
+  bytes data = 2;
+}
+
+message QueryEnd { QueryCursor cursor = 1; }
+message QueryFailure {
+  ErrorDetail error = 1;
+  bool retryable = 2;
+}
+// 整个 WatchQueries 连接的保活帧，client_query_id 为空；不触发查询读取。
+message QueryHeartbeat {}
+// 此次订阅要求的读取已完成；相同内容也确认，不推进 revision。
+message QueryReady { QueryCursor cursor = 1; }
+
+message QueryFrame {
+  string client_query_id = 1;
+  oneof body {
+    QueryBegin begin = 10;
+    QueryChunk chunk = 11;
+    QueryEnd end = 12;
+    QueryFailure failure = 13;
+    QueryHeartbeat heartbeat = 14;
+    QueryReady ready = 15;
+  }
+}

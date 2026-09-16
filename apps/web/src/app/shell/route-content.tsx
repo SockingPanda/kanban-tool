@@ -43,15 +43,12 @@ function BoundaryPanel({ boundary, onRetry }: { boundary: Boundary; onRetry?: ()
   </section>;
 }
 function CurrentRoute({ props, online }: { props: ProductShellProps; online: boolean }) {
-  const { route, runtime, canonicalBoardSlug, onNavigate, onReconnect, taskMutations, onVisibleCanonicalReloadChange, syncStatus, eventsBatch, invalidationRevision = 0 } = props;
+  const { route, runtime, canonicalBoardSlug, onNavigate, onReconnect, taskMutations, onVisibleCanonicalReloadChange, syncStatus } = props;
   if (route.kind === 'settings') return <SettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} />;
   if (route.kind === 'health') return <HealthPage runtime={runtime} />;
   if (route.kind === 'maintenance') return <MaintenancePage runtime={runtime} boardSlug={route.boardSlug} />;
   if (route.kind !== 'board') return null;
-  return <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={online} invalidationRevision={invalidationRevision}
-    boardRevision={props.boardRevision ?? invalidationRevision} inspectorRevision={props.inspectorRevision ?? invalidationRevision}
-    runsRevision={props.runsRevision ?? invalidationRevision} eventsRefreshRevision={props.eventsRefreshRevision ?? invalidationRevision}
-    eventsBatch={eventsBatch} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />;
+  return <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={online} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />;
 }
 export function RouteContent(props: ProductShellProps) {
   const online = useOnline();

@@ -1,3 +1,6 @@
+import { rpcRequest } from "./release-rpc"
+import type { RpcMethod } from "../src/application/data/rpc-transport"
+
 import { constants } from "node:fs"
 import { mkdir, open, rename } from "node:fs/promises"
 
@@ -101,12 +104,8 @@ async function assertHostIdentity(request: APIRequestContext) {
   return runtime
 }
 
-function taskApiPath(taskId: string, suffix = ""): string {
-  return `${baseURL}/api/v1/tasks/${encodeURIComponent(taskId)}${suffix}`
-}
-
-async function canonicalGet<T>(request: APIRequestContext, path: string): Promise<T> {
-  const response = await request.get(path)
+async function canonicalGet<T>(method: RpcMethod, taskId: string): Promise<T> {
+  const response = await rpcRequest(method, { path: { task_id: taskId } })
   expect(response.ok()).toBe(true)
   return await response.json() as T
 }
@@ -124,7 +123,7 @@ test("#shell.runtime real host runtime/manifest identity and negative origin che
   markFlows(["shell.runtime"])
 })
 
-test("#task.collection #task.create #task.detail #events.view real UI create, persistent SSE catch-up and deep-link recovery", async ({ browser, page, request }, testInfo) => {
+test("#task.collection #task.create #task.detail #events.view real UI create, persistent QueryService catch-up and deep-link recovery", async ({ browser, page, request }, testInfo) => {
   // capabilities: task.collection, task.create, task.detail, events.view
   await assertHostIdentity(request)
 
@@ -158,7 +157,7 @@ test("#task.collection #task.create #task.detail #events.view real UI create, pe
     expect(taskId).toMatch(/^t_[A-Za-z0-9_-]+$/)
     await expect(page.getByTestId("task-inspector")).toContainText(title)
 
-    const taskResponse = await request.get(`${baseURL}/api/v1/tasks/${encodeURIComponent(taskId!)}`)
+    const taskResponse = await rpcRequest("GetTask", { path: { task_id: taskId! } })
     expect(taskResponse.ok()).toBe(true)
     const taskBody = await taskResponse.json() as { data?: { id?: string; title?: string; board_slug?: string } }
     expect(taskBody.data?.id).toBe(taskId)
@@ -220,7 +219,7 @@ test("#board.view #list.view #map.view #runs.view real read surfaces and selecte
   markFlows(["board.view", "list.view", "map.view", "runs.view"])
 })
 
-test("#task.transition #task.comments #task.dependencies #task.steps #task.labels #task.attachments real Inspector mutations and canonical readback", async ({ page, request }, testInfo) => {
+test("#task.transition #task.comments #task.dependencies #task.steps #task.labels #task.attachments real Inspector mutations and canonical readback", async ({ page }, testInfo) => {
   // capabilities: task.transition, task.comments, task.dependencies, task.steps, task.labels, task.attachments
   const title = `Stage09 real task ${testInfo.project.name}`
   await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
@@ -244,7 +243,7 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   await actionDialog.getByRole("button", { name: "指定", exact: true }).click()
   await expect(actionDialog).toBeHidden()
   await expect(page.getByRole("combobox", { name: "更改任务状态", exact: true })).toContainText("待开始")
-  const transitionedTask = await canonicalGet<{ data?: { id?: string; status?: string; description?: string | null } }>(request, taskApiPath(taskId!))
+  const transitionedTask = await canonicalGet<{ data?: { id?: string; status?: string; description?: string | null } }>("GetTask", taskId!)
   expect(transitionedTask.data?.id).toBe(taskId)
   expect(transitionedTask.data?.status).toBe("todo")
   expect(transitionedTask.data?.description).toBe(description)
@@ -257,7 +256,7 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   await page.getByRole("button", { name: "发布评论", exact: true }).click()
   await expect(commentBodyInput).toHaveValue("")
   await expect(page.getByTestId("task-discussion").getByText(commentBody, { exact: true })).toBeVisible()
-  const comments = await canonicalGet<{ data?: readonly { task_id?: string; kind?: string; body?: string }[] }>(request, taskApiPath(taskId!, "/comments"))
+  const comments = await canonicalGet<{ data?: readonly { task_id?: string; kind?: string; body?: string }[] }>("ListComments", taskId!)
   expect(comments.data).toEqual(expect.arrayContaining([
     expect.objectContaining({ task_id: taskId, kind: "note", body: commentBody }),
   ]))
@@ -268,7 +267,7 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   await page.getByRole("textbox", { name: "新的执行步骤" }).fill(stepTitle)
   await page.getByRole("button", { name: "添加步骤", exact: true }).click()
   await expect(page.getByTestId("task-inspector-steps")).toContainText(stepTitle)
-  const steps = await canonicalGet<{ data?: { steps?: readonly { title?: string; required?: boolean }[] } }>(request, taskApiPath(taskId!, "/steps"))
+  const steps = await canonicalGet<{ data?: { steps?: readonly { title?: string; required?: boolean }[] } }>("ListSteps", taskId!)
   expect(steps.data?.steps).toEqual(expect.arrayContaining([expect.objectContaining({ title: stepTitle, required: true })]))
   markFlows(["task.steps"])
   await page.getByText("标签与附件", { exact: true }).first().click()
@@ -278,7 +277,7 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   await labelInput.fill(labelName)
   await page.getByTestId("label-add").click()
   await expect(page.getByTestId("inspector-labels")).toContainText(labelName)
-  const taskLabels = await canonicalGet<{ data?: readonly { id?: string; board_id?: string; name?: string; color?: string | null }[] }>(request, taskApiPath(taskId!, "/labels"))
+  const taskLabels = await canonicalGet<{ data?: readonly { id?: string; board_id?: string; name?: string; color?: string | null }[] }>("ListTaskLabels", taskId!)
   expect(taskLabels.data).toEqual(expect.arrayContaining([
     expect.objectContaining({ name: labelName, color: "#4F46E5" }),
   ]))
@@ -290,6 +289,7 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   await page.getByTestId("attachment-upload").click()
   const attachmentRow = page.getByTestId("attachment-row").filter({ hasText: attachmentName })
   await expect(attachmentRow).toBeVisible()
+  await expect(page.getByTestId("inspector-assets")).toHaveAttribute("aria-busy", "false")
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.getByTestId("attachment-download").click(),
@@ -300,7 +300,7 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   const chunks: Buffer[] = []
   for await (const chunk of stream) chunks.push(Buffer.from(chunk))
   expect(Buffer.concat(chunks)).toEqual(attachmentBytes)
-  const attachments = await canonicalGet<{ data?: readonly { task_id?: string; filename?: string; content_type?: string | null; size_bytes?: number }[] }>(request, taskApiPath(taskId!, "/attachments"))
+  const attachments = await canonicalGet<{ data?: readonly { task_id?: string; filename?: string; content_type?: string | null; size_bytes?: number }[] }>("ListAttachments", taskId!)
   expect(attachments.data).toEqual(expect.arrayContaining([
     expect.objectContaining({ task_id: taskId, filename: attachmentName, content_type: "text/plain", size_bytes: attachmentBytes.byteLength }),
   ]))
@@ -310,7 +310,7 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   await page.getByRole("combobox", { name: "搜索添加依赖任务", exact: true }).fill("Seed release task")
   await page.getByRole("option", { name: /Seed release task/ }).click()
   await expect(page.getByTestId("task-dependencies")).toContainText("Seed release task")
-  const dependencies = await canonicalGet<{ data?: { task?: { id?: string }; parents?: readonly { id?: string; title?: string }[]; edges?: readonly { parent?: { id?: string }; child?: { id?: string } }[] } }>(request, taskApiPath(taskId!, "/dependencies"))
+  const dependencies = await canonicalGet<{ data?: { task?: { id?: string }; parents?: readonly { id?: string; title?: string }[]; edges?: readonly { parent?: { id?: string }; child?: { id?: string } }[] } }>("ListDependencies", taskId!)
   expect(dependencies.data?.task?.id).toBe(taskId)
   expect(dependencies.data?.parents).toEqual(expect.arrayContaining([
     expect.objectContaining({ id: "t_release_seed", title: "Seed release task" }),

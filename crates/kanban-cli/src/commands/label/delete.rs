@@ -12,9 +12,11 @@ pub(crate) struct DeleteArgs {
     pub(crate) force: bool,
 }
 
-pub(crate) fn run(ctx: &CliContext, args: &DeleteArgs) -> Result<(), CliFailure> {
+pub(crate) async fn run(ctx: &CliContext, args: &DeleteArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
-    let result = client.delete_board_label(&ctx.board, &args.label, args.force)?;
+    let result = client
+        .delete_board_label(&ctx.board, &args.label, args.force)
+        .await?;
     if ctx.json {
         output::print_json(&CliLabelDeleteOutput {
             data: CliLabelDeleteResult {

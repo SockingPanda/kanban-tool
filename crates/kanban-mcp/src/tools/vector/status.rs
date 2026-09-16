@@ -24,8 +24,8 @@ impl KanbanMcp {
         Parameters(args): Parameters<Args>,
     ) -> Result<Json<VectorStatusResponse>, McpError> {
         let board = self.board(args.board);
-        let client = self.client.clone();
-        let status = call_client_internal(move || client.vector_status(&board)).await?;
+        let client = &self.client;
+        let status = call_client_internal(client.vector_status(&board)).await?;
         Ok(Json(VectorStatusResponse { data: status }))
     }
 }

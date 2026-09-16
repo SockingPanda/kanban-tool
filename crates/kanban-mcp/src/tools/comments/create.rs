@@ -40,7 +40,7 @@ impl KanbanMcp {
     ) -> Result<Json<CreateCommentResponse>, McpError> {
         let board = self.board(args.board);
         let task_ref = args.task_ref;
-        let client = self.client.clone();
+        let client = &self.client;
         let request = CreateCommentRequest {
             idempotency_key: args.idempotency_key,
             author: args.author,
@@ -53,8 +53,7 @@ impl KanbanMcp {
                 .map(|metadata| serde_json::Value::Object(metadata.into_iter().collect())),
         };
         let comment =
-            call_client(move || client.create_comment_by_selector(&board, &task_ref, &request))
-                .await?;
+            call_client(client.create_comment_by_selector(&board, &task_ref, &request)).await?;
         Ok(Json(CreateCommentResponse { data: comment }))
     }
 }

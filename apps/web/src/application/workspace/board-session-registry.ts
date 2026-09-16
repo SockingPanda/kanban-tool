@@ -1,19 +1,11 @@
 import type { BoardReadModel, BoardReadQuery } from "../data/board-read-model";
-import { type HttpTransport } from "../data/http-transport";
-import { createBoardSyncSink } from "../sync/board-sync-sink";
-import { createEventsApiClient } from "../sync/events-api";
-import { WebSyncController, type WebSyncSnapshot } from "../sync/web-sync-controller";
-import { asCanonicalBoardId, type CanonicalBoardId, type SseTransport, type StreamContractAdapter, type SyncTelemetryEntry } from "../sync/contracts";
+import { asCanonicalBoardId, type CanonicalBoardId } from "../../domain/board-id";
 import type { WebRuntimeConfig } from "../../lib/runtime"
-import type { BoardViewModel } from "../../domain/tasks/board"
+import type { BoardSyncStatus, BoardViewModel } from "../../domain/tasks/board"
 
 export interface BoardReadResource {
   readonly selector: string
-  readonly streamTransport?: SseTransport
-  readonly streamUrl?: string
-  readonly transport: HttpTransport
   readonly query: BoardReadQuery
-  readonly adapter: StreamContractAdapter
   readonly runtimeKey: string
   identityKey: string
   canonicalBoardId: CanonicalBoardId | null
@@ -25,18 +17,14 @@ interface BoardSession {
   readonly key: string
   readonly generation: number
   readonly query: BoardReadQuery
-  readonly controller: BoardSessionController
-  readonly resource: BoardReadResource
   readonly resources: Set<BoardReadResource>
   readonly listeners: Set<(model: BoardReadModel) => void>
-  readonly telemetryListeners: Set<(entry: SyncTelemetryEntry) => void>
-  refreshPromise: Promise<void> | null
+  readonly stateListeners: Set<(state: BoardSyncStatus) => void>
+  readonly abort: AbortController
+  releaseConnection: () => void
+  state: BoardSyncStatus
   refs: number
   disposed: boolean
-}
-
-type BoardSessionController = Pick<WebSyncController, "start" | "stop" | "retry"> & {
-  readonly snapshot?: () => Pick<WebSyncSnapshot, "state">
 }
 
 export type BoardReconnectResult = "reconnecting" | "already-live" | "unavailable"
@@ -51,13 +39,7 @@ export interface BoardSessionHandle {
   readonly generation: number
 }
 
-export interface BoardSessionTestDependencies {
-  readonly streamTransport?: SseTransport
-  readonly createController?: (options: ConstructorParameters<typeof WebSyncController>[0]) => BoardSessionController
-}
-
 const sessions = new Map<string, BoardSession>()
-const sessionTelemetryObservers = new Map<string, Set<(entry: SyncTelemetryEntry) => void>>()
 const sessionListeners = new Set<() => void>()
 let sessionRevision = 0
 
@@ -81,6 +63,27 @@ export function resourceIdentityKey(
 /** Canonical session ownership is independent from the selector used to read a board. */
 function sessionKey(runtime: WebRuntimeConfig, canonicalBoardId: CanonicalBoardId): string {
   return `${runtimeIdentityKey(runtime)}\u0000${canonicalBoardId}`
+}
+
+/** 写后刷新由 QueryService Ready 确认；会话仅负责把完整模型交给仍挂载的消费者。 */
+async function refreshSession(session: BoardSession): Promise<void> {
+  if (!isCurrent(session)) return
+  const nextModel = await session.query.reload(session.abort.signal)
+  if (isCurrent(session)) for (const listener of session.listeners) listener(nextModel)
+}
+
+function isCurrent(session: BoardSession): boolean {
+  return !session.disposed && sessions.get(session.key) === session
+}
+
+function setConnectionState(session: BoardSession, state: BoardSyncStatus): void {
+  if (!isCurrent(session)) return
+  session.state = state
+  for (const listener of session.stateListeners) listener(state)
+}
+
+function retrySession(session: BoardSession): void {
+  void refreshSession(session).catch(() => setConnectionState(session, 'stale'))
 }
 
 export function routeResourceContextKey(runtime: WebRuntimeConfig, selector: string, routeKind: string, boardSlug = ""): string {
@@ -108,7 +111,7 @@ export function activeBoardSessionCount(): number {
   return sessions.size
 }
 
-/** Subscribe to canonical-session ownership changes so Settings reconnect controls stay truthful. */
+/** 会话归属改变时通知订阅者，重连控件使用同一个会话事实。 */
 export function subscribeBoardSessions(listener: () => void): () => void {
   sessionListeners.add(listener)
   return () => sessionListeners.delete(listener)
@@ -138,9 +141,8 @@ export function reconnectActiveBoardSession(runtime: WebRuntimeConfig, boardSlug
       && session.key.startsWith(`${runtimeKey}\u0000`)
       && (boardSlug === undefined || [...session.resources].some((resource) => resource.resolvedSlug === boardSlug))
     ) {
-      const snapshot = session.controller.snapshot?.()
-      if (snapshot !== undefined && snapshot.state !== "circuit-open") return "already-live"
-      session.controller.retry()
+      if (session.state === "live") return "already-live"
+      retrySession(session)
       return "reconnecting"
     }
   }
@@ -152,39 +154,15 @@ export function resetBoardSessionsForTests(): void {
   for (const session of sessions.values()) {
     session.disposed = true
     session.listeners.clear()
-    session.telemetryListeners.clear()
-    session.controller.stop()
+    session.stateListeners.clear()
+    session.abort.abort()
+    session.releaseConnection()
     for (const resource of session.resources) resource.sessionGeneration += 1
     session.query.invalidate()
   }
   sessions.clear()
-  sessionTelemetryObservers.clear()
   notifySessionListeners()
 }
-/** Subscribe to the already-validated SSE/recovery telemetry of one session. */
-export function subscribeBoardSessionTelemetry(
-  runtime: WebRuntimeConfig,
-  canonicalBoardId: CanonicalBoardId,
-  listener: (entry: SyncTelemetryEntry) => void,
-): () => void {
-  const key = sessionKey(runtime, canonicalBoardId)
-  let observers = sessionTelemetryObservers.get(key)
-  if (observers === undefined) {
-    observers = new Set()
-    sessionTelemetryObservers.set(key, observers)
-  }
-  observers.add(listener)
-  let active = true
-  return () => {
-    if (!active) return
-    active = false
-    const current = sessionTelemetryObservers.get(key)
-    if (current === undefined) return
-    current.delete(listener)
-    if (current.size === 0) sessionTelemetryObservers.delete(key)
-  }
-}
-
 if (import.meta.hot) {
   import.meta.hot.dispose(() => resetBoardSessionsForTests())
 }
@@ -194,8 +172,7 @@ export function acquireBoardSession(
   model: BoardViewModel,
   resource: BoardReadResource,
   onModel: (model: BoardReadModel) => void,
-  onTelemetry: (entry: SyncTelemetryEntry) => void,
-  dependencies: BoardSessionTestDependencies = {},
+  onState: (state: BoardSyncStatus) => void,
 ): BoardSessionHandle {
   const boardId = asCanonicalBoardId(model.board.id)
   const expectedKey = resourceIdentityKey(runtime, resource.selector, boardId)
@@ -214,44 +191,17 @@ export function acquireBoardSession(
     session = undefined
   }
   if (session === undefined) {
-    const listeners = new Set<(nextModel: BoardReadModel) => void>()
-    const telemetryListeners = new Set<(entry: SyncTelemetryEntry) => void>()
-    const eventsApi = createEventsApiClient({ transport: resource.transport })
-    const sink = createBoardSyncSink({
-      identity: { canonicalBoardId: boardId, selector: model.board.slug },
-      query: resource.query,
-      eventsApi,
-      adapter: resource.adapter,
-      publish: (nextModel) => {
-        for (const listener of listeners) listener(nextModel)
-      },
-    })
-    const controllerOptions = {
-      boardSelector: model.board.slug,
-      canonicalBoardId: boardId,
-      streamUrl: resource.streamUrl ?? "/api/v1/stream/events",
-      transport: dependencies.streamTransport ?? resource.streamTransport ?? (() => { throw new Error("Host stream transport 未提供") }),
-      adapter: resource.adapter,
-      sink,
-      telemetry: {
-        record: (entry: SyncTelemetryEntry) => {
-          for (const listener of telemetryListeners) listener(entry)
-          for (const observer of sessionTelemetryObservers.get(key) ?? []) observer(entry)
-        },
-      },
-    } satisfies ConstructorParameters<typeof WebSyncController>[0]
-    const controller = dependencies.createController?.(controllerOptions) ?? new WebSyncController(controllerOptions)
     resource.sessionGeneration += 1
     session = {
       key,
       generation: resource.sessionGeneration,
       query: resource.query,
-      resource,
       resources: new Set([resource]),
-      controller,
-      listeners,
-      telemetryListeners,
-      refreshPromise: null,
+      listeners: new Set(),
+      stateListeners: new Set(),
+      abort: new AbortController(),
+      releaseConnection: () => undefined,
+      state: 'connecting',
       refs: 0,
       disposed: false,
     }
@@ -265,10 +215,26 @@ export function acquireBoardSession(
   // Each acquire owns a wrapper, so two mounts that happen to pass the same
   // callback cannot remove one another's subscription on first release.
   const modelListener = (nextModel: BoardReadModel) => onModel(nextModel)
-  const telemetryListener = (entry: SyncTelemetryEntry) => onTelemetry(entry)
+  const stateListener = (state: BoardSyncStatus) => onState(state)
   session.listeners.add(modelListener)
-  session.telemetryListeners.add(telemetryListener)
-  session.controller.start()
+  session.stateListeners.add(stateListener)
+  if (session.refs === 1) {
+    const owned = session
+    try {
+      owned.query.observe(owned.abort.signal,
+        nextModel => { if (isCurrent(owned)) for (const listener of owned.listeners) listener(nextModel) },
+        () => setConnectionState(owned, 'stale'))
+      owned.releaseConnection = owned.query.subscribeConnection(next => setConnectionState(owned, next === 'offline' ? 'stale' : next))
+    } catch (error) {
+      owned.disposed = true
+      owned.abort.abort()
+      owned.releaseConnection()
+      owned.query.invalidate()
+      sessions.delete(key)
+      notifySessionListeners()
+      throw error
+    }
+  } else onState(session.state)
 
   let released = false
   const release = () => {
@@ -276,48 +242,30 @@ export function acquireBoardSession(
     released = true
     if (session === undefined || sessions.get(key) !== session || session.key !== key) return
     session.listeners.delete(modelListener)
-    session.telemetryListeners.delete(telemetryListener)
+    session.stateListeners.delete(stateListener)
     session.refs -= 1
     if (session.refs > 0) return
     session.disposed = true
     session.listeners.clear()
-    session.telemetryListeners.clear()
+    session.stateListeners.clear()
     for (const resource of session.resources) resource.sessionGeneration += 1
-    session.controller.stop()
+    session.abort.abort()
+    session.releaseConnection()
     session.query.invalidate()
     if (sessions.get(key) === session) sessions.delete(key)
     if (sessions.get(key) === undefined) notifySessionListeners()
-    const observers = sessionTelemetryObservers.get(key)
-    if (observers?.size === 0) sessionTelemetryObservers.delete(key)
   }
   return {
     release,
     retry: () => {
-      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
+      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) retrySession(session)
     },
     reconnect: () => {
-      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
+      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) retrySession(session)
     },
     refresh: () => {
       if (released || session === undefined || session.disposed || sessions.get(key) !== session) return Promise.resolve()
-      if (session.refreshPromise !== null) return session.refreshPromise
-      const current = session
-      const generation = current.generation
-      const refreshPromise = (async () => {
-        const nextModel = await current.query.reload()
-        // The refresh belongs to the canonical session entry, not the handle
-        // that happened to start it. A released handle must not suppress a
-        // publish when another owner still retains the same session.
-        if (current.disposed || current.generation !== generation || sessions.get(key) !== current) return
-        for (const listener of current.listeners) listener(nextModel)
-      })()
-      current.refreshPromise = refreshPromise
-      void refreshPromise.then(() => {
-        if (current.refreshPromise === refreshPromise) current.refreshPromise = null
-      }, () => {
-        if (current.refreshPromise === refreshPromise) current.refreshPromise = null
-      })
-      return refreshPromise
+      return refreshSession(session)
     },
     generation: session.generation,
   }

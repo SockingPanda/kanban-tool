@@ -1,3 +1,4 @@
+import { rpcRequest } from "./release-rpc"
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
@@ -13,7 +14,10 @@ async function choose(page: Page, label: string, value: string) {
   await page.getByRole('option', { name: value, exact: true }).click();
 }
 async function read(request: APIRequestContext, suffix = '') {
-  const response = await request.get(`${baseURL}/api/v1/tasks/${taskId}${suffix}`);
+  void request;
+  const method = ({ '': 'GetTask', '/steps': 'ListSteps', '/dependencies': 'ListDependencies', '/comments': 'ListComments', '/labels': 'ListTaskLabels', '/attachments': 'ListAttachments', '/runs': 'ListRuns' } as const)[suffix as '' | '/steps' | '/dependencies' | '/comments' | '/labels' | '/attachments' | '/runs'];
+  if (!method) throw new Error('未知任务读取 ' + suffix);
+  const response = await rpcRequest(method, { path: { task_id: taskId } });
   expect(response.ok(), await response.text()).toBe(true);
   return (await response.json()).data;
 }
@@ -22,17 +26,18 @@ async function detail(page: Page) {
   await expect(page.getByTestId('task-inspector')).toBeVisible();
 }
 async function apiCreate(request: APIRequestContext, taskTitle: string) {
-  const response = await request.post(`${baseURL}/api/v1/boards/${boardSlug}/tasks`, { data: { title: taskTitle, description: '验收所需的隔离任务', actor: 'v4-proof' } });
+  const response = await rpcRequest("CreateTask", { path: { board: boardSlug }, input: { title: taskTitle, description: '验收所需的隔离任务', actor: 'v4-proof' } });
   expect(response.ok(), await response.text()).toBe(true);
   return (await response.json()).data;
 }
 
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ request }, info) => {
+  void request;
   boardSlug = `paper-${info.project.name}-${Date.now()}`;
-  const response = await request.post(`${baseURL}/api/v1/boards`, { data: { slug: boardSlug, name: '纸本界面验收', actor: 'v4-proof' } });
+  const response = await rpcRequest("CreateBoard", { input: { slug: boardSlug, name: '纸本界面验收', actor: 'v4-proof' } });
   expect(response.ok(), await response.text()).toBe(true);
-  const label = await request.post(`${baseURL}/api/v1/boards/${boardSlug}/labels`, { data: { name: 'Stage09 release', color: '#4F46E5' } });
+  const label = await rpcRequest("CreateBoardLabel", { path: { board: boardSlug }, input: { name: 'Stage09 release', color: '#4F46E5' } });
   expect(label.ok(), await label.text()).toBe(true);
 });
 test.beforeEach(async ({ page }) => {
@@ -120,7 +125,7 @@ test('依赖添加、环拒绝和删除，讨论及普通标签、附件', async
   await page.getByRole('combobox', { name: '搜索添加依赖任务' }).fill(parent.title);
   await page.getByRole('option', { name: `${parent.ref} · ${parent.title}`, exact: true }).click();
   await expect.poll(async () => (await read(request, '/dependencies')).parents.map((task: { id: string }) => task.id)).toContain(parentId);
-  const cycle = await request.post(`${baseURL}/api/v1/tasks/${parentId}/dependencies`, { data: { depends_on: taskId, actor: 'v4-proof' } });
+  const cycle = await rpcRequest("AddDependency", { path: { task_id: parentId }, input: { parent_task_id: taskId, actor: 'v4-proof' } });
   expect(cycle.ok()).toBe(false);
   await page.getByRole('button', { name: `解除依赖 ${parent.ref}` }).click();
   await expect.poll(async () => (await read(request, '/dependencies')).parents.length).toBe(0);
@@ -154,8 +159,8 @@ test('依赖添加、环拒绝和删除，讨论及普通标签、附件', async
 test('失败保留草稿，合法状态动作、非法目标、运行记录', async ({ page, request }) => {
   await detail(page);
   let failed = false;
-  await page.route(`**/api/v1/tasks/${taskId}`, async route => {
-    if (route.request().method() === 'PATCH' && !failed) { failed = true; await route.abort('failed'); }
+  await page.route("**/kanban.v1.KanbanService/UpdateTask", async route => {
+    if (!failed) { failed = true; await route.abort('failed'); }
     else await route.continue();
   });
   const field = page.getByRole('textbox', { name: '任务标题', exact: true });
@@ -175,7 +180,7 @@ test('失败保留草稿，合法状态动作、非法目标、运行记录', as
   await expect.poll(async () => (await read(request)).status).toBe('running');
   await page.getByText('运行记录与任务操作', { exact: true }).click();
   const [heartbeat] = await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/transitions/heartbeat') && response.request().method() === 'POST'),
+    page.waitForResponse(response => response.url().endsWith('/kanban.v1.KanbanService/HeartbeatTask') && response.request().method() === 'POST'),
     page.getByRole('button', { name: '发送心跳', exact: true }).click(),
   ]);
   expect(heartbeat.ok()).toBe(true);

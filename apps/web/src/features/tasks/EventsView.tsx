@@ -1,16 +1,15 @@
-import { mergeEventBatch } from '../../application/query/merge-event-batch';
+import { integerDate, type Integer } from '../../domain/integer'
+import { useAsyncRead } from '../../application/query/use-async-read';
 import './activity.css';
 import { PageHeader } from '../../components/layout/page-header';
 import { Button } from '../../components/ui/button';
 import { Icon } from '../../components/ui/icon';
 import { Badge } from '../../components/ui/badge';
 import { Tabs } from '../../components/ui/tabs';
-import { useLayoutEffect } from "react";
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 
-import { ExplorerReadError, type BoardEventsBatch, type BoardEventsReadModel, type ExplorerEvent } from "../../application/data/explorer-read-model";
-import { mergeBoardEvents } from "../../application/data/explorer-read-model";
+import { ExplorerReadError, type BoardEventsReadModel, type ExplorerEvent } from "../../application/data/explorer-read-model";
 import type { Locale } from "../../platform/preferences/preferences"
 import { taskOpenerKey } from "../../platform/focus/explorer-focus"
 import type { WebRuntimeConfig } from "../../lib/runtime"
@@ -37,17 +36,12 @@ export interface EventsPresentationProps {
 }
 
 export interface EventsViewProps {
+  readonly onReadSettled?: () => void
   readonly runtime: WebRuntimeConfig
   readonly boardSelector: string
   /** Explorer 已有的 task query；同时作为可选的看板事件筛选。 */
   readonly taskId?: string | null
   readonly kindFilter?: string
-  /** 由现有 persistent sync owner 递增，用于触发 catch-up read。 */
-  readonly invalidationRevision?: number
-  /** 仅 recovery/gap/poll boundaries 递增；普通 SSE event 通过 batch 进入。 */
-  readonly eventsRefreshRevision?: number
-  /** 该 sync owner 提供的可选已校验 batch；本组件不会打开 stream。 */
-  readonly batch?: BoardEventsBatch | null
   readonly online?: boolean
   readonly onKindFilterChange?: (value: string) => void
   readonly onSelectTask?: (taskId: string) => void
@@ -143,10 +137,10 @@ function errorKind(error: Error | null): string | null {
 
 const eventTimeFormatters = { "zh-CN": new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }), "en-US": new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }) };
 
-function eventTimestamp(value: number, locale: Locale): { readonly display: string; readonly iso: string } {
-  const milliseconds = Math.abs(value) < 1_000_000_000_000 ? value * 1_000 : value
-  const date = new Date(milliseconds)
-  if (Number.isNaN(date.getTime())) return { display: String(value), iso: String(value) }
+function eventTimestamp(value: Integer, locale: Locale): { readonly display: string; readonly iso: string } {
+  const milliseconds = value > -1_000_000_000_000n && value < 1_000_000_000_000n ? Number(value) * 1_000 : value
+  const date = integerDate(milliseconds)
+  if (date === null) return { display: String(value), iso: String(value) }
   const language = locale === "en" ? "en-US" : "zh-CN"
   let display: string
   try {
@@ -254,165 +248,22 @@ function FilterBar({ copy, value, onChange }: { readonly copy: EventsCopy; reado
 }
 
 function useBoardEventsRead(
-  runtime: WebRuntimeConfig,
-  boardSelector: string,
-  taskId: string | null,
-  eventsRefreshRevision: number,
-  batch: BoardEventsBatch | null | undefined,
+  runtime: WebRuntimeConfig, boardSelector: string, taskId: string | null,
   online: boolean,
 ): EventsReadState & { readonly refresh: () => void } {
   const { loadBoardEvents } = useWorkspaceOperations();
-
-  const identityKey = JSON.stringify([
-    runtime.apiBaseUrl,
-    runtime.webBasePath,
-    runtime.webBuildId,
-    boardSelector,
-    taskId,
-  ])
-  const scopeKey = JSON.stringify([
-    runtime.apiBaseUrl,
-    runtime.webBasePath,
-    runtime.webBuildId,
-    boardSelector,
-  ])
-  const loadRef = useRef<(signal: AbortSignal) => Promise<BoardEventsReadModel>>((signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal }))
-  const cursorRef = useRef(0)
-  const cursorIdentityRef = useRef(identityKey)
-  useLayoutEffect(() => { loadRef.current = (signal) => loadBoardEvents(runtime, boardSelector, {
-    taskId,
-    signal,
-    after: cursorIdentityRef.current === identityKey ? cursorRef.current : 0,
-  }) });
-  const [generation, setGeneration] = useState(0)
-  const requestKey = `${identityKey}\u0000${eventsRefreshRevision}\u0000${generation}`
-  type InternalEventsReadState = EventsReadState & {
-    readonly identityKey: string
-    readonly scopeKey: string
-    readonly requestKey: string
-  }
-  const [state, setState] = useState<InternalEventsReadState>(() => ({
-    identityKey,
-    scopeKey,
-    requestKey,
-    data: null,
-    loading: false,
-    error: null,
-    stale: false,
-  }))
-
-  useLayoutEffect(() => {
-    if (state.identityKey !== identityKey || !state.data) return;
-    cursorRef.current = state.data.meta.nextAfter;
-    cursorIdentityRef.current = identityKey;
-  }, [state.data, state.identityKey, identityKey]);
-
-  useEffect(() => {
-    const requestIdentity = identityKey
-    const requestToken = requestKey
-    if (!online) {
-      setState((current) => ({
-        identityKey: requestIdentity,
-        scopeKey,
-        requestKey: requestToken,
-        data: current.scopeKey === scopeKey ? current.data : null,
-        loading: false,
-        error: new ExplorerReadError("offline", "当前离线，无法加载事件。"),
-        stale: current.scopeKey === scopeKey && current.data !== null,
-      }))
-      return
-    }
-    const controller = new AbortController()
-    let active = true
-    setState((current) => ({
-      identityKey: requestIdentity,
-      scopeKey,
-      requestKey: requestToken,
-      data: current.scopeKey === scopeKey ? current.data : null,
-      loading: true,
-      error: null,
-      stale: current.scopeKey === scopeKey && current.data !== null,
-    }))
-    void loadRef.current(controller.signal).then(
-      (data) => {
-        if (!active || controller.signal.aborted) return
-        setState((current) => {
-          if (current.identityKey !== requestIdentity || current.requestKey !== requestToken) return current
-          if (current.data && current.data.board.id === data.board.id && current.data.taskId === data.taskId) {
-            const events = mergeBoardEvents(current.data.events, data.events, data.board.id)
-
-
-            return {
-              identityKey: requestIdentity,
-              scopeKey,
-              requestKey: requestToken,
-              data: { ...data, events, meta: { ...data.meta, count: events.length, nextAfter: Math.max(current.data.meta.nextAfter, data.meta.nextAfter) } },
-              loading: false,
-              error: null,
-              stale: false,
-            }
-          }
-
-
-          return { identityKey: requestIdentity, scopeKey, requestKey: requestToken, data, loading: false, error: null, stale: false }
-        })
-      },
-      (error: unknown) => {
-        if (!active || controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
-        setState((current) => {
-          if (current.identityKey !== requestIdentity || current.requestKey !== requestToken) return current
-          return {
-            identityKey: requestIdentity,
-            scopeKey,
-            requestKey: requestToken,
-            data: current.data,
-            loading: false,
-            error: error instanceof Error ? error : new Error(String(error)),
-            stale: current.data !== null,
-          }
-        })
-      },
-    )
-    return () => {
-      active = false
-      controller.abort()
-    }
-  }, [boardSelector, eventsRefreshRevision, generation, identityKey, online, requestKey, scopeKey, taskId])
-
-  useEffect(() => {
-    if (!batch) return
-// 合并 SSE 增量到异步快照，含单调游标和作用域校验，不能以最新 batch 替代历史快照；最小复现见 build/react-doctor-regressions.test.ts。
-// react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
-    setState(current => mergeEventBatch(current, batch, identityKey, taskId));
-  }, [batch, identityKey, state.data?.meta.nextAfter, taskId])
-
-  const visibleState: EventsReadState = state.identityKey !== identityKey
-    ? {
-        data: taskId === null ? state.data : null,
-        loading: online,
-        error: online ? null : new ExplorerReadError("offline", "当前离线，无法加载事件。"),
-        stale: taskId === null && state.data !== null,
-      }
-    : state.requestKey !== requestKey
-      ? {
-          data: state.data,
-          loading: online,
-          error: online ? null : new ExplorerReadError("offline", "当前离线，无法加载事件。"),
-          stale: state.data !== null,
-        }
-      : state
-
-  return { ...visibleState, refresh: () => setGeneration((value) => value + 1) }
+  const key = JSON.stringify([runtime.apiBaseUrl, runtime.webBuildId, boardSelector, taskId]);
+  const read = useAsyncRead(true, key, signal => loadBoardEvents(runtime, boardSelector, { taskId, signal }),
+    online);
+  return { ...read, stale: Boolean(read.data && (read.error || !online)), refresh: read.retry };
 }
 
 export function EventsView({
+  onReadSettled,
   runtime,
   boardSelector,
   taskId = null,
   kindFilter: kindFilterProp = "",
-  invalidationRevision = 0,
-  eventsRefreshRevision = invalidationRevision,
-  batch,
   online = typeof navigator === "undefined" || navigator.onLine,
   onKindFilterChange,
   onSelectTask,
@@ -420,7 +271,10 @@ export function EventsView({
   const { locale } = usePreferences()
   const [localKindFilter, setLocalKindFilter] = useState(kindFilterProp)
   const kindFilter = onKindFilterChange ? kindFilterProp : localKindFilter
-  const state = useBoardEventsRead(runtime, boardSelector, taskId, eventsRefreshRevision, batch, online)
+  const state = useBoardEventsRead(runtime, boardSelector, taskId, online)
+  useEffect(() => {
+    if (taskId === null && !state.loading) onReadSettled?.()
+  }, [onReadSettled, state.loading, taskId])
   const setKindFilter = (value: string) => {
     setLocalKindFilter(value)
     onKindFilterChange?.(value)

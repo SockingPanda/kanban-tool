@@ -8,8 +8,7 @@ import { BoardReadError, type BoardReadModel } from "../data/board-read-model";
 import type { WorkspaceDataSource } from "./data-source";
 import { createTranslator } from "../i18n"
 import { usePreferences } from "../../platform/preferences/use-preferences"
-import { createGeneratedStreamContractAdapter } from "../sync/generated-adapter";
-import { asCanonicalBoardId, type SyncTelemetryEntry } from "../sync/contracts";
+import { asCanonicalBoardId } from "../../domain/board-id";
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import {
   boardMessagesForLocale,
@@ -18,7 +17,7 @@ import {
   type BoardViewState,
 } from "../../domain/tasks/board"
 import { toBoardViewModel } from "../tasks/board-model"
-import { boardSyncStatusForTelemetry, subscribeBrowserConnectivity } from "./board-live-state"
+import { subscribeBrowserConnectivity } from "./board-live-state"
 import {
   createBoardTaskClaimTokenStore,
   type BoardTaskCanonicalReloadHandler,
@@ -43,28 +42,21 @@ export interface BoardLiveProps {
   readonly onNavigate: (target: AppNavigationTarget, options?: { replace?: boolean }) => void | Promise<unknown>
   /** Keep the canonical session mounted while Explorer owns the visible route. */
   readonly renderBoard?: boolean
-  /** Existing fenced telemetry seam for Explorer/Events invalidation. */
-  readonly onSessionTelemetry?: (entry: SyncTelemetryEntry) => void
   /** Propagate browser connectivity changes to the App-level Explorer status. */
   readonly onSyncStatusChange?: (status: BoardSyncStatus) => void
   /** Expose the canonical session's typed mutation surface to the rendered Explorer board. */
   readonly onTaskMutationsChange?: (surface: BoardTaskMutationSurface | undefined, releasedSurface?: BoardTaskMutationSurface) => void
-  /** Report a committed mutation so the App can invalidate Explorer readers/navigation. */
+  /** 提交后的任务身份用于同步 URL 与当前导航。 */
   readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void
   /** Await visible Explorer readers after the canonical session has reloaded. */
   readonly onCanonicalReload?: BoardTaskCanonicalReloadHandler
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string, source: WorkspaceDataSource): BoardReadResource {
-  const transport = source.transport
-  const query = source.createBoardReadQuery(runtime, selector, { includeTasks: false, dependencies: { transport } })
+  const query = source.createBoardReadQuery(runtime, selector, { includeTasks: false })
   return {
     selector,
-    transport,
-    streamTransport: source.streamTransport,
-    streamUrl: source.streamUrl,
     query,
-    adapter: createGeneratedStreamContractAdapter(),
     runtimeKey: runtimeIdentityKey(runtime),
     identityKey: resourceIdentityKey(runtime, selector, null),
     canonicalBoardId: null,
@@ -126,7 +118,7 @@ function retainResourceKey(resources: Map<string, BoardReadResource>, resource: 
   resources.set(resource.identityKey, resource)
 }
 
-export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload }: BoardLiveProps) {
+export function useBoardSession({ runtime, route, onNavigate, onSyncStatusChange, onTaskMutationsChange, onMutationCommitted, onCanonicalReload }: BoardLiveProps) {
   const source = useWorkspaceOperations();
   const { createTaskMutationClient } = source;
   const preferences = usePreferences()
@@ -261,7 +253,7 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
         if (preserveReadyBoard && retained !== null) {
           stateContextKeyRef.current = contextAtStart
           setState({ kind: "ready", model: retained })
-          setSyncStatus(boardSyncStatusForTelemetry(error instanceof BoardReadError && error.kind === "offline" ? "transport-failure" : "recovery-failure") ?? "stale")
+          setSyncStatus("stale")
         } else {
           stateContextKeyRef.current = contextAtStart
           setState(errorState(error, translator))
@@ -323,7 +315,7 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
           return null
         },
         onCanonicalReload: async (options) => {
-          // 会话元数据被 SSE 替换时，仍须等可见任务完成回读才能释放写入状态。
+          // 会话与可见查询都确认本次 Ready 后，才释放写入状态。
           const [canonical, visible] = await Promise.allSettled([refreshCanonical(), onCanonicalReload?.(options)])
           if (visible.status === "rejected") throw visible.reason
           if (visible.value != null) return visible.value
@@ -396,7 +388,7 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
             setSyncStatus("stale")
           }
         },
-        (entry) => {
+        (nextStatus) => {
           if (
             !activeRef.current
             || activeContextRef.current !== contextKey
@@ -406,9 +398,8 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
             || sessionGeneration === null
             || resource.sessionGeneration !== sessionGeneration
           ) return
-          const nextStatus = boardSyncStatusForTelemetry(entry.type)
-          if (nextStatus !== null) setSyncStatus(nextStatus)
-          onSessionTelemetry?.(entry)
+          setSyncStatus(nextStatus)
+          onSyncStatusChange?.(nextStatus)
         },
       )
     } catch {
@@ -424,7 +415,7 @@ export function useBoardSession({ runtime, route, onNavigate, onSessionTelemetry
         sessionRetryRef.current = null
       }
     }
-  }, [canonicalBoardId, contextKey, onSessionTelemetry, route.kind, routeBoardSlug, runtime, selector, setSyncStatus, visibleStateKind])
+  }, [canonicalBoardId, contextKey, onSyncStatusChange, route.kind, routeBoardSlug, runtime, selector, setSyncStatus, visibleStateKind])
 
   useEffect(() => {
     const onOffline = () => reportSyncStatus("offline")

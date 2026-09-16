@@ -22,9 +22,9 @@ impl KanbanMcp {
         &self,
         Parameters(args): Parameters<BoardShowArgs>,
     ) -> Result<Json<GetBoardResponse>, McpError> {
-        let client = self.client.clone();
+        let client = &self.client;
         let board = self.board(args.board);
-        let result = call_client(move || client.get_board(&board)).await?;
+        let result = call_client(client.get_board(&board)).await?;
         Ok(Json(GetBoardResponse { data: result }))
     }
 }

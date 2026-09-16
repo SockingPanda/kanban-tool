@@ -1,3 +1,5 @@
+mod route_contract;
+
 use std::{fs, path::Path};
 
 use xtask::ToolResult;
@@ -16,8 +18,9 @@ pub(crate) fn run(root: &Path) -> ToolResult<()> {
     check_agents_document_contract(root, &text)?;
     check_workspace_map(root, &text)?;
     check_skill_packages(root)?;
+    route_contract::check(root, &text)?;
     check_active_maps(root)?;
-    println!("ok: AGENTS.md、技能包结构和 active recipe/package map 已通过");
+    println!("ok: AGENTS.md、技能路由与治理引用、技能包结构和 active recipe/package map 已通过");
     Ok(())
 }
 
@@ -256,6 +259,10 @@ mod tests {
             .expect("workspace manifest should be readable");
         fs::write(root.join("Cargo.toml"), manifest)
             .expect("workspace manifest should be writable");
+        fs::create_dir_all(root.join("docs")).unwrap();
+        for document in ["docs/documentation.md", "docs/collaboration.md"] {
+            fs::copy(repository.join(document), root.join(document)).unwrap();
+        }
         for (index, member) in workspace_members(&repository)
             .unwrap()
             .into_iter()

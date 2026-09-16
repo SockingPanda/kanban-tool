@@ -58,8 +58,9 @@ FTS、vector、graph/context、projection jobs、缓存和 capability probe 是�
 `kanban-server` 负责 host 进程生命周期、数据库及附件/run-log 路径准备、router、dispatcher 和
 shutdown；启动时由 `kanban-service::KanbanService::open_with_roots` 打开并初始化 Turso，并在 service
 内执行 migration、连接、事务、repository、projection 与维护操作。因而只有 `kanban serve` 进程会
-触达这份 canonical 数据库；client、CLI、MCP、Desktop 和 dispatcher 通过 本机 gRPC contract
-工作，host 停止或输入无效时返回稳定错误，不 fallback 到另一个数据库。
+触达这份 canonical 数据库。CLI、MCP 通过 client 使用本机原生 gRPC；Web/Desktop WebView 使用
+同源 binary gRPC-Web。dispatcher 在 Host 内直接调用共享 KanbanService，不增加回环 RPC。Host
+停止或输入无效时，外部入口返回稳定错误，不 fallback 到另一个数据库。
 
 ## 指南
 

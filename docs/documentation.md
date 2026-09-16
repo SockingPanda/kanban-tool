@@ -19,15 +19,15 @@
 
 1. 先找到拥有该行为的代码、schema、生成 artifact 或 crate/app 文档；它是当前事实源。
 2. 行为变化先更新 owner source，再更新根入口和必要的导航链接；不要在两个 active 文档复制同一事实。
-3. 术语变化先经过 `$domain-modeling` 的边界澄清；术语确认后立即更新根 `CONTEXT.md`。
+3. 术语变化由 `$docs` 核对 owner 实现与产品决定，明确边界后更新根 `CONTEXT.md`；不依赖仓库未提供的全局技能。
 4. 需要写实现说明时，把内容放在对应 owner 文档；不要把 `CONTEXT.md` 变成 spec 或 scratch pad。
 5. 只有难以逆转、出乎预期且存在真实取舍的决定才新增 ADR，并同步 [`docs/adr/README.md`](adr/README.md)。
 6. 完成的 ledger、旧 recovery runbook、聚合快照和一次性 workaround 移出 active 文档树；历史沿 Git/tag、release asset 或 task record 追溯。
-7. 文档改动完成后运行 `just docs-check` 和 `just diff-check`；若同时修改 Rust owner，再运行受影响的 Rust gate。
+7. 普通文档改动运行 `just docs-structure-check` 和 `just diff-check`；根契约、技能及治理指南补 `just agents-check`。涉及 rustdoc、include 或公开 Rust 文档契约时运行完整 `just docs-check`；同时修改代码时合并相应 owner gate。
 
 ## Agent 阅读路径
 
-Agent 先读 `AGENTS.md` 获得入口和稳定契约；需要统一产品用词时读 `CONTEXT.md`；需要行为、状态、persistence 或 wire 细节时回到对应 owner 文档。Context 是词汇表，不是所有事实的汇总页。
+Agent 先读 `AGENTS.md` 获得入口和稳定契约；需要统一产品用词时读 `CONTEXT.md`；需要行为、状态、persistence 或 wire 细节时回到对应 owner 文档。协作、共享入口和证据边界见 [协作指南](collaboration.md)。Context 是词汇表，不是所有事实的汇总页。
 
 ## Context 与 ADR 边界
 

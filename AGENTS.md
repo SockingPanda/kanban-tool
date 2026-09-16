@@ -46,13 +46,13 @@
 - 未经当前验收需要，不升级 dependency、重写 lockfile、增加 backend/兼容层或建立新的 abstraction。
 - 发现范围外问题只记录；只有数据完整性、安全边界、状态机或主路径不可用时才扩大范围。
 - 验收证据和最终 diff 检查完成后停止，不自动开始下一阶段。
+- 并行写入、共享入口和交付证据遵循 [Agent 协作指南](docs/collaboration.md)；任务基线和进行中的计划保留在任务记录。
 
 ## 5. 技能路由
 
 - `$style`：Rust、Cargo、模块组织、依赖边界、错误和测试位置。
 - `$prose`：用户可见简体中文文案、README、指南和 ADR 表达。
-- `$docs`：事实源、owner placement、文档同步和历史退出边界。
-- `$domain-modeling`：维护领域术语、`CONTEXT.md` 和需要记录的长期决策。
+- `$docs`：事实源、领域术语、owner placement、文档同步和历史退出边界。
 - `$check`：根据当前 `justfile` 选择并报告最小充分验证。
 - `$commit`：仅在用户明确授权后创建本地 Conventional Commit。
 - `$branch`：识别和创建分支，按层级执行已获授权的本地合并与必要的快进整理。
@@ -61,7 +61,7 @@
 
 - 产品首页、最小使用路径和指南索引：[`README.md`](README.md)。
 - 文档治理、事实源、owner placement 和同步清单：[`docs/documentation.md`](docs/documentation.md)。
-- 跨文档共享的领域语言：[`CONTEXT.md`](CONTEXT.md)；术语需要确认或变更时使用 `$domain-modeling`。
+- 跨文档共享的领域语言：[`CONTEXT.md`](CONTEXT.md)；术语需要确认或变更时使用 `$docs`。
 - 跨 crate 拓扑、依赖方向和 canonical/derived 原则：[`docs/architecture.md`](docs/architecture.md)。
 - 状态、readiness、claim、lease 和 dispatcher：[`crates/kanban-core/docs/state_machine.md`](crates/kanban-core/docs/state_machine.md)。
 - persistence、migration、maintenance：[`crates/kanban-service/docs/`](crates/kanban-service/docs/)。
@@ -75,7 +75,7 @@
 ## 7. 验证边界
 
 - `justfile` 是命令入口的唯一事实源；不凭记忆发明 recipe 或参数。
-- 文件修改至少运行 `just diff-check`；文档结构改动补 `just docs-check`。
+- 文件修改至少运行 `just diff-check`；纯文档结构改动补 `just docs-structure-check`，skill/根契约补 `just agents-check`；rustdoc、include 或公开 Rust 文档契约变化仍运行 `just docs-check`。
 - protocol/schema contract 改动才运行 `just schema-check`；Rust、Web、Desktop 和 package gate 只按真实影响升级。
 - 会写 Cargo target 的 recipe 必须经仓库的 build lock；不自设 target/cache、不 `cargo clean`、不并行写 target。
 - 未运行的 gate 不得表述为通过、migration closed 或 release ready；失败先判断是否由当前 diff 引起。

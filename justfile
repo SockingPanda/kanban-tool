@@ -114,10 +114,14 @@ agents-check:
 tooling-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- tooling check
 
+# 只运行现有 xtask 文档结构检查；完整 docs-check 保留 rustdoc 与 doctest。
+docs-structure-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- docs check
+
 docs-check:
     TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo doc --workspace --no-deps
     TAURI_CONFIG='{"bundle":{"resources":[]}}' scripts/cargo-build-lock.sh -- cargo test --doc --workspace
-    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- docs check
+    just docs-structure-check
 
 node-lock-check:
     pnpm install --frozen-lockfile --lockfile-only --ignore-scripts
@@ -299,6 +303,14 @@ schema-generate:
 
 schema-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema check
+
+# 仓库结构与规则检查；仍需编译 xtask。
+repo-check:
+    just diff-check
+    just agents-check
+    just deps-check
+    just tooling-check
+    just docs-structure-check
 
 # CI 的完整编排只组合真实 recipes；日常窄 gate 仍保持 core 与单包范围。
 ci-full:

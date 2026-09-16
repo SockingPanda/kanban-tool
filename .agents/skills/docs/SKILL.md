@@ -1,6 +1,6 @@
 ---
 name: docs
-description: 维护 kanban-tool 的文档事实源、owner placement 和同步边界；当产品行为、crate/app ownership、状态机、persistence、wire/schema、CLI、Desktop layout 或安装环境发生变化，或需要判断应读和应改哪份文档时使用。不负责 Rust 实现、长文措辞、底层检查命令或提交。
+description: 维护 kanban-tool 的文档事实源、领域术语、owner placement 和同步边界；当产品行为、crate/app ownership、状态机、persistence、wire/schema、CLI、Desktop layout 或安装环境发生变化，或需要判断应读和应改哪份文档时使用。不负责 Rust 实现、长文措辞、底层检查命令或提交。
 ---
 
 # 文档所有者契约
@@ -16,6 +16,9 @@ description: 维护 kanban-tool 的文档事实源、owner placement 和同步�
 不触发：只改中文句子用 `$prose`；只改 Rust/Cargo 用 `$style`；只选择验证用 `$check`；只创建提交用 `$commit`。
 
 ## 文档落点
+
+领域术语由根 `CONTEXT.md` 持有，本 skill 同时维护其定义、literal 与避免使用的歧义称呼。先核对
+owner 实现与产品决定；没有仓库内提供的技能时，不把某台机器上的全局术语技能当成必备依赖。
 
 - 根 `README.md` 是产品首页、最小使用路径和指南索引。
 - 根 `AGENTS.md` 是仓库地图、稳定不变量和文档路由。

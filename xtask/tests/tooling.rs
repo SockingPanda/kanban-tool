@@ -107,6 +107,124 @@ fn mismatched_server_version() -> String {
 }
 
 #[test]
+fn affected_json_tracks_explicit_base_renames_and_untracked_documents() {
+    let tree = TemporaryTree::new("affected-documents");
+    let root = tree.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname='fixture'\nversion='0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "# 普通导航\n").unwrap();
+    fs::write(root.join("docs/旧指南.md"), "# 编译进 rustdoc 的指南\n").unwrap();
+    fs::write(
+        root.join("src/lib.rs"),
+        "#![doc = include_str!(\"../docs/旧指南.md\")]\n",
+    )
+    .unwrap();
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .args([
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", stderr(&output));
+        stdout(&output).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&[
+        "add",
+        "--",
+        "Cargo.toml",
+        "README.md",
+        "docs/旧指南.md",
+        "src/lib.rs",
+    ]);
+    git(&["commit", "--quiet", "-m", "fixture baseline"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    let plan = |base: &str| {
+        let output = run_web_assets(&[
+            "affected",
+            "json",
+            "--root",
+            root.to_str().unwrap(),
+            "--base",
+            base,
+        ]);
+        assert!(output.status.success(), "{}", stderr(&output));
+        serde_json::from_str::<Value>(&stdout(&output)).unwrap()
+    };
+
+    assert_eq!(plan(&base)["recipes"], serde_json::json!([]));
+    fs::write(root.join("README.md"), "# 更新普通导航\n").unwrap();
+    assert_eq!(
+        plan(&base)["recipes"],
+        serde_json::json!(["docs-structure-check", "diff-check"])
+    );
+    git(&["add", "--", "README.md"]);
+    git(&["commit", "--quiet", "-m", "fixture navigation"]);
+    fs::rename(root.join("docs/旧指南.md"), root.join("docs/新 指南.md")).unwrap();
+    git(&["add", "--", "docs/旧指南.md", "docs/新 指南.md"]);
+    fs::write(
+        root.join("src/lib.rs"),
+        "#![doc = include_str!(\"../docs/新 指南.md\")]\n",
+    )
+    .unwrap();
+    fs::write(root.join("draft.md"), "# 未跟踪文档\n").unwrap();
+
+    let value = plan(&base);
+    assert_eq!(value["base"], base);
+    assert_eq!(value["sources"]["base"], serde_json::json!(["README.md"]));
+    assert_eq!(
+        value["sources"]["staged"],
+        serde_json::json!(["docs/新 指南.md", "docs/旧指南.md"])
+    );
+    assert_eq!(
+        value["sources"]["working_tree"],
+        serde_json::json!(["src/lib.rs"])
+    );
+    assert_eq!(
+        value["sources"]["untracked"],
+        serde_json::json!(["draft.md"])
+    );
+    assert_eq!(
+        value["recipes"],
+        serde_json::json!(["docs-check", "diff-check"])
+    );
+    assert_eq!(value.as_object().unwrap().len(), 5);
+
+    git(&["commit", "--quiet", "-m", "fixture rename"]);
+    let value = plan(&base);
+    assert_eq!(
+        value["sources"]["base"],
+        serde_json::json!(["README.md", "docs/新 指南.md", "docs/旧指南.md"])
+    );
+    assert_eq!(
+        value["recipes"],
+        serde_json::json!(["docs-check", "diff-check"])
+    );
+    let invalid = run_web_assets(&[
+        "affected",
+        "json",
+        "--root",
+        root.to_str().unwrap(),
+        "--base",
+        "missing-base",
+    ]);
+    assert!(!invalid.status.success());
+}
+
+#[test]
 fn committed_schema_tree_and_fixtures_match_registry() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

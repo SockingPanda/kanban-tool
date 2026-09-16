@@ -1,0 +1,59 @@
+name: Repository contract
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-contract-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      # 此 job 只编译仓库工具，使用独立于本地默认 8 的 runner 资源配置。
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C linker-features=-lld"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install Protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.57.0
+      - name: Configure shared Cargo target
+        id: cargo-target
+        run: |
+          cargo_target_root="$RUNNER_TEMP/kanban-tool-cargo-target"
+          printf 'KANBAN_CARGO_TARGET_ROOT=%s\n' "$cargo_target_root" >> "$GITHUB_ENV"
+          printf 'target=%s\n' "$(realpath -m --relative-to="$GITHUB_WORKSPACE" "$cargo_target_root")" >> "$GITHUB_OUTPUT"
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> ${{ steps.cargo-target.outputs.target }}
+      - name: Check formatting
+        run: just fmt-full
+      - name: Check repository contracts
+        run: just repo-check
+      - name: Check repository tooling
+        run: just check-p xtask
+      - name: Test repository tooling
+        run: just test-p xtask
+      - name: Lint repository tooling
+        run: just clippy-p xtask

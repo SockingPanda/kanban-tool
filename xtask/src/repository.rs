@@ -144,6 +144,62 @@ pub(crate) fn include_targets(root: &Path, source: &Path, text: &str) -> ToolRes
     Ok(targets)
 }
 
+/// 保留动态 include 的已知前缀，供 affected 保守判断文档影响面。
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum IncludeReference {
+    File(PathBuf),
+    Prefix(PathBuf),
+    Unresolved,
+}
+
+pub(crate) fn include_references(
+    root: &Path,
+    source: &Path,
+    text: &str,
+) -> ToolResult<Vec<IncludeReference>> {
+    let mut references = Vec::new();
+    for invocation in syn::parse_str::<IncludeMacros>(text)?.0 {
+        if let Ok(literal) = syn::parse2::<syn::LitStr>(invocation.tokens.clone()) {
+            references.push(IncludeReference::File(
+                source.parent().unwrap_or(root).join(literal.value()),
+            ));
+            continue;
+        }
+        let concat = syn::parse2::<syn::Macro>(invocation.tokens)
+            .ok()
+            .filter(|invocation| invocation.path.is_ident("concat"));
+        let Some(concat) = concat else {
+            references.push(IncludeReference::Unresolved);
+            continue;
+        };
+        let parts = syn::parse2::<IncludeConcat>(concat.tokens)?;
+        let base = if parts.manifest {
+            source
+                .ancestors()
+                .find(|candidate| candidate.join("Cargo.toml").is_file())
+        } else if !parts.literal.is_empty() {
+            Some(source.parent().unwrap_or(root))
+        } else {
+            None
+        };
+        let Some(base) = base else {
+            references.push(IncludeReference::Unresolved);
+            continue;
+        };
+        let target = if parts.manifest {
+            base.join(parts.literal.trim_start_matches('/'))
+        } else {
+            base.join(parts.literal)
+        };
+        references.push(if parts.dynamic {
+            IncludeReference::Prefix(target)
+        } else {
+            IncludeReference::File(target)
+        });
+    }
+    Ok(references)
+}
+
 /// 扫描 Rust token，而不是把生成器字符串、注释里的示例当作真实宏调用。
 struct IncludeMacros(Vec<syn::Macro>);
 
@@ -185,6 +241,7 @@ impl syn::parse::Parse for IncludeMacros {
 struct IncludeConcat {
     manifest: bool,
     literal: String,
+    dynamic: bool,
 }
 
 impl syn::parse::Parse for IncludeConcat {
@@ -198,9 +255,14 @@ impl syn::parse::Parse for IncludeConcat {
                     .push_str(&input.parse::<syn::LitStr>()?.value());
             } else if !dynamic && input.fork().parse::<syn::Macro>().is_ok() {
                 let invocation = input.parse::<syn::Macro>()?;
-                result.manifest |= invocation.path.is_ident("env")
+                let manifest = invocation.path.is_ident("env")
                     && syn::parse2::<syn::LitStr>(invocation.tokens)
                         .is_ok_and(|name| name.value() == "CARGO_MANIFEST_DIR");
+                if manifest && !result.manifest && result.literal.is_empty() {
+                    result.manifest = true;
+                } else {
+                    dynamic = true;
+                }
             } else if input.peek(syn::Token![,]) {
                 input.parse::<syn::Token![,]>()?;
             } else {
@@ -212,6 +274,7 @@ impl syn::parse::Parse for IncludeConcat {
                 })?;
             }
         }
+        result.dynamic = dynamic;
         Ok(result)
     }
 }

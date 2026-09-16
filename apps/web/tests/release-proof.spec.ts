@@ -270,7 +270,7 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   const steps = await canonicalGet<{ data?: { steps?: readonly { title?: string; required?: boolean }[] } }>("ListSteps", taskId!)
   expect(steps.data?.steps).toEqual(expect.arrayContaining([expect.objectContaining({ title: stepTitle, required: true })]))
   markFlows(["task.steps"])
-  await page.getByText("标签与附件", { exact: true }).first().click()
+  await page.locator('summary').filter({ hasText: /^标签$/ }).click()
 
   const labelName = "Stage09 release"
   const labelInput = page.getByRole("textbox", { name: "标签名称" })
@@ -286,7 +286,6 @@ test("#task.transition #task.comments #task.dependencies #task.steps #task.label
   const attachmentName = `stage09-${testInfo.project.name}.txt`
   const attachmentBytes = Buffer.from(`Stage09 attachment bytes ${testInfo.project.name}\n`, "utf8")
   await page.getByTestId("attachment-file").setInputFiles({ name: attachmentName, mimeType: "text/plain", buffer: attachmentBytes })
-  await page.getByTestId("attachment-upload").click()
   const attachmentRow = page.getByTestId("attachment-row").filter({ hasText: attachmentName })
   await expect(attachmentRow).toBeVisible()
   await expect(page.getByTestId("inspector-assets")).toHaveAttribute("aria-busy", "false")

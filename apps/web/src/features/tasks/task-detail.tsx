@@ -1,3 +1,4 @@
+import { TaskAttachments } from './TaskAttachments';
 import { useState } from 'react';
 import type { TaskWorkspaceState } from './use-task-workspace';
 import { useTaskInspectorState } from './use-task-detail-state';
@@ -31,16 +32,18 @@ function HeartbeatAction({ actions }: { actions: ReturnType<typeof useTaskInspec
 }
 function ReadyTaskDetail({workspace}:{workspace:ReadyWorkspace}) {
   const [tab,setTab]=useState('detail');
+  const [attachmentsBusy,setAttachmentsBusy]=useState(false);
   const model=workspace.inspectorModel,task=model.task,handlers=workspace.inspectorMutationHandlers;
   const claimToken=workspace.taskMutations?.claimTokens?.get(task.id)??null;
   const actions=useTaskInspectorState({model,identity:workspace.inspectorIdentity,onSelectTask:workspace.selectTask,locale:workspace.locale,claimToken,mutationHandlers:handlers,mutationSnapshot:workspace.inspectorMutationSnapshot,online:workspace.online!==false,onLoadRuns:workspace.loadInspectorRuns,onLoadEvents:workspace.loadInspectorEvents,onLoadNeighborhood:workspace.loadInspectorNeighborhood});
   const busy=!handlers||Boolean(workspace.inspectorMutationSnapshot?.pending.size);
   const titleSave=(title:string)=>handlers?handlers.saveTask({title:title.trim(),expected_lock_version:task.lockVersion??0}):Promise.resolve({committed:false,reconciled:false});
-  return <><DetailSheet open title={task.ref} description="任务详情" className="task-detail-dialog" dismissDisabled={busy} onClose={workspace.closeInspector} closeLabel="关闭任务检查器" footer={<><Button variant="default" disabled={busy} onClick={workspace.closeInspector}>关闭</Button></>}>
+  return <><DetailSheet open title={task.ref} description="任务详情" className="task-detail-dialog" dismissDisabled={busy || attachmentsBusy} onClose={workspace.closeInspector} closeLabel="关闭任务检查器" footer={<><Button variant="default" disabled={busy || attachmentsBusy} onClick={workspace.closeInspector}>关闭</Button></>}>
     <div data-testid="task-inspector"><TaskTextField className="task-title-input" aria-label="任务标题" name="task-title" rows={2} value={task.title} save={titleSave} disabled={busy} /><TaskDependencies workspace={workspace} /><TaskProperties workspace={workspace} actions={actions} />
     <MutationFeedback workspace={workspace} />{workspace.inspectorRead.error&&<div className="paper-banner banner-error" role="alert">{workspace.inspectorRead.error.message}<Button onClick={workspace.inspectorRead.retry}>重试</Button></div>}
     <Tabs value={tab} onChange={setTab} items={[{value:'detail',label:'详情'},{value:'comments',label:'讨论',count:model.comments.length}]} />
     {tab==='detail'&&<TaskWorkContent workspace={workspace} />}{tab==='comments'&&<TaskDiscussion workspace={workspace} />}
+    <TaskAttachments workspace={workspace} onBusyChange={setAttachmentsBusy} />
     <details className="paper-detail-options"><summary>运行记录与任务操作</summary><HeartbeatAction actions={actions} /><Button icon="play" size="sm" onClick={()=>{void workspace.onNavigate?.(routePath({kind:'board',boardSlug:workspace.route.boardSlug,view:'runs',query:`task=${encodeURIComponent(task.id)}`},{basePath:workspace.runtime.webBasePath}));}}>查看运行记录</Button><Button size="sm" onClick={actions.beginEditor}>编辑更多属性</Button>{actions.editing&&<TaskInspectorEditForm draft={actions.editDraft} dirty={true} pending={actions.mutationSavePending} error={actions.saveError?.message??null} onRetry={actions.retrySave} retryBlocksSubmit={actions.saveRetryMatches} copy={actions.copy} onChange={actions.setEditDraft} onSave={actions.submitEditor} onCancel={actions.closeEditor} />}</details>
     </div>
   </DetailSheet><ActionDialog actions={actions} /></>;

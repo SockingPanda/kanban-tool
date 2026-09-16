@@ -22,14 +22,15 @@ async fn rpc_routes_match_method_manifest_and_descriptor() {
     let actual = descriptor
         .file
         .into_iter()
-        .filter(|file| file.package.as_deref() == Some("kanban.v1"))
-        .flat_map(|file| file.service)
-        .flat_map(|service| {
-            let name = service.name.unwrap();
-            service
-                .method
-                .into_iter()
-                .map(move |method| format!("/kanban.v1.{name}/{}", method.name.unwrap()))
+        .flat_map(|file| {
+            let package = file.package.unwrap_or_default();
+            file.service.into_iter().flat_map(move |service| {
+                let name = format!("{package}.{}", service.name.unwrap());
+                service
+                    .method
+                    .into_iter()
+                    .map(move |method| format!("/{name}/{}", method.name.unwrap()))
+            })
         })
         .collect::<BTreeSet<_>>();
     assert_eq!(actual, expected);
@@ -37,7 +38,7 @@ async fn rpc_routes_match_method_manifest_and_descriptor() {
     let routes = methods
         .iter()
         .map(|method| {
-            if method.server_streaming {
+            if method.service == "kanban.v1.QueryService" {
                 method.path()
             } else {
                 format!("/{}/*method", method.service)
@@ -85,6 +86,8 @@ async fn rpc_routes_match_method_manifest_and_descriptor() {
     for path in [
         "/kanban.v1.KanbanService/Unknown",
         "/kanban.v1.QueryService/Unknown",
+        "/kanban.extensions.v1.ObjectService/Unknown",
+        "/kanban.extensions.v1.FileService/Unknown",
     ] {
         let response = router
             .clone()
@@ -99,7 +102,7 @@ async fn rpc_routes_match_method_manifest_and_descriptor() {
             )
             .await
             .unwrap();
-        if path.contains("KanbanService") {
+        if !path.contains("QueryService") {
             assert_eq!(
                 tonic::Status::from_header_map(response.headers())
                     .unwrap()

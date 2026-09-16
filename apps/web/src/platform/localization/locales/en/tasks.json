@@ -1,0 +1,13 @@
+{
+  "count_one": "{{count}} task",
+  "count_other": "{{count}} tasks",
+  "status.archived": "Archived",
+  "status.blocked": "Blocked",
+  "status.done": "Done",
+  "status.ready": "Ready",
+  "status.review": "In review",
+  "status.running": "In progress",
+  "status.scheduled": "Scheduled",
+  "status.todo": "To do",
+  "status.triage": "Triage"
+}

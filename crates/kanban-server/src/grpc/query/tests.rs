@@ -750,3 +750,109 @@ async fn active_run_log_and_stats_observe_file_and_clock_changes_without_mutatio
     assert_eq!(state.grpc_probe.queries(), reads);
     assert_eq!(runtime.counts(), (0, 0, 0));
 }
+
+#[tokio::test]
+async fn object_and_file_queries_share_ready_refresh_and_resume_semantics() {
+    use kanban_protocol::rpc::{self, extensions as w};
+    let (_directory, state, runtime) = fixture().await;
+    let task = create(&state, "附件对象").await;
+    let board = state.application().get_board("default").await.unwrap().id;
+    let queries = vec![
+        definition(
+            "modules",
+            Query::ListObjects(w::ObjectListInput {
+                board_id: board.clone(),
+                type_key: "module".into(),
+                ..Default::default()
+            }),
+        ),
+        definition(
+            "cycles",
+            Query::ListObjects(w::ObjectListInput {
+                board_id: board.clone(),
+                type_key: "cycle".into(),
+                ..Default::default()
+            }),
+        ),
+        definition(
+            "task",
+            Query::GetObject(w::ObjectIdentityInput {
+                board_id: board.clone(),
+                object_id: task.id.clone(),
+            }),
+        ),
+        definition(
+            "files",
+            Query::ListObjectFiles(w::FileOwnerInput {
+                board_id: board.clone(),
+                owner_id: task.id.clone(),
+                ..Default::default()
+            }),
+        ),
+    ];
+    let mut stream = watch(&runtime, queries.clone()).await;
+    let mut rebuilt = Rebuild::default();
+    let mut ready = std::collections::BTreeSet::new();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while ready.len() < queries.len() {
+            let frame = stream.next().await.unwrap().unwrap();
+            if matches!(frame.body, Some(Body::Ready(_))) {
+                ready.insert(frame.client_query_id.clone());
+            }
+            rebuilt.apply(frame);
+        }
+    })
+    .await
+    .unwrap();
+    let catalog = state.application().object_catalog().await.unwrap();
+    state.application().object_execute(serde_json::from_value(serde_json::json!({
+        "board_id":board,"actor":"query-test","request_id":"module-live-query",
+        "mutation":{"operation":"create","object":{"type_key":"module","title":"实时模块","body":null,"properties":{},"expected_catalog_version":catalog.version}}
+    })).unwrap()).await.unwrap();
+    rebuilt.receive(&mut stream, 1).await;
+    let pb::query_result::Result::ListObjects(document) =
+        pb::QueryResult::decode(rebuilt.bytes["modules"].as_slice())
+            .unwrap()
+            .result
+            .unwrap()
+    else {
+        panic!("错误查询类型")
+    };
+    let value = rpc::decode_json(document.data.unwrap()).unwrap();
+    assert_eq!(value["items"][0]["title"], "实时模块");
+    state
+        .application()
+        .create_attachment(kanban_service::CreateAttachmentCommand {
+            task_id: task.id.clone(),
+            id: Some("a_query_file".into()),
+            filename: "proof.txt".into(),
+            rel_path: None,
+            content_type: None,
+            content: b"content".to_vec(),
+            sha256: None,
+            created_by: "query-test".into(),
+        })
+        .await
+        .unwrap();
+    rebuilt.receive(&mut stream, 2).await;
+    let pb::query_result::Result::ListObjectFiles(files) =
+        pb::QueryResult::decode(rebuilt.bytes["files"].as_slice())
+            .unwrap()
+            .result
+            .unwrap()
+    else {
+        panic!("错误查询类型")
+    };
+    assert_eq!(files.items[0].id, "a_query_file");
+    drop(stream);
+    let mut resumed = queries;
+    for query in &mut resumed {
+        query.resume = rebuilt.cursors.get(&query.client_query_id).cloned();
+        query.refresh = true;
+    }
+    let mut stream = watch(&runtime, resumed).await;
+    let cursor = rebuilt.ready(&mut stream, "files").await;
+    assert_eq!(cursor, rebuilt.cursors["files"]);
+    drop(stream);
+    runtime.stop().await;
+}

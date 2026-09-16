@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { ts } from '../typescript.mjs';
+const require=createRequire(import.meta.url);
+const source=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../../src/platform/localization');
+const out=fs.mkdtempSync(path.join(os.tmpdir(),'kb-i18n-pure-'));
+process.on('exit',()=>fs.rmSync(out,{recursive:true,force:true}));
+const program=ts.createProgram([path.join(source,'locale.ts'),path.join(source,'format.ts')],{strict:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,outDir:out,types:[],skipLibCheck:true});
+const diagnostics=ts.getPreEmitDiagnostics(program);
+if(diagnostics.length)throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics,{getCurrentDirectory:()=>process.cwd(),getCanonicalFileName:x=>x,getNewLine:()=> '\n'}));
+program.emit();
+const {parseLocale,localeTag}=require(path.join(out,'locale.js'));
+const {createFormatters,parseCalendarDate,parseInstant}=require(path.join(out,'format.js'));
+
+test('preference aliases preserve v4 zh/en values',()=>{for(const v of ['zh','zh-CN','zh_Hans','zh-Hans-SG'])assert.equal(parseLocale(v),'zh');for(const v of ['en','en-US','en_GB'])assert.equal(parseLocale(v),'en');});
+test('unsupported traditional Chinese is not mislabeled as supported',()=>{for(const v of ['zh-TW','zh-Hant','zh-HK','fr',null,42,'english'])assert.equal(parseLocale(v),null);});
+test('HTML locale remains zh-CN while internal preference remains zh',()=>assert.equal(localeTag('zh'),'zh-CN'));
+test('calendar dates validate leap years including years below 100',()=>{assert.equal(parseCalendarDate('0099-01-01').getUTCFullYear(),99);assert.equal(parseCalendarDate('2024-02-29').getUTCDate(),29);for(const v of ['2026-02-29','2026-04-31','2026-00-01','0000-01-01','2026-1-1'])assert.throws(()=>parseCalendarDate(v));});
+test('calendar display cannot shift to the previous day due to viewer zone',()=>{assert.equal(createFormatters('en','America/Los_Angeles').calendarDate('2026-09-15'),createFormatters('en','Asia/Shanghai').calendarDate('2026-09-15'));assert.match(createFormatters('en').calendarDate('2026-09-15'),/15/);});
+test('instants demand an explicit offset and reject normalized invalid dates',()=>{for(const v of ['2026-09-15','2026-09-15T00:00:00','2026-02-30T00:00:00Z','2026-09-15T24:00:00Z','2026-09-15T00:00:00+99:00'])assert.throws(()=>parseInstant(v));});
+test('equivalent offset timestamps are the same instant',()=>assert.equal(parseInstant('2026-09-15T08:00:00+08:00').getTime(),parseInstant('2026-09-15T00:00:00Z').getTime()));
+test('explicit instant zones affect time but not stored values',()=>{assert.notEqual(createFormatters('en','UTC').instant(0),createFormatters('en','Asia/Shanghai').instant(0));});
+test('number, percent and relative format use Intl with deterministic inputs',()=>{const f=createFormatters('en');assert.equal(f.number(1234),'1,234');assert.equal(f.percent(0.25),'25%');assert.equal(f.relative(-1,'day'),'yesterday');});
+test('invalid numbers and invalid time zone are rejected',()=>{assert.throws(()=>createFormatters('en').number(NaN));assert.throws(()=>createFormatters('en').percent(Infinity));assert.throws(()=>createFormatters('en','invalid-zone').instant(0));});
+test('generated contracts reject missing keys, missing arguments, wrong count types and extra parameters',()=>{
+ const file=path.join(out,'contract.ts');
+ const importPath=path.join(source,'contracts.generated').replaceAll('\\','/');
+ fs.writeFileSync(file,`import type { Translator } from ${JSON.stringify(importPath)};\ndeclare const t: Translator;\nt('common:save');\nt('tasks:count', {count:2});\nt('shell:archivedProject',{name:'User project'});\n// @ts-expect-error unknown key\nt('common:unknown');\n// @ts-expect-error missing interpolation\nt('shell:archivedProject');\n// @ts-expect-error wrong count type\nt('tasks:count',{count:'2'});\n// @ts-expect-error extraneous options must not control the engine\nt('shell:archivedProject',{name:'x',lng:'en'});\n// @ts-expect-error plain messages take no values\nt('common:save',{});\n`);
+ const p=ts.createProgram([file],{strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,moduleResolution:ts.ModuleResolutionKind.Bundler,types:[],skipLibCheck:true});
+ const ds=ts.getPreEmitDiagnostics(p);assert.equal(ds.length,0,ds.map(d=>ts.flattenDiagnosticMessageText(d.messageText,'\n')).join('\n'));
+});

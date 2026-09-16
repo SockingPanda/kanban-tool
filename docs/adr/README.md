@@ -11,3 +11,5 @@ ledger、旧 recovery runbook、聚合快照、baseline 和一次性 workaround 
 - [0005 文档事实源与领域语言分层](0005_documentation_sources_of_truth.md)
 - [0006 Browser-first 的统一 Web UI](0006_browser_first_web_ui.md)
 - [0007 唯一 Host 的本地 gRPC](0007_local_grpc.md)
+- [0008 对象关系作为唯一关系事实](0008_object_relations.md)
+- [0009 文件身份与对象关联分离](0009_file_objects.md)

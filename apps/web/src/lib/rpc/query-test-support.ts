@@ -1,11 +1,16 @@
-import { create, toBinary } from '@bufbuild/protobuf'
+import { create, toBinary, fromJsonString } from '@bufbuild/protobuf'
 import { QueryCursorSchema, QueryFrameSchema, QueryResultSchema, type QueryCursor, type QueryDefinition, type QueryFrame } from '../../generated/rpc/kanban/v1/query_pb'
 import * as codec from './codec.generated'
+import { encodeJson } from './value-codec'
+import { stringifyJson } from '../lossless-json'
+import { FileListOutputSchema } from '../../generated/rpc/kanban/extensions/v1/workspace_pb'
 
 /** 测试从真实具名 DTO 编码生成 wire，避免手写字节绕过 codec。 */
 export function queryResultBytes(definition: QueryDefinition, payload: unknown): Uint8Array {
   let result: ReturnType<typeof create<typeof QueryResultSchema>>['result']
   switch (definition.query.case) {
+    case 'getObject': case 'listObjects': case 'getObjectCatalog': case 'getObjectOverview': case 'getWorkflowClosure': case 'getObjectReferences': case 'getObjectHistory': case 'getObjectSnapshots': case 'diagnoseObjects': result = { case: definition.query.case, value: { $typeName: 'kanban.extensions.v1.ObjectDocument', data: encodeJson(payload) } }; break
+    case 'listObjectFiles': result = { case: 'listObjectFiles', value: fromJsonString(FileListOutputSchema, stringifyJson(payload)) }; break
     case 'listBoards': result = { case: 'listBoards', value: codec.encodeListBoardsResponse(payload) }; break
     case 'listBoardColumns': result = { case: 'listBoardColumns', value: codec.encodeListBoardColumnsResponse(payload) }; break
     case 'listTasks': result = { case: 'listTasks', value: codec.encodeListTasksResponse(payload) }; break

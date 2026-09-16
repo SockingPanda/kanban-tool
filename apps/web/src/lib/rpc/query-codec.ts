@@ -2,15 +2,20 @@ import { create, toBinary } from "@bufbuild/protobuf"
 import type { RpcCall } from "../../application/data/rpc-transport"
 import { QueryDefinitionSchema, type QueryDefinition, type QueryCursor, type QueryResult } from "../../generated/rpc/kanban/v1/query_pb"
 import * as codec from "./codec.generated"
-import { RpcCodecError, int32, record, text } from "./value-codec"
+import { RpcCodecError, int32, record, text, decodeJson, required } from "./value-codec"
 
 export interface RecentEventsCall {
   readonly method: "RecentEvents"
   readonly query: { readonly board: string; readonly task_id?: string; readonly limit: number }
   readonly signal?: AbortSignal
 }
-export type QueryCall = RpcCall | RecentEventsCall
-const queryMethods = new Set<string>(["ListBoards", "ListBoardColumns", "ListTasks", "ListTasksByStatus", "GetTask", "ListTaskLabels", "ListDependencies", "ListSteps", "ListComments", "ListAttachments", "TaskNeighborhood", "BoardTaskMap", "ListRuns", "GetRun", "GetRunLog", "ListEvents", "GetStats", "GetHealth", "MaintenanceStatus", "SearchStatus", "GetTaskDetails", "GetBoard", "ListBoardLabels", "SearchTasks", "SearchTasksByStatus", "RecentEvents"])
+export interface ExtensionQueryCall {
+  readonly method: "ExtensionQuery"
+  readonly definition: Extract<QueryDefinition["query"], { case: "getObject" | "listObjects" | "getObjectCatalog" | "getObjectOverview" | "getWorkflowClosure" | "getObjectReferences" | "getObjectHistory" | "getObjectSnapshots" | "diagnoseObjects" | "listObjectFiles" }>
+  readonly signal?: AbortSignal
+}
+export type QueryCall = RpcCall | RecentEventsCall | ExtensionQueryCall
+const queryMethods = new Set<string>(["ExtensionQuery", "ListBoards", "ListBoardColumns", "ListTasks", "ListTasksByStatus", "GetTask", "ListTaskLabels", "ListDependencies", "ListSteps", "ListComments", "ListAttachments", "TaskNeighborhood", "BoardTaskMap", "ListRuns", "GetRun", "GetRunLog", "ListEvents", "GetStats", "GetHealth", "MaintenanceStatus", "SearchStatus", "GetTaskDetails", "GetBoard", "ListBoardLabels", "SearchTasks", "SearchTasksByStatus", "RecentEvents"])
 
 export function isQueryCall(call: QueryCall): boolean { return queryMethods.has(call.method) }
 
@@ -18,6 +23,7 @@ export function isQueryCall(call: QueryCall): boolean { return queryMethods.has(
 export function encodeQueryDefinition(call: QueryCall, clientQueryId: string, resume?: QueryCursor, refresh = false): QueryDefinition {
   let query: QueryDefinition["query"]
   switch (call.method) {
+    case "ExtensionQuery": query = call.definition; break
     case "ListBoards": query = { case: "listBoards", value: codec.encodeListBoardsRequest(call) }; break
     case "ListBoardColumns": query = { case: "listBoardColumns", value: codec.encodeListBoardColumnsRequest(call) }; break
     case "ListTasks": query = { case: "listTasks", value: codec.encodeListTasksRequest(call) }; break
@@ -64,6 +70,8 @@ export function decodeQueryResult(definition: QueryDefinition, projection: Query
   const result = projection.result
   if (!definition.query.case || result.case !== definition.query.case) throw new RpcCodecError("查询投影类型与请求不一致。")
   switch (result.case) {
+    case "getObject": case "listObjects": case "getObjectCatalog": case "getObjectOverview": case "getWorkflowClosure": case "getObjectReferences": case "getObjectHistory": case "getObjectSnapshots": case "diagnoseObjects": return decodeJson(required(result.value.data))
+    case "listObjectFiles": return result.value
     case "listBoards": return codec.decodeListBoardsResponse(result.value)
     case "listBoardColumns": return codec.decodeListBoardColumnsResponse(result.value)
     case "listTasks": return codec.decodeListTasksResponse(result.value)

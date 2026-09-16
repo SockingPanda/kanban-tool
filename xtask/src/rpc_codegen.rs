@@ -2,6 +2,7 @@
 
 mod artifacts;
 mod emit;
+mod extensions;
 mod model;
 mod web;
 
@@ -31,6 +32,7 @@ struct Operation {
 
 /// 生成或检查 protocol owner 的正式 .proto、codec 和 RPC parts 清单。
 pub fn run(root: &Path, check: bool) -> ToolResult<()> {
+    extensions::run(root, check)?;
     let owner = root.join("crates/kanban-protocol");
     let operations: Vec<Operation> =
         serde_json::from_slice(&fs::read(owner.join("proto/rpc-operations.json"))?)?;

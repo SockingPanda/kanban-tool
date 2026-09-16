@@ -1,4 +1,4 @@
-import type { HealthReport } from "../application/data/health-read-model";
+import type { HealthReport } from "./data/health-read-model";
 import type { WebRuntimeConfig } from "../lib/runtime"
 
 function runtimeBaseURI(baseURI?: string): string {

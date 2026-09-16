@@ -1,0 +1,3593 @@
+{
+  "attachments:cancel": {
+    "sourceHash": "41477aaf9bb271283d52c95fd337afe12006dbd80ef283bab9928cbcb4c45361",
+    "targetHash": "9fa4d4795c42b65345e7ab9f9e340052243afdb557f4c18eeff9e84783adab91",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:choose": {
+    "sourceHash": "93f5d577d904e3972eb07d4dc228d61cb1b46f17836a161c8142fcc744bde70e",
+    "targetHash": "e1b73cef1bef2d1469f5c1618119e5d33cb2e163f7ceca850bb0624a2f53c68c",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:clear": {
+    "sourceHash": "22cc7eb1e861feb6faab3a1493f867013681b130e8da65cff4d78c98c51541e4",
+    "targetHash": "7a40aef8c3820375bd8b6896c226b1d342839882c47795c883c7e410793770de",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:confirm": {
+    "sourceHash": "7da511168d3c386304581b538d5935360bc298dd5f83d1640a58ec5d54759616",
+    "targetHash": "c667f899ed1a1658d8a0f4f36f2447e664ce1c0fc22888575181c07d9cb93813",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:download": {
+    "sourceHash": "dc7ce908d590c85f360feee3c858a4ac52538fbed3f1d5dfc9591fc94266a65f",
+    "targetHash": "c996a8b49be3abe1f576f066982f43ae786ef0772d366fb6c70023b74eb8fd4f",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:downloading": {
+    "sourceHash": "e3bf79c859410feb48151e32b8219ac8b25d5703a6ff7b2590c028bb07919cd6",
+    "targetHash": "de76d28e30a5dabf4a062622fea345dd39399511e22b9e628a3a467f0b21dda1",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:drop": {
+    "sourceHash": "5de7aafc2b3b4b64934f32a13117aada1d5e57b2dc8e1f95fd0854e88875f68e",
+    "targetHash": "c611b89c5ad2dae0201f00564aa2ae85bd67f4ddc6aae7ab9d41607e5e230f86",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:empty": {
+    "sourceHash": "a5b11278a5b369e897a7ff170e9015e8e0cabf021e3de2ba068f39f51217302d",
+    "targetHash": "d6c4f4687a5f1e31163c87ecd2efa4f5d17e55f82cb4241ebd18ababadede888",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:hashMissing": {
+    "sourceHash": "9cd9c8496cca7300410bc9c21bccea560e7ee079036cecc3cc45dae554505436",
+    "targetHash": "3e05c522f3ebdce14592ff65ce72cf9f54b91263d410e898bd1609b276b6f11a",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:identity": {
+    "sourceHash": "3469e06c436629014cf1b3d0dbb932f399cc664af24c706b40b575e864ab23ed",
+    "targetHash": "0c99d6d2f945429e5b5c4e6cf0ddd2ce74fb2ce27063f87d4e3c4eb671a3b0db",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:keep": {
+    "sourceHash": "97dbfbd1470229753ac5f54d3929298b595e5f4f18ceacfd6cadd6139636e71e",
+    "targetHash": "14a0a1d632d0fffe31b0939e968088a7baaed1b5416f9e674ef3bb4f63ee1b50",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:limit": {
+    "sourceHash": "618b463c9d7fe9172397ff005c02fb100b7d72fa1cd6d8104d12b002a03ae2ae",
+    "targetHash": "ecb216c3caf69a351925219ab7cd78190cc1b8dbab4880e7ac6add9efc62b6ae",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:loading": {
+    "sourceHash": "bcb4a6799b8232e4886fb7ac9fb547fe622138ad9afbfb169f5d298afe2ea70f",
+    "targetHash": "1a18dcf1ce29417fa2b4ef5e3996a4f7d878077399221b41c440c0f3d59b257e",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.cancelUnknown": {
+    "sourceHash": "540e4ba5023e2a62fd6e30ba597468ff3d6dbba4d87b1bb231b814c3ee62166c",
+    "targetHash": "3b3e912cc854dad504063922c549f4650929c372c0a2438999a98953103ce97c",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.cancelUnsent": {
+    "sourceHash": "1e3db8305ccb44830a1ba4ca3f96594ba580ce7d64317dfeb7e39e9559955a17",
+    "targetHash": "f29abff8ef3e2a2c6c5f7b281aa4bb4426c11de1e512eecc8267d39e9c934fe1",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.idInvalid": {
+    "sourceHash": "b40374c1c041a90ac7fbc592c04d3d1f557cdb5986281826be528e747e6df3f7",
+    "targetHash": "8b14f176016aa6ec3f7e8873fad65e2e3743964d793b81523a382afb08628754",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.integrity": {
+    "sourceHash": "1b72f0729ecc3a69095c0d4650853040291aa05e23818a1e5dfb602bc8c771a3",
+    "targetHash": "733ffd1ca11f41ccb9b98c1a58461e13e80663285d2abcb393a77b6458e3a6ea",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.nameInvalid": {
+    "sourceHash": "5402a5a5e20a953da7e57aaefdf7b5eb639f1905cd193ab058555c45be268525",
+    "targetHash": "ee85f951ea85f5ce4b6b08e6b3057f1c6589acce6f1ce9877aae90c308022237",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.nameLong": {
+    "sourceHash": "2af720fccfbe9fc4399a2343ded3d4523acf07d8a3cc5fbf7498f8383d9cf0ff",
+    "targetHash": "8749fe1f9800177885969515e5353ddcf3eed1f560d290426ce2b1176aefff3f",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.notReady": {
+    "sourceHash": "a008e7ea8545f4bee21799b1359ae054e07856101992ad874142daeac508ad08",
+    "targetHash": "f27d8e43cf566ae97409d8684f32f0bef04285dda369022a448da58d4897f3ad",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.ownerInvalid": {
+    "sourceHash": "215cad6c3f6b2d66cfd41d3e4b547035dd3810160d62f16c2888421e8a15575f",
+    "targetHash": "034994f33b6de575ba89566e73c7b9ebda016e1262e8ee9eea15b7aa5d03dca1",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.queueClosed": {
+    "sourceHash": "fe6e2f67992e3ed001926c37356a0535af1d88a8ba885ceebb279bf0bc57bf98",
+    "targetHash": "974136518b5a4912ad9705cd31bb7a807f9c58390f9fa5e1805a7e449a6c489e",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.queueFull": {
+    "sourceHash": "e45a943fb1cc464ef602e2c1d8328ad4ed30d8d7b87ec70cb379153c82876b27",
+    "targetHash": "4e248c5d499a00880bbb673d311c23deb6f2c721967401a16c87d2bb705433bb",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.receiptMismatch": {
+    "sourceHash": "e309e37e908f5cd520f6e85da0c1ba3f95f9733e051918802d0da4fff4e722fc",
+    "targetHash": "970b82ecd2b7c0b02e48ab0d4700198cfa5f94b8720a1af0da33edf4795c002d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.refreshCommitted": {
+    "sourceHash": "51b3abf3fe1599da233db1fd17d2b2383822fa6d65d973300313a7c289ad07e9",
+    "targetHash": "1b9bd367a4bcffa5ba619c6860a83d4e465786a40191a27342800eb6341bde30",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.tooLarge": {
+    "sourceHash": "75dee1c97e4a5fde8d2c6a8e174f5e41f4ef68acd3de3ee84098772075c326a2",
+    "targetHash": "405d1522a4008437df8f22530bed14942a3fa2e45a793488e5f4d005b9dacfae",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.unknown": {
+    "sourceHash": "ff8cb35e81190c274fa2bb153c8ed815434f5725ddc915d2e6094c666f93b795",
+    "targetHash": "aab0367741f456c748a9ac34422f29564e6f76578768a774baebf99b92bd3674",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:problem.unlinkFailed": {
+    "sourceHash": "9b5035087a862d24c6937ec507298dff4ef094064c9ddf539f341e35dd4f9e41",
+    "targetHash": "155c47b08a271eeed0c2dfec7dfa375ac98efef313ac510360884b75e6868028",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:refresh": {
+    "sourceHash": "233081be05565a816773d9f2ee2c8daaeaf7a256477100141e2a4b1259e451a6",
+    "targetHash": "d5444e0208c1db41312b791ea044b9bf2ee973d9fde013943446a14f660e9250",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:remove": {
+    "sourceHash": "5af35197edc56da7bf09cb369b23bf6b732c97fb6f43987c7575452ec77f728c",
+    "targetHash": "83e472ffdf20a90beec92fd3c3db11ce07569a93d260284bcf33a4754c1ba0e0",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:retry": {
+    "sourceHash": "00ed6015385b34ab5549853ba616fb892543b72ba4cb03ab586a19b4c8725f6f",
+    "targetHash": "2f8735824f812bfb5b9a7b81c129bfe09954a6d08554c2b61fda4ce9bc207e71",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:status.canceled": {
+    "sourceHash": "ca12723998260294801b4c01080ef1796dd8a16eb7a13f38752218fc23ceb447",
+    "targetHash": "f8e3d2703826b1768c12dd357373132e113631d01ed594797f988b984429a25d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:status.committing": {
+    "sourceHash": "b89343b058eb86175c5c6e18a6b3f98f9e8df32fc134ad0b2384b31ce2710851",
+    "targetHash": "f02d7c09156d5fe04cfdea13ced755faa991710a448eb854fceb3dacc6af2d3d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:status.error": {
+    "sourceHash": "e9b87ddc69da6bf3f6af5f0edea9685c8488a65dca92c26512e194219d3dcdf0",
+    "targetHash": "66daff25b8654eaba603e3343ba3c3bc200757d753455782854ccc6c006f5048",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:status.queued": {
+    "sourceHash": "a4b5f5cc021983a13266fc9096cc6d1cb169bb2ae03c132d86db7889ffd0b1f5",
+    "targetHash": "33b5a662d38edd7543f64dc6ae45254afd3b38549c1b1c046c3ac27dd7807a9a",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:status.succeeded": {
+    "sourceHash": "18c0cf4085014bbcc4571691571863b655cbf25414601526d31cf0eccffa1a16",
+    "targetHash": "47026e024df8f5235a833ca53a622bb68c2f74d7874c5c11f78b8a3157b37744",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:status.uploading": {
+    "sourceHash": "3662633af5d13aee0465f76bab0d0e675296d25d4e49287d33c0629b04205d29",
+    "targetHash": "2cd4997f15b81f34a38bfe47d288153421b640501d994f29095acd7e7f51b8f6",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:title": {
+    "sourceHash": "47eea34ccdad93e201be5f013f0feb9ac2ea64a7f401dfaa6466c03280609f7c",
+    "targetHash": "9e84e8e34c755e7d37b89e2c1b466a36aab38e1aae86fcd3462cfc00bd7182da",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "attachments:unavailable": {
+    "sourceHash": "1e00f56dfa5c8c01f861fa1adc6636af1a5b214d8fa8cbed13cf8b82fba47fb9",
+    "targetHash": "2535f2c3f292ff98b478f1f8d9d1b369bb82a0654dcebd51b0ac59443e7a73b4",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "common:bootstrapLoading": {
+    "sourceHash": "1e6a3ad971974291206784fa57f9315fe6dcb91e8385f72cc172b0866c827b0e",
+    "targetHash": "16f736334ae71d38dad54d4618eb08f68113c4664a48caf3418135b875cc16fe",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:cancel": {
+    "sourceHash": "9cb9583080e53d1edbaf4812d66871df699d5eaaa22d47fa816def8dbf17ca14",
+    "targetHash": "b1dc4db4bc02232da9f2ecbeb5cd14671705cd899f4b6575e087bc870c53b979",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:darkTheme": {
+    "sourceHash": "5a006fabb4bd66110abee9a9662d32e1aee9ab6eca8fd666f7fb1fee954153ba",
+    "targetHash": "639a7c6de10b5f9f2a52e26721d3470e7e0bde7352fa2c27e45f1a6bd2432c2f",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:errorConflict": {
+    "sourceHash": "26105cb572d6831b04cf659551e9c9623d8f3eb5edacda35c78ece61b23c39b8",
+    "targetHash": "56ba832fb7862676a5d01d9269907fa2c8c68fc98b03c18491637369cc72457c",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:errorInvalidInput": {
+    "sourceHash": "d449d014e77de8954f1501f9decdadcd960a57130f36d3c66408dda813bbdee2",
+    "targetHash": "5ad505d4b737ed188b87a2d6db2b7d99ce87cf2f242e68daf3cb792f3eb2e188",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:errorUnavailable": {
+    "sourceHash": "a49453e2f4cf6689ca62ec4daf6a8aff49e55d1aecd5ece9a10802c2196ebbf0",
+    "targetHash": "46e2fed5ae9c737748e1214688c0960a3e818e10b87874c7efd8eecbe7dfb6ca",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:errorUnknown": {
+    "sourceHash": "9f1cdc8f9cfc6d055693739c53ed86c5c8bafd68cd446eca81151474ee9f7de1",
+    "targetHash": "a913de4c0da476a8373710eae5df1a7c4b6e34c0bc45847c339d3e3d66eee4de",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:language": {
+    "sourceHash": "c665a7bb860a8adaab3e6b5d5e6e4293947dd0817385a91bd140dd714c3920af",
+    "targetHash": "7297bd67e5a39fcf1b67ba75235df3f348f505e0ebd5400e9d9e9cf2a9d374aa",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:lightTheme": {
+    "sourceHash": "f341298620ab33f9260e3b414f589a3187b62a8339cd1f9f05974511abf7af61",
+    "targetHash": "e21e5fbd49e8fb0c63b02c0928bb96cb135e65d69df443f7bc38656f38864421",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:loading": {
+    "sourceHash": "aa5a87e4d4163f682369a0310eae295141b766b5ad126250fff80ee681849a47",
+    "targetHash": "f60cd6b5e7d9f17104925de169951cedb224e3658a5cedb4f0e0fbdbcc1b3f80",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:productName": {
+    "sourceHash": "e2a119f14b9bd969bb568104082c67a0c9ad5d7dbcb0cf9c4cb6ba5c4c32bd9a",
+    "targetHash": "e556b411429eba9b492890007b092f3fc7b5233e17dcb8712c3124a090e519d4",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:retry": {
+    "sourceHash": "1ac51de8ecbea90fbe04fa0f764505dffcad009ad35b0bce0485b60fd9cd78c4",
+    "targetHash": "f8a9e3a4da7520efe88a83652b7caa8c3d3bdd34d9c5483e143eec6bc2f6995e",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:save": {
+    "sourceHash": "796866ef66fb3c24d60813ef51139616ebdd4ef5dccb64aa1fc40b674591abcf",
+    "targetHash": "10d8ac962e89fb879b766d2b0ae57627f12ed3a1b33deaa17b1795e142f23540",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "common:settings": {
+    "sourceHash": "093315ca6931e1f58fad9831c7d73e4c6bb2fa107f4b1594e9e41fb863229f09",
+    "targetHash": "f89b44f5f8ba14fd5f496515aa59999d57d6b3ea20108beef63ff7cc95ec3809",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "legacy:action": {
+    "sourceHash": "fc19075ef3eeed729ce8c5335f71f97c6667ae51d3a6ca8bceecd3875162ac1f",
+    "targetHash": "b185850f9ab49afcb0b5cb0d2aaa5616013f6b3a94c673e00a390f47cc53df15",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:active": {
+    "sourceHash": "b61a9eb46f92c8d221f5e0117c4287ec13941b587471bf316f413552d74d1587",
+    "targetHash": "d22968466d72edfdf62dd28fc80e55ddce8089511efdaf600a6c67e52d7214b0",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:activeFingerprint": {
+    "sourceHash": "9c0519f64caf5cd6b8954014f4f7e7c7813dead683137bb804ad5690ce5f3852",
+    "targetHash": "96e2d371ac70aa5d23e7a76f57aaa9f5dfa25c4fcf46cc795d06447c877bb963",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:activeGeneration": {
+    "sourceHash": "0c93f34aac0905752827d253a13f6e3141458f7111ed4a8ba3a3a9a094319c29",
+    "targetHash": "1b9d1948ea2f5e110839286371a2248f53beed4d2e6ade1579377abbb3988d1d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:actor": {
+    "sourceHash": "3cd1a6df6bd36574c8f7687814ebf52d7c8c1a846be11af1f2014643068e530a",
+    "targetHash": "40a5602405a6665b4e4b44a4d1e3ed3b744766a462842871ecb12ea294a71435",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:afterBytes": {
+    "sourceHash": "40832ac3f39ab6cf8740a175854615d6e61d9b59ecdb7b92bbd70fca3255fc38",
+    "targetHash": "1c84c946d4638ff8b27ced758fb16e783ec5458a17a6af9949c6f42e656a5ead",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:api": {
+    "sourceHash": "187073595e9e6a1b10b22249df41e7cbfebf049a8a8783c9c5e00d18fde780ec",
+    "targetHash": "9543e24851085ce445b5c9c49d0a19573767224496e9ddb3357ab588d811466d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:apiOrigin": {
+    "sourceHash": "b8d55284a80b9a971b3128678032cc0709af99b664410801be302be56ab5116e",
+    "targetHash": "b6a55d03df403cc1f26c87793c5cd7b5037ca2a311de619d286ca6d33ef1140b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:appearance": {
+    "sourceHash": "37c87c30d0e728e0092c63ffbc87f525d9123616581a01aa4cf3161422f4f2f4",
+    "targetHash": "11bd16916aeae72958b55363635148f2ad096a7115c90f6fa0822bb9e16190f4",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:archivedDependencyEdges": {
+    "sourceHash": "9abd5fa1452abe989169e5f555ffc73be7317156fd595b95b9c297b309dc44ad",
+    "targetHash": "942b07586cfc5539c3bc4f1b4398fb571dcdec25c9163f1b1145eefd2bd2ecb4",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:backend": {
+    "sourceHash": "1cdb01669f9b1bbc121891f0d0fa24a00182dacae268c9d3a4a286aee6a6414e",
+    "targetHash": "b3c7493024eeb21612af0bb07d35213d98ac5304a38b32b16c604f106723a60d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:backupAction": {
+    "sourceHash": "37824b93eb1c2b2a4cfb9893aab60eecd4e18af00cc85cfbaa30be2ec1529f96",
+    "targetHash": "da80557799c08eeaac8e06f7595e0a0536feeb5c46a1ec08c9bc086b620f3a31",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:backupComplete": {
+    "sourceHash": "117781c4aeaed507add3106660a8e767b9091af290bfb8a3af097e5afc3ee7ab",
+    "targetHash": "9552916895b3d76038f404655ae5bdc5d95ce4bb22686a24a2417e1af335172c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:backupPathLabel": {
+    "sourceHash": "dc19c650ebd92ee2d14d4612c58c180a49f886522b74a3828382e1ad09ebc7dd",
+    "targetHash": "4102e701ddc232cf190515646136eceb71855469bb907551834ab43f925ace2e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:beforeBytes": {
+    "sourceHash": "e246c461b9601e120c82c940bd4af2411339bf4750f67504eaca65d9725c5d1f",
+    "targetHash": "c13b59ddbc2fed81163c3c757a86bc0ce62ae0eaffb11bde7e9d4bd0b5dc61ff",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:blockedReasons": {
+    "sourceHash": "9be54cefc15ce4003323541080e57a06cd54b64b19ce6f1a9c7ce19482ef278e",
+    "targetHash": "c1008dd5ead09aa41f9fe9e5722427cdcd734181d6a1b45874a531f7cf8c238a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:board": {
+    "sourceHash": "edcf7e6f2a9e468e705ce7db867d0330255ec12333e2133f35e17572f73f99cd",
+    "targetHash": "2bcfb29a1723aced643bddddc24225feaf19e099cdd49ac7e49fa34e534ae42f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:boardId": {
+    "sourceHash": "4b31a1dd21f1eecc9c5066bfa1ebf981a315909a99cf4566e22628f46a518c74",
+    "targetHash": "1f11fef18dc0f37aa5e46640cab0e893c8e597a703d8b4b641e6db6c35dd55eb",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:boardLoadErrorDescription": {
+    "sourceHash": "5da12606d7f785782d221ee8a8988f462e80fa9bb54a6368f490ed8935ac8a63",
+    "targetHash": "8252cdf43dc087eea5d62fccee2dfe7c5e65c615a2de9b2edc4f0705c354053d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:boardNoBoardsDescription": {
+    "sourceHash": "7fc87282e6fbb0f85edeba6066e9259d0ef0bc472efb0bc1b5cf8c74f2f7cdcb",
+    "targetHash": "78be0da1273c3ab3031e50a43508b4508a09f90bd4c0d5c2cc84011881773765",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:boardOfflineDescription": {
+    "sourceHash": "63813aa36e708fc6e3a858810be62ef67e82a3ea0e8eff5f68316d6b227773ae",
+    "targetHash": "15ac37fef59e61a0ee38a78b19dd5dca5b02d00490f37040d69a2527f5cc7570",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:boardPlaceholder": {
+    "sourceHash": "0b7ec3f9907dc7b367d82fa437f6e53d5d33806598e7311c2e3dd3a93e18ba12",
+    "targetHash": "878f1897cf05d330e47543940c37dfa466864de5e33b9f3e2751802fdd28e307",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:boardPlaceholderDescription": {
+    "sourceHash": "71ae652cb771a5d78cc16840afb54ab94e9e7e547136655bbd435c8a2540c098",
+    "targetHash": "0240b2ab783938589f2788f1896dfa276bdb9e3b4df68cb3a059440c981f4607",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:build": {
+    "sourceHash": "5a52280128d1d6ad7b3055aa470689b7110ff51dcb41fb3d63435627ed827cf5",
+    "targetHash": "d850e5d91bc08ce798f0212fab61eeee6442a53b29662e407817493690b45f84",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:buildIdentity": {
+    "sourceHash": "c29e2a89aaa5488fcd738d8c391ffd8cb1fcd7a709d0735b4f29d0dfb321f0a0",
+    "targetHash": "7f28db6220dd2678745f1ef8de13f293b8989c9cfdda5c0b73f6a17b499a0294",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:buildingGeneration": {
+    "sourceHash": "716297485243d1e104d7c2042d64c566fb2928f478a70dfe576fca8f268ebcfc",
+    "targetHash": "473d6432b0ccdb3cfbd9b844b3f43ad62737027ab4892848d8258bd2e73905f0",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:busy": {
+    "sourceHash": "c91311f01db4ab059ed17fcac56565f41014ab40e06f4354c874ca8ce3003190",
+    "targetHash": "aaee3bb2d51bfe136c9c769ba5140d98a3673d65f8998d78de696df9b31a510f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:bytes": {
+    "sourceHash": "75b1b17c32f1d2dd52f7328a3edb1418bfa8c1bcc63b7f06b5cc4eadac1d0f87",
+    "targetHash": "010c228d5099de215acda6cce815065c4d464197baf77639c535ada56e9c4e75",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:cancel": {
+    "sourceHash": "b36ec16c9511ca682de2a3275970bc5fb329f097732ac095ca9fa1c50262776d",
+    "targetHash": "b1dc4db4bc02232da9f2ecbeb5cd14671705cd899f4b6575e087bc870c53b979",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:checkpointAction": {
+    "sourceHash": "4461b6bcb6ec525cf03d875cd2c884171dfe8ca876989f30b70d1c108619a193",
+    "targetHash": "15300db91f18bcf9808e58e6de72ea5123a2861926af70d3e36daa87c33b5681",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:checkpointComplete": {
+    "sourceHash": "066ed1361b2fdf4923292466752649b2e569f6e9dfa77e09f008f7c74ecbc520",
+    "targetHash": "178a61cef5e88cb3ec43d15e0038555b9972b18f62497ef2d858fa9999be5fd7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:checkpointDescription": {
+    "sourceHash": "4015b3fa66dbd8acd7f06c6b62f9ede11568ee691ca11c1717e52eb1b24b1fff",
+    "targetHash": "8ccb6e91e1f874023fa499cea50404a437d972b25d28593957468a8b5f52595f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:checkpointedFrames": {
+    "sourceHash": "c3f07cbb043a1b19ee25752f215fa4ca46f744c575aa048b63f138c8ca78fe81",
+    "targetHash": "66c9827ecc537c26232778c5e9b2eb65783f02639a3f65b8b2d519a85b1ac040",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:checkpointHeading": {
+    "sourceHash": "e2f48905b5caedad0a5c3ac262b5c4297981a311cb8578bd5e5990a80f448bdf",
+    "targetHash": "2d186be8f2fe57a8d33d5d5a59457772ed6613ab57a543588a5fef3107c08ba3",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:checksum": {
+    "sourceHash": "89a8ebd996e23c0cfa5f589d427d8bc17be56bfa149cc1bd344b7e99baf2b400",
+    "targetHash": "4cc1d11b6507aab79d0c081a107fa1f9b40056b13dc0a864d7e964522a505f91",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:chinese": {
+    "sourceHash": "96eb59909be354efb93758ea0d5481f7056720b0c344eb554157a19066527fab",
+    "targetHash": "2ea6b2e5c10c47b0647a49a485a2a20cd28c210d9faac8324d63937817c6ffac",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:cleanupAction": {
+    "sourceHash": "ea9ba3e3bef5510e9dfcecc4870885127094b9d368cd7600577595b440fa9b21",
+    "targetHash": "9b2f9912781092fda477e1b38f6d19385d434910f8019937329167f2bd43702f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:collapseSidebar": {
+    "sourceHash": "aeaa6a86cd15f4ac839595380f24d6c2d22033882663a24c09b9962857182204",
+    "targetHash": "8f0b2a9b423fabf8bbb0bff67304bda6ca27a3a4f8077fb7e595a3dd8d2a1c8b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:comfortableDensity": {
+    "sourceHash": "09b90dd41a314b47591023510e56b162c198fa2360e0f72a798aabce327e2fdb",
+    "targetHash": "6efcc3c44e209fcfc7aee1d3f9fee514f9f91ba225d6dcfe2222b885e76941b8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:compactDensity": {
+    "sourceHash": "e2b5abd6456d29f56b3d7c7db6017a83188eb7f6a8c3c12c45f1a966855eaf79",
+    "targetHash": "e9d67efe3d34519bef279888332818de5fcbb6245342165fff2a299a36e163ee",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmBackup": {
+    "sourceHash": "f87f8da59145eaa62597c7d0cd0aabd7fea8bcf306986872f4a608d1efa0f367",
+    "targetHash": "3e811052fd220bff6ddca6ce6e57a8078eac8ab57083871075cbefdbf9870b43",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmCheckpoint": {
+    "sourceHash": "7bef988b41293b9ee1bd491de105480c6e67de2e3efa4a94716e1ca2e635141b",
+    "targetHash": "cd4b8fc0e9314aab3effde895f13104828bf4f66afc9b389d9c29f89e3fa3385",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmCheckpointDescription": {
+    "sourceHash": "f0b1afef275cd9d7d6a3f44af78fcfb4a18f75267d54695daf0d09d3ebc0ebf0",
+    "targetHash": "7b5b1f3b2750d2a5353509d8410178ee59b0ee0ddd6600e873e689bf3f3d4dfc",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmCleanup": {
+    "sourceHash": "a3ef180dab34417c4becaa2e5942dddcac6c4ab8ffc0e6b348f9d1d59e1f2c9e",
+    "targetHash": "73c4faafa62249f19b8afd0c85a32614853c378682d1aada4418199feea67267",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmCleanupDescription": {
+    "sourceHash": "f107742c2d260329671d42b7a66b69ab7fdef026abb92d2c53e00b3a9ec3c4e1",
+    "targetHash": "f4f830c987400cec9b3bd590c17249ee2ea3a4a84ace306d232f498bda909964",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmExport": {
+    "sourceHash": "dabc0138f24a8ea629fd768f275290a39762138d4b0adba914c93949d16f2d99",
+    "targetHash": "91e6adff1c150e63e2963097f8a1d5443d45ee7d4d0f140dad605c54bd8270b8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmImport": {
+    "sourceHash": "6b6c9503f7553f7fe5e7143a9d2217931534efabe61071b597500667c13cd593",
+    "targetHash": "eb8a7632d1ac783750a5ada7e78aac56f5f12969ad2ece10835953b72b6de26c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmImportDescription": {
+    "sourceHash": "9e5bae75535f942d0c82c8f6953bda67e065e0805418745ee4c8dc4507b2a4c2",
+    "targetHash": "b53104dfa4176bb8c2c2842ccc2a4ac1d4f26b553406ec4fe7fee65a2d868677",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmPathPrefix": {
+    "sourceHash": "149aac7cce980737074a08def156807c9c361ab853380096a8b1960a89aa0866",
+    "targetHash": "880551e721ba4c547969dc9f2a8205552da32b54d78f15f0fc129e9992f09378",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmRebuild": {
+    "sourceHash": "c900e5f0a08e69f44ca9abd3ae635f595cb963d8a9bceb0a3d3980873e3387f1",
+    "targetHash": "3d75ebb31a76d838195bf987d6e88a4ff58ffb6b1ca0225574ed9944e3b02a2f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmRebuildDescription": {
+    "sourceHash": "348fd8b428c84bbd2e8d67bf1b91767ff035fdcf713605ea15c74e852640e1e8",
+    "targetHash": "128eb0312b4229c96b5676f5601d9c83a1ebfa065b286a217be203dddf0ab4db",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmReplaceImport": {
+    "sourceHash": "3400b54744818994dc425f4920ada0b9cd633b9206be568516a022d866c68867",
+    "targetHash": "988ffeeba0731dfa91aad891a75a95d0d8f1e144115e12c12d03ee229f85687d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmReplaceImportDescription": {
+    "sourceHash": "04d6a22fc4cf0ce64bf4ba373ea8dfaf17191d9aaf4b57c81eaef1bbebc75c82",
+    "targetHash": "77191ddb789122d8c86c592720b888d78f010865c886f4eacd5168fe5a654158",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmRun": {
+    "sourceHash": "8aa1516053340014c77afda49f3f59e2dbb12bf6d14ef252b0c338042fd81338",
+    "targetHash": "f570eff6e746d1f4269225d837d84a1688296d07d7089095d4b9e2ebad4169da",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmRunDescription": {
+    "sourceHash": "a7ca76e5ddb89679bb318502d233c0a92cf7023e3f1785cf777252f0d8dc8a0e",
+    "targetHash": "141140248c53dfd6a59a045b7d48e699235bd90c9ecf5502ccf4d56b7c61316c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmVacuum": {
+    "sourceHash": "2b87f95318c9253c07a77aee4b1fae6c50c2fabbe5288c4c0eac28125134927c",
+    "targetHash": "50d317b2b9f274a1e73f320c622d70705b7b0aa57e37bc84cbc720a2e5858159",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:confirmVacuumDescription": {
+    "sourceHash": "76657d99a2950f182d7075cc83de894b0058b0203dbf48489726fa173baf9ca9",
+    "targetHash": "29bd3f0091ceae34511d468831da3ca9b0dff8f06c0c74a5fea8f62014e31936",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:connection": {
+    "sourceHash": "783ccfec08aaae58bac3315cda3983687b48645b6afa9fdc6452e9ed99395ad6",
+    "targetHash": "22e83c54a58e01be316ad2714ba7798a5048dd77401bb0ab0ce181317e8d37c7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:connectionAlreadyConnected": {
+    "sourceHash": "9fed26fa761157f1b761db2f74ec8b3c2a892b4f6299e717178acdc9edf038aa",
+    "targetHash": "3f93f184c1a8175ce0aeff4205077d74230212800cf04c6802058529e42dda64",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:connectionHeading": {
+    "sourceHash": "b70300a5fb25511f01b6dc6e8980811cb5c4c1a3c3d2cfa6a6ae27bfebae0c17",
+    "targetHash": "c7376e5187f1c9740634588a4df570f537022b61497416521575ef96c5d74d73",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:connectionReconnect": {
+    "sourceHash": "d4ae99b4e8d68636fffbfce6935301599776dc57ebb36ea5f6379a289671f275",
+    "targetHash": "ffbf652d66ac2cfa20da6ba168a09c7c2b9dadd7c5bb4426be38dd125f62bf51",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:connectionReconnected": {
+    "sourceHash": "f40d846b8fbbfc6fc7b440564e0b7e086882aa63dfb9cd5ee4af54bcb5706205",
+    "targetHash": "8948ff1f83a3e4ce0d075f9f2066d5ea6c295a8de5b5656d63afc86902f379e0",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:connectionReconnecting": {
+    "sourceHash": "95cc6d70c192b1abc5f5a4defab2dc5a61e932aaa5e9289c3d640e61388ad3ce",
+    "targetHash": "a531ac5b345fc9046ccde020e589339b0df56474b3d58f6a08772275afbf41a1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:connectionReconnectUnavailable": {
+    "sourceHash": "63a74f1ca74edfebcc94e85a92ba637bc78daee7b696eccdf54d9c9c35570b79",
+    "targetHash": "5f291733ee151201ad7668c9a17f31a3b500b57a51264d1478006cf9df70854b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:consistencyErrors": {
+    "sourceHash": "a1bce21b8f6772641a6196c6b40b77e51099c6024c3711db2181e11c38255ec6",
+    "targetHash": "339b7163c00736e745314690954c376e860e3ca7492ff2bd3ded53bb1b0879ec",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:consistencyWarnings": {
+    "sourceHash": "a8441d76b7ce1b6c2b021aff2583ee736a3c8b2cc75e654b0cf159de2d840fa3",
+    "targetHash": "6d283039ba6539f628ed49afef717e8d1ac9d8e364db958c3bcac005337b48cb",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:continue": {
+    "sourceHash": "58851d455a5e7129036c00efa4646cf17465af289df15ef8c4d80afd89ffb020",
+    "targetHash": "eaa891f77600a43c47c93f241568de97af153c9f825a3426f024d6641d02e699",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:copyDiagnostics": {
+    "sourceHash": "e1ff30d604b84eefa88112bda35398f8452ae17412da2dd7a8177bfab6e6dabd",
+    "targetHash": "c4aead088abb68e858084e59b9db6ca18af8e11d47e6f67668a370fbfcf9bcc7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:darkTheme": {
+    "sourceHash": "0c21fba6427594503525e1a3bedcbc65befb30e669f63c8e6a501006c1f73425",
+    "targetHash": "639a7c6de10b5f9f2a52e26721d3470e7e0bde7352fa2c27e45f1a6bd2432c2f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:databaseInstance": {
+    "sourceHash": "1a77189bcea914278d57f6ef218ba04994658e72c2219fec4a573389fce4f478",
+    "targetHash": "82f830cd44e73c1f85847bcc1a12f9679a7190205f99417efb788f7bd4084f63",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:dbFingerprint": {
+    "sourceHash": "1383ab8d0404b822d9b13b10bb95ea5a62b990402eee4a26e52eb3282b628e78",
+    "targetHash": "553ceed6ea57c0521eb8d79a5cfb731b745589253a72b14600a20ba795237fa1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:dbPath": {
+    "sourceHash": "281c1a48e8ed0620a0a55fb6146f99652cb885f40b3d2360860bd33aaa91118e",
+    "targetHash": "465f3a60fe6345ba017ebf85d1e97a376ccc030cd354967d79f31b73ea3e14a9",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:defaultBoard": {
+    "sourceHash": "1b5613d8cc3c5bee5181750a7d7a72722b5b78f8cb1e4df226259fc187fb507b",
+    "targetHash": "fcf7e2565b3dfcd5b279aadd913b0d80b9fc090676aea904c8a09946d18f0208",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:degraded": {
+    "sourceHash": "ce559e67347e4b5ec25a7a4c787c838412a5829b689ed32c07931dd38aa2474d",
+    "targetHash": "2e84f596b4121f47605c83a3bc6ffa60fac2e3714624cebbc2fefd642b21fc55",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:density": {
+    "sourceHash": "a08f4f0a27d2b06bd54e1bc3332708dfc2b12810b26cfd49ea88931b99510d1f",
+    "targetHash": "46db342a282fb63c8ca017cbbc467ee4bb622ba80b465e265bb26ecb041abec0",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:dependencyCycles": {
+    "sourceHash": "8f8a04cffe298adbc4b2252346f62fe1a72d00bffbd7357322545f6646618345",
+    "targetHash": "b19fc95936556351e1a898510817d07a9393c8b506f25a62a848dd436201a03c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:derivedIndex": {
+    "sourceHash": "1e2e82575cf68adc7ca8a9d8f39e90f7f8a8f194100aa8aacb325849f93846a4",
+    "targetHash": "2873f91e6fb25b1165c035c908504dd22a285a47f720571d290ffbe9367bff34",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:derivedStores": {
+    "sourceHash": "4152d7a3b0e1897265185ad70dc22a4e2c5728947f81cd240c3440baf870790d",
+    "targetHash": "9a8fefc17b834b79d53d4038a79eb9ab0efedce0b5b87d4bda1e2477ba2b77a7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:diagnostics": {
+    "sourceHash": "ea756baf136e05a5929263e38c0af4b42de8ab87dc1651e3d6b3165dd2c8a715",
+    "targetHash": "f0f65f5ba92819a0d1fd44d7eab19b6c1b64e16e20d79a9a193d5d3487dc004d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:diagnosticsCopied": {
+    "sourceHash": "4d78cc76c6d36caddd6bce7c62f6774894c3510aaf296823948252077e99360e",
+    "targetHash": "a7907a05a27429da2461f946f36a67b7773814f677b558bb84a2b8dd918af497",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:diagnosticsCopyFailed": {
+    "sourceHash": "8f2719f9c73f46011603f5a7a5171842ed3cbc3790a40728612847de7bc9b2b3",
+    "targetHash": "c82e96b4d05e4e8d43cb7aeda381733df887b22e1c1ff6e830ebc4e5d70fe0e7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:diagnosticsHeading": {
+    "sourceHash": "30478a9e1ac5c141b7331611e5b6f666401925b65e27ea3fc57389e11dc3aa74",
+    "targetHash": "b871ddbfd6b3be7aa1a5107773a8b604364dcce70a5de1855f3659f76c04a1ff",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:dirtyStores": {
+    "sourceHash": "9f821f5162f91e438f66f0f63fab0bb632945b00873089e0386a7965c1b7d83a",
+    "targetHash": "667d5d23b2853fd7f3b684c5b3ee484196f84d406b145836ffbccd8fd555ba25",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:doctorFindings": {
+    "sourceHash": "cce34231af8035923b24c50b0131978a8295b955aa05c1ea2a623da32f2ac3b7",
+    "targetHash": "01f504e114c84448bdb6f91720c908aa0b654f835760488c6cec97bc5df47a1c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:doctorHeading": {
+    "sourceHash": "ea756baf136e05a5929263e38c0af4b42de8ab87dc1651e3d6b3165dd2c8a715",
+    "targetHash": "706f7c02c22bb3bd0023aa52ec4026e64359cc2156626ffc3a87826c640d9b43",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:doctorOk": {
+    "sourceHash": "fab2d8a5a951e097f69b8a1f210387b6e7426ee17beda30e6aa135de94b8abd6",
+    "targetHash": "2e08adce9fe5e15b7ed39bab59842480d03774d94a383773aae19a9782eeead4",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:english": {
+    "sourceHash": "7d4ee51d9e48bd644d2d3c1b5975a8d16fcd5a7f573083799d6b2509fbdd24a4",
+    "targetHash": "5b22376a9c6d0abb9f3cbb36cd99b17e6328d1f8b1a5f0a6704fc15fc1e2af43",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:error": {
+    "sourceHash": "c1d033516bd5cd8922f37134697b9bc35df8b9400dc25008e08a32b952c382c8",
+    "targetHash": "32243971cb1dc7fcdf9fb0fe4dbc758bd58d53ba98d694aa7618281df892ddfb",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:errorDescription": {
+    "sourceHash": "04941f4b5e014030998cee3594b83d1d9389e14aca112ac35c304c6b8316c085",
+    "targetHash": "8320115823229a94876d0abc50943c66ae3075cf934c9678b92bffc12ccfd6ac",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:errorPresent": {
+    "sourceHash": "b9e1832566d43fac9cf4056960f6911cf5dae434cdf84a1d7ac8d13829ee4834",
+    "targetHash": "4e1c074b8369c6010cf5f3705b0e76a038ff593bc95dd92620ccbb1b82424284",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:errors": {
+    "sourceHash": "d2d21764ca78b0b8bc75914b85fe0178c80d613541101cf9014183161f8fb3cd",
+    "targetHash": "b5330076eabf795c847b50faddd771ff17e1d97d329edb9f19e114da2c6f1b5f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:errorStores": {
+    "sourceHash": "62389a1d0d844672c32dd63527879ee065edc8b52beefa07def639a178ba285b",
+    "targetHash": "92484b488145844ca7bbac8899f354e9a3eda86bba52eda071d546bee5c35e92",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:executableDependencyViolations": {
+    "sourceHash": "39d9308efd6dc7ce831b07e473a7c144363537083b7e30c1052f54d63dd5f6a8",
+    "targetHash": "1f070eb5bb4f9dc694f12665439ae46f47fb93a5cabdb670bbf81a76a8005e16",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:executableScheduleViolations": {
+    "sourceHash": "5b081eab76c638bc17f2599976f5fc8f5848eb1df499fa32f4b15a7bf96e78e0",
+    "targetHash": "775bf1f315a8640469d6ab94755356ae1a7d82e019d7f3891527500110fef0fb",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:executableSpecViolations": {
+    "sourceHash": "79133f97360fcdd9b33ed1e667197710f87d4fab323af0c57c4872f2c30a870e",
+    "targetHash": "ef25d95608d5abf8093810936d464189cd74a36376d44cafcf869fda689aec37",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:expandSidebar": {
+    "sourceHash": "784eb0dc43769c61b69cbabdb69939ccf2e4baec9c16f2f5932d1af511bc95f2",
+    "targetHash": "5e3d70b40a6678994570fb61df81832f26cc8e682d99cb3f45ea2c369276390e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:expiredRunningTasks": {
+    "sourceHash": "086b6f53d4998b57cef0ac5c8d203f47af9e0ed36decc9d30584b3bd6cadedcb",
+    "targetHash": "aa598df0b6ab60b02c8bc07e014ba0c358c18611d535cddd4c1bac2d5c824da1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:expiresAt": {
+    "sourceHash": "8681168bbf78443f37f1b77397de0b81d7c798fa81e3db9c4918040108fe67b3",
+    "targetHash": "14fabb5bf39e9d8451dfe7596a06e51f732b7fedce4da91ad5a2b78c2845ebe9",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:exportAction": {
+    "sourceHash": "31e9654496b714ca3b548338e7467a0183b36d773335a62034cee64cc4265bc7",
+    "targetHash": "c13bc11bb9fdc374cd7415d0a3f75e4c3ee8ef98e1ff916bbcd4f0a9fd821207",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:exportComplete": {
+    "sourceHash": "d5b448a7c9203a3215b3e8fa601d3dac5368e74b674d4c718aea44ffc5e69b6d",
+    "targetHash": "95d3cd33bdb272995e52130847bbd3bd6680d3954eb619c70751cd1642fc61ea",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:exportPathLabel": {
+    "sourceHash": "a7ad564b9482ab7fb716dfaf4b84845a3f7fae3aae0fea0d61a98f19a12db47c",
+    "targetHash": "769b45d3d6b0868e34c1f0186b545db6517649472e89b136a146249d54931151",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:failed": {
+    "sourceHash": "d39a99ba6e1b4bd45e38c5db9bc020d7b0cf0ff2588f3ea1b1342822bbabb75f",
+    "targetHash": "66daff25b8654eaba603e3343ba3c3bc200757d753455782854ccc6c006f5048",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:failedOutbox": {
+    "sourceHash": "bc84fea672562c65372ccf45e4d4eacadbf8bb46858457c9ce6d2af2f6e3dd2a",
+    "targetHash": "17dc84664a40f2eb38a94a0e96c63f384f568e39566826d6baf1062caf928b50",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:featureBoardIdentityError": {
+    "sourceHash": "696ef91accce48f6ce237ab8e3cf214a52cd3a241bc6e45b15e0caac4a425325",
+    "targetHash": "57b372519237d159aa5c72d4f4ee4e73a94ff4bb85e74edc62979f8b53f0fb6b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:featureLoadError": {
+    "sourceHash": "28daa17fa1d09c448be865ae79d8e64aac1c29b11780fa3d51ce367442b816ce",
+    "targetHash": "2a1a23ae9c65bbbfda0c8d33ba5d82783b9167659e9ac9bfe50b91cd606fe171",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:featureLoading": {
+    "sourceHash": "d73c2a6a7d05622e4b06973c29d048b482bde67a9813f5dc2d5a5f843417fcca",
+    "targetHash": "851b47e62121b7c4216f2e65f98da5991915c40a8b0d9eb326ee212fc5dcfe22",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:featureResolvingBoard": {
+    "sourceHash": "6483bdcf7dde081de688640e02dd299a531914c728897343210eece6e8204ed7",
+    "targetHash": "77879366329be92d597c583cf41a608802f0ef2f802dd1b73897e84220435114",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:featureRetry": {
+    "sourceHash": "3a12b6dc93fdae6a387007d82774c2f06bb968d60be694d0202f5cb9373ae3f6",
+    "targetHash": "f8a9e3a4da7520efe88a83652b7caa8c3d3bdd34d9c5483e143eec6bc2f6995e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:fenceEpoch": {
+    "sourceHash": "c2bae3332a48618935eed4077ccc1bfe4cded5d00d8f7153e72de3fde3d6fdda",
+    "targetHash": "1a06195e7442d91c43969acc5bece90e7670caa70cf5a538d81966a620a68806",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:generatedAt": {
+    "sourceHash": "a3455d7faac0793cc9a3b99c6f2ff60f4de7d5170d3a5caf45c580bc3a796ad4",
+    "targetHash": "57601935a6317885d7e0113eb0508411b55e12d2ef1c48beab1a4504dc8ec070",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:generation": {
+    "sourceHash": "ad0a016c7580d434cb2124fa460cfa8c2bdf30444d612050f38773a09fc4c9c0",
+    "targetHash": "13e0522e7fcb106078cc3396d7f6ef17d16d06f5b691ed06d546a77966f2d364",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:health": {
+    "sourceHash": "6d2fb2e1488d9a1a6c568056444485d12b403fe397e3f554c3e004762df5db67",
+    "targetHash": "bebfee396769b6f46379f66b6fe5f1f75642b7b1d005de8e0619a2d5fb81b5fd",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthDb": {
+    "sourceHash": "1ed43e5f3d2ab9b8444d07a693d20e3ff88170a710b49cdcc71b417edf5a0e6d",
+    "targetHash": "a3677286bf23786315c5f5b659b8b3dda7aab033015ce11f286670cd1915d8ef",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthDescription": {
+    "sourceHash": "4e6aa42989306880fa1790d7a9283ae86b8473ec9d635911c16fd6c94fed9466",
+    "targetHash": "b08b7a9b5af33b457433c00502618e9d4152599f2637c5135d76154bdb3a5f69",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthHeading": {
+    "sourceHash": "e6f5b79044f8c283efb5098c509608d8a2b22cdcc09920854443da072974aa7d",
+    "targetHash": "2e3540b3bef0b26e485a7ea7b37c96e964d49252e5258d58f4414cb56dde93d5",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthInvalidResponse": {
+    "sourceHash": "a36a3de8c3f7a6cdc68d906af055b459302b02b16f9157daa9e6aa5c8d828c33",
+    "targetHash": "7b6f94fd808a48b52bd9975b36b964cf9748c856844e211f0206fde2afcb3c8c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthMetrics": {
+    "sourceHash": "49dda600c18e694c087bcd233528b4afb302789b77cd174b92fca92a7ed59c14",
+    "targetHash": "68e8faa322bf2d74fa55780d525384ac18e19dfdf149ca149c4f833458685293",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthOfflineError": {
+    "sourceHash": "ccd150eca68cfe17edeeb663d6051c1e3dbe34db61a3f786ec1d0688eb44fa34",
+    "targetHash": "add8b34a664df5985007277309dad59d76f2dbc0d9470f30dbf7d1a382bed341",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthOk": {
+    "sourceHash": "31c10a45194f6222855c1897b8e9aa1428aaea8e0cc6c9f37730e5a5d56651b9",
+    "targetHash": "faa8c96d06137301954780b8233771201518e3ef547a0578f638f2d85a36e542",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthRequestFailed": {
+    "sourceHash": "a167facc18c725ca400383d68de6da98365af0b921450a0e1151707a8e30fd95",
+    "targetHash": "98c172a8cf69651f2eb1f68386e569fd27f897141db3460696fac45f95342950",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthRetryNextStep": {
+    "sourceHash": "cab6278b2b6a72ab0d120810ceb64b99a6c6b5fb6a72a028a69aa54b37d88adc",
+    "targetHash": "89775a08710e2e3313424aea0afacea19532d68e7a23f997a8041ea38cd9b3bd",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthServerUnavailable": {
+    "sourceHash": "777def79e761e776cd1bb486a50987e3a6d264b9ef8292482418b4c657c9ae26",
+    "targetHash": "f590a45c4f14e14704ec7b2852fd159041bb7756f5f4421db59fa91ba0444ddf",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthStale": {
+    "sourceHash": "fb2ebe54d47df410d631da24dc1ea71ce4298beb3ac337c7dbac7404249ea255",
+    "targetHash": "6f43d7090d4c8b78003db4e0d40477f19c6a9b8aa5be86c21adb7a8f09b9d8d1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthUnavailable": {
+    "sourceHash": "291b3d59cbb171e2c326128499acbe5f12b2c7caca0dea7600c80d677cbeeaf5",
+    "targetHash": "141384de8d72a584813e729df44187b9393656460d629c0845aa29625c5b2310",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:healthUnexpectedError": {
+    "sourceHash": "352723ba6fac579c42472e53c05dd01643932ad22bfcb9b0fd8e4c893b463299",
+    "targetHash": "4d8f0cd564ac7590cb0946ddc0fe6e153cab98842ba1807949ee8bd74f231b11",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:homeLoading": {
+    "sourceHash": "a3e3be86e64d6eee2ddf25567103014edac6f55e69019a85fec3f61b38d7a4d3",
+    "targetHash": "2cb389b58a5b91f435b3b1dfbb5daa1a945a77c166d6884ef90e2ae4169e8e3d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:homeLoadingDescription": {
+    "sourceHash": "477689d3ebb740b225508c646752680963166f9a9776474addd751f89f55b987",
+    "targetHash": "a0aee9626e7582c1e3d2a00c34d47671c8073b126c911f1da46cb613d035e219",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:hostAdministration": {
+    "sourceHash": "dbfd5666baff67a6b2fb40d3f6adc2143e4a7925e50753ba081d864dbb107d02",
+    "targetHash": "509c9e8cc6fee1a052fd0af6177fcaf7041efb25334420fcc5d961300a29f7c4",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:identity": {
+    "sourceHash": "149d9a39d5799fc0a78a5cb2a4f61c4d9c96804321aa92b74d63b3c1f0df355e",
+    "targetHash": "a4ac066c2bcdc1a9802baf482d1a5fa0c446d5247ce09d6730c0e6e3bb76690a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:identityActorHelp": {
+    "sourceHash": "9b7df5a9d29d51ba6e25b15be48d861f6f13a05c44480d05c14b8ecb1c246e31",
+    "targetHash": "9f65774b6e06163125397711453396355fd70295cb93ef34bfedf03fbe8b9c29",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:identityActorInvalid": {
+    "sourceHash": "3c274bbc339576e6c9ef1a3a562a9de6dcbd171b18526f1cc63bd3a60907523e",
+    "targetHash": "75d3beb98fc044e1702e9a974b289365fd578261ac5ab1bc1bd753406a2b1ee5",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:identityDescription": {
+    "sourceHash": "6d24cf587d81f1cb6a6909a337f2188ce738ed8ec0b9a60eabc944f2a6a78d0c",
+    "targetHash": "e4853eb9099c29d64dc1ade994fcf32e9b4db2ec8b11c394e38a661d2300ee7a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:identityReset": {
+    "sourceHash": "89fd557c927e55e08002f87729c7958179836d98b9143eae1284e30ccf47cdb9",
+    "targetHash": "56dda2b644a3d3f11ede9ffb379c0a7e2393bfa308de01d984bef947b25d9b4e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:identitySaved": {
+    "sourceHash": "fa9d54263ecfd2dbc7eed3de246dceb15923c2155dd0fa7b16b5ab979d367077",
+    "targetHash": "094a04ae31927ab341a26ad37c8a773868fb744a2989141d87d0b1f1c848dd94",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:importAction": {
+    "sourceHash": "17d39b1641e7280a154fc8cc219c352894fb1fba013a1a11e78e2c78dff61bc1",
+    "targetHash": "18a5125438c879dc68f441d8ecdf525a2d3e9ae17284ee874552d044fa0649ab",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:importComplete": {
+    "sourceHash": "80e53e30dec6c8ed37e3986f28efa50a73986c73d3738adaa0928b060ce2aded",
+    "targetHash": "28bfa3cafa3488ba7c8381a6b88edc9f3e6ff37f426828c0a670e7f2a2aa98d1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:importedRecords": {
+    "sourceHash": "5fcd5498983eb4191aac3f44eeeb2d24bfe1ce05c06e9ff7cf43ab8f68b8a648",
+    "targetHash": "7160de3d3fe4764d6860c5eb014dfad0e2803b172f1b10aa2c2428578982ef2e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:importPathLabel": {
+    "sourceHash": "2cd56054626da006eeeb7a3d7a9a6ed856a75fe26836bdb58ad355c50ee55340",
+    "targetHash": "60c533cb183e238cab2c2df42cd8e915c710ca955f8583b3474aa9cd2c701a37",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:importPathPlaceholder": {
+    "sourceHash": "10e90a3cf08d5af10f77098afca9fa016e4605aaa059f31f800d448caee62115",
+    "targetHash": "88225dcbdc8e1ae07f5f78bdbd40bcf196dc16f25b5294fcb0cd2e9416178e39",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:incompleteRequiredSteps": {
+    "sourceHash": "8fa1081912fef579d5510aa7cc2aa0db5ab33452e8b1e04870a2abf54af924c7",
+    "targetHash": "2c4ede0a8ee3563f8bc65582f2a7a9c798d416a2310898be518336d3b96e9c4b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:integrity": {
+    "sourceHash": "2372177cd150b46c1f491240c8f14b6754877777e7146b74c86110c600f990ee",
+    "targetHash": "5e969470431c90d7367d6cd26840a5927f20205cb1b8485e643963a7096888aa",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:invalidBoardSlug": {
+    "sourceHash": "240a77cd3082b023ed53c458075f3fdd01e45aea271dab7e7f67d0364200bb2f",
+    "targetHash": "44485e554982dfd508cdcf310043e4cb0d20864ab9cfbbdbbf3812e750febb18",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:invalidBoardSlugDescription": {
+    "sourceHash": "fc8fccd114b0fcf3a4d94b0aa8eba72f006201f47f1ec43f24bfae9bcfba43ec",
+    "targetHash": "1f7f93f0c8bfd422ebf9f3c685bbc3d7596302c65c436263db040070406d7c4c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:journal": {
+    "sourceHash": "44d5340a6b20c3c63b036a1d06ddcd643d202f8355ccecf91d5931bfd7e25494",
+    "targetHash": "3c48834a2a6f3fa87424d02cefd063c7db7fc181fda7a7c4aa573a777b60e9f4",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:lagEvents": {
+    "sourceHash": "0ae2411fcfadd6ba03cceb83882acf35d317d94ff6e3b04b9f6d7e86033cbab7",
+    "targetHash": "03a6acb1ea939b1d4cc33a4624a34de2013d4604d643e3267688a40a5b20bee6",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:language": {
+    "sourceHash": "bcaeeb89b9a4c6aa077ab445b874b8d51d178e13ae44ed3cb795919316ef456b",
+    "targetHash": "7297bd67e5a39fcf1b67ba75235df3f348f505e0ebd5400e9d9e9cf2a9d374aa",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:lastError": {
+    "sourceHash": "00b7d2bf55f86c2668d8f5fa919d2f3cccf1cfb9ff73296d680e46d0481bca08",
+    "targetHash": "b227085910372c12e1a489f49c355ca53d73baa57c1b2f70b313863ef0df571f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:lastEvent": {
+    "sourceHash": "edf82d0a344d493acb15ffe632f61e862c8bc27b27f0770c2abdf49e5b756f9d",
+    "targetHash": "d68f2973a4dc20b3e107b0b3d744a5f0f07960ec7c8500ae9e2d2ecd558318d8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:lastHeartbeat": {
+    "sourceHash": "290601be952512ea948f219e72cae73e043c68ae10519a6e267ff001f19aa6b1",
+    "targetHash": "9e0a6c82795fccd88b1e14d90272d302d69e3307f6ed1b778f6e8ba076dc2149",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:leaseExpiresAt": {
+    "sourceHash": "1d384a3551d6ca24e0b70f06aeac43aaa01e39cd493bf107baaabb304463a17f",
+    "targetHash": "a4c14aac372c917a161d26265b9ef50ec494118a1b8fa8d0a2229628bce00f89",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:legacyImportHeading": {
+    "sourceHash": "74dda31fee253bf2ec989c15ab92cfb1b756588a53faf7dabe88a0e2f33a4325",
+    "targetHash": "48f17a5f548c03d9ba57a87b1b87bbbd3930d23b33857f9c9f88451989d843d8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:legacyImportUnsupported": {
+    "sourceHash": "9049257d38a91dbf0f83ac64c81a922f2a8e88d58b348393a22463120a2e1725",
+    "targetHash": "b505b584c4a707397aaa27744aed2e67721a135473296b0ffef59a6997e3f82b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:lightTheme": {
+    "sourceHash": "760c4d20646ecdfa6202b6515534692f6b8ed20d396e4c08bc04099ad1ca0f4d",
+    "targetHash": "e21e5fbd49e8fb0c63b02c0928bb96cb135e65d69df443f7bc38656f38864421",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:loading": {
+    "sourceHash": "b122cf165e97a0099e0efe766173fc97d8b040f9b7a8d9c5a1f3a0f8525c5615",
+    "targetHash": "f60cd6b5e7d9f17104925de169951cedb224e3658a5cedb4f0e0fbdbcc1b3f80",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:logFrames": {
+    "sourceHash": "51582f5463ac6af50f75df369229615633c2c6ddd52403ae6c300b6e766e4720",
+    "targetHash": "1c2d318ab658bc71427488d3e227412cf7a41e85043d865976abab1dff53fe4e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenance": {
+    "sourceHash": "bd3c79c9ee4964f83b428e9335c5c9e7b51a26ff95b106eebc614582601b9f04",
+    "targetHash": "fb200224ba98cbfa3ded4d29c8508b3e05b2ad6ac49485e04932be827bdb2463",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceActionFailed": {
+    "sourceHash": "47f89cfcdcdb6ce6eab6511197ced4da09750bfea5f73e047ca984c3aeae77d4",
+    "targetHash": "358c7b4eba67fe0702072f419f0e3be6871ef50d0c147a0c3630137caf3d611d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceComplete": {
+    "sourceHash": "368b10063551fee68e65e51f50df63691c535f757f4a995343c0135db42b322f",
+    "targetHash": "232b417ec55f6a3e4c4564b9b6eb8049b184efab42263171a22ad46f4d0d4e8b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceDataStale": {
+    "sourceHash": "590b055271790ec9d15bf0ea4f8a96e4613deea321c9eb6c6a48e329744a028f",
+    "targetHash": "950f7ab0da0c649a243124407a2b8eade075b2d97f2705771434faabe066422a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceDescription": {
+    "sourceHash": "a6140887923b45f1e819aebb97d4c021b85696d53eebe5d8a016d8697377dc0d",
+    "targetHash": "b467961ec5f4011f68e763f42cfd52e06b3b87a0c9c3d8a9b29f3cacef73825a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorConflict": {
+    "sourceHash": "f1a6ffa72a5638e5ba3e399a150b35aa161835edd21da47aa45811670ae1d3cf",
+    "targetHash": "d6ec5d6be2ff8cb7dd01096771ee137f74d978a13c36fe3a8ce3ad753632667c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorContentType": {
+    "sourceHash": "af4ec833238a393583aeafd9859c67f337782eadc08b81fb6287236d45e7789c",
+    "targetHash": "dfc284efb7215681d5e3036a1e52eeea80d7a568865c16a2d94cece0aa061ab2",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorCrossOrigin": {
+    "sourceHash": "7e70377b84d7d7ac3b94245d9edd712a62be6d26a46b84b47c1b2743b48d6d91",
+    "targetHash": "92195f6c20fdef3c9cc09c10f52083f40affc139d910f020b9b0318714a623c3",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorFeatureNotAvailable": {
+    "sourceHash": "cb5e1c5ffdbe8c16b1a9ab546d5afe337dd39550651ccf0ca8847356c2458b0a",
+    "targetHash": "5039acb47b430da5f123c562fc46b36f582969daea3ecd42964e5a11e251d460",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorHttp": {
+    "sourceHash": "405f0f46a9f4070904dc671a1454042369b6bc8ab648fb2c8fe90ceadc3a9eea",
+    "targetHash": "d423c21b8935122c38c8f9f003a29dee4c5f54a47724b80c647b0b8bcbac92bb",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorInvalidBytes": {
+    "sourceHash": "a862f3679013da2eee94ee87d71dd7924665bdf4c65c2ab456f6ccbf9b8079be",
+    "targetHash": "03c53e9b323045ed6e45c3fa7ee1e0f30dfd89fa15cdfa164f91e43aa1fea068",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorInvalidContract": {
+    "sourceHash": "043c36ed03d0786c4385e3c752cc1377b341c529dcd056f082e4b7a020ce3ed6",
+    "targetHash": "9307876d6404048a949458cba0b59094fc1c1d1abb01b9c96dafbc1eb92f1697",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorInvalidHeaders": {
+    "sourceHash": "d032674c60ab2704ced7d4029c9b5401c04b8866d0d99f8e44aa6538e8819dc3",
+    "targetHash": "212dd00731b4896cf95b17086caa2955ba1c784bea524d235856c11911907bcf",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorInvalidInput": {
+    "sourceHash": "7079c200547596713b88715737bd8d317476fa4c97f1d8672b24f8b5f5476538",
+    "targetHash": "d75cf91656f241a74109872557d7e7dc17d6a5b050874561042b6fb9e06df7a5",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorInvalidJson": {
+    "sourceHash": "ac009d06f1778be654df86b7b5d87f94d713342fd426f296a910bd8c2d3eec67",
+    "targetHash": "761cdb6040eafd0779ba7c1ea858c49e90e14e1c717fba3bec7918e6af088b60",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorMalformedUrl": {
+    "sourceHash": "79e977babe497fafa3c2451a0d124a9c0e6602a99be2671e7a20351ac1be8c4b",
+    "targetHash": "adb59eb4b857b628bdc8604e1c356c3704ddcee161d006800965a2648de9372f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorNotFound": {
+    "sourceHash": "10a942653b51fc220fb248c5f12d3b6225ca221cd2c43a423f95da6cab5a92ce",
+    "targetHash": "b17cc519ee5dff0e4efd78f370bc18a02af4b012c4e458709b58bdb997ad544e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorOffline": {
+    "sourceHash": "d30d3e9f0ba2a4e0d5c610d3ffaa81d8ae6a0f27d802d7ade764e3c892b5d545",
+    "targetHash": "933ca7b9f97ca363f1449ea657e85668943437fd3d8077c2ad0e767e6f06f602",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorTooLarge": {
+    "sourceHash": "51aeea9a7a2e9d0237442bb2732300e19090777aab789e50f42b04d2eb96e0e0",
+    "targetHash": "3f548d28d0d9fb7920aa1e4095131a6d2745da057caf881ec36d43ff1360e272",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceErrorUnknown": {
+    "sourceHash": "18ec11cc2bf91bec597b01d0e6b7f17e4ad7070d4d7ceec4058e1beafd422039",
+    "targetHash": "67edf171183b5fee0afdae568b109694b51c533ee9deb21bdc8d4f69c1568e8d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceHeading": {
+    "sourceHash": "4766c75d7317a925cd30932b2046e302fc3fdedb4a5f3f01383f90af71c53710",
+    "targetHash": "ee00aa88111e79eac2813b53a734933703209e6f48b1345d3123b84ab9532842",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceOperationsHeading": {
+    "sourceHash": "7c292d0079805b0d50373281db4a8e8e5b90bf04aca42493db86fada3d539332",
+    "targetHash": "d3948970e664c1aa2ea7eac6e1c6b9b677e9f63e207054ec9473805c878d43eb",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceOwnerLabel": {
+    "sourceHash": "f4c150e1cad7b89cfff1e85843407120b0f1bd6a8f362de67e027696d04924b4",
+    "targetHash": "aa46ada983481ba6e352b5d2342d3fe5dd2ccc5deddf75a42d3e9241a62d9426",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:maintenanceStatusHeading": {
+    "sourceHash": "6c01a7a7789e59fcf1341526377a57bfdedc972cd64418026c8aaa3efc1070dc",
+    "targetHash": "ac901ac1cffb6dea3aa3ce757075eae66bdc0eec5a5bbbd5296a7349f9d6d50b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:message": {
+    "sourceHash": "08c2d0df934690c919ed10c89f6290fec21411ad2be99dbf38c2065e70300bdf",
+    "targetHash": "b4bbd5f6c6920bb06020df585b3b4368119c58554b60abee83c6f7a851e30880",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:migrationVersion": {
+    "sourceHash": "afb4f62228ae9103c1a5cc06a2f669f6fc2049aa467c1a07160a7b67127c0f3a",
+    "targetHash": "84b9a79d5e2535d5995f8e2766a7c683b5ff806d0d1061f6fbbf0c7695963ca6",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:missingRunLogs": {
+    "sourceHash": "cd2b4a020a949c3e17219b6344e52c60e164a7a4590c26acab391bd89251d62a",
+    "targetHash": "0ba4af65c4cca36a59f5700a4d6e33a7700ae405e195649e18ba91fbe5a4ce33",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:mode": {
+    "sourceHash": "528761dcc17a9a167ae833b563280e5b1ca4b6dca89edcc6c36472684d6488a8",
+    "targetHash": "3d1cbfcf8bffb0af438578227c05dcf9a61d33a85dd56744b1aa6d2f18d61332",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:mutationSubmittedSyncPending": {
+    "sourceHash": "41fe07a1c608c43cd64ec487bd3f821e4337506c66ac57246bb6467d460c97e2",
+    "targetHash": "d0cafe3f7fcfa39ce38c8ea07bdc68e1e068db65db3a7f4a1a317370d55978f8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:navigation": {
+    "sourceHash": "87bca8d021ade207f90a5716cce118b147c73b926fe28d01b462c4af61b6a58f",
+    "targetHash": "c5d26b615e69fe7e286f4468e4d85248320f24479a0281bbab65fd541ce619ea",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:noBlockedReasons": {
+    "sourceHash": "77a4443a2d2390146a83c231d05fc4e5486ec8d32a838396b4af660d7443311a",
+    "targetHash": "10d83a7d51b2df1778bd4acb4649b4c001788d1c8b64426532e83e5113a9267f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:noBoardDescription": {
+    "sourceHash": "11840a6d9c7ae4250202563675df4dd0d1c458d7934311313d3d4dadc0a835df",
+    "targetHash": "91cc06a7d8f17ea359810526f991611f3fe0a22b08606f726fe46833a592c848",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:noDerivedStores": {
+    "sourceHash": "bc37272056292dbf13d048306073ab0c1e9a8dbbf196a476ef4630bab2e20578",
+    "targetHash": "5683fc388e5ae7a7329de9d71795dc843e7b9526e579d4646cfc72e35fdbf8b2",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:none": {
+    "sourceHash": "5aadfa9b8c20e7f5f18217785ec73be6c4b37d589666eb2ee3771b67990f2c67",
+    "targetHash": "d139946583df99c078dc29187c3e2ac6143af26aa6be6426771aa66723ca1c58",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:noOwner": {
+    "sourceHash": "f64f233094e13fc72b79ae22c20b99fa05140bc58f6bb4d2ef9121365d2e81d8",
+    "targetHash": "37776267db316a6610e18f5054103d06c09ef9a04914b85f9c401e5f2fceb276",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:noProjectionStores": {
+    "sourceHash": "b692209ba8f3a4c399cc58f5a9ad6539b16b89be2884add3a530dec99f7e8698",
+    "targetHash": "11177a2185d4aed2022583e074592dfc444a87a751beb48c444f261699f69bd9",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:noStaleClaims": {
+    "sourceHash": "809bdecf56bb21eebe99e54b0b1c3191cf6a1227a7b085a875a18b63dc30fdb0",
+    "targetHash": "d201445d7aad243c6be3bb1720d55f2dd298527a2dabff15e2cd8410a892dbd1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:noStatusCounts": {
+    "sourceHash": "990494bc0766722e29448f7e303d0171fbd56db99de748df6b8a41848f4aacd6",
+    "targetHash": "707c03be8d20838b5aa9c9fa95f17c255360d10b2f2f6b262f717ce82cdc59f3",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:notFound": {
+    "sourceHash": "f87bfb41ba386e24725b329e7533fdda600197611d20bc3fee02fd273843aab5",
+    "targetHash": "89b9ecdb9c8a2b50ddf5a57ed53a6ced40c8b82d056004088152f9cda226935f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:notFoundDescription": {
+    "sourceHash": "e1b6142ccd135845c67d16718305fc1fe6b13ad2e843d315108dd5228c9363a3",
+    "targetHash": "a83c933b4f63642ce1e1f0cf5da75807a39463c2cddc8aa49baebcc683e62d2d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:offline": {
+    "sourceHash": "4f992103a787bfae447c164316c96799b349a4d21ac7bfda9b214b72efd7c114",
+    "targetHash": "b2d2603662f1ecc737c2e05c40ead8f793112321864782192c69de27366a80c5",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:offlineDescription": {
+    "sourceHash": "050f2b33b84264298954729b9e91057bdd3b9156ca822a6824fab990ebd5742e",
+    "targetHash": "f7d3f856a530c3bf84b97c0c34d51287ea8ef5d352ed06d54c40dc946b55894a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:openHealth": {
+    "sourceHash": "b58976e6455cd997414013c7d50a68acb2c4da37c25d58f05a2d7a88a0d042ce",
+    "targetHash": "273d8e2192e061c8f2296ea9aefea542e9532eb454be944127c2c94d4d136e95",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:orphanRunningRuns": {
+    "sourceHash": "8e72f8ffec44c4996fd76b90ab94ab070eed150be1d14b1e5608c9bdcf704f86",
+    "targetHash": "8f608449fc132a59f9065ff34bef78c7152281a771171107140bcf4efa432d15",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:outboxFailed": {
+    "sourceHash": "8a34d1a5f5417e1cc6be1aa67e1f2651b92256d9956872eec2288960b9133dba",
+    "targetHash": "c8bc8ee72f209451c61011452e97019992b3c870293dd75535207d0c9053970b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:outboxPending": {
+    "sourceHash": "a2c4d1d5819412548fae41d1a01d4879a1dc7dd712252e7f79ed90498ccb772d",
+    "targetHash": "a43e90154ae6a2106e355af02d4fc0b6f6ddf2334ff8ef11fca2cb183fcc8643",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:outboxRunning": {
+    "sourceHash": "091fc8c631bf3dc9efb077340c2c6653edd30c2b00a2f080500252e161baaa1a",
+    "targetHash": "3d613d63a425c717fae3da5a0f167e831f6364f9a2cc9e4f047860d0bbe01b16",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:owner": {
+    "sourceHash": "387d05cf7c29cfeb95665f8efc79aa6c226b5d8a8ace975f7b93d21c6eac7b48",
+    "targetHash": "d94234bb2b32e2f191fa362edbacef8dbfcf8a2141a1e818c038deb958b4fb37",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:pending": {
+    "sourceHash": "d56d1413f6ec4b75727c4615c0d908c4ea24364dc6997f2fe90aaf9d3c19d33d",
+    "targetHash": "7491fd39e0d6a3929b86c34b09f30fd0f7a336fcdaf0fa458b325292903fad6a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:pendingOutbox": {
+    "sourceHash": "6363978ad56c2e99ed5c94f45092e215816c0e2774fcc5049000340e2f4e531b",
+    "targetHash": "ee93ef58d0ab9319684cc8d49f00a8b45d17900aeb692910aa0e9b0215305831",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:phase": {
+    "sourceHash": "25a9c5d5a6928295c551d78dd8d501d601082f92b4a2255268a759d2c0ca5a77",
+    "targetHash": "6d24ae298041c6a8326674a088ae2195dce65afa537c4c0e43121180c391e7fa",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:portableImportHeading": {
+    "sourceHash": "82500e2ef78e4f7f16fc439b877ea70690a8aaacc8a19bc2004f47b22d786f51",
+    "targetHash": "e2eb47dd957f55a3810cffb404a4bc363bf7b62a29e92e9dcccc2a5b6d9fdbcb",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:previousGeneration": {
+    "sourceHash": "6cc029a9ab25bf74fbf7d5d03180dafb293c422956585d9686e426a2c5ce7b13",
+    "targetHash": "080d8075c15c05fb54c07466efc3419a984307980b13f49fd655603e366d6529",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:processed": {
+    "sourceHash": "9361b6d6c9d077337e0762c0ca0a84ef349ae69570554d84a22aba59244d04f7",
+    "targetHash": "412ae6293b19a93414409ab6c6863b428131065476dcd91b3d97aeb495989467",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:productKicker": {
+    "sourceHash": "785bdc8ee9156d480f3b57733a207d0e9d3e45d776088a81e0e1ea036d9f5170",
+    "targetHash": "82c2d187ba38f452ce02ba2dccae1ed5dd733e17d8271b85878c634fa96ff3c3",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:productName": {
+    "sourceHash": "4ee8d53544e3ac118f8b16265374ff529e63ff2728cd7cfef5f1a8f2c430b699",
+    "targetHash": "e556b411429eba9b492890007b092f3fc7b5233e17dcb8712c3124a090e519d4",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:projectionMaintenanceDescription": {
+    "sourceHash": "f0fd1ece2d212930fbf8c638d74189dfb7d2b5dfb595c58c7c15f8ac4586580e",
+    "targetHash": "70da9768b6b8cce0762e1efe28c1db2141578868debfb9d4f8a7b8dc44586228",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:projectionMaintenanceHeading": {
+    "sourceHash": "b93d7e30bb63cfa7f446e3aca00e27aa4ec7aeed2f8b9d36fb9502d0d89849aa",
+    "targetHash": "c0974b2e8df986385a92e15a8908430c4b5debd4041a6b551c003a91f80706db",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:projectionStores": {
+    "sourceHash": "0a25516c5a72c5fb72399e03155f13d0f5b62fd8bce88907fc4b5566ccd67042",
+    "targetHash": "8ca3897e3151c6f408e35818fea9f11af052f9d33564d11caec65eb25db11392",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:protocol": {
+    "sourceHash": "0ae67f21c3bf36c30f673e6664f96bc06521e495e6e9f4d9972c1836b801b419",
+    "targetHash": "cd602d004bd0b56de8c7f7bb4c69ee591fc64c62e335bb165a58987ef1056d9f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:protocolVersion": {
+    "sourceHash": "0ae67f21c3bf36c30f673e6664f96bc06521e495e6e9f4d9972c1836b801b419",
+    "targetHash": "cd602d004bd0b56de8c7f7bb4c69ee591fc64c62e335bb165a58987ef1056d9f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:publishPreconditions": {
+    "sourceHash": "8a641378c86c5e61da88e0e267bfaaabd78b409f75f321fc0e59644acd810ffd",
+    "targetHash": "94577e2a2e34a21f0e4d9cd58e9a44512aa40238df1fcc79774ccf71336bc263",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:ready": {
+    "sourceHash": "cb2b37ed45d76fd6ba8bf827bc37a93c9e73c3d8e090d03df4e75ca895f1bc8e",
+    "targetHash": "df614e5c830e4de2370de9243335b7577e144b13a1dcfb11baa79d9ac0f5671d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:rebuildAction": {
+    "sourceHash": "e0b0dcb3d6b22de34362a7805f5d4437b088da2f53b67a3588a88530f71a975e",
+    "targetHash": "2b40f0d26b1431a7fd4d469f43a0792fdc29965975e3ad9984359fb0ebe4f3d6",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:rebuildJobs": {
+    "sourceHash": "e9ccb0bc6ba8a40d0330c68ea59efe634a5f3886b434993a3b23fbcd760da064",
+    "targetHash": "96baf0f785a3007fbd12165b31019d2e7f55c55af6be57a320276c6b628381da",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:recordCount": {
+    "sourceHash": "10006a28bcfb189d38dd77fcc6b0806e56aff3fc4199170930951be3e161c92d",
+    "targetHash": "879d384f8a9d5349299d86052d6d6a39e40c1ea692d13d1ce30bdd629788f47f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:refresh": {
+    "sourceHash": "7fe993fb92b7db0e0c6caa18efb6ba4b4c17e76def61491bd201879b2fff416b",
+    "targetHash": "ca83b4f58dc03fd1b60686e5f57c6c904c2520f1d5378ea50a1043de4e38b16a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:replaceImportAction": {
+    "sourceHash": "76e8a44bb10fa512eff11780181adb3947d0d5b0b26a09b87454c2a5fbb3d7b5",
+    "targetHash": "b3af75d95525bd1a812e8ed85b925dd258d6afa2885d95f973b3a367a2ce073e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:replaceImportLabel": {
+    "sourceHash": "35669093a855063c7b230bfcb82e976ff052bb602d18abba87eac3b6b77873cb",
+    "targetHash": "ff3ea61cc8be6109c742e026c30f919da82ce6d11a89aa205fd9e6d9d57234d7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:reported": {
+    "sourceHash": "fcb8b38c2d5635d3c85c979876e1918c46ce1700edbf6b823d77679810db77fe",
+    "targetHash": "ee66bfab0e7b21c90399a90a6b046ab7491ae34fbaf6f7e0c60d66ccaf050e08",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:restartRequired": {
+    "sourceHash": "590c4fe596e7d21ae68f9e06f8ded1cb841ea1da2e32789af0650c5c920ad6cd",
+    "targetHash": "32e8b079b9d14eec3f5b1890fadb2be660481f393ea0551423fee55b19d8e967",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:retry": {
+    "sourceHash": "be6c87b296be5cabb4b4209ab217fa582c1c13950448a08bc398c321c588b87d",
+    "targetHash": "e582ee48a1612f4035f0f25455979720bb158249f60583d1416ba5e1626825bf",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:routeBoundary": {
+    "sourceHash": "c1204b41e356175b3e2046fd03edad358403795816aabb9c011e82d88508b2c2",
+    "targetHash": "bd28c4a7c80825815a5d3f28ffb64f28af25db175719ee57a3d763eaf4074cd1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:run": {
+    "sourceHash": "519177bad46a266d96ee150196c2bb1ff146dd8b83e6b78f9456dabe6ddd5f66",
+    "targetHash": "7e16c593b9dd71cd0396e9afca35049e95184c6f6c53a062a5a8881cf2abd797",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:runDoctor": {
+    "sourceHash": "5e002b6a0704f0b73b071199eba7c6e72c85fcdf00ea95781ac43b83ca9536ca",
+    "targetHash": "8b1c7be59b5c7aec9144ad7f9fc4de68afed23cc8961db546e438d0fbf07b66c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:runMaintenanceAction": {
+    "sourceHash": "1fd5ed46874cd0d60c0f671853cf295d64eff7a3464eb1aa279bc3c5058418ea",
+    "targetHash": "80062e356eb2e52515c00f5a1905ee3f7e2dbfc8965b39d11ddb1902880098b0",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:running": {
+    "sourceHash": "7b52331b6d1f3ed7e2803fd09385d9afa0a1257b8815618c162859b3b78098b3",
+    "targetHash": "19f4dd679712eb334f37058f3cbe31bfabfc8d41887b6597a1de73894c38c492",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:runningOutbox": {
+    "sourceHash": "178602d5bfa2a84dd373f2be75402c1a9bc0f7a91c28a3276f38a95eeaad0d2b",
+    "targetHash": "74cc23cf69d0066fe892e6c39d4f2c9fe190e226fe0a3f33625d3c234d89c2cc",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:runningWithoutActiveRun": {
+    "sourceHash": "6478ab7c2872f9586fdc0924ac99b03be026e025343b272b02de3e41d16fe07a",
+    "targetHash": "b8ea62f3687c904384d86f7b8fb299e8d9c7e7f5ded7ef20d85535ad827ef092",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:runtime": {
+    "sourceHash": "0d84c622875aff6419bd72435ab39bca06e80a3eca4055ef8b667b4f2c00aece",
+    "targetHash": "6f66bfda96b348e2e4b55e935303d9b1a977c54d52441755c93266e410634a8b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:runtimeIdentity": {
+    "sourceHash": "b0a6751d8bba177756dfb570479a46331cacf5ca6c9d5d15217353170148c577",
+    "targetHash": "1db39f5b99b65763e5ad95a381b77b5e8f1cfbeb09ccec8fca0865b9cb93dd88",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:save": {
+    "sourceHash": "b037c81a5bd4b25f800fafe4f04e63a4ffc84aad565d7d42fa776b8e3d34d4a8",
+    "targetHash": "10d8ac962e89fb879b766d2b0ae57627f12ed3a1b33deaa17b1795e142f23540",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:schemaVersion": {
+    "sourceHash": "aa9d53ad8f04ca94bfb1a08c81bd90c1ab0e10ba117550d80c6258ad8644826c",
+    "targetHash": "b0d15f9a1ee95e1d47bee5e0605e8e51292244f8a066f864512f98879dc28287",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:searchStatusHeading": {
+    "sourceHash": "4ce94b0c4caccc0b3735d43c12d24d6f82da33e1ed7a11190ab64510fbc7fd7c",
+    "targetHash": "22ecde1cfa8b3f9fdf1fbd70b1d479ed319fd0b8d14010df72f912c272299e16",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:server": {
+    "sourceHash": "6a2192dcbac389f508ae684e18d431acac083285d6798b9977d33d271ae6e00d",
+    "targetHash": "ac95d3d76e77a9989eea0be35bee5077c463d6e6abed895b64221d7c9209ebf1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:serverMessagePresent": {
+    "sourceHash": "0c36fcf796691cca84df0fb51ecc9f8aa8fe1bccb0efde8512f7a6034ad4c122",
+    "targetHash": "28bfb527568cf6e2cc1aec373211ab6bfdf6dc80cebc4d016b40a080156c5e35",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:serverPath": {
+    "sourceHash": "edac46112fd0e7092d75fb034f25dbd53ecedd767eaafb8edcbcb579cd6c36dd",
+    "targetHash": "1f9da9343c6ae83f314259983cb532b87812beef0d760002409b5d1a98f1809e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:settings": {
+    "sourceHash": "0643a413fd41d7fdff479dd472faaf608549cd6af9f29091f11d5571ef547be0",
+    "targetHash": "f89b44f5f8ba14fd5f496515aa59999d57d6b3ea20108beef63ff7cc95ec3809",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:settingsDescription": {
+    "sourceHash": "496d4581431f265f7979b25b3d3982a764e4b771fad17671b14f58b6309f5de5",
+    "targetHash": "f900225c4208db1bcba5f2871b96b177b4aa83f57e26e3ce66a50d499a4e509b",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:settingsHeading": {
+    "sourceHash": "ba93fc56bc6304a3dde6576d1d13c17d4606522e5d780e6e0ab8d4671f70b514",
+    "targetHash": "a622ce498eb5c62b414afacbf1149a02edda0769bc9ee879501aebddfa4e4bda",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:sidebarCollapsed": {
+    "sourceHash": "6765649bc511b775aa1f7319c1b9c13109fd39fc07d4c4820818825d0da34e17",
+    "targetHash": "bb0fe7c3039e4daf6f26b2c3797e69b7e74b661f1af6ef6de14bdb770ad2f71c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:sidebarExpanded": {
+    "sourceHash": "ddc72c3c80c9595f4a50fadb8102c7e3ce61fc6aaf8494363fc6ec45ec259a74",
+    "targetHash": "827d32cf10f54dc5a668af03b40fdc9e0d0122f11bd6d6e951246ba5c2c3b816",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:sidebarState": {
+    "sourceHash": "79e55267f2c7b5a6a97733f38ce46015a5c9c71afd02feda8bd9086c5e9b6496",
+    "targetHash": "8c9c8a0899444f5d97e4a435e00528f1f23ab885d30773c7e9a410258fb0cf98",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:skippedRecords": {
+    "sourceHash": "d2fb10e760c990cf234a7aec227194aa5bc0588a7869b4fbe9adcc199e04078b",
+    "targetHash": "21efea7d064b20e7a1187a7a37e5d6eb3fc77d0e63b54203eeb2f13f09c8932e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:skipToContent": {
+    "sourceHash": "2ee3258cb6c566368525c9c760f2dbcd08febdbe5fa7b496e4774752b70a3995",
+    "targetHash": "f5b613b736b81247e371ff707fa97b5e61719a93c138bbbd7f1d85b39778886d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:sourceFingerprint": {
+    "sourceHash": "4f1d3452d4c9c1cf51d75394742816a54aac1a964416c9b1b2503ae924f5f9fe",
+    "targetHash": "37f971c7d4894ea2605db1e66ce79c2754fb7a44a62765be7b4195a0ad5403b8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:stagedDatabasePath": {
+    "sourceHash": "c39c51a13fc4e5fdd35be5d752294ac7e747ef3bbad735b50b0809fe7bd7c040",
+    "targetHash": "e7b0dfb7589ea7b2948316dc65094ca848005d7896884ebba1abd98aca2e2365",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:stagedFingerprint": {
+    "sourceHash": "b2f1bff8b6ec53f363a47ee2a41eb411f9512d524a2518e2602fa98e60cfcd5b",
+    "targetHash": "377ef857fbcd1cbc3621dad7a092e9d2019c0be9659f952f072c76b6393e84ba",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:stale": {
+    "sourceHash": "91472cafb7e94e3f7240407962c561bb61e6099684b264731a5e2ddd78d7552f",
+    "targetHash": "e5d5cb3810c9c332bc228c549501f51d6465ab0ceb97715087cbf4db17ea7073",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:staleClaims": {
+    "sourceHash": "14df818a5a85cfb628fd366d0edb28ce4126ddb5721edcb76dc33db346c27bde",
+    "targetHash": "80f3aa134d176946d207c10c17f5f6a6e656b98d3e0b19ccf4dc96aa97f410d0",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:statsHeading": {
+    "sourceHash": "fdf84795986c0cad73eaea000eb9caaff58dd4641e182a76779c6db7dfc6711f",
+    "targetHash": "706e60732f5a8c9b989491394e180424fee3c15373e14a479eb6d2d8c9be0f20",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:status": {
+    "sourceHash": "6a143abf65393db5c609cd1b3aa2d98e3e236761db8f433ef333a5c7d2cb1ede",
+    "targetHash": "d1d168890ae48902820411f73b123e43daeaa694eb554a7c8c1fe1eec1437507",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:statusCounts": {
+    "sourceHash": "981f6edf9afbd777a60aa6f672dac69a69aff1606909fa76088a81488d962d9c",
+    "targetHash": "297d6ece70205484007f6f4d2009e720dc0a643484c2d456ad5941e9ed60b2ed",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:storeErrors": {
+    "sourceHash": "0a788394deb4b7e4fa364063bfbd866a59e1fd53954b757d74a4bcbf5692d477",
+    "targetHash": "d86817be4346a15a31564fe7e82e480f5a87b1beefe965a7d688c4fccad8d772",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:storeFenceEpoch": {
+    "sourceHash": "5d2ae835b97358a78dc06f222525a2f567a276fb47482e543c3cd0ec55787bb6",
+    "targetHash": "24bf03912428996be1ef522472218bb2ca95d67ca35d474fa54aa1a4a6ef9621",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:storeLastEvent": {
+    "sourceHash": "84b7ad64bbe62828a9f1e2bad6c0447897d949c199961bb5793e6653dc71d399",
+    "targetHash": "ec707752942914372ee88c6a7aba04cbde42795e00cd7624e057e76de0a4459c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:suspiciousRunLogPaths": {
+    "sourceHash": "8e1c29158e52d75036bc1f26d63f42671acabf5fdd5299b5a66b50a5eb732838",
+    "targetHash": "1aeeb735f5263d8cbc74da47dc9c52401ba9956e559f544d2d633f502587a55a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:systemTheme": {
+    "sourceHash": "3381f0efa976868ec8c461419795b35aaab71cd0202a75fb75307b124b95c9a2",
+    "targetHash": "699662f6eedfc5421b5cc79e91813376fe626aa4754d1b41e6ca36365c70ced7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:targetFingerprintBefore": {
+    "sourceHash": "fb04e0b25fbbc684154dad43f9c116061030fdab4057f78d008107017d545fc9",
+    "targetHash": "8058eadb72db233b2910cf61bd3eac888cc6b29aae1f1aa6e92c6907c3368a0e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:theme": {
+    "sourceHash": "5c2ac5f0f7e2b80695ba3955a2163bcd81e9f290c36e33ded181db82315ede39",
+    "targetHash": "160dbd2586467c267e51ea86c5f6585862c52a8976899eaeb7e9f607bf5f440d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:unplannedActiveTasks": {
+    "sourceHash": "18ccdd34d0d93012efbb72d9f273ee9d6c62c95074433be05bee51c2a29b39b2",
+    "targetHash": "03d6242fc472c6797a3c5810911698f9c3b8cc3c10cd3a0499e2758a51e46850",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:unspecified": {
+    "sourceHash": "fbf548fb374a3e383d8012fee0bce515212b865b3e947eb246875f5b3ed9972a",
+    "targetHash": "2c8499fbfe6d3651d32c25bfdfd79c546af1b7cc936da955e5448be97f537811",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:updatedAt": {
+    "sourceHash": "55c41166f4b98f37e820ce86e0a4cfc41b80578a8afa3b71a2a5cbc8f62138c5",
+    "targetHash": "ef737f01bc25fd2b84906a2c67ca43126c17e7785094734d89359eb505eb1fc1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:userVersion": {
+    "sourceHash": "34437b1284ed292e101d6029c198d685834353628258a38036980efc7084b6fe",
+    "targetHash": "11d904e66e19753626103a2d63f7ee64f4bb02e88d578c61c35e8f2a0a96f5b9",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:vacuumAction": {
+    "sourceHash": "ea074664c9f052c2080384a092147082ece94e93a86b39fe5cb3bf04b016740f",
+    "targetHash": "41c854f3e1c29bf45cf89d45e39735a39ba9db8d84298652c5a87db15efef0f8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:vacuumComplete": {
+    "sourceHash": "98571a0887cd99c2b8f39bc89c8b62b44d335fe6ee5169c66d5e174db672557f",
+    "targetHash": "bb02b8b7fcaba217f972cb7f3fbd3130c53f69a71cbe0046c30586846a485fed",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:version": {
+    "sourceHash": "096892b5924dfd3aecdc1e13fef9d3faeca5a116e78702c976b917f06dedb45f",
+    "targetHash": "87f15328088080b5d3ab3d2f1c7696c2657e320bb64db16f5e2d140c26b6640d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "legacy:workspace": {
+    "sourceHash": "5bc360b40105a57e0cea89f17c44dd6eac96ed351ac776863b216c75a894bd9f",
+    "targetHash": "4dcdf4323b4af6aa5c4ab2c3116cae61ab8ec33c1c728e4540e0c3c1714d9656",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "objects:addRelation": {
+    "sourceHash": "f57d3f2feb809963ddf72b54e7f1f2e069dd8bf0139575a24c9da4a9901ccbe1",
+    "targetHash": "92920d8bdd9dd1212673085a7538f1b664b89a9bdc8c8577695e12c50a0dc626",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:archive": {
+    "sourceHash": "cb7f8d44485096943cfe100f71561b50b867ffca170c082af622dea6a5e9eba6",
+    "targetHash": "195c039f81e1f1ef22ebaeb297e577bdd785122127a67246f231e91b3eb6bf20",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:archived": {
+    "sourceHash": "73883a24568b4a6d8640673a3de70b6efbb8b649f200283ee312f47f2c33936d",
+    "targetHash": "f299d2c0ff88b19cd49d6cd989f97a126cec823ee247c8ec630acd615b1a9034",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:audit": {
+    "sourceHash": "137cdcfbe12337e703601eb7556c5e217955c1e60c547f9dac811699576de9d4",
+    "targetHash": "1e7521d902ff37fb19aa4ffc189c1dba1d35fd754afc8c47c437717236b6f0a2",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:badDate": {
+    "sourceHash": "555b305b9dc591ec7d45b70877ed668d94e23955ba4e039f2ea02e50b2c8b4d6",
+    "targetHash": "95f7926c00ddda1d183c2912ce7f42bbbce3e9c4c13fd7d82b91a33e1659e907",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:badProperties": {
+    "sourceHash": "c7c35b0e6e1373a509217ef39de06067747f1b1d9f98489cbc44793d85c01dae",
+    "targetHash": "a9be3a92ec322ef75805b8510cdff985c33243109e1b073846974b367d037323",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:body": {
+    "sourceHash": "a1f544731ecd2f130baf8673f1d0ed4e2745351c952c8ee1cfc8d408285b3082",
+    "targetHash": "2c30f4858652a7eac71a748885c3a53491eb878db0a76e88cfe3e7755d4213ef",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:cancel": {
+    "sourceHash": "9be63609c82fecd4517500d62a781e58d7379f8d15ad1e9f48aac2ace69d93b0",
+    "targetHash": "b1dc4db4bc02232da9f2ecbeb5cd14671705cd899f4b6575e087bc870c53b979",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:cancelCycle": {
+    "sourceHash": "92acc8546fa5f4a68116ba42fdcf253064b4a92c1a783e15ea95571816d9e92e",
+    "targetHash": "c6b68dd8de952df1e5d7f5f5ce42cbfc1bf6ed3a60e537b253e4b4a8e7d9ef42",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:carryTo": {
+    "sourceHash": "65c489f82eb7b2976b894a32ca6ab2fd4c31384ab2b9987300fd58a91e230006",
+    "targetHash": "d313ecc900a60ba8d57a8dfca222dbd6868d2541e2d09e1e87a2f94961bd8c03",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:choose": {
+    "sourceHash": "413a31a86b5618db33da79fcd2b71affddc88fafac45f3597689b3d3fe5e55f2",
+    "targetHash": "9df9fa3e613afa1fe0fcf6e84d8c9d55361805a447f2a43bfcc40bd58a5edf49",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:close": {
+    "sourceHash": "7fb3d821197a0ba0269a56ecdb923d4886329964417615dd2b35f6e071de72f6",
+    "targetHash": "6d7da670c2ff68d8f1980d2b3c62b28749185f6aedac00197508f71e2e531ea9",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:closureHint": {
+    "sourceHash": "27ea79b8681dbbb1e3c78722824dd7a0987a0998d43814ab52f4166ab85c1a15",
+    "targetHash": "aa32111e05149cdab5ef2938bd08636cda933b1d7dc3c202384a865bf0558bf4",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:confirm": {
+    "sourceHash": "b8224c60165998906faeaa234688809cbdbe116d533c441bc9dd2c26153553b2",
+    "targetHash": "5879bd51e7713d3cc51a7ab2a78e962a7d44f7367a3db2c3f3c3644e8736cbe2",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:connecting": {
+    "sourceHash": "00a373025fcced120c6cffd02adbf1dd34c5e2c37e3cfd3392e3352975d547e7",
+    "targetHash": "6634f1d6c5d8f774f5413eb6dd2be0b9447f4ebc2eefa20a03edc47013ff9956",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:create": {
+    "sourceHash": "97801de73ded2d6884db6bd44a332c2d1c5903bf97e86af19bb49dde88ec535d",
+    "targetHash": "e3d21c4117ab121201e87c4b7fda1c22cf3d4997df9cfd45d6a81a30a0e2a1a7",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:createType": {
+    "sourceHash": "7d943d35d3599d9d4a1acb91520b5431413d78c64027c31a2a110b2b38d0a8db",
+    "targetHash": "5a4fa1ecbd0153beb5f1a14f77e2dc8a020bee0ccff6cbf7b64470a8d1017306",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:customProperties": {
+    "sourceHash": "54da344097d035c8e0044dc78c8271dc2c4d440445983a356663bd200ca07938",
+    "targetHash": "811fb80eb005f4ce7069dec51ddb21776053f149b1a5bd666b3805e589910d28",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:cycle": {
+    "sourceHash": "6a7777ff01bb74d3cf5fa1b132cbe1e291ce1829eb8d076e60a42e0bc0a9c30e",
+    "targetHash": "a526185804111948a6250bcda2b3090df5f0e12e33ce17d587c3dd086d02eda2",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:dirtyChanged": {
+    "sourceHash": "ecfaafbcb26e64152a69b391d1533976041c1d500a057eca48ffc80dcdbf06be",
+    "targetHash": "15f9307f2fa6d9a501b297251c7654a08c2d4d0c0b64c57c2d653428b4941aba",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:discardDraft": {
+    "sourceHash": "04f3ee82b680873f2f17aa0508216649ee9ee32e76422107a206757d1227c252",
+    "targetHash": "a6582e7c082e6c659e82a6a957f52491966ec25c5338ef6bb5e218119eb18012",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Control discards both title and body drafts; not human-reviewed."
+  },
+  "objects:empty": {
+    "sourceHash": "77c41b008a71bc13d0df1f27ab7f6a5d6b252411c41e1031eac8eb8aa526c2d3",
+    "targetHash": "76542cb429b32de28db1dce5fb832ae18fe789ea1f96f62b48c377bd5c4c5c67",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:ends": {
+    "sourceHash": "1db2dddd2ad03e5fc0e8fa719a1000ef353b7125fddac6362dbd72c0ed31a371",
+    "targetHash": "5a8f92f2fe781b56accef633ddc67897efc5bebcd19023ac6406d5c086b38516",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:file": {
+    "sourceHash": "d60b0da81db9235a2ab6f4f0d97788e14283b67cdfed17a205352322b5898c82",
+    "targetHash": "6fcc7eefab5e430e2c78908bc2fa1638099ec1f2ac474d5440998da15220fb25",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:fileOwners": {
+    "sourceHash": "016584c76806c76d28bb1a52f1f853705b6b734d0bda7ff9c72641ed66f2ab1b",
+    "targetHash": "20c970496072e27ec48a5f72639558aaa3e07fb6e1daeb11265d2c2663f9ee03",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:live": {
+    "sourceHash": "05f0d8e7da024fc2190fb4bb38d9fb8a6e5381c7cc29f5d060999b5bfac71642",
+    "targetHash": "20d9b39cf6d09162156be0dc5ddef90bbc2848656f71e5a9444ec9ffc396834d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:loading": {
+    "sourceHash": "0bcb944ef3a5fbff30558db63175969a9d12a93ad47337cceefcf6a8773cb629",
+    "targetHash": "1807cc7d67eec4fb61371e8cf96e6a5b81a8b0788d3f776f1f80e7630dd94109",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:module": {
+    "sourceHash": "627e890ab316a18953c813efc01d3e65285cedb99e98e4588d52c60b28ba165c",
+    "targetHash": "a7fc710fc92b8d42720a6b65269871449a7efca588583acec7bc399d74f6c0e6",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:more": {
+    "sourceHash": "c958929730b1845cfb31bd13db606d0fc64184656faf6b0b3d257865bbaa9468",
+    "targetHash": "c800ba98825b22c8e78af015dadec1edc51c590a6632ed69aaef3a8051e89e3c",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:name": {
+    "sourceHash": "da57c9cbac4003642a180526562b3ed7cbe8648bf675464a29ea9447bb60c8d3",
+    "targetHash": "4f4b6967b138f126a69795f9a8fa709c90f83d95883584c6e9ef80c4b3e261e1",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:noOwners": {
+    "sourceHash": "736fa893934da1c62136799bca9ba6692ca2db1e898b1340ed84ee60a81c4493",
+    "targetHash": "9f8e76ac7294f914968d48ac205dbbf33e08aadc7aba572d361c0e1e8330f222",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:note": {
+    "sourceHash": "96771cddd4343ddb4c8d81d54db28cd030dbfb9554335685dc1998912c26bcad",
+    "targetHash": "990b0d0a64985a16c73dde1a049d6371afdf42deeb0075541116f0536259dbd2",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:overview": {
+    "sourceHash": "6b7ca6500ea1acef08f54e0355edcaa9fcb68ca401a78d46690acef76cd1554b",
+    "targetHash": "fd00ce41df5aedc6ba3f1bab6c0a65db55d7569e86b0497cfae2a573eb5add67",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:pendingId": {
+    "sourceHash": "e8fc3aec27e9278ac81c58393e21c44db9ca29928f7f0a7d4c710526b938b3a8",
+    "targetHash": "585b819e4b4270f02511c3ee3d07e57c90a49d8f21c59c9366b25d0575934095",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:properties": {
+    "sourceHash": "6d312acbe81c6d78bf7305bff80fc31c632507cae509a071582fedb058bb60d4",
+    "targetHash": "844933dbbf992e8b6d7e3d4491c3de614683ffaa2d729be49fac3b8b96ae001d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:readError": {
+    "sourceHash": "41705ea7b86e56887311abb9c72c7f31e85560f6e7f8cd01fd97e4195bd99859",
+    "targetHash": "d280525b327c77fa2ef53291148a6b006a60510bd7d2ca4d3260b37cbeded8bc",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:refresh": {
+    "sourceHash": "23c0593ea50234228b85a50d9853f5b21d334832572c3a6246365c6d790a578a",
+    "targetHash": "ca83b4f58dc03fd1b60686e5f57c6c904c2520f1d5378ea50a1043de4e38b16a",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:relatedEmpty": {
+    "sourceHash": "57dac1e72363f68cdb958722b812c53874b0088c79a4891809b50f71c660a71f",
+    "targetHash": "387bc401d22b182517a8975010a65f7181030e3699c80c2f097da803db3644c2",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:relatedId": {
+    "sourceHash": "a548ce8aa6795acfb53b77135e4ae17403276c047dba5ed5c9543fc646475dff",
+    "targetHash": "268a0f0b8abd701a4a416b92fc2fd258ebfb2a3789d51701f95665c76616fbe3",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:relations": {
+    "sourceHash": "0c3ad5d466ef582fb7baf26731c810e78cff766294b272ef8f3f2d155d785831",
+    "targetHash": "d2e4cba38e3c3d2e29a00a7a4c092d6cc5ed94e1d6f09e10165a8aa48f87133d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:removeRelation": {
+    "sourceHash": "a1b0f6ae13fc8d521bdb89a1c4ea4f99e74275461572ea174aeb861e2c90ca4e",
+    "targetHash": "2541f32e9df3a53798e0a869e948319a74d7082595abdc755aa1870731f92318",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:replaceSingle": {
+    "sourceHash": "c2813c9357fcba2b413c5c840e6901a58226fcc393de89a9f6fbec3256d0d1d1",
+    "targetHash": "dfdc0474051084e173cd2fc5238c7b117a98a05d27350b90ee0130ca16dcbfb9",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:resource": {
+    "sourceHash": "c96f942e05c03809a85bc4adc8daee67f17e199c38335a9ab88bd6b968f92502",
+    "targetHash": "4ff546c64e400e582813fd712f1d3c4f3fff7932e4a0f7fb2b02de1ddc7c8262",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:restore": {
+    "sourceHash": "38b28856ca6461d74176beb377a6787caf6d2a60a9447c212fd8a71b28e17a7a",
+    "targetHash": "db3795d16655f801fac0e90b671fb41c344352e6abb7c5b963e93f77a99ac27d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:retryOriginal": {
+    "sourceHash": "138051ae9da5a9ecc2f575010236c8ae3ec19eeabfcadc2d67fc9a45723daaae",
+    "targetHash": "547e9830513f7970829d11da60c09ff12e5f5d75f94698aeedb750420a36ab57",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:save": {
+    "sourceHash": "2507ab42e9b8156da958f8f4743fe39a1ba3bcfc87c6b1181d1efbeddf3508ca",
+    "targetHash": "10d8ac962e89fb879b766d2b0ae57627f12ed3a1b33deaa17b1795e142f23540",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:saveBody": {
+    "sourceHash": "c0485dcd4ea113fb16a2aab6dfe75e921addaa4c4a4f0791b5d94297cd8a3555",
+    "targetHash": "fdfd336b47677c2b95c6706050b06cef60b17972c2cc144571eebb4de460e6eb",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:saveTitle": {
+    "sourceHash": "c30f629710a653766514c8b78c2a9ddd4f0758c10d7b7ff47a2784b4c5487fd7",
+    "targetHash": "6953e61c008bb07376818d5431d37135882663fdadcefe3d2cc473273b163b3a",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:search": {
+    "sourceHash": "39a35cc2cf70ed2326e08481b8b28d02488fb7e336f4094f9bd0ca5a15559771",
+    "targetHash": "1b9e88225d71a205c04dd40b4773bc71bd4382d5bd6bfc06c19c78c5a58a6f49",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:selectType": {
+    "sourceHash": "ebea5cd8d872fbccd969841334875d6f4f2938c119955dd3a6dad8114fc0c8ba",
+    "targetHash": "fe0290d5d18c1d4bfd0b6e32eb49fa83f94dad06dec305d5388ea0e24a5aa831",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:showArchived": {
+    "sourceHash": "1762dc38a26a69ba2a36f93671c519fa9cd1218d648d58a57b06cb48a0ed83be",
+    "targetHash": "7892d01d0fa6558e8d59a8554a574520ce2409d202fd4b2e0d33ea1dc5c7c957",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:stale": {
+    "sourceHash": "ecc698c1b1da3d8bb227867a795aca42e96f0e547bdb2e5282e20a7ca8b141f4",
+    "targetHash": "db1450de5810861e39cadb68becb010ddc03469823105bcf6c0cc6e227d65409",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:start": {
+    "sourceHash": "35e0d2e51e753502aeeb3b35b2d798eea6cfd613a8299e05fecf0d91751659df",
+    "targetHash": "8350f01268cd54820d6d687dc2e9c8bc3310c23e817e346275ca4d43253dabd7",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:starts": {
+    "sourceHash": "30f6d2fc9387dca861eeedd93be21a156274e0c5c6388360cb235229e69c5c59",
+    "targetHash": "348ea6070821581b2097381291424d8f41899426ecb7a838980170da0f75b106",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:task": {
+    "sourceHash": "a04e8c8bc64f71e7ab7c2c781b978b475ad13688f5feda5d8fb8fd51b3d38277",
+    "targetHash": "910a990db31a03255e490ecae7b6388baefc226af2a6291aeab8b1656081feda",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:title": {
+    "sourceHash": "18f2b0d67d69d1d8bb909dbd4f4fe32245103285f17fc6fc876cc43c80e9c290",
+    "targetHash": "2bec424180c182008564fcef7a1696179f334a8eff55d7b22fbdff470bbac5ae",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:type": {
+    "sourceHash": "8ad2559633987771ccf4231ffcb3f85988293d25c47100dbe2e5e3cec4b20c27",
+    "targetHash": "49bea0f5dbbc9fa0b8e00863e9724bb23bbebd4053da33bb90007d4d30c0aa9b",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:typeKey": {
+    "sourceHash": "5a6b83b2e532f3e071efde0ab73b50d4ffa4ae7fb361094b45d80464a05ba9e9",
+    "targetHash": "950c53934be43d7162f39b83c56111ccc783fc96101bbc129eefd7dad5dea48b",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:typeName": {
+    "sourceHash": "ad5efdfe927f2a60b1ac12eff672d619f438a85ee524f63383a1b28896e98aaf",
+    "targetHash": "47ae5a096a862f6edaad4e682a042b7596d3162f58c90d5c4a85a28f644a2c91",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:typeReadOnly": {
+    "sourceHash": "f0d4c67b234d35077d614648d056857047b10f87e60584048ae89ef93b5bcfb0",
+    "targetHash": "288778ced780fe186e23086b6e32b95f1d9089a08c9d697c0d0f4cbbbf0d9d30",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:unavailable": {
+    "sourceHash": "92883b193959aca18007c02c5c84b3eb95e6ceb8cad57a3491ab06c39e40946a",
+    "targetHash": "5f978cbc94e0f6ccbf9cd4fe297f842e162c055acd2da894c1d136607a6aa199",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:unknownCommit": {
+    "sourceHash": "15f8a96c1de3323ab3b8b0278844b7911b2ca81868725bb32cf4c76c2a1f6474",
+    "targetHash": "5de1916d7bb150e9d81afd393d674cc4f92aba04d3f77fb15f2def680b80d1b7",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:version": {
+    "sourceHash": "e6b384dfa0f5700947f5958f50986fd16f5dce6c669d9da57f809b87fff17443",
+    "targetHash": "87f15328088080b5d3ab3d2f1c7696c2657e320bb64db16f5e2d140c26b6640d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "objects:writeError": {
+    "sourceHash": "4c2386f209e4abbfec18c8c5059ff5873a286c09409d3033456516afdf6991ed",
+    "targetHash": "a7ff852d84412a5e13a64cb95cd5172e673adcc3906be6985b2717bf5a7b6e4d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Integration delivery: authored with the zh source and domain behavior. Not human-reviewed."
+  },
+  "settings-view:actor": {
+    "sourceHash": "2be655b9c7829f68467e7029bc19c15f1a373b433d57aeed484ba5364a97b796",
+    "targetHash": "d23838e9a8b2be3d8943fdf2312a599b81850f8207b129fb56ec173452350bae",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:actorPlaceholder": {
+    "sourceHash": "0a305f0df2447bd49cf42bf25043516524d6b6fad8e571332d7e067d361df64c",
+    "targetHash": "efba8eb023cd77a49e6c41d04b916e8973f0ea0a4376cede90a521bc8522c659",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:appearance": {
+    "sourceHash": "ad1add6ddfdb4bf89e2687978d284cc986c95fee192ce1548963103bf76ba18d",
+    "targetHash": "11bd16916aeae72958b55363635148f2ad096a7115c90f6fa0822bb9e16190f4",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:available": {
+    "sourceHash": "023bab5c5daa0db11a0834e735776e11ffb20923629404263a7c98aeda3a081c",
+    "targetHash": "82fd4e5bcf47ee03e3294ee5138f0d63941284b37623a64a78401a903b06c42d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:collapsed": {
+    "sourceHash": "58dcd138932effcdea30735675dce865e4b8859043263ecddb20c0fca0369e2b",
+    "targetHash": "a1b14d86e8c68cb0d13d59887ffaa64da3c96d5940790e213f835a8253b2191a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:comfortable": {
+    "sourceHash": "8d2dfa62d6dc8aea688cd12a1f789af5480d3b494def5604a101ddde692c74ed",
+    "targetHash": "6efcc3c44e209fcfc7aee1d3f9fee514f9f91ba225d6dcfe2222b885e76941b8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:compact": {
+    "sourceHash": "e2a2a793ee0126a6765c6152f47145a90968192f73a3d7aceecc00d8aa2bde7b",
+    "targetHash": "e9d67efe3d34519bef279888332818de5fcbb6245342165fff2a299a36e163ee",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:connection": {
+    "sourceHash": "b6300a11a7889a9e4dc74ff62803a50fe03a33f0627e257290dd3ce41bcde1e2",
+    "targetHash": "22e83c54a58e01be316ad2714ba7798a5048dd77401bb0ab0ce181317e8d37c7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:copy": {
+    "sourceHash": "94f37315cfce7c49ab9d9859f7ea9a486b5b9f50edcda75aceb02806b7ba81ae",
+    "targetHash": "c4aead088abb68e858084e59b9db6ca18af8e11d47e6f67668a370fbfcf9bcc7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:copying": {
+    "sourceHash": "efaf49ddfb119d5923a101c5417c8ed29b0a6d43c251d28853202e6c786ed68f",
+    "targetHash": "df076fb0d455c8caaf89ea52244d3283074c87bc6ea8b8976dbaf34eb8e7901c",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:dark": {
+    "sourceHash": "19c37e420bbfa65ebc9b74a488a08c669a744fa1d12b6a4cce045b9ec8c0fb95",
+    "targetHash": "639a7c6de10b5f9f2a52e26721d3470e7e0bde7352fa2c27e45f1a6bd2432c2f",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:density": {
+    "sourceHash": "dbe2f683999f72f4d5e8b5e4314aa7f4bcfe91e32fef73d1efadc292e7459c59",
+    "targetHash": "46db342a282fb63c8ca017cbbc467ee4bb622ba80b465e265bb26ecb041abec0",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:densityNote": {
+    "sourceHash": "1ddb0120b9462fcbd3bb3cd4f8268ec375cdd8d2a57e5ec5ffb942ad0c9b056d",
+    "targetHash": "8b42ac40b1d5c4393de17e027342a9d9ea46ce862f448e9e812df179a488af31",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:description": {
+    "sourceHash": "5ba6a33e044f57e1daf2c576b88c8c4ada957fbbfe78ce19229fa1c9fe3909f9",
+    "targetHash": "96a96eb3dc6f5cb719742132367f46a637c7bdbe7b470ec032ec7153e7d7ff02",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:display": {
+    "sourceHash": "4289b015890e34df4792d74e1b514e39db5c0225a22eb80c0184f2fdc50de060",
+    "targetHash": "5b9f7d5ed6b1c9d8c9b97b21834ef842ed2e1bec15af7ab655ca74958c03ebcd",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:displayNote": {
+    "sourceHash": "dc374fe97cebfeb6739b1f85e328a0f626bc0fe4b91b6af753b1c02c205fffec",
+    "targetHash": "6283f4d64b2b6fa8d4778d977d69eab3e2f3efe54f30f811535127f9803be851",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:error": {
+    "sourceHash": "3b30290f18e63da9e246e70b08c6940f02f330d6b5aa2e4214c4e9e6fe0c8cc1",
+    "targetHash": "de2e12cac9ac1f8fa282d0b3a0ce5364fea615292fd56828bce60d1d3de8187e",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:expanded": {
+    "sourceHash": "c95907f7afdf36ec042ad6094e54b14d226589173044520a4861c6f0f90376f9",
+    "targetHash": "d20f9525a2e2b6ab65e19fac50d68bcfcabea73d44eeb006cf060eb92c33a046",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:health": {
+    "sourceHash": "7045372000d3f46112416c7464293ae6f245e1d6b46cd0718188396683e2a214",
+    "targetHash": "be88dd0176aa652136a93ea793e6ffbebe96717ea34ad942c8ab78325fb530d7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:healthRetry": {
+    "sourceHash": "f9328aa99486ae79a952d13987373cda31f851c569c9a3ea48471e2cf6fe3631",
+    "targetHash": "e5cd4100221dd0969af3fc9924fe964a309aef2d875ad4dd66c96f6ca94cec0c",
+    "state": "translated",
+    "origin": "model-assisted",
+    "note": "Moved the existing inline retry label into the current settings namespace; not human-reviewed."
+  },
+  "settings-view:identity": {
+    "sourceHash": "9a0ee2f40e0b947f1ea300246882e0cb9447c3c56b4bda77084435f7cbf21531",
+    "targetHash": "a4ac066c2bcdc1a9802baf482d1a5fa0c446d5247ce09d6730c0e6e3bb76690a",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:identityNote": {
+    "sourceHash": "b8bc47707d1bd0f2193ef5bc3addd57d8d7836982ebba6deb95a27219cf1f0e5",
+    "targetHash": "86b7ecc213443562b04fdca5dea7d799a43d81116d3108cd2deabe84186b9e58",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:language": {
+    "sourceHash": "89be3d9b180785ca3af1672adff084ae195dbae8e45655685b989b9adf0af6d9",
+    "targetHash": "7297bd67e5a39fcf1b67ba75235df3f348f505e0ebd5400e9d9e9cf2a9d374aa",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:languageNote": {
+    "sourceHash": "acd3666d2941c364d71b620e5fe58b7c5e0ea221564e8e4c0a6850ff6da2aee6",
+    "targetHash": "5d83c32ffff5f5298a7ad07990edb282101d37fdf8102cf4e25dfd0a0bd89ac3",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:light": {
+    "sourceHash": "d40b1c41b1e70fdabb892e1b01ab8eda5a919fbd592228fa1b217ae180dc181a",
+    "targetHash": "e21e5fbd49e8fb0c63b02c0928bb96cb135e65d69df443f7bc38656f38864421",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:loading": {
+    "sourceHash": "8253682220dd1233da070f7c9efd98fc69d68f98450f7452bb763a6da6e1e7a7",
+    "targetHash": "a4bbd504aa1b873df3b63668dc5c5bc406a80eb4a6d50d1189f44969e958f052",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:maintenance": {
+    "sourceHash": "06ea032f557d50b8cc93512c10dca05f9d3e7b718317a3c3df93d54a1bb988d3",
+    "targetHash": "fb775a9cd2bc2be7fcf539d5c339259702b391139a68675fa601b19fe0a8b9c8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:reconnect": {
+    "sourceHash": "755d496be4b0ee07cd143e05b6504b4a71b2d4a800992570595e9fa6705078ea",
+    "targetHash": "057719626962020d09dea7a72b5c824da29bfc04be181f1ea621a56c5892ee05",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:reconnecting": {
+    "sourceHash": "7da6da51d796b8fde5b2b70f8aef5931b2ef73436aea9849f710f7c414a5caf5",
+    "targetHash": "3a723de8c3ec46de0fd38dcf98ba19a6cb179f21891aee0a4418efe88c24abc2",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:reset": {
+    "sourceHash": "5ac70c3655b0ed536dda75b7e2d95e95ba1eb29c88eb2bd6d64db74cf4c46539",
+    "targetHash": "3f5013b2c089b44e6186abd3f086baf1011b5426602d53711336f98ded851f69",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:save": {
+    "sourceHash": "23cafb7cbb812835ec7b17a66bf6c5e31f21484878d1c5fc551f234dec799954",
+    "targetHash": "c83a98cc2437d00501b0a1c95a2a64ada118bcd1be692baf2b6c5be9ad2dfe46",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:saved": {
+    "sourceHash": "01e32ab7c4b55d1c4a993d1fa64db80591d16373df8a20b0cfa62a35a2cb34ce",
+    "targetHash": "084f1b10b216d75909f496b70cff47da5ecc4673f7d10b8d58e35e541989d9f1",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:service": {
+    "sourceHash": "45b502fd3cd27884e0a1edc2b1a660608c45dbd24bc1bbd01aa61ba5c732243a",
+    "targetHash": "6fda33fa28584ba7a728641b7fc742924206ad9a6c06237dcdc6a43972fcfff9",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:serviceNote": {
+    "sourceHash": "5017148a9db0f75839466eaca57c18af9c7ab327d0d55b064b0884615b10bed4",
+    "targetHash": "bd0b74d9f1f1f65078509140ff0fa8d15d5fece228481b2ce17b09d92ce085e9",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:sidebar": {
+    "sourceHash": "344c452f06ccbc8f9d43c4849adaf7a11f70e41fbbbbf8bfe65829e9cb1acf63",
+    "targetHash": "fe874c60e644e54de8652bca7070634738111499e2e1a40d53d6915c191ffb56",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:sidebarNote": {
+    "sourceHash": "159b48919f429200ad21f3888cc2e4a5311908712250fd307e1ed6ee98c96422",
+    "targetHash": "d1760a48076ae671f89ea24df5b7066704c0ca9894dc234e235ff80f7bba1c20",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:system": {
+    "sourceHash": "1189070f3e549b124b593f9faf88a88c6fbd8c27685d505d96324e11429df2e7",
+    "targetHash": "699662f6eedfc5421b5cc79e91813376fe626aa4754d1b41e6ca36365c70ced7",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:technical": {
+    "sourceHash": "ea71b6ce28a4cafd84e90568480a997d16cdc239c6d4a02a1e50dcf002d93b80",
+    "targetHash": "9b9dc17e66aee58c6273911e43cd52ef68dd4f190cc233777b894e4cbdbb6d79",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:theme": {
+    "sourceHash": "939665ee55c0657e9e90941210e9446a95b4e52c2de4d021a8088ce87b414915",
+    "targetHash": "160dbd2586467c267e51ea86c5f6585862c52a8976899eaeb7e9f607bf5f440d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:themeNote": {
+    "sourceHash": "5e9cbbcfea8abf36eab0908839f9b3b00c2a6c012e4afb2e7ca97b09ed60cb5d",
+    "targetHash": "b8f83a8b4f785f9005b6e00b9e087d12479a9b8441aaa97a9bed7af4d87e3ab8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:title": {
+    "sourceHash": "d33fd4b1efb8ff6fa8f5082f3d02195796f06b22f1bd6c26514d758b9ded09ec",
+    "targetHash": "f89b44f5f8ba14fd5f496515aa59999d57d6b3ea20108beef63ff7cc95ec3809",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:tools": {
+    "sourceHash": "eddb1bbcdc46c109b3a8ce881987ae6e3788cd0515a721d4c4e30c8d0f063d90",
+    "targetHash": "f0f65f5ba92819a0d1fd44d7eab19b6c1b64e16e20d79a9a193d5d3487dc004d",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:toolsNote": {
+    "sourceHash": "d873c0bdaf91f33bb562bdf898ee5819ad3c95827548ee0cdab96b9468688c7d",
+    "targetHash": "19d99e50dbe768a93ed2eb6bf41aeb74ae3a1370cfbb0811dee4e0a1d16d8ccc",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings-view:warning": {
+    "sourceHash": "5d53cd9331b2fa6b0f54768055c981a687f2dab9aa0e03f61f91bd1d516f703f",
+    "targetHash": "98844d82d773b7d7d6128a42c58ee95fb2efca27340b69ab033c7acaefcbd7e8",
+    "state": "translated",
+    "origin": "imported",
+    "note": "Extracted byte-for-value from the pinned current v4 source; not independently reviewed."
+  },
+  "settings:appearanceLanguage": {
+    "sourceHash": "9c2b06daefdf8c415800d24eb195091efa23790c0b08617ebbdd9a13e9f732bd",
+    "targetHash": "74b9b8074b0c85ad7e4b37f72cdeb746c01652999182142d171d684e5be05130",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:connectionDiagnostics": {
+    "sourceHash": "28fe6210788b88887229650e80110db50157f85514b390f4d1b5083ed80c635d",
+    "targetHash": "8edfb84e6d4c864b83478927482c5e5c9e876e5960d383619a68831967c079b1",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:dataMaintenance": {
+    "sourceHash": "4ed7b0a2f071b4b73f1fe7457bbf0c993c41f0e7f164296d367ab76924df3a0d",
+    "targetHash": "fb775a9cd2bc2be7fcf539d5c339259702b391139a68675fa601b19fe0a8b9c8",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:description": {
+    "sourceHash": "0548b1220622eb460fa3971bfdd9512a49f3e39a1d80804e9cedd4b42c2d6610",
+    "targetHash": "6a353f012836cbe9a965ee11ba9ff5d17a1228b736d4adf96b064ab34e98e5cb",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings copy; apostrophe normalized to the project writing style. No human review claimed."
+  },
+  "settings:healthCheck": {
+    "sourceHash": "2f9117739bf9f57f793d3bf59b25e95d756fa3a462ba2d31787ad5422813f679",
+    "targetHash": "c9fe725474624991a151f35de4813e6b5a4b6762df1750f5b62f0471afaf88de",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:interfaceTheme": {
+    "sourceHash": "6d71efdaaed10e25eb0be99d8d4b782dc6e9eeff3655d2084a5f4bd5f4a6f976",
+    "targetHash": "9c84aad9c61bb7c04d0d429a75a61f9de3f974c3cca60ffd02816825d25fc88d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:projectData": {
+    "sourceHash": "9dbce5079a1f51252225c2c4887736f384fd5f7022217c1d51b5632d5f0720f2",
+    "targetHash": "e52f076dc8aa435c9be0a53ab0303cf5452a042dfbe0ed591d9be91812f27ac5",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:projectDataDescription": {
+    "sourceHash": "4998b93de417c35d6998198ebc3f12da429d4632087eaa5d283effb90a143edb",
+    "targetHash": "9906db9c47b406ea1382fadc06379a22d32bc8639bd0be5c85e21bd2e1ede773",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:reconnect": {
+    "sourceHash": "c2f52aaa2e68c7963ab98aa4bf4bc26fb04a958ffe264cac17249efa5294a029",
+    "targetHash": "057719626962020d09dea7a72b5c824da29bfc04be181f1ea621a56c5892ee05",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:shortcuts": {
+    "sourceHash": "16f0a68e56e049ad7fc8b641c004a00c3d2dc97ae5e4fdef277e24dabf0e3c7f",
+    "targetHash": "9a2d422acbd6fcbc0130a0deca22181fcd3447930ae6bab7ba518d326a2ca8fd",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:themeDescription": {
+    "sourceHash": "a5f0376b8926cc7579b5e95943ba0c5fbd3c9d2746956d45f2124232daf505dd",
+    "targetHash": "917321109ea67e97bf74d537cbbbb037ea3f108cf00519c768907a9ddc56df63",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "settings:toggleTheme": {
+    "sourceHash": "360ed7c7365030ae3ff5c4896fb9faa65853df8be730c58c04ba233e99458b77",
+    "targetHash": "54bf1ff38c5cc2a4c6fd0e4872f96bf1cf483ef7d8fea4c7bbc2f1a89fe01ceb",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial settings wrapper translations; human review not claimed."
+  },
+  "shell:archivedProject": {
+    "sourceHash": "e088bafedaf43738988a8c94228a7ddb77aba73ef4402820459c6cf34ecbecc8",
+    "targetHash": "65ccf578c96229242f74fb2b96cdb731d7b0f2cc672688c153431b72a3dba4b7",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:backToTasks": {
+    "sourceHash": "22ae5e92a033cdf162aa14aaaa004819064693c00628b9d68c0ae7dee4377081",
+    "targetHash": "1ca35e58b39f4d3a06cd0630d2d0a1a25867a0bf612e3b7ca8a7da68035568ce",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:chooseProject": {
+    "sourceHash": "18fbc943bdbb3efa133725252ed31a5d42dc7496d17b10cb515091ce5d3279a5",
+    "targetHash": "c1b474835c96d53cb853f8f5b3a5ef4897b621c92d43b3067f916b9a70b7a554",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:collapseNavigation": {
+    "sourceHash": "49347e0b77c63bf8918dab332e983c8a4f0c7475c3c2eec8a6a70e38a7ec712d",
+    "targetHash": "44d74156196d01bd8644c66c2fa3e7830daf3439e56cd6614392112be236e92a",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:collapseSidebar": {
+    "sourceHash": "8f3d7288babe28c65ddf7b8652f5c6466fa457c3edb0597390dbec78e859a067",
+    "targetHash": "8f0b2a9b423fabf8bbb0bff67304bda6ca27a3a4f8077fb7e595a3dd8d2a1c8b",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:componentPreview": {
+    "sourceHash": "eaea2102a353579b9216cb424d1f440bd94547ce15c3741aad38db47b91150ea",
+    "targetHash": "8d02e399192bdc2935b9223092d77a759bc2b1ef30af00e26c7c367e09325aac",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:connection.connecting": {
+    "sourceHash": "8e71ead540ea912c7e428ecb1e8577df00e0594d1e8a2367c5f3a336fe666ea1",
+    "targetHash": "21d24c58943a30a81c5abf19b7a5dfe05207a9178607eb19101017cb5483a813",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:connection.live": {
+    "sourceHash": "26cdfa235a8f938e1a9322bc10acfbe0d8d43c64d7899279ba0c5c67edae01fc",
+    "targetHash": "3aaef149b26bb88d5932deb2d3a2e3bd3a1317c958215e5b94ea061b90b81fd9",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:connection.offline": {
+    "sourceHash": "be89c9d586b208c2c197f9cd88c2d6dd94da46f9757aa494e006f16a166912c0",
+    "targetHash": "79aad90ad2a177f974031a385e9bc7f7771bf9b3dcf96cd33e0349f15110d3cd",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:connection.stale": {
+    "sourceHash": "7fecb4d6af860aa6bf394203da809c9ea96289fb8f7d0da0a6fa1127f1f790e5",
+    "targetHash": "872b1a87fdc4badf391217760048f898cae32fe3934c8d032f542b3045dd1578",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:createTask": {
+    "sourceHash": "a247b7a404be2b69810bef1d0a270a4da15fc81ace9a7c0e6e0faa14e76cee6e",
+    "targetHash": "d81c60ea4250cd639722df22be382e1bc4039b65572f337518bd911f8a8f0527",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:currentProject": {
+    "sourceHash": "af6d2391c27180f66376c11cf191e639dc22197567d86665e174bca8ae73379d",
+    "targetHash": "554fd5273a8fddfc033fa7253be2fc4d64854be575dadfa0be288815d6a3e19b",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:darkMode": {
+    "sourceHash": "ad32b194fee2486aa8dee1d2ededbd646ff6ccc1ed272364f826070982240705",
+    "targetHash": "cfd4d0d602033432606dd5e2c9732a34763a8cd1d9e15898da44540c2e55b3f4",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Current v4 navigation integration, not human-reviewed."
+  },
+  "shell:darkThemeLabel": {
+    "sourceHash": "4a7d93acf50522bbed78e4a2b2763a651e879a048a80015a5bdb9b066ed33c84",
+    "targetHash": "f015ce03d6259eeb1170b336c650078c36cd2e9561909948a4b8b7cf9434ed7f",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Retains the existing accessible name; English translated in this change."
+  },
+  "shell:expandNavigation": {
+    "sourceHash": "d8ab3f58fae679f73cc251dd6edc4e57438a2c8d56896a3749e2b90cd3e33bc7",
+    "targetHash": "627a896068a085ccbd6be2a7ed88f192914f4b85e29844f5ba17dd216ded140b",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:expandProjectNavigation": {
+    "sourceHash": "ad2dd5e45122aa114228eec72bc00e480af0773142ead73b110098ddb761021e",
+    "targetHash": "1224a458c39b1be68b7afea601b5e66a0e3337d5b1babbfca2f36416c76a3394",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:expandSidebar": {
+    "sourceHash": "ef1a501b76c08f79af1a0fa8d3a670f91d4768e9422f3748511b19e28300e685",
+    "targetHash": "5e3d70b40a6678994570fb61df81832f26cc8e682d99cb3f45ea2c369276390e",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:hint.cycles": {
+    "sourceHash": "4ece41ccb15f82d7246de4d061a577401b6e7e2b3f8556b5b167bb8bb3874d41",
+    "targetHash": "4f5e17fe7e5f42785773b81eabdb64f2243d8136ccd189236610bf09153bdadf",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:hint.map": {
+    "sourceHash": "59d39938af2956bdf352d420133d9c6c52af04b02c6884620bdd65ae66ff8733",
+    "targetHash": "8518b626bc8bf2c8f0e919b83519d1bb0780ab6747708403f4c35939943746df",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:hint.modules": {
+    "sourceHash": "ee7b4acf3d74fb5624d640407f9411d1e0d4ac1837f6f3308923885eecd31f8f",
+    "targetHash": "1d0dbb2cbd18e3dcdfeacbf1a2d1eb1937d552d510db834a8b8e1259016ebdf1",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:hint.provenance": {
+    "sourceHash": "266a0df49f6270c979d009602b937d832053d7112b1023a79122e811871d09b2",
+    "targetHash": "a2ecefd86b28629634b3d1eba125c7bfaa7ca1930449053190bbce90c67e9620",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:hint.tasks": {
+    "sourceHash": "0cce9a55fb47739f1b8d16145bf44fa1a37945939252cd6e9f113ce69ab75605",
+    "targetHash": "69745ad16794e2ed71ed1231cd5c55d7a7a3a2ce44e7e1384a930e5c1721968c",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:lightMode": {
+    "sourceHash": "8db3bb2f61e84ceca15cf0c65bcfca5aa0d57eef97d1775e4e38b6b9fd2f53fe",
+    "targetHash": "a4a49df718507b6302a4cc20869f47f637f31b56921f6080f7c8e4890552efe3",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Current v4 navigation integration, not human-reviewed."
+  },
+  "shell:loadingProjects": {
+    "sourceHash": "6f6cf71ea1d5e878fd16bb6b8eaf3c1e22861fab2d2e8b49f89f189094fd529f",
+    "targetHash": "93a482b8f0df9de7d8f3f8361bad34ef426f5692e9ac2f2b2e18c3eca287a06d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:localUser": {
+    "sourceHash": "3cc0c626f24eea11e59f295ce4f6fcd7722957ee10c93658a184f6472ad1fa39",
+    "targetHash": "e1d5071bac30be91d75b8a18575d6f4fe62aa5214bec42b7315528c70ce1ca9b",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Current v4 navigation integration, not human-reviewed."
+  },
+  "shell:localWorkspace": {
+    "sourceHash": "f4d649ecd5e95d84cde6eaee9e4a72e73c8c384f57a03160b87e983abad4646d",
+    "targetHash": "98292c494c78f4e116c48871b4b084d8633d5681b2cec04ecd051027401e8499",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:manual": {
+    "sourceHash": "1c697e2b8ebf9581f4fda984e1e1a237f9066c7150659e649493872028dbb34d",
+    "targetHash": "bfdd8b7e80a61a4e13b44b132979a18b5d3f8e761dd1a9a3366bb9343bd8959e",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:navigationHint": {
+    "sourceHash": "eff3ef6fb36520246ec2755f865b310da12c957e608b91a679309174d67d4802",
+    "targetHash": "914b89a07d05da021394edae8eceea9d7ff1075b26b64149929265b8925d80e1",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.cycles": {
+    "sourceHash": "a8ed57466e853cdfda79d2073b41030d78de2069eb2eca6dc108fb0e733761b1",
+    "targetHash": "a526185804111948a6250bcda2b3090df5f0e12e33ce17d587c3dd086d02eda2",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.dependencies": {
+    "sourceHash": "187c68ba0a6791fb99f0e107b662cd7903bc84ff617f35fb326ae2f06e1c6593",
+    "targetHash": "6a7c2e28ac9126b8c3c07ffda7ae32c69a622bafc5fd389ba8d5fb983806ea9a",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.events": {
+    "sourceHash": "7a852cc5b4cd19fda3088f62550f1b9ddd88c0fe3d384310810676c28ce1da50",
+    "targetHash": "163bf7e730147d79c4c016c0cd1bb5036bc147426cb4f46f45a61170fb86cde3",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.health": {
+    "sourceHash": "92a797253ede1be13dd1e2378eb85b6d2997c27ec0f28e95fb485cbe5cb0578c",
+    "targetHash": "bebfee396769b6f46379f66b6fe5f1f75642b7b1d005de8e0619a2d5fb81b5fd",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.maintenance": {
+    "sourceHash": "971f145bb5bb2bddec0acf953054443400e5c4389ebf5429e0b60cc5c9d2c217",
+    "targetHash": "fb200224ba98cbfa3ded4d29c8508b3e05b2ad6ac49485e04932be827bdb2463",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.modules": {
+    "sourceHash": "54307d6829844e050d9413f2d9831a7482ae548f9510db3828c39604e5b18265",
+    "targetHash": "a7fc710fc92b8d42720a6b65269871449a7efca588583acec7bc399d74f6c0e6",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.objects": {
+    "sourceHash": "c276929005ab27db058e02d3ea127921aae71faaeb36fb32c191fe9564017446",
+    "targetHash": "62b764825cb7e35261a141f3691dc02500d71de22369db49ca9cfd9d721a985c",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Current v4 navigation integration, not human-reviewed."
+  },
+  "shell:page.projectMap": {
+    "sourceHash": "675cd95cf819dae97b62c6c8b197d1213a79b00940c87553b052bc1e8acfc275",
+    "targetHash": "a0ea6237334db56ae04069c04e41eac7478dd5c3e3615b590fc3161f371c0120",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.provenance": {
+    "sourceHash": "da3de6f5f088f3f53a6b3269022638f6bb2c791a8eb2206aa68ea3026be73df3",
+    "targetHash": "abc8d7dce40ff2113eb649694cb4d2067e2c23a604e0fd05ecab90a0d34b6d88",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.runs": {
+    "sourceHash": "c01d198e6e7448ef0e12609a36af860d5920131143e50fae50bcc5685abcff8c",
+    "targetHash": "495a38b892e3957551b436e8a4f955c1d66848af90cdc029c5f54b04a2568991",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:page.tasks": {
+    "sourceHash": "f7e2c5841176e48914986c334e0a3b5625e37fca0ad412488ff4013589f25d1e",
+    "targetHash": "910a990db31a03255e490ecae7b6388baefc226af2a6291aeab8b1656081feda",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:paperEdition": {
+    "sourceHash": "b3d7a123b7448f62ca4e650409aae28a6a0927ed69d492f6493ea37048070a98",
+    "targetHash": "df86a8df6a53940c3b767e1e8c55f07e9c9368a3e708972d947d5871baea574e",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:pinnedCaption": {
+    "sourceHash": "dde2f893deac65c4ffb737f6409b949793a683f738eb18529a3253a370125103",
+    "targetHash": "2d2791bd49487d1bd040cc13fbdbb33edc0e94de56541075d03b8f6a3718dadd",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:pinnedModules": {
+    "sourceHash": "df09bbab0bb2267f8ee4e1b5078906b5c02f5b45108d6fb56b43c8e72037956d",
+    "targetHash": "217ad0fd138940e0c4766077e6cda10c1ee4764e47008d83f575cf789deed1b6",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:privateProject": {
+    "sourceHash": "ebf74bd3281945ab2b22d8138e84fa21e3c84322cac78aa6a807aa5f6ac20258",
+    "targetHash": "a4076807a72a51d4977aa52b59f300df0a775e61785ac28439d5b52a7e580c97",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:projectCaption": {
+    "sourceHash": "005b899fdc081e185937597bb940f545a73cb0765005c96f1c38cd8b10c70356",
+    "targetHash": "1b79c210d7f52dbc0fefb4cc97b3e33d91cd3469ac591c769c26ff386ce9ffa0",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:projectNavigation": {
+    "sourceHash": "2dc5747c166e43b7135d37698f1a762537baa97df81244969bb06fc2f8f0fcb3",
+    "targetHash": "745475f29fa9d315d0952938b610963144c11982bd6357efa6c2f558d5ec45f0",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:projectPages": {
+    "sourceHash": "0d5ced3e710ada68d67f46646725ef483ab24153afc0b3d741d8983e68d3d097",
+    "targetHash": "455923d34463eda97503795e4d3488701f8d8419ab2c9da92fccb5ea5c2336ed",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:projectsFailed": {
+    "sourceHash": "911db57663a743c993bb4886aa4961f6f0632d7aeae1e4ea70f2312fe5d1f953",
+    "targetHash": "333c1dcd38a866f4a290971e353ff97cec9f3eb4cb62898e4a9e2a6b2ac67ede",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:searchProject": {
+    "sourceHash": "d9788eaa3f0620513dba00bc2c655763e616601f5ceefc58d9bec6a12c8df70d",
+    "targetHash": "a66d66e22d118ce4c77e48bc992b6641ccb7ade3b2510b9a580f3234171dd816",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:searchProjectShortcut": {
+    "sourceHash": "48217e714dcabe98dfae8b57088a123367e0b1340f9affe0915db5b2868cd1e6",
+    "targetHash": "938c0f2bb4c8bdf8f614d3dff05b2f7a6b5569ab62bae6334912f79641ee4e96",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:searchTasks": {
+    "sourceHash": "5f192af351c6f10f37a396c034399a104e4865ebdce89f1bfdfbd2429141ccc6",
+    "targetHash": "08170fa8e9953ecd440deab6bf7f744de7009201666c4af3444521b29833654e",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:skipToContent": {
+    "sourceHash": "2a4dbfb7e8d47dbb8ac433d381df32ac2180b88be4a8ad24309ff038252b3a2a",
+    "targetHash": "f5b613b736b81247e371ff707fa97b5e61719a93c138bbbd7f1d85b39778886d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:toDark": {
+    "sourceHash": "2a425f3e22883a0bb54f99391fc765ad3d1ee5c560796c518bbfeaf3c0a0c1a2",
+    "targetHash": "54039797e1684588e470529e1f054887c7454c389e4065345df38c8fcc76b553",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Current v4 navigation integration, not human-reviewed."
+  },
+  "shell:toggleTheme": {
+    "sourceHash": "f91d335f97e2bc6820fa95e4fca36141b67674aaa3a4ce4c776e528e5cb907a7",
+    "targetHash": "72240dd3ac079f0afdf348ee483df2be97482d1564d6a61704a1f2b477e0116b",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:toLight": {
+    "sourceHash": "c048a5f500920c66d581ad77fb7dd1d7528a9dc3164e476aa22904b8367bc51f",
+    "targetHash": "45c1850caf855ed22bc07f2cbdb95b292cc5f8394a80039746eb37fcc70117e6",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Current v4 navigation integration, not human-reviewed."
+  },
+  "shell:unavailable": {
+    "sourceHash": "19dcdfc125dca4340b0cb439f809973b795feb41965c5558f3bacf575dee10d7",
+    "targetHash": "b43c1bee1c1d7136b2005c51a2bb3cb3dd74d12d337b0c00cfce5bbfba7f6b09",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:unavailableLabel": {
+    "sourceHash": "48b0a4735ec0ab418d3029a93b41b2070c219fda3ebad6e1ceb375e71f16a6cb",
+    "targetHash": "0d5c3adabff035aeff13e989575bc01749f1d14156184d654d1d88fa03766e59",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "shell:workArea": {
+    "sourceHash": "bbf2b9f22340f572e56a4309da8faa3f50cfef7c1a68029a671ae112ac62530d",
+    "targetHash": "4dcdf4323b4af6aa5c4ab2c3116cae61ab8ec33c1c728e4540e0c3c1714d9656",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:count": {
+    "sourceHash": "3135108f922cc2b2cb1d3dd318172ee467315d30be6a399c512417ee57c3ddb5",
+    "targetHash": "d4b2ceb3df6292fa497136d0bb70fc467086dcd720caf08a67e85814a728c9f1",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.archived": {
+    "sourceHash": "55296dbd5b08a97cfd68c708af2f92e974f6e3b7ed767196e262c93605f7dd3a",
+    "targetHash": "f299d2c0ff88b19cd49d6cd989f97a126cec823ee247c8ec630acd615b1a9034",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.blocked": {
+    "sourceHash": "bb03e67759661f7babd3d4fa661179d68f5e799fad5f761aa6fd4d99cce81e85",
+    "targetHash": "cbe3f6af111521460467ef541270cd2b7f47babd7d8575b410784a7ca2b4684d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.done": {
+    "sourceHash": "917364b6425898983a56fa4d8a1721d58d3184a5578de62e5c0beda111eef953",
+    "targetHash": "2b4a262c691d2d4953e5c275488f6128e14491733923096126647b086f8f0cd0",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.ready": {
+    "sourceHash": "3dd69eeb7b6844c50915a159c7e4ae726451cb6cff04e422300d4d720bd0abfc",
+    "targetHash": "df614e5c830e4de2370de9243335b7577e144b13a1dcfb11baa79d9ac0f5671d",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.review": {
+    "sourceHash": "7ca14ca3db7a3840df34e684f21401f65b6311eb1b60d355e9f42b13a8487f78",
+    "targetHash": "6680cf708ab5dce066b559c8e843832322f27eb7b87de6ede3cc8b46d36372f8",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.running": {
+    "sourceHash": "839ea7e2298d06c6fd540c979224862aa2848f5fb2904ef9ce0979b72cdf11bd",
+    "targetHash": "8d4e8e91499a0e7cb5793b2cbf22c5e2c15b091787cf7bd18358732e5614d885",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.scheduled": {
+    "sourceHash": "cf333718f456c62f769c9ce3853405d50a90cd1e1f8c22b9f2d2e8923be61d4f",
+    "targetHash": "070f87426a9264d27315bf839632c58936819cfa36fcefc13931ffbfc92000af",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.todo": {
+    "sourceHash": "d5b26f86fd791932c7d655dc1c5666da25eb77d4dfefb8a5323b5c9ce30273e5",
+    "targetHash": "bf0deffd7ed5ce0cba317dce1988292125bc6685f90a6c9047bb899f733c43d6",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  },
+  "tasks:status.triage": {
+    "sourceHash": "b2bdce1445ef00a2970004fae334162dc64e30ac72173c2cadec775f111ccf24",
+    "targetHash": "1e0ced967675671eec14e6a93991cdaa71d2529f123a517824297cfdae388c3a",
+    "state": "translated",
+    "origin": "model-authored",
+    "note": "Initial bilingual implementation; machine checks do not certify human translation review."
+  }
+}

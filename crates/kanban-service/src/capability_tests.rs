@@ -422,6 +422,13 @@ mod tests {
             .expect("other task");
 
         let connection = store.connection().await.expect("connection");
+        let retired = connection.execute("INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, size_bytes, created_by, created_at) VALUES ('a_safe', 'b_default', 't_default_guard', 'safe.txt', 'safe.txt', 1, 'tester', 1)", ()).await.expect_err("旧附件表不再接受写入");
+        assert!(retired.to_string().contains("retired"));
+        // 旧格式导入仍使用原表约束，转换前只在受控事务内开放写入。
+        connection.execute("BEGIN", ()).await.unwrap();
+        crate::object_model::portable::begin_legacy_rows(&connection)
+            .await
+            .unwrap();
         connection
             .execute(
                 "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, size_bytes, created_by, created_at) VALUES ('a_safe', 'b_default', 't_default_guard', 'safe.txt', 'attachments/safe.txt', 1, 'tester', 1)",
@@ -445,6 +452,8 @@ mod tests {
             .await
             .expect_err("attachment update must reject parent traversal");
         assert!(update_error.to_string().contains("rel_path escapes"));
+
+        connection.execute("ROLLBACK", ()).await.unwrap();
 
         // 两次 create_task 已经分别建立 default/guard-other 的 canonical entity。
         let relation_error = connection

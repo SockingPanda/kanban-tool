@@ -1,0 +1,15 @@
+{
+  "config_version": 1,
+  "server_url": "http://127.0.0.1:8721",
+  "actor": "mcp",
+  "default_board": "default",
+  "profile": "all",
+  "disabled_tools": [],
+  "limits": {
+    "max_in_flight": 8,
+    "timeout_ms": 30000,
+    "max_arguments_bytes": 65536,
+    "max_result_bytes": 262144,
+    "page_size": 32
+  }
+}

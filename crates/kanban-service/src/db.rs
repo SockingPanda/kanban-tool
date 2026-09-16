@@ -99,7 +99,22 @@ impl TursoStore {
         backup_hook: Option<&dyn UpgradeBackupHook>,
     ) -> Result<(), StoreError> {
         let mut connection = self.connection().await?;
-        migration::apply(&mut connection, self.path.as_ref(), backup_hook).await?;
+        let outcome = migration::apply(&mut connection, self.path.as_ref(), backup_hook).await?;
+        let backup_required = outcome.state != migration::SchemaState::Fresh;
+        crate::object_model::migration::apply(
+            &mut connection,
+            self.path.as_ref(),
+            backup_hook,
+            backup_required,
+        )
+        .await?;
+        crate::object_model::files::migration::apply(
+            &mut connection,
+            self.path.as_ref(),
+            backup_hook,
+            backup_required,
+        )
+        .await?;
         connection
             .execute_batch(schema::PROJECTION_TRIGGER_SCHEMA)
             .await?;

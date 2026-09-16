@@ -1,0 +1,72 @@
+{
+  "strictFiles": [
+    "src/app/shell/project-navigation.tsx",
+    "src/app/shell/project-navigation-view.tsx",
+    "src/features/objects/ObjectWorkspace.tsx",
+    "src/features/attachments/AttachmentManager.tsx",
+    "src/features/tasks/TaskAttachments.tsx",
+    "src/features/settings/settings-view.tsx"
+  ],
+  "allowlist": [
+    {
+      "file": "src/app/shell/project-navigation-view.tsx",
+      "text": "Kanban",
+      "reason": "Product name, marked translate=no."
+    },
+    {
+      "file": "src/app/shell/project-navigation-view.tsx",
+      "text": "⌘ K",
+      "reason": "Keyboard keycap, marked translate=no."
+    },
+    {
+      "file": "src/app/shell/project-navigation-view.tsx",
+      "text": "K",
+      "reason": "Monogram fallback, not a natural-language message."
+    },
+    {
+      "file": "src/features/objects/ObjectWorkspace.tsx",
+      "text": "任务",
+      "reason": "Exact persisted built-in type name used only to detect the unmodified seed. The displayed label is translated by type key; user-renamed types retain their name."
+    },
+    {
+      "file": "src/features/objects/ObjectWorkspace.tsx",
+      "text": "模块",
+      "reason": "Exact persisted built-in type name used only to detect the unmodified seed. The displayed label is translated by type key; user-renamed types retain their name."
+    },
+    {
+      "file": "src/features/objects/ObjectWorkspace.tsx",
+      "text": "迭代",
+      "reason": "Exact persisted built-in type name used only to detect the unmodified seed. The displayed label is translated by type key; user-renamed types retain their name."
+    },
+    {
+      "file": "src/features/objects/ObjectWorkspace.tsx",
+      "text": "文件",
+      "reason": "Exact persisted built-in type name used only to detect the unmodified seed. The displayed label is translated by type key; user-renamed types retain their name."
+    },
+    {
+      "file": "src/features/objects/ObjectWorkspace.tsx",
+      "text": "笔记",
+      "reason": "Exact persisted built-in type name used only to detect the unmodified seed. The displayed label is translated by type key; user-renamed types retain their name."
+    },
+    {
+      "file": "src/features/objects/ObjectWorkspace.tsx",
+      "text": "资料",
+      "reason": "Exact persisted built-in type name used only to detect the unmodified seed. The displayed label is translated by type key; user-renamed types retain their name."
+    },
+    {
+      "file": "src/features/attachments/AttachmentManager.tsx",
+      "text": "application/octet-stream",
+      "reason": "Literal MIME type, not a natural-language message."
+    },
+    {
+      "file": "src/features/settings/settings-view.tsx",
+      "text": "简体中文",
+      "reason": "语言选项保留该语言的自称，便于在另一种语言界面中识别。"
+    },
+    {
+      "file": "src/features/settings/settings-view.tsx",
+      "text": "English",
+      "reason": "语言选项保留该语言的自称，便于在另一种语言界面中识别。"
+    }
+  ]
+}

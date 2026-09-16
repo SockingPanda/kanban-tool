@@ -1,0 +1,14 @@
+{
+  "description": "Manage this project's connection, interface preferences, and data maintenance.",
+  "projectData": "Project data",
+  "projectDataDescription": "Connected to the local service. Changes are saved by the service.",
+  "reconnect": "Reconnect",
+  "healthCheck": "Health check",
+  "dataMaintenance": "Data maintenance",
+  "interfaceTheme": "Interface theme",
+  "themeDescription": "The {{theme}} theme is active.",
+  "toggleTheme": "Toggle",
+  "appearanceLanguage": "Appearance and language",
+  "connectionDiagnostics": "Connection and diagnostics",
+  "shortcuts": "Shortcuts: {{search}} to search; {{create}} to create a task; {{close}} to close dialogs."
+}

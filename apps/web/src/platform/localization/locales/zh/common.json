@@ -1,0 +1,16 @@
+{
+  "bootstrapLoading": "正在加载 Kanban 工作区…",
+  "cancel": "取消",
+  "darkTheme": "深色",
+  "errorConflict": "数据已变化，请刷新后重试。",
+  "errorInvalidInput": "输入无效，请检查后重试。",
+  "errorUnavailable": "暂时无法连接服务，请检查连接后重试。",
+  "errorUnknown": "操作未完成，请重试。",
+  "language": "语言",
+  "lightTheme": "浅色",
+  "loading": "加载中…",
+  "productName": "Kanban Tool",
+  "retry": "重试",
+  "save": "保存",
+  "settings": "设置"
+}

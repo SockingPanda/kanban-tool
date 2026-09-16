@@ -44,3 +44,5 @@ use kanban_service::vector;
 - [规范持久化](docs/persistence.md)
 - [迁移与导入](docs/migration.md)
 - [维护](docs/maintenance.md)
+- [对象与关系](docs/objects.md)
+- [文件与附件](docs/files.md)

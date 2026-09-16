@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Kanban MCP startup configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "config_version": {
+      "type": "integer",
+      "const": 1,
+      "default": 1
+    },
+    "server_url": {
+      "type": "string",
+      "minLength": 1,
+      "default": "http://127.0.0.1:8721",
+      "description": "只接受带显式端口的 http:// loopback endpoint；运行时进行更严格校验。"
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "default": "mcp"
+    },
+    "default_board": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "default": "default"
+    },
+    "profile": {
+      "type": "string",
+      "enum": [
+        "work",
+        "read_only",
+        "all"
+      ],
+      "default": "work"
+    },
+    "disabled_tools": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9_.-]+$"
+      },
+      "default": []
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_in_flight": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64,
+          "default": 8
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 30000,
+          "default": 30000
+        },
+        "max_arguments_bytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 1048576,
+          "default": 65536
+        },
+        "max_result_bytes": {
+          "type": "integer",
+          "minimum": 16384,
+          "maximum": 4194304,
+          "default": 262144
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 32
+        }
+      }
+    }
+  }
+}

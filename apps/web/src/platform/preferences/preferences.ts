@@ -1,5 +1,7 @@
+import { parseLocale, localeTag, LOCALE_DESCRIPTORS, type Locale } from "../localization/locale"
+import { bootstrapLoadingCopy } from "../localization/bootstrap"
 export type ThemeMode = "system" | "light" | "dark"
-export type Locale = "zh" | "en"
+export type { Locale } from "../localization/locale"
 export type DensityMode = "compact" | "comfortable"
 
 export type WebPreferences = {
@@ -43,7 +45,7 @@ export function parseThemePreference(value: unknown): ThemeMode | null {
 }
 
 export function parseLocalePreference(value: unknown): Locale | null {
-  return value === "zh" || value === "en" ? value : null
+  return parseLocale(value)
 }
 
 export function parseDensityPreference(value: unknown): DensityMode | null {
@@ -124,13 +126,14 @@ export function themeColorForMode(mode: ThemeMode, prefersDark = false): string 
 }
 
 export function loadingCopyForLocale(locale: Locale): string {
-  return locale === "en" ? "Loading Kanban workspace…" : "正在加载 Kanban 工作区…"
+  return bootstrapLoadingCopy(locale)
 }
 
 type PreferenceDocument = Pick<Document, "documentElement" | "querySelector">
 
 export function applyWebPreferencesToDocument(preferences: WebPreferences, documentLike: PreferenceDocument): void {
-  documentLike.documentElement.lang = preferences.locale === "en" ? "en" : "zh-CN"
+  documentLike.documentElement.lang = localeTag(preferences.locale)
+  documentLike.documentElement.dir = LOCALE_DESCRIPTORS[preferences.locale].direction
   if (preferences.theme === "system") delete documentLike.documentElement.dataset.theme
   else documentLike.documentElement.dataset.theme = preferences.theme
   documentLike.documentElement.dataset.density = preferences.density

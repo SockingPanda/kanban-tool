@@ -24,6 +24,12 @@ JSON 的 signed/unsigned integer 分支保持整数精度。业务错误通过�
 字段编号保存在 `proto/rpc-field-numbers.json`。生成实现由 `xtask` 持有，build script 只编译
 本 owner 下的 Protobuf source。
 
+对象和文件接口由 `proto/kanban/extensions/v1/workspace.proto` 持有，并与原有 source 编入同一
+descriptor。`xtask` 从这些声明生成 `proto/rpc-extensions.json`，并纳入正式 RPC catalog 的
+精确集合校验。原生 `kanban-client` 复用共享 gRPC channel；浏览器使用同源 gRPC-Web。
+对象属性以 `JsonValue` 保留有符号、无符号 64 位整数，文件按有界块上传、流式下载。
+这些 RPC 不自动扩展领域 CLI/MCP 工具目录。
+
 schema 描述序列化形状、字段可选性和 transport envelope；状态 transition、claim token、board
 isolation、依赖环、idempotency 和事务原子性由 service/server/client 测试与领域规则证明，不能从
 JSON Schema 推断。
@@ -41,6 +47,9 @@ label proposal 有 task-scoped 与 board-wide 两种独立的 typed contract；b
 `proto/kanban/v1/query.proto` 的 `QueryDefinition` 与 `QueryResult` 用对应的具名 oneof 复用完整
 业务请求和响应。查询身份包含 Host runtime、canonical board、规范化过滤/排序/分页与投影版本；
 订阅 ID、恢复 cursor 和显式 `refresh` 不进入身份。一个 `WatchQueries` 连接复用多个活跃查询。
+
+对象、模块、周期与文件列表使用同一 `QueryDefinition` / `QueryResult`；新增 oneof 编号从 36
+追加，已有编号不变。扩展查询共享 read fence、恢复 cursor、delta 与 Ready，不另设对象提示流。
 
 `QueryBegin`、`QueryChunk`、`QueryEnd` 传送完整 snapshot 或基于旧编码的精确 splice delta。
 delta 描述偏移、删除字节数和插入字节；最终仍还原成完整 typed `QueryResult`，包含 total、窗口

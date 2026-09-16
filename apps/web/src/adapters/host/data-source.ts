@@ -1,3 +1,5 @@
+import { createObjectClient } from './object-client';
+import { createAttachmentTransferClient } from './attachment-transfer';
 import { readBoardDirectory } from './board-directory';
 import type { WebRuntimeConfig } from '../../lib/runtime';
 import type { WorkspaceDataSource } from '../../application/workspace/data-source';
@@ -25,6 +27,8 @@ export function createHostDataSource(runtime: WebRuntimeConfig, options: RpcTran
     recentEvents: (request, signal) => registry.read({ method: 'RecentEvents', query: request, signal }),
   };
   return {
+    createObjectClient: config => createObjectClient(config, registry, transport, options),
+    createAttachmentTransferClient: (config, board) => createAttachmentTransferClient(config, board, registry, transport, options),
     readBoardDirectory: signal => readBoardDirectory(transport, signal),
     loadBoardReadModel: (config, selector, readOptions = {}) => loadBoardReadModel(config, selector, {
       ...readOptions, dependencies: { transport, ...readOptions.dependencies },

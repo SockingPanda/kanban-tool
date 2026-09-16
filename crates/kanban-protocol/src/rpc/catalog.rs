@@ -57,6 +57,12 @@ pub fn methods() -> &'static [RpcMethodDescriptor] {
             response: "QueryFrame".into(),
             server_streaming: true,
         });
+        methods.extend(
+            serde_json::from_str::<Vec<RpcMethodDescriptor>>(include_str!(
+                "../../proto/rpc-extensions.json"
+            ))
+            .expect("对象/文件 RPC manifest 必须有效"),
+        );
         methods
     })
 }

@@ -1,3 +1,5 @@
+import type { ObjectClient } from "../data/object-client";
+import type { AttachmentTransferClient } from "../data/attachment-transfer";
 import type { BoardOption } from '../../domain/board-directory';
 import type { WebRuntimeConfig } from "../../lib/runtime";
 import type { BoardReadModelOptions, BoardReadModel, BoardReadQuery } from "../data/board-read-model";
@@ -14,6 +16,8 @@ import type { MaintenanceApiDependencies, MaintenanceApi } from "../data/mainten
 
 /** 按 Board 和查询条件读取数据；提交返回 canonical service 的确认结果。 */
 export interface WorkspaceDataSource {
+  createObjectClient(runtime: WebRuntimeConfig): ObjectClient;
+  createAttachmentTransferClient(runtime: WebRuntimeConfig, boardSelector: string): AttachmentTransferClient;
   readBoardDirectory(signal?: AbortSignal): Promise<readonly BoardOption[]>;
   loadBoardReadModel(runtime: WebRuntimeConfig, selector?: string, options?: BoardReadModelOptions): Promise<BoardReadModel>;
   createBoardReadQuery(runtime: WebRuntimeConfig, selector?: string, options?: BoardReadModelOptions): BoardReadQuery;

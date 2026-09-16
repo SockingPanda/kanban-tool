@@ -135,7 +135,7 @@ test('依赖添加、环拒绝和删除，讨论及普通标签、附件', async
   await expect(page.getByRole('textbox', { name: '评论内容' })).toHaveValue('');
   expect((await read(request, '/comments')).some((comment: { body: string }) => comment.body === `已验证 ${info.project.name}`)).toBe(true);
   await page.getByRole('button', { name: '详情', exact: true }).click();
-  await page.getByText('标签与附件', { exact: true }).first().click();
+  await page.locator('summary').filter({ hasText: /^标签$/ }).click();
   await page.getByRole('textbox', { name: '标签名称' }).fill('Stage09 release');
   await page.getByTestId('label-add').click();
   await expect(page.getByTestId('inspector-labels')).toContainText('Stage09 release');
@@ -143,13 +143,13 @@ test('依赖添加、环拒绝和删除，讨论及普通标签、附件', async
   await expect(page.getByTestId('label-suggestions')).toBeVisible();
   const content = Buffer.from('真实附件\n');
   await page.getByTestId('attachment-file').setInputFiles({ name: 'paper.txt', mimeType: 'text/plain', buffer: content });
-  await page.getByTestId('attachment-upload').click();
   await expect(page.getByTestId('attachment-row')).toContainText('paper.txt');
   const attachment = (await read(request, '/attachments'))[0];
   expect(attachment.sha256).toBe(createHash('sha256').update(content).digest('hex'));
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('attachment-download').click()]);
   expect(download.suggestedFilename()).toBe('paper.txt');
   await page.getByTestId('attachment-delete').click();
+  await page.getByRole('button', { name: '确认解除引用', exact: true }).click();
   await expect(page.getByTestId('attachment-row')).toHaveCount(0);
   await page.getByTestId('label-remove').click();
   await expect.poll(async () => (await read(request, '/labels')).length).toBe(0);

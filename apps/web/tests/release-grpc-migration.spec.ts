@@ -25,7 +25,7 @@ function requests(page: Page) {
   return seen
 }
 function assertProtocol(seen: ReturnType<typeof requests>) {
-  const rpc = seen.filter(request => new URL(request.url).pathname.startsWith('/kanban.v1.'))
+  const rpc = seen.filter(request => new URL(request.url).pathname.startsWith('/kanban.'))
   expect(rpc.length).toBeGreaterThan(0)
   expect(rpc.every(request => request.method === 'POST' && request.contentType === 'application/grpc-web+proto')).toBe(true)
   expect(seen.filter(request => new URL(request.url).pathname.startsWith('/api/v1/'))).toEqual([])
@@ -62,7 +62,7 @@ test('实际 Host：完整查询订阅保留 URL，外部评论和标签写入�
   await expect(page.getByTestId('task-discussion')).toContainText('外部非卡片评论')
   const commentVisibleMs = Date.now() - start
   await page.getByRole('button', { name: '详情', exact: true }).click()
-  await page.getByText('标签与附件', { exact: true }).first().click()
+  await page.locator('summary').filter({ hasText: /^标签$/ }).click()
   await rpc.business.addTaskLabel({ taskId, name: '外部标签', createMissing: true })
   await expect(page.getByTestId('inspector-labels')).toContainText('外部标签')
   await expect(page).toHaveURL(new RegExp(`status=todo&q=needle&task=${taskId}`))
@@ -132,11 +132,10 @@ test('实际 Host：浏览器上传和下载 5 MiB 附件，超过旧 JSON 上�
   const seen = requests(page)
   await page.goto(`/app/boards/${board}/list?task=${taskId}`)
   await expect(page.getByTestId('task-inspector')).toBeVisible()
-  await page.getByText('标签与附件', { exact: true }).first().click()
+  await page.locator('summary').filter({ hasText: /^标签$/ }).click()
   const content = Buffer.alloc(5 * 1024 * 1024, 0xab)
   const filename = 'grpc-中文附件.bin'
   await page.getByTestId('attachment-file').setInputFiles({ name: filename, mimeType: 'application/octet-stream', buffer: content })
-  await page.getByTestId('attachment-upload').click()
   await expect(page.getByTestId('attachment-row')).toContainText(filename)
   const downloadEvent = page.waitForEvent('download')
   await page.getByTestId('attachment-download').click()
@@ -146,8 +145,8 @@ test('实际 Host：浏览器上传和下载 5 MiB 附件，超过旧 JSON 上�
   if (!path) throw new Error('浏览器没有保存下载内容')
   const { readFile } = await import('node:fs/promises')
   expect((await readFile(path)).equals(content)).toBe(true)
-  expect(seen.some(request => request.url.endsWith('/CreateAttachment'))).toBe(true)
-  expect(seen.some(request => request.url.endsWith('/DownloadAttachment'))).toBe(true)
+  expect(seen.some(request => request.url.endsWith('/FinishFileUpload'))).toBe(true)
+  expect(seen.some(request => request.url.endsWith('/DownloadFile'))).toBe(true)
   assertProtocol(seen)
   await evidence(info, 'attachment-requests', seen)
 })

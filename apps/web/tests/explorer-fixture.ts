@@ -133,7 +133,7 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
   const summary = () => ({ id: TASK_ID, board_id: BOARD_ID, board_slug: BOARD_SLUG, ref: TASK_REF, title: "Task Inspector fixture", status: "ready" })
   rpc.handle("*", async call => {
     apiRequests.push(call.method)
-    if (call.kind === "unary" && !["SuggestTaskLabels", "DownloadAttachment"].includes(call.method)) writeRequests.push(call.method)
+    if (call.kind === "unary" && !["SuggestTaskLabels", "DownloadAttachment", "DownloadFile"].includes(call.method)) writeRequests.push(call.method)
     const { query, input, path } = call
     const taskId = String(path.task_id ?? TASK_ID)
     switch (call.method) {
@@ -188,6 +188,7 @@ export async function installExplorerFixture(page: Page, options: ExplorerFixtur
       case "ListComments": return { data: [] }
       case "CreateComment": return { data: { id: "comment_fixture", board_id: BOARD_ID, task_id: TASK_ID, author: "playwright", author_type: "user", agent_type: null, body: "fixture comment", kind: "note", metadata: {}, created_at: 1 } }
       case "ListAttachments": return { data: attachments }
+      case "DownloadFile":
       case "DownloadAttachment": return { attachment: attachments.find(item => item.id === path.attachment_id), content: new TextEncoder().encode("fixture") }
       case "DeleteAttachment": { const index = attachments.findIndex(item => item.id === path.attachment_id); if (index >= 0) attachments.splice(index, 1); return { data: { deleted: true } } }
       case "ListTaskLabels": return { data: readyTask.labels }

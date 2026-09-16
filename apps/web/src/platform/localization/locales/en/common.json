@@ -1,0 +1,16 @@
+{
+  "bootstrapLoading": "Loading Kanban workspace…",
+  "cancel": "Cancel",
+  "darkTheme": "Dark",
+  "errorConflict": "The data has changed. Refresh and try again.",
+  "errorInvalidInput": "Invalid input. Check the values and try again.",
+  "errorUnavailable": "The service is unreachable. Check the connection and try again.",
+  "errorUnknown": "The operation did not complete. Try again.",
+  "language": "Language",
+  "lightTheme": "Light",
+  "loading": "Loading…",
+  "productName": "Kanban Tool",
+  "retry": "Retry",
+  "save": "Save",
+  "settings": "Settings"
+}

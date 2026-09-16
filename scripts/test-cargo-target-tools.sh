@@ -288,9 +288,9 @@ assert_resource_limit_defaults() {
     -u KANBAN_CARGO_BUILD_JOBS \
     -u KANBAN_TEST_THREADS \
     KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
-    [[ "${CARGO_BUILD_JOBS:-}" == "2" ]]
-    [[ "${NEXTEST_TEST_THREADS:-}" == "2" ]]
-    [[ "${RUST_TEST_THREADS:-}" == "2" ]]
+    [[ "${CARGO_BUILD_JOBS:-}" == "8" ]]
+    [[ "${NEXTEST_TEST_THREADS:-}" == "8" ]]
+    [[ "${RUST_TEST_THREADS:-}" == "8" ]]
   '
 
   KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
@@ -334,9 +334,9 @@ assert_resource_limit_defaults() {
     -u KANBAN_CARGO_BUILD_JOBS \
     -u KANBAN_TEST_THREADS \
     KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c '
-    [[ "${CARGO_BUILD_JOBS:-}" == "2" ]]
-    [[ "${NEXTEST_TEST_THREADS:-}" == "2" ]]
-    [[ "${RUST_TEST_THREADS:-}" == "2" ]]
+    [[ "${CARGO_BUILD_JOBS:-}" == "8" ]]
+    [[ "${NEXTEST_TEST_THREADS:-}" == "8" ]]
+    [[ "${RUST_TEST_THREADS:-}" == "8" ]]
     touch "$1"
   ' _ "$nested_marker"
   [[ -e "$nested_marker" ]] || fail "nested resource limit command 未运行"

@@ -12,6 +12,7 @@ members = [
   "crates/kanban-live-core",
   "apps/desktop/src-tauri",
 ]
+exclude = ["vendor/tantivy-0.26.1"]
 default-members = [
   "crates/kanban-core",
   "crates/kanban-service",
@@ -89,3 +90,7 @@ kanban-web-artifact = { path = "crates/kanban-web-artifact", default-features = 
 kanban-client = { path = "crates/kanban-client" }
 kanban-server = { path = "crates/kanban-server" }
 kanban-live-core = { path = "crates/kanban-live-core" }
+
+# 回移上游的 lru 安全升级；来源、唯一补丁和退出条件见 vendor/README.md。
+[patch.crates-io]
+tantivy = { path = "vendor/tantivy-0.26.1" }

@@ -505,7 +505,8 @@ fn resolve_maps<'a>(
                     optional_string_field(declared, "source", "cargo metadata dependency")
                         .ok()
                         .flatten()
-                        == resolved_source;
+                        == resolved_source
+                        || is_tantivy_security_patch(metadata, declared, resolved_package);
                 let kind_matches = dep_kinds.iter().any(|kind| {
                     kind.as_object()
                         .and_then(|kind| dep_kind_matches(declared, kind).ok())
@@ -528,6 +529,28 @@ fn resolve_maps<'a>(
         )));
     }
     Ok(by_id)
+}
+
+/// Cargo 的 path patch 保留 registry declaration，但 resolved source 为 null。
+/// 只接受当前登记的安全补丁，不能把任意本地包当成 registry source。
+fn is_tantivy_security_patch(
+    metadata: &Map<String, Value>,
+    declared: &Map<String, Value>,
+    resolved: &Map<String, Value>,
+) -> bool {
+    let Some(root) = metadata.get("workspace_root").and_then(Value::as_str) else {
+        return false;
+    };
+    declared.get("source").and_then(Value::as_str) == Some(CRATES_IO_SOURCE)
+        && resolved.get("source") == Some(&Value::Null)
+        && resolved.get("name").and_then(Value::as_str) == Some("tantivy")
+        && resolved.get("version").and_then(Value::as_str) == Some("0.26.1")
+        && resolved
+            .get("manifest_path")
+            .and_then(Value::as_str)
+            .is_some_and(|path| {
+                Path::new(path) == Path::new(root).join("vendor/tantivy-0.26.1/Cargo.toml")
+            })
 }
 
 fn workspace_by_name(
@@ -2116,6 +2139,49 @@ mod tests {
     #[test]
     fn clean_fixture_passes() {
         audit_metadata(&fixture()).expect("clean dependency fixture should pass");
+    }
+
+    #[test]
+    fn only_registered_tantivy_patch_can_replace_registry_source() {
+        let mut metadata = fixture();
+        metadata["workspace_root"] = json!("/workspace");
+        let patched_id = "path+file:///workspace/vendor/tantivy-0.26.1#tantivy@0.26.1";
+        let mut patched = registry_package("tantivy");
+        patched["id"] = json!(patched_id);
+        patched["source"] = Value::Null;
+        patched["version"] = json!("0.26.1");
+        patched["manifest_path"] = json!("/workspace/vendor/tantivy-0.26.1/Cargo.toml");
+        metadata["packages"].as_array_mut().unwrap().push(patched);
+        package_record(&mut metadata, "turso")["dependencies"]
+            .as_array_mut()
+            .unwrap()
+            .push(registry_dependency("tantivy", "^0.26", true, &[]));
+        let nodes = metadata["resolve"]["nodes"].as_array_mut().unwrap();
+        let turso = nodes
+            .iter_mut()
+            .find(|node| node["id"] == registry_id("turso", "0.7.2"))
+            .unwrap();
+        turso["deps"] = json!([edge("tantivy", patched_id)]);
+        turso["dependencies"] = json!([patched_id]);
+        nodes.push(node(patched_id, vec![], &[]));
+        audit_metadata(&metadata).expect("已登记的 Tantivy patch 应通过");
+
+        for manifest in [
+            "/workspace/vendor/other/Cargo.toml",
+            "/workspace/vendor/tantivy-0.26.1-extra/Cargo.toml",
+            "/outside/vendor/tantivy-0.26.1/Cargo.toml",
+        ] {
+            assert_reject(metadata.clone(), |metadata| {
+                package_record(metadata, "tantivy")["manifest_path"] = json!(manifest);
+            });
+        }
+        assert_reject(metadata.clone(), |metadata| {
+            package_record(metadata, "tantivy")["version"] = json!("0.26.2");
+        });
+        assert_reject(metadata, |metadata| {
+            dependency_record(metadata, "turso", "tantivy")["source"] =
+                json!("registry+https://unregistered.example/index");
+        });
     }
 
     #[test]

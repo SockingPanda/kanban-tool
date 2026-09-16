@@ -2,3 +2,6 @@
 * text=auto eol=lf
 
 *.png binary
+
+# 第三方发布源码按原始字节保存，便于核对来源和补丁。
+vendor/tantivy-0.26.1/** -text -whitespace linguist-vendored

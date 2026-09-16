@@ -73,12 +73,26 @@ pub(crate) fn workspace_members(root: &Path) -> ToolResult<Vec<String>> {
 
 pub(crate) fn repository_files(root: &Path, extension: &str) -> ToolResult<Vec<PathBuf>> {
     let mut files = Vec::new();
-    collect_files(root, extension, &mut files)?;
+    collect_files(root, root, extension, &mut files)?;
     files.sort();
     Ok(files)
 }
 
-fn collect_files(path: &Path, extension: &str, files: &mut Vec<PathBuf>) -> ToolResult<()> {
+/// 只跳过已登记的第三方发布包；vendor 下的第一方说明仍参与仓库检查。
+pub(crate) fn is_vendored_source(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root)
+        .is_ok_and(|relative| relative.starts_with("vendor/tantivy-0.26.1"))
+}
+
+fn collect_files(
+    root: &Path,
+    path: &Path,
+    extension: &str,
+    files: &mut Vec<PathBuf>,
+) -> ToolResult<()> {
+    if is_vendored_source(root, path) {
+        return Ok(());
+    }
     if path.is_symlink() {
         return Ok(());
     }
@@ -100,7 +114,7 @@ fn collect_files(path: &Path, extension: &str, files: &mut Vec<PathBuf>) -> Tool
         ) {
             continue;
         }
-        collect_files(&entry.path(), extension, files)?;
+        collect_files(root, &entry.path(), extension, files)?;
     }
     Ok(())
 }
@@ -345,6 +359,9 @@ members = [
         fs::create_dir_all(root.join("node_modules/pkg"))
             .expect("node_modules directory should be creatable");
         fs::create_dir_all(root.join("target/doc")).expect("target directory should be creatable");
+        fs::create_dir_all(root.join("vendor/tantivy-0.26.1"))
+            .expect("vendor directory should be creatable");
+        fs::create_dir_all(root.join("vendor/other")).expect("other directory should be creatable");
         fs::write(root.join("docs/guide.md"), "# Guide\n").expect("guide should be writable");
         fs::write(
             root.join("node_modules/pkg/README.md"),
@@ -356,9 +373,25 @@ members = [
             "[broken](../missing)\n",
         )
         .expect("generated README should be writable");
+        fs::write(
+            root.join("vendor/tantivy-0.26.1/README.md"),
+            "[upstream link](../upstream-only)\n",
+        )
+        .expect("vendored README should be writable");
+        fs::write(root.join("vendor/README.md"), "# 补丁来源\n")
+            .expect("vendor guide should be writable");
+        fs::write(root.join("vendor/other/README.md"), "# 其他内容\n")
+            .expect("other guide should be writable");
 
         let files = repository_files(&root, "md").expect("repository files should be readable");
-        assert_eq!(files, vec![root.join("docs/guide.md")]);
+        assert_eq!(
+            files,
+            vec![
+                root.join("docs/guide.md"),
+                root.join("vendor/README.md"),
+                root.join("vendor/other/README.md"),
+            ]
+        );
 
         fs::remove_dir_all(root).expect("temporary root should be removable");
     }

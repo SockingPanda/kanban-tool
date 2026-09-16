@@ -1,0 +1,52 @@
+xtask/src/check/agents.rs
+  s_15a3d10bc0d369::t_1c27395dbcd793 1-2,21
+  s_15a3d10bc0d369::t_df6eff5bfa18f2 23
+  s_15a3d10bc0d369::t_5778701edfcf24 262-265
+docs/documentation.md
+  s_15a3d10bc0d369::t_df6eff5bfa18f2 22,26,30
+xtask/README.md
+  s_15a3d10bc0d369::t_5778701edfcf24 21-22,52-58
+  s_15a3d10bc0d369::t_a0e8a7da8de23d 59
+xtask/src/check/agents/route_contract.rs
+  s_15a3d10bc0d369::t_570e6c7aac3457 109-111,152,224-228,256-262,295-299,314-318,365-366,373-376,381-384
+  s_15a3d10bc0d369::t_1c27395dbcd793 1-8,10-38,44-108,112-151,153-223,233-255,263-294,300-313,360-364,367-372,377-380,385-407
+  s_15a3d10bc0d369::t_5778701edfcf24 229-232,319-359
+  s_15a3d10bc0d369::t_df6eff5bfa18f2 9,39-43
+docs/adr/README.md
+  s_15a3d10bc0d369::t_1c27395dbcd793 16
+docs/architecture.md
+  s_15a3d10bc0d369::t_1c27395dbcd793 61-63
+docs/collaboration.md
+  s_15a3d10bc0d369::t_1c27395dbcd793 1-83
+.agents/skills/prose/SKILL.md
+  s_15a3d10bc0d369::t_1c27395dbcd793 15
+.agents/skills/check/SKILL.md
+  s_15a3d10bc0d369::t_1c27395dbcd793 3,10,12-13,15-17,19,21-29,31-32,34,36-38,40-52
+AGENTS.md
+  s_15a3d10bc0d369::t_1c27395dbcd793 49,55,64,78
+docs/adr/0010_repository_collaboration.md
+  s_15a3d10bc0d369::t_1c27395dbcd793 1-16,20-41
+  s_15a3d10bc0d369::t_5778701edfcf24 17-19
+.agents/skills/docs/SKILL.md
+  s_15a3d10bc0d369::t_1c27395dbcd793 3,20-21
+  s_15a3d10bc0d369::t_4de673b882d4d0 22
+justfile
+  s_15a3d10bc0d369::t_1c27395dbcd793 117-120,124,307-313
+  s_15a3d10bc0d369::t_6319e106ccb567 314
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "60a427160c3556def6ea288337f6ecfd900a5da4",
+  "prompts": {},
+  "sessions": {
+    "s_15a3d10bc0d369": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a9f3-ee29-73f0-af2f-22e7ab90579a",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

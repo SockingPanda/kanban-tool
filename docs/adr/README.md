@@ -13,3 +13,4 @@ ledger、旧 recovery runbook、聚合快照、baseline 和一次性 workaround 
 - [0007 唯一 Host 的本地 gRPC](0007_local_grpc.md)
 - [0008 对象关系作为唯一关系事实](0008_object_relations.md)
 - [0009 文件身份与对象关联分离](0009_file_objects.md)
+- [0010 协作规则、技能路由与验证入口](0010_repository_collaboration.md)

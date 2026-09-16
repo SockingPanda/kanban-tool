@@ -12,6 +12,7 @@ description: 为 kanban-tool 编写或重写简体中文 README、owner guide、
 硬边界：
 
 - 项目说明以简体中文为主；命令、路径、crate、API/JSON 字段、枚举和库名保留精确 literal。
+- 翻译目录遵循目标 locale，不把其他语言资源机械改为中文。用户可见文案通过现有翻译 owner 维护；错误码、持久化身份与协议字段不翻译，也不另建 locale 状态。
 - 先给最小可用路径，再链接高级细节；已有 canonical 定义时只写影响和链接，不复制第二份规范。
 - 只写当前状态。精确 endpoint/flag/schema、测试名、gate、baseline 和迁移进度由代码、生成 artifact、CI 或任务记录持有。
 - 示例必须能由当前 help、代码、测试或 schema 核对；不确定时标记待核对，不用猜测填空。

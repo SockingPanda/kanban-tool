@@ -42,6 +42,10 @@ fn each_typed_query_has_its_matching_complete_result() {
         .map(|(name, (message, number))| {
             let response = if name == "recent_events" {
                 "ListEventsResponse".into()
+            } else if name == "list_object_files" {
+                "kanban.extensions.v1.FileListOutput".into()
+            } else if name == "get_object_catalog" || message.starts_with("kanban.extensions.v1.") {
+                "kanban.extensions.v1.ObjectDocument".into()
             } else {
                 format!("{}Response", message.strip_suffix("Request").unwrap())
             };

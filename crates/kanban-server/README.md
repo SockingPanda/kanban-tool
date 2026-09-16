@@ -15,6 +15,11 @@ CLI、MCP、Desktop 和 typed client 通过 localhost 使用 host；它们不应
 server 路由测试核对每个正式方法实际到达对应 Protobuf decoder。业务 adapter 调用共享 application，
 application 再调用 `kanban-service`，不形成第二 mutation path。
 
+`ObjectService` 和 `FileService` 接收对象命令、对象读取以及文件上传和下载，同样调用
+`kanban-service`。文件会话限制上传大小、块大小、并发和空闲时间；取消释放尚未提交的会话，
+已经开始的提交保留收尾任务与资源直到结果确定。Host 关闭时停止接收新工作并等待这些任务。
+对象、模块、周期和文件列表持续读取使用上述统一 `QueryService`，不提供单独的对象提示流。
+
 原生 RPC 从 HTTP/2 `:authority` 校验目标；请求同时带 `Host` 时两者必须一致。
 Origin 仅接受当前 listener 和明确的 Desktop 开发来源。
 `grpc-timeout` 约束请求和响应流；取消或退出会释放订阅名额。

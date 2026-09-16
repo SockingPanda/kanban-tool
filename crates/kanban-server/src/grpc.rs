@@ -5,6 +5,7 @@ use tower::Layer;
 mod business;
 mod context;
 mod deadline;
+mod extensions;
 #[cfg(test)]
 mod probe;
 mod query;
@@ -14,6 +15,8 @@ pub(crate) use probe::SourceProbe;
 pub(crate) const RPC_ROUTES: &[&str] = &[
     "/kanban.v1.KanbanService/*method",
     "/kanban.v1.QueryService/WatchQueries",
+    "/kanban.extensions.v1.ObjectService/*method",
+    "/kanban.extensions.v1.FileService/*method",
 ];
 
 pub struct RpcMount {
@@ -25,16 +28,19 @@ pub struct RpcMount {
 #[derive(Clone)]
 pub struct HostRpcRuntime {
     query: query::QueryRuntime,
+    extensions: extensions::ExtensionRuntime,
 }
 
 impl HostRpcRuntime {
     pub fn begin_shutdown(&self) {
         self.query.begin_shutdown();
+        self.extensions.begin_shutdown();
     }
 
     pub async fn stop(&self) {
         self.begin_shutdown();
         self.query.stop().await;
+        self.extensions.stop().await;
     }
 }
 
@@ -52,7 +58,9 @@ pub fn rpc_mount(state: &AppState) -> RpcMount {
         kanban_protocol::rpc::v1::query_service_server::QueryServiceServer::new(queries.clone())
             .max_decoding_message_size(256 * 1024)
             .max_encoding_message_size(kanban_protocol::rpc::query::MAX_QUERY_FRAME_BYTES);
+    let (extension_router, extensions) = extensions::mount(state);
     let router = Router::new()
+        .merge(extension_router)
         .route_service(
             RPC_ROUTES[0],
             tonic_web::GrpcWebLayer::new().layer(deadline::Deadline::new(business)),
@@ -63,7 +71,10 @@ pub fn rpc_mount(state: &AppState) -> RpcMount {
         );
     RpcMount {
         router,
-        runtime: HostRpcRuntime { query: queries },
+        runtime: HostRpcRuntime {
+            query: queries,
+            extensions,
+        },
     }
 }
 

@@ -1,4 +1,4 @@
-//! File capability: immutable content plus ordinary object relations. No second database or host.
+//! 文件能力由不可变内容与普通对象关系组成，复用同一数据库和 Host。
 pub(crate) mod migration;
 mod model;
 mod path;

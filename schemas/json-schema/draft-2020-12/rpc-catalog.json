@@ -958,5 +958,133 @@
     "response": "QueryFrame",
     "server_streaming": true,
     "service": "kanban.v1.QueryService"
+  },
+  {
+    "method": "ExecuteObject",
+    "operation_id": "rpc.extension.execute-object",
+    "request": "ObjectCommandInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "GetObject",
+    "operation_id": "rpc.extension.get-object",
+    "request": "ObjectIdentityInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "ListObjects",
+    "operation_id": "rpc.extension.list-objects",
+    "request": "ObjectListInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "GetObjectCatalog",
+    "operation_id": "rpc.extension.get-object-catalog",
+    "request": "Empty",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "GetObjectOverview",
+    "operation_id": "rpc.extension.get-object-overview",
+    "request": "ObjectIdentityInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "GetWorkflowClosure",
+    "operation_id": "rpc.extension.get-workflow-closure",
+    "request": "ObjectIdentityInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "GetObjectReferences",
+    "operation_id": "rpc.extension.get-object-references",
+    "request": "ObjectReferencesInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "GetObjectHistory",
+    "operation_id": "rpc.extension.get-object-history",
+    "request": "ObjectHistoryInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "GetObjectSnapshots",
+    "operation_id": "rpc.extension.get-object-snapshots",
+    "request": "ObjectSnapshotsInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "DiagnoseObjects",
+    "operation_id": "rpc.extension.diagnose-objects",
+    "request": "ObjectBoardInput",
+    "response": "ObjectDocument",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.ObjectService"
+  },
+  {
+    "method": "BeginFileUpload",
+    "operation_id": "rpc.extension.begin-file-upload",
+    "request": "BeginFileUploadInput",
+    "response": "BeginFileUploadOutput",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.FileService"
+  },
+  {
+    "method": "WriteFileChunk",
+    "operation_id": "rpc.extension.write-file-chunk",
+    "request": "WriteFileChunkInput",
+    "response": "FileOffsetOutput",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.FileService"
+  },
+  {
+    "method": "FinishFileUpload",
+    "operation_id": "rpc.extension.finish-file-upload",
+    "request": "FileUploadIdentity",
+    "response": "FileInfo",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.FileService"
+  },
+  {
+    "method": "CancelFileUpload",
+    "operation_id": "rpc.extension.cancel-file-upload",
+    "request": "FileUploadIdentity",
+    "response": "CancelFileUploadOutput",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.FileService"
+  },
+  {
+    "method": "ListObjectFiles",
+    "operation_id": "rpc.extension.list-object-files",
+    "request": "FileOwnerInput",
+    "response": "FileListOutput",
+    "server_streaming": false,
+    "service": "kanban.extensions.v1.FileService"
+  },
+  {
+    "method": "DownloadFile",
+    "operation_id": "rpc.extension.download-file",
+    "request": "FileIdentityInput",
+    "response": "FileDownloadFrame",
+    "server_streaming": true,
+    "service": "kanban.extensions.v1.FileService"
   }
 ]

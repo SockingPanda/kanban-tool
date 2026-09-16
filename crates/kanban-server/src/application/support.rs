@@ -34,7 +34,7 @@ pub(crate) struct CallContext {
     pub actor: Option<String>,
 }
 
-pub(super) fn request_actor(
+pub(crate) fn request_actor(
     body_actor: Option<&str>,
     context: &CallContext,
     default_actor: &str,

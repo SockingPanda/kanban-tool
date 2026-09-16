@@ -5811,7 +5811,7 @@
   ],
   "rpc_catalog": {
     "path": "rpc-catalog.json",
-    "sha256": "sha256:6ed57f603434ad9ceb40bfc3ec49f411a4dc8305607786265938bb4b7a642892"
+    "sha256": "sha256:917c14a61a87b15d30a8970976dd204cacd4c28abcdc06481999f1ff56b42e0b"
   },
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema"
 }

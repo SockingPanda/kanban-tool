@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// The original filename and blob identity are immutable. Object.title is a separate display title.
+/// 原始文件名和 blob 身份不可变；Object.title 单独管理显示标题。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileInfo {
     pub id: String,

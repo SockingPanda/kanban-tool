@@ -5,6 +5,7 @@ mod context;
 mod dependency;
 mod entities;
 mod event;
+mod extensions;
 mod graph;
 mod labels;
 mod maintenance;

@@ -16,7 +16,7 @@ macro_rules! query_calls {
                     let (path, query, input) = request.decode_parts().map_err(invalid_request)?;
                     Ok(Query::$variant(pb::$request::from_parts(path, query, input).map_err(invalid_request)?))
                 })*
-                Query::RecentEvents(request) => Ok(Query::RecentEvents(request)),
+                query => Ok(query),
             }
         }
 
@@ -35,6 +35,7 @@ macro_rules! query_calls {
                     let value = kanban_protocol::ListEventsResponse::new(events, kanban_protocol::NextAfterMeta { next_after: page.next_after });
                     Projection::RecentEvents(value.try_into().map_err(response_codec_error)?)
                 }
+                query => super::super::extensions::read_query(&state, query).await?,
             };
             let result = pb::QueryResult { result: Some(result) };
             if result.encoded_len() > super::MAX_SNAPSHOT_BYTES {
@@ -155,6 +156,34 @@ pub(super) async fn normalize(state: &AppState, query: Query) -> Result<Query, S
         TaskNeighborhood,
         ListRuns
     );
+    let board_id = match &mut query {
+        Query::GetObject(i) | Query::GetObjectOverview(i) | Query::GetWorkflowClosure(i) => {
+            Some(&mut i.board_id)
+        }
+        Query::ListObjects(i) => {
+            i.limit = if i.limit == 0 { 100 } else { i.limit };
+            Some(&mut i.board_id)
+        }
+        Query::GetObjectHistory(i) => {
+            i.limit = if i.limit == 0 { 100 } else { i.limit };
+            Some(&mut i.board_id)
+        }
+        Query::GetObjectSnapshots(i) => {
+            i.limit = if i.limit == 0 { 50 } else { i.limit };
+            Some(&mut i.board_id)
+        }
+        Query::DiagnoseObjects(i) => Some(&mut i.board_id),
+        Query::ListObjectFiles(i) => {
+            i.limit = if i.limit == 0 { 100 } else { i.limit };
+            Some(&mut i.board_id)
+        }
+        _ => None,
+    };
+    if let Some(board_id) = board_id {
+        let mut canonical = Some(board_id.clone());
+        canonical_board(state, &mut canonical).await?;
+        *board_id = canonical.expect("非空 board selector");
+    }
     match &mut query {
         Query::GetRun(request) => trim_id(&mut request.run_id, "r_")?,
         Query::GetRunLog(request) => trim_id(&mut request.run_id, "r_")?,

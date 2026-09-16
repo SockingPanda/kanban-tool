@@ -1,4 +1,4 @@
-//! Independently fingerprinted migration. No original v4 or object-model v2 DDL is rewritten.
+//! 迁移拥有独立指纹，保留原 v4 与对象模型 v2 的 DDL。
 use super::super::{catalog, migration as objects, relations, store::*};
 use super::path;
 use crate::StoreError;
@@ -201,7 +201,7 @@ pub(crate) async fn migrate_legacy_attachments(c: &Connection) -> Result<(), Sto
         if let Some(sha) = &sha {
             path::sha256(sha).map_err(error)?;
         }
-        // A previously shared path can become one shared blob only when its metadata agrees.
+        // 旧共享路径只有在 metadata 一致时才能转换为共享 blob。
         let old = rows(
             c,
             "SELECT id,size_bytes,sha256 FROM file_blobs WHERE storage_key=?1",
@@ -224,8 +224,8 @@ pub(crate) async fn migrate_legacy_attachments(c: &Connection) -> Result<(), Sto
         exec(c, "INSERT INTO file_objects(object_id,board_id,type_key,blob_id,original_filename,content_type,created_by,created_at) VALUES (?1,?2,'file',?3,?4,?5,?6,?7)", vec![s(&id),s(&board),s(&blob_id),s(&filename),os(mime.as_deref()),s(&actor),n(created)]).await.map_err(error)?;
         exec(c, "INSERT INTO object_relation_edges(board_id,relation_key,source_id,target_id,source_type,source_cardinality,target_cardinality,created_at) VALUES (?1,'file.attachment',?2,?3,'file','many','many',?4)", vec![s(&board),s(&id),s(&owner),n(created)]).await.map_err(error)?;
     }
-    // The old table remains only to preserve the original baseline DDL identity.
-    // Its rows have moved, not been duplicated. Future INSERTs are rejected by a trigger.
+    // 保留旧表以维持原基线的 DDL 身份。
+    // 原行已迁出，trigger 拒绝后续 INSERT。
     exec(c, "DELETE FROM task_attachments", vec![])
         .await
         .map_err(error)?;

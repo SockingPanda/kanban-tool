@@ -87,7 +87,7 @@ fn expired() -> Status {
     Status::deadline_exceeded("RPC deadline 已到期")
 }
 
-fn parse(headers: &HeaderMap) -> Result<Option<Instant>, Status> {
+pub(super) fn parse(headers: &HeaderMap) -> Result<Option<Instant>, Status> {
     let mut values = headers.get_all("grpc-timeout").iter();
     let Some(raw) = values.next() else {
         return Ok(None);

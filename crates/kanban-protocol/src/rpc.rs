@@ -21,3 +21,11 @@ pub use codec::{RpcCodecError, decode_json, decode_status, encode_json, encode_s
 
 /// 操作到原 DTO parts 的生成映射，供 adapter 和覆盖验证消费。
 pub const METHOD_MANIFEST: &str = include_str!("../proto/rpc-methods.json");
+
+/// 同一 descriptor 中的对象和文件扩展。命名层级与 Protobuf package 一致。
+pub mod extensions {
+    pub mod v1 {
+        tonic::include_proto!("kanban.extensions.v1");
+    }
+    pub use v1::*;
+}

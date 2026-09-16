@@ -542,8 +542,8 @@ pub(super) async fn validate_system(c: &Connection) -> ObjectResult<()> {
     Ok(())
 }
 
-/// Extension built-ins are included only after their own lineage marker exists.
-/// The original SEED bytes remain unchanged, preserving object-model v2 fingerprints.
+/// 扩展的内建类型只在对应 lineage 标记存在后参与校验。
+/// 保留原 SEED 字节，维持对象模型 v2 的指纹。
 pub(super) async fn seed_with_extensions(c: &Connection) -> ObjectResult<Seed> {
     let mut seed: Seed = serde_json::from_str(SEED)?;
     if exists(

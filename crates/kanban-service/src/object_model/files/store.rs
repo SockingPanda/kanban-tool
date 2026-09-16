@@ -113,7 +113,7 @@ pub(crate) fn validate_spec(spec: &FileUploadSpec) -> ObjectResult<()> {
     Ok(())
 }
 
-/// A replay never recreates a reference that the user has since removed.
+/// 重放不会重新创建用户已经解除的引用。
 pub(crate) async fn replay(
     c: &Connection,
     spec: &FileUploadSpec,
@@ -157,8 +157,8 @@ pub(crate) async fn open(root: &Path, record: &StoredFile) -> ObjectResult<File>
     .map_err(ObjectError::storage)?
 }
 
-/// Caller owns the shared mutation gate. Blob publication precedes the metadata transaction commit.
-/// Every failure retains published content. No error branch removes a possibly shared blob.
+/// 调用方持有共享 mutation gate，blob 发布先于 metadata 事务提交。
+/// 失败时保留已发布的内容，避免删除可能被共享的 blob。
 pub(crate) async fn commit(
     store: &TursoStore,
     root: &Path,
@@ -220,7 +220,7 @@ pub(crate) async fn commit(
     }
 }
 
-/// Legacy task deletion removes only its live relation. File objects and blobs remain available.
+/// 旧任务附件删除仅解除对应关系，文件对象和 blob 继续保留。
 pub(crate) async fn unlink_legacy(
     store: &TursoStore,
     board_id: &str,

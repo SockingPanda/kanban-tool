@@ -155,7 +155,7 @@ fn fixture_table(discriminator: &str) -> &'static str {
         "signal_observation" => "signal_observations",
         "signal" => "signals",
         "event" => "task_events",
-        "attachment" => "task_attachments",
+        "attachment" => "file_objects",
         "label" => "labels",
         "label_semantics" => "label_semantics",
         "label_atom" => "label_atoms",
@@ -181,6 +181,11 @@ fn fixture_identity<'a>(discriminator: &str, data: &'a Map<String, Value>) -> &'
         _ => "id",
     };
     data.get(key)
+        .or_else(|| {
+            (discriminator == "attachment")
+                .then(|| data.get("object_id"))
+                .flatten()
+        })
         .unwrap_or_else(|| panic!("{discriminator} fixture lacks identity field {key}"))
 }
 
@@ -211,6 +216,7 @@ fn find_fixture_record<'a>(
         .find(|record| {
             record.as_object().and_then(|data| {
                 data.get(match discriminator {
+                    "attachment" => "object_id",
                     "dependency" => "parent_task_id",
                     "label_semantics" => "label_id",
                     "label_ontology_action_atom_effect" | "label_ontology_action_signal" => {

@@ -2,6 +2,8 @@ syntax = "proto3";
 package kanban.v1;
 import "kanban/v1/kanban.proto";
 import "kanban/v1/dto.proto";
+import "kanban/extensions/v1/workspace.proto";
+import "kanban/v1/common.proto";
 
 // 一个 runtime 的活跃查询复用同一连接，避免浏览器 HTTP/1 同源连接限额。
 service QueryService {
@@ -53,6 +55,16 @@ message QueryDefinition {
     ListBoardLabelsRequest list_board_labels = 33;
     SearchTasksRequest search_tasks = 34;
     SearchTasksByStatusRequest search_tasks_by_status = 35;
+    kanban.extensions.v1.ObjectIdentityInput get_object = 36;
+    kanban.extensions.v1.ObjectListInput list_objects = 37;
+    Empty get_object_catalog = 38;
+    kanban.extensions.v1.ObjectIdentityInput get_object_overview = 39;
+    kanban.extensions.v1.ObjectIdentityInput get_workflow_closure = 40;
+    kanban.extensions.v1.ObjectReferencesInput get_object_references = 41;
+    kanban.extensions.v1.ObjectHistoryInput get_object_history = 42;
+    kanban.extensions.v1.ObjectSnapshotsInput get_object_snapshots = 43;
+    kanban.extensions.v1.ObjectBoardInput diagnose_objects = 44;
+    kanban.extensions.v1.FileOwnerInput list_object_files = 45;
   }
 }
 
@@ -92,6 +104,16 @@ message QueryResult {
     ListBoardLabelsResponse list_board_labels = 33;
     SearchTasksResponse search_tasks = 34;
     SearchTasksByStatusResponse search_tasks_by_status = 35;
+    kanban.extensions.v1.ObjectDocument get_object = 36;
+    kanban.extensions.v1.ObjectDocument list_objects = 37;
+    kanban.extensions.v1.ObjectDocument get_object_catalog = 38;
+    kanban.extensions.v1.ObjectDocument get_object_overview = 39;
+    kanban.extensions.v1.ObjectDocument get_workflow_closure = 40;
+    kanban.extensions.v1.ObjectDocument get_object_references = 41;
+    kanban.extensions.v1.ObjectDocument get_object_history = 42;
+    kanban.extensions.v1.ObjectDocument get_object_snapshots = 43;
+    kanban.extensions.v1.ObjectDocument diagnose_objects = 44;
+    kanban.extensions.v1.FileListOutput list_object_files = 45;
   }
 }
 

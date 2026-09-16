@@ -166,3 +166,86 @@ async fn empty_file_limits_and_cancelled_staging_preserve_capacity() {
         0
     );
 }
+
+#[tokio::test]
+async fn portable_and_database_backup_restore_with_separate_attachment_roots() {
+    let (source_dir, source) = fixture().await;
+    let bytes = b"hex:ordinary text\nrestored immutable bytes";
+    let spec = spec("a_restored", bytes);
+    let original = upload(&source, &spec, bytes).await;
+    let history = serde_json::to_value(
+        source
+            .object_history("b_default", "t_one", 0, 100)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let connection = source.store.connection().await.unwrap();
+    let storage_key = store::lookup(&connection, "b_default", "t_one", &spec.file_id)
+        .await
+        .unwrap()
+        .storage_key;
+    let portable = source_dir.path().join("portable-v5.jsonl");
+    source.export(portable.to_str().unwrap()).await.unwrap();
+    for from_backup in [false, true] {
+        let restored_dir = tempfile::tempdir().unwrap();
+        let root = restored_dir.path().join("attachments");
+        std::fs::create_dir(&root).unwrap();
+        let database = restored_dir.path().join("restored.db");
+        if from_backup {
+            source.backup(database.to_str().unwrap()).await.unwrap();
+        }
+        let restored = KanbanService::open_with_roots(&database, None, Arc::new(root.clone()))
+            .await
+            .unwrap();
+        if !from_backup {
+            let first = restored
+                .import(portable.to_str().unwrap(), false)
+                .await
+                .unwrap();
+            let replay = restored
+                .import(portable.to_str().unwrap(), false)
+                .await
+                .unwrap();
+            assert_eq!(first.journal_id, replay.journal_id);
+        }
+        // metadata 的成功恢复不能伪装成内容恢复；附件目录必须独立恢复。
+        assert!(
+            restored
+                .file_download("b_default", "t_one", &spec.file_id)
+                .await
+                .is_err()
+        );
+        let restored_blob = path::guarded(&root, &storage_key, true).unwrap();
+        std::fs::copy(
+            source_dir.path().join("attachments").join(&storage_key),
+            restored_blob,
+        )
+        .unwrap();
+        let mut download = restored
+            .file_download("b_default", "t_one", &spec.file_id)
+            .await
+            .unwrap();
+        assert_eq!(download.info, original);
+        let mut actual = Vec::new();
+        download.file.read_to_end(&mut actual).unwrap();
+        assert_eq!(actual, bytes);
+        assert_eq!(
+            serde_json::to_value(
+                restored
+                    .object_history("b_default", "t_one", 0, 100)
+                    .await
+                    .unwrap()
+            )
+            .unwrap(),
+            history
+        );
+        let connection = restored.store.connection().await.unwrap();
+        assert!(
+            super::super::store::rows(&connection, "PRAGMA foreign_key_check", vec![])
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+}

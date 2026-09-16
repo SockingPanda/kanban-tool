@@ -1,4 +1,4 @@
-//! All client-supplied paths are rejected. Legacy relative paths are read-only migration data.
+//! 拒绝客户端提供的路径；旧相对路径只用于只读迁移。
 use crate::object_model::{ObjectError, ObjectResult};
 use std::{
     fs,

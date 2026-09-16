@@ -9,10 +9,12 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    sync::Arc,
 };
 
 use rusqlite::Connection as SqliteConnection;
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 use turso::Connection;
 
 use crate::{
@@ -21,6 +23,15 @@ use crate::{
 };
 
 const PORTABLE_TABLES: &[&str] = &[
+    "file_model_schema",
+    "object_model_schema",
+    "object_types",
+    "object_properties",
+    "object_options",
+    "object_type_properties",
+    "object_relation_types",
+    "object_workflows",
+    "object_rollups",
     "boards",
     "board_columns",
     "tasks",
@@ -48,6 +59,15 @@ const PORTABLE_TABLES: &[&str] = &[
     "label_ontology_action_atom_effects",
     "signal_observations",
     "signals",
+    "objects",
+    "file_blobs",
+    "file_objects",
+    "object_property_slots",
+    "object_property_values",
+    "object_requests",
+    "object_snapshots",
+    "object_event_links",
+    "object_relation_edges",
 ];
 
 /// 这些表由 provider/worker 派生，portable adoption 只验证它们不进入事实快照。
@@ -80,7 +100,6 @@ INSERT INTO task_dependencies(board_id,parent_task_id,child_task_id,created_at) 
 INSERT INTO task_runs(id,board_id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,claim_expires_at,started_at,last_heartbeat_at,finished_at,exit_code,summary,error,log_path,metadata_json) VALUES ('r_core','b_core','t_core','succeeded','manual',7,'claim-core','tester',100,21,22,23,0,'done',NULL,NULL,'{}');
 INSERT INTO task_comments(id,board_id,task_id,idempotency_key,author,author_type,agent_type,body,kind,metadata_json,created_at) VALUES ('c_core','b_core','t_core',NULL,'tester','user',NULL,'portable comment','note','{"source":"fixture"}',31);
 INSERT INTO task_events(event_id,board_id,task_id,run_id,kind,actor,payload_json,created_at) VALUES ('e_core','b_core','t_core','r_core','custom.opaque','tester','["opaque",1]',32);
-INSERT INTO task_attachments(id,board_id,task_id,filename,rel_path,content_type,size_bytes,sha256,created_by,created_at) VALUES ('a_core','b_core','t_core','artifact.txt','attachments/artifact.txt','text/plain',7,NULL,'tester',33);
 INSERT INTO labels(id,board_id,name,color,created_at,updated_at) VALUES ('l_core','b_core','core',NULL,34,35), ('l_fixture','b_fixture','rust',NULL,34,35);
 INSERT INTO task_labels(board_id,task_id,label_id,created_at) VALUES ('b_core','t_core','l_core',36);
 INSERT INTO app_settings(key,value_json,updated_at) VALUES ('contract.fixture','{"enabled":true}',37);
@@ -109,6 +128,38 @@ COMMIT;
         .map_err(|error| error.to_string())?;
     connection
         .execute("DELETE FROM projection_jobs", ())
+        .await
+        .map_err(|error| error.to_string())?;
+    drop(connection);
+    drop(store);
+    let root = path
+        .parent()
+        .ok_or("fixture 缺少父目录")?
+        .join("attachments");
+    let service = crate::KanbanService::open_with_roots(path, None, Arc::new(root))
+        .await
+        .map_err(|error| error.to_string())?;
+    let bytes = b"fixture";
+    let spec = crate::object_model::files::FileUploadSpec {
+        board_id: "b_core".into(),
+        owner_id: "t_core".into(),
+        file_id: "a_core".into(),
+        filename: "artifact.txt".into(),
+        content_type: Some("text/plain".into()),
+        size_bytes: bytes.len() as u64,
+        sha256: format!("{:x}", Sha256::digest(bytes)),
+        actor: "tester".into(),
+    };
+    let upload = service
+        .file_begin_upload(&spec)
+        .await
+        .map_err(|error| error.to_string())?
+        .write_chunk(bytes)
+        .map_err(|error| error.to_string())?
+        .seal()
+        .map_err(|error| error.to_string())?;
+    service
+        .file_commit_upload(&spec, upload)
         .await
         .map_err(|error| error.to_string())?;
     Ok(())
@@ -210,11 +261,26 @@ pub fn assert_portable_facts_equal(source: &Path, target: &Path) -> Result<(), S
         source_records, target_records,
         "portable canonical records 发生变化"
     );
-    let attachment = find_record(&target_records, "task_attachments", "id", "a_core")?;
-    assert_eq!(attachment["rel_path"], "attachments/artifact.txt");
-    assert_eq!(attachment["size_bytes"], 7);
-    assert_eq!(attachment["sha256"], Value::Null);
-    assert_eq!(attachment["created_at"], 33);
+    assert!(!target_records.contains_key("task_attachments"));
+    let attachment = find_record(&target_records, "file_objects", "object_id", "a_core")?;
+    assert_eq!(attachment["original_filename"], "artifact.txt");
+    assert_eq!(attachment["created_by"], "tester");
+    let blob = find_record(
+        &target_records,
+        "file_blobs",
+        "id",
+        attachment["blob_id"].as_str().ok_or("缺少 blob_id")?,
+    )?;
+    assert_eq!(blob["size_bytes"], 7);
+    assert_eq!(blob["sha256"], format!("{:x}", Sha256::digest(b"fixture")));
+    let relation = find_record(
+        &target_records,
+        "object_relation_edges",
+        "source_id",
+        "a_core",
+    )?;
+    assert_eq!(relation["target_id"], "t_core");
+    assert_eq!(relation["relation_key"], "file.attachment");
 
     let dependency = find_record(
         &target_records,
@@ -249,7 +315,7 @@ pub fn assert_legacy_target_facts(export_path: &Path) -> Result<(), String> {
             {
                 dependency = record.get("data").cloned();
             }
-            Some("task_attachments") if record["data"]["id"].as_str() == Some("a_legacy") => {
+            Some("file_objects") if record["data"]["object_id"].as_str() == Some("a_legacy") => {
                 attachment = record.get("data").cloned();
             }
             _ => {}
@@ -265,8 +331,13 @@ pub fn assert_legacy_target_facts(export_path: &Path) -> Result<(), String> {
     assert_eq!(dependency["child_task_id"], "t_child");
     assert_eq!(dependency["created_at"], 110);
     let attachment = attachment.ok_or("缺少 legacy attachment fact")?;
-    assert_eq!(attachment["rel_path"], "attachments/legacy.txt");
-    assert_eq!(attachment["size_bytes"], 7);
+    assert_eq!(attachment["original_filename"], "legacy.txt");
+    let records = read_export(export_path)?;
+    let blob = find_record(&records, "file_blobs", "id", "legacy_a_legacy")?;
+    assert_eq!(blob["storage_key"], "attachments/legacy.txt");
+    assert_eq!(blob["size_bytes"], 7);
+    let relation = find_record(&records, "object_relation_edges", "source_id", "a_legacy")?;
+    assert_eq!(relation["target_id"], "t_legacy");
     assert_eq!(attachment["created_at"], 120);
     Ok(())
 }

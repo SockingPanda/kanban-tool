@@ -26,6 +26,11 @@ input 和返回 DTO。actor 使用 `x-kb-actor-bin` metadata，支持中文与�
 标准 RPC error detail 保留 `ClientError::code()`、业务错误和兼容的 `Api.status` 数值。请求和响应的
 消息预算使用 protocol 的统一上限，附件内容上限由 application service 校验。
 
+对象操作以及分块文件上传、流式下载由 `operations::extensions` 接入相同 Channel；输入输出
+使用 `rpc::extensions` 的具名 Protobuf 类型。对象动态值保留 64 位整数，写入携带原 request_id
+和 actor；取消或超时后必须读取核对结果，不能假定写入回滚。文件上传按服务返回的 chunk limit
+推进，重试同一块时保留 offset 和原字节，提交结果未知时保留原 file_id。
+
 label proposal 查询区分 task scope 与 board scope：调用 `list_task_label_proposals` 或
 `list_board_label_proposals`，后者可传 `status` 过滤。ontology 的既有 `Value` 外壳在 client 边界转换为
 具名 typed DTO；`ontology_data` 是同步的本地 DTO 转换。

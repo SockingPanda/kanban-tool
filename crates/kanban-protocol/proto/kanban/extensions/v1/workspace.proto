@@ -1,0 +1,159 @@
+// 对象与文件的正式 RPC；动态属性使用无损 JsonValue，生成入口为 xtask。
+syntax = "proto3";
+package kanban.extensions.v1;
+import "kanban/v1/common.proto";
+
+message ObjectDocument {
+  kanban.v1.JsonValue data = 1;
+}
+
+message ObjectCommandInput {
+  string board_id = 1;
+  string actor = 2;
+  string request_id = 3;
+  kanban.v1.JsonValue mutation = 4;
+}
+
+message ObjectIdentityInput {
+  string board_id = 1;
+  string object_id = 2;
+}
+
+message ObjectBoardInput {
+  string board_id = 1;
+}
+
+message ObjectListInput {
+  string board_id = 1;
+  string type_key = 2;
+  string text = 3;
+  bool include_archived = 4;
+  uint32 limit = 5;
+  kanban.v1.JsonValue filters = 6;
+  kanban.v1.JsonValue after = 7;
+}
+
+message ObjectReferencesInput {
+  kanban.v1.JsonValue query = 1;
+}
+
+message ObjectHistoryInput {
+  string board_id = 1;
+  string object_id = 2;
+  sint64 after = 3;
+  uint32 limit = 4;
+}
+
+message ObjectSnapshotsInput {
+  string board_id = 1;
+  string object_id = 2;
+  string before = 3;
+  uint32 limit = 4;
+}
+
+message FileInfo {
+  string id = 1;
+  string board_id = 2;
+  string owner_id = 3;
+  string filename = 4;
+  string content_type = 5;
+  uint64 size_bytes = 6;
+  string sha256 = 7;
+  string created_by = 8;
+  sint64 created_at = 9;
+  sint64 object_version = 10;
+}
+
+message BeginFileUploadInput {
+  string board_id = 1;
+  string owner_id = 2;
+  string file_id = 3;
+  string filename = 4;
+  string content_type = 5;
+  uint64 size_bytes = 6;
+  string sha256 = 7;
+  string actor = 8;
+}
+
+message BeginFileUploadOutput {
+  string upload_id = 1;
+  uint64 offset = 2;
+  uint32 chunk_limit = 3;
+  FileInfo completed = 4;
+}
+
+message WriteFileChunkInput {
+  string upload_id = 1;
+  uint64 offset = 2;
+  bytes data = 3;
+}
+
+message FileOffsetOutput {
+  uint64 offset = 1;
+}
+
+message FileUploadIdentity {
+  string upload_id = 1;
+}
+
+message FileOwnerInput {
+  string board_id = 1;
+  string owner_id = 2;
+  uint32 limit = 3;
+  string after_id = 4;
+}
+
+message FileListOutput {
+  repeated FileInfo items = 1;
+  string next_id = 2;
+}
+
+message FileIdentityInput {
+  string board_id = 1;
+  string owner_id = 2;
+  string file_id = 3;
+}
+
+message FileDownloadChunk {
+  uint64 offset = 1;
+  bytes data = 2;
+}
+
+message FileDownloadComplete {
+  uint64 size_bytes = 1;
+  string sha256 = 2;
+}
+
+message FileDownloadFrame {
+  oneof frame {
+    FileInfo header = 1;
+    FileDownloadChunk chunk = 2;
+    FileDownloadComplete complete = 3;
+  }
+}
+
+message CancelFileUploadOutput {
+  bool removed = 1;
+}
+
+service ObjectService {
+  rpc ExecuteObject(ObjectCommandInput) returns (ObjectDocument);
+  rpc GetObject(ObjectIdentityInput) returns (ObjectDocument);
+  rpc ListObjects(ObjectListInput) returns (ObjectDocument);
+  rpc GetObjectCatalog(kanban.v1.Empty) returns (ObjectDocument);
+  rpc GetObjectOverview(ObjectIdentityInput) returns (ObjectDocument);
+  rpc GetWorkflowClosure(ObjectIdentityInput) returns (ObjectDocument);
+  rpc GetObjectReferences(ObjectReferencesInput) returns (ObjectDocument);
+  rpc GetObjectHistory(ObjectHistoryInput) returns (ObjectDocument);
+  rpc GetObjectSnapshots(ObjectSnapshotsInput) returns (ObjectDocument);
+  rpc DiagnoseObjects(ObjectBoardInput) returns (ObjectDocument);
+}
+
+service FileService {
+  rpc BeginFileUpload(BeginFileUploadInput) returns (BeginFileUploadOutput);
+  rpc WriteFileChunk(WriteFileChunkInput) returns (FileOffsetOutput);
+  rpc FinishFileUpload(FileUploadIdentity) returns (FileInfo);
+  rpc CancelFileUpload(FileUploadIdentity) returns (CancelFileUploadOutput);
+  rpc ListObjectFiles(FileOwnerInput) returns (FileListOutput);
+  rpc DownloadFile(FileIdentityInput) returns (stream FileDownloadFrame);
+}

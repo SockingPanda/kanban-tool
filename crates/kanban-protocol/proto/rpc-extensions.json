@@ -1,0 +1,130 @@
+[
+  {
+    "operation_id": "rpc.extension.execute-object",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "ExecuteObject",
+    "request": "ObjectCommandInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.get-object",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "GetObject",
+    "request": "ObjectIdentityInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.list-objects",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "ListObjects",
+    "request": "ObjectListInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.get-object-catalog",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "GetObjectCatalog",
+    "request": "Empty",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.get-object-overview",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "GetObjectOverview",
+    "request": "ObjectIdentityInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.get-workflow-closure",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "GetWorkflowClosure",
+    "request": "ObjectIdentityInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.get-object-references",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "GetObjectReferences",
+    "request": "ObjectReferencesInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.get-object-history",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "GetObjectHistory",
+    "request": "ObjectHistoryInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.get-object-snapshots",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "GetObjectSnapshots",
+    "request": "ObjectSnapshotsInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.diagnose-objects",
+    "service": "kanban.extensions.v1.ObjectService",
+    "method": "DiagnoseObjects",
+    "request": "ObjectBoardInput",
+    "response": "ObjectDocument",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.begin-file-upload",
+    "service": "kanban.extensions.v1.FileService",
+    "method": "BeginFileUpload",
+    "request": "BeginFileUploadInput",
+    "response": "BeginFileUploadOutput",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.write-file-chunk",
+    "service": "kanban.extensions.v1.FileService",
+    "method": "WriteFileChunk",
+    "request": "WriteFileChunkInput",
+    "response": "FileOffsetOutput",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.finish-file-upload",
+    "service": "kanban.extensions.v1.FileService",
+    "method": "FinishFileUpload",
+    "request": "FileUploadIdentity",
+    "response": "FileInfo",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.cancel-file-upload",
+    "service": "kanban.extensions.v1.FileService",
+    "method": "CancelFileUpload",
+    "request": "FileUploadIdentity",
+    "response": "CancelFileUploadOutput",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.list-object-files",
+    "service": "kanban.extensions.v1.FileService",
+    "method": "ListObjectFiles",
+    "request": "FileOwnerInput",
+    "response": "FileListOutput",
+    "server_streaming": false
+  },
+  {
+    "operation_id": "rpc.extension.download-file",
+    "service": "kanban.extensions.v1.FileService",
+    "method": "DownloadFile",
+    "request": "FileIdentityInput",
+    "response": "FileDownloadFrame",
+    "server_streaming": true
+  }
+]

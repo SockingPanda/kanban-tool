@@ -5,6 +5,7 @@
 //! `kanban-server` 通过 [`KanbanService`] 持有唯一的 canonical store；CLI、MCP 和 Desktop
 //! 通过 localhost API 访问，不直接接触数据库。
 
+mod attachment_stream;
 mod db;
 mod domain;
 mod error;
@@ -39,6 +40,7 @@ mod graph_tests;
 pub mod adoption_test_support;
 
 pub mod dto;
+pub mod object_model;
 pub mod operations;
 mod service;
 mod suggestion_engine;
@@ -47,8 +49,10 @@ mod vector;
 #[cfg(feature = "legacy-sqlite-import")]
 mod legacy_import;
 
+pub use attachment_stream::{ATTACHMENT_IO_CHUNK_BYTES, AttachmentUpload, MAX_ATTACHMENT_BYTES};
 pub use dto::*;
 pub use kanban_core::{Board, BoardColumn, KanbanError, Result, TaskStatus, new_task_id};
+pub use operations::AttachmentStreamRecord;
 pub use operations::maintenance::{
     BackupReportRecord, CheckpointReportRecord, DoctorDerivedStoreRecord, DoctorIssueRecord,
     DoctorReportRecord, ExportReportRecord, ImportReportRecord, MaintenanceOwnerRecord,

@@ -1,0 +1,29 @@
+{
+  "types": [
+    {
+      "definition": {
+        "key": "file",
+        "name": "文件",
+        "layout": { "view": "file", "body_format": "markdown", "content_capability": "immutable_blob" }
+      },
+      "capability": "plain"
+    }
+  ],
+  "properties": [],
+  "bindings": [],
+  "relations": [
+    {
+      "key": "file.attachment",
+      "name": "附件引用",
+      "source_type": "file",
+      "target_type": null,
+      "source_property": "file.owners",
+      "target_property": null,
+      "source_cardinality": "many",
+      "target_cardinality": "many",
+      "acyclic": false
+    }
+  ],
+  "workflows": [],
+  "rollups": []
+}

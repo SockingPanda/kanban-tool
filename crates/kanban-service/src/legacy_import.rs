@@ -1236,6 +1236,7 @@ async fn write_transaction(
     for attachment in attachments {
         tx.execute("INSERT INTO attachment_staging(id,journal_id,attachment_id,source_rel_path,staged_rel_path,expected_sha256,expected_size_bytes,observed_sha256,observed_size_bytes,phase,error,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?6,?7,'verified',NULL,?8,?8)", vec![Value::Text(staging_id(journal,&attachment.id)),Value::Text(journal.to_owned()),Value::Text(attachment.id.clone()),Value::Text(attachment.rel_path.clone()),Value::Text(attachment.rel_path.clone()),Value::Text(attachment.sha256.clone()),Value::Integer(attachment.size),Value::Integer(now)]).await?;
     }
+    crate::object_model::portable::begin_legacy_rows(&tx).await?;
     for table in CANONICAL_TABLES {
         let rows = snapshot.rows.get(*table).map(Vec::as_slice).unwrap_or(&[]);
         insert_table(
@@ -1250,6 +1251,7 @@ async fn write_transaction(
         )
         .await?;
     }
+    crate::object_model::portable::finish_legacy_rows(&tx).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -1486,7 +1488,17 @@ async fn target_counts(connection: &TursoConnection) -> Result<BTreeMap<String, 
     let mut out = BTreeMap::new();
     for table in CANONICAL_TABLES {
         let mut rows = connection
-            .query(&format!("SELECT COUNT(*) FROM {}", quote(table)), ())
+            .query(
+                &if *table == "task_attachments" {
+                    format!(
+                        "SELECT COUNT(*) FROM ({})",
+                        crate::object_model::portable::LEGACY_ATTACHMENTS_SQL
+                    )
+                } else {
+                    format!("SELECT COUNT(*) FROM {}", quote(table))
+                },
+                (),
+            )
             .await?;
         let row = rows
             .next()
@@ -1505,6 +1517,15 @@ async fn logical_empty(
     connection: &TursoConnection,
     counts: &BTreeMap<String, u64>,
 ) -> Result<bool, StoreError> {
+    if crate::object_model::portable::custom_catalog_count(connection).await? != 0 {
+        return Ok(false);
+    }
+    let mut objects = connection
+        .query("SELECT 1 FROM objects LIMIT 1", ())
+        .await?;
+    if objects.next().await?.is_some() {
+        return Ok(false);
+    }
     if counts.values().all(|x| *x == 0) {
         return Ok(true);
     }

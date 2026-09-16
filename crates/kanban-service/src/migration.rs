@@ -1146,7 +1146,10 @@ async fn validate_v1_shape(connection: &Connection) -> Result<(), StoreError> {
 }
 
 async fn validate_full_shape(connection: &Connection) -> Result<(), StoreError> {
-    let tables = table_names(connection).await?;
+    let mut tables = table_names(connection).await?;
+    crate::object_model::files::migration::exclude_validated_tables(connection, &mut tables)
+        .await?;
+    crate::object_model::migration::exclude_validated_tables(connection, &mut tables).await?;
     let expected_tables = V1_EXACT_COLUMNS
         .iter()
         .chain(FULL_EXACT_COLUMNS.iter())

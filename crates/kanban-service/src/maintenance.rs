@@ -29,14 +29,7 @@ use turso::{Connection, Value, params_from_iter, transaction::TransactionBehavio
 
 use crate::{TursoStore, error::StoreError, migration, schema, shared::now_ms};
 
-const MAINTENANCE_LEASE_TTL_MS: i64 = 60_000;
-#[cfg(not(test))]
-const MAINTENANCE_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
-#[cfg(test)]
-const MAINTENANCE_HEARTBEAT_INTERVAL: Duration = Duration::from_millis(10);
-
-/// 外部快照中的 canonical facts。派生 projection 不得被导出为事实。
-pub(crate) const PORTABLE_TABLES: &[&str] = &[
+const LEGACY_PORTABLE_TABLES: &[&str] = &[
     "boards",
     "board_columns",
     "tasks",
@@ -66,9 +59,90 @@ pub(crate) const PORTABLE_TABLES: &[&str] = &[
     "signals",
 ];
 
+fn portable_tables(version: u32) -> &'static [&'static str] {
+    if version == 2 {
+        LEGACY_PORTABLE_TABLES
+    } else {
+        PORTABLE_TABLES
+    }
+}
+
+const MAINTENANCE_LEASE_TTL_MS: i64 = 60_000;
+#[cfg(not(test))]
+const MAINTENANCE_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
+#[cfg(test)]
+const MAINTENANCE_HEARTBEAT_INTERVAL: Duration = Duration::from_millis(10);
+
+/// 外部快照中的 canonical facts。派生 projection 不得被导出为事实。
+pub(crate) const PORTABLE_TABLES: &[&str] = &[
+    "file_model_schema",
+    "object_model_schema",
+    "object_types",
+    "object_properties",
+    "object_options",
+    "object_type_properties",
+    "object_relation_types",
+    "object_workflows",
+    "object_rollups",
+    "boards",
+    "board_columns",
+    "tasks",
+    "task_execution_plans",
+    "task_steps",
+    "task_dependencies",
+    "task_runs",
+    "task_comments",
+    "task_events",
+    "task_attachments",
+    "labels",
+    "task_labels",
+    "app_settings",
+    "task_subtasks",
+    "entities",
+    "relation_predicates",
+    "entity_relations",
+    "label_semantics",
+    "label_atoms",
+    "label_semantic_proposals",
+    "label_ontology_observations",
+    "label_ontology_signals",
+    "label_ontology_actions",
+    "label_ontology_action_signals",
+    "label_ontology_action_atom_effects",
+    "signal_observations",
+    "signals",
+    "objects",
+    "file_blobs",
+    "file_objects",
+    "object_property_slots",
+    "object_property_values",
+    "object_requests",
+    "object_snapshots",
+    "object_event_links",
+    "object_relation_edges",
+];
+
 /// replace 时必须先删除子表，再删除父表。该顺序与 `PORTABLE_TABLES` 的导入顺序
 /// 相反，保留外部 schema、migration 和 host 治理表不动。
 const PORTABLE_REPLACE_DELETE_TABLES: &[&str] = &[
+    "object_relation_edges",
+    "object_workflows",
+    "object_rollups",
+    "object_relation_types",
+    "object_event_links",
+    "object_requests",
+    "object_snapshots",
+    "object_property_values",
+    "object_property_slots",
+    "file_objects",
+    "file_blobs",
+    "objects",
+    "object_type_properties",
+    "object_options",
+    "object_properties",
+    "object_types",
+    "file_model_schema",
+    "object_model_schema",
     "signals",
     "signal_observations",
     "label_ontology_action_atom_effects",
@@ -464,7 +538,7 @@ impl TursoStore {
             let source_fingerprint = digest_bytes(&payload);
             let mut header = PortableHeader {
                 format: "kanban.portable.jsonl".to_owned(),
-                version: 2,
+                version: 5,
                 schema_family,
                 schema_lineage,
                 schema_version,
@@ -608,7 +682,7 @@ impl TursoStore {
         if let Some(journal) = &journal {
             match journal.phase.as_str() {
                 "completed" => {
-                    verify_imported_target(&connection, &snapshot.header).await?;
+                    verify_imported_target(&connection, &snapshot).await?;
                     let jobs = count_rebuild_jobs(&connection, &snapshot_fingerprint).await?;
                     return Ok(import_report(
                         in_path,
@@ -658,10 +732,7 @@ impl TursoStore {
         if let Some(journal) = journal.as_ref()
             && journal.phase == "prepared"
         {
-            if verify_imported_target(&connection, &snapshot.header)
-                .await
-                .is_ok()
-            {
+            if verify_imported_target(&connection, &snapshot).await.is_ok() {
                 // canonical facts 已经存在。这是“提交成功但 journal 更新失败”窗口的
                 // 恢复分支；这里只推进 journal，并继续幂等的派生工作。
                 if let Err(error) =
@@ -862,7 +933,7 @@ impl TursoStore {
                 return Err(error);
             }
         };
-        if let Err(error) = verify_imported_target(&connection, &snapshot.header).await {
+        if let Err(error) = verify_imported_target(&connection, &snapshot).await {
             let _ = mark_import_journal_error(&connection, &journal_id, error.to_string().as_str())
                 .await;
             return Err(error);
@@ -914,7 +985,7 @@ impl TursoStore {
                 return Err(error);
             }
         };
-        if let Err(error) = verify_imported_target(connection, &snapshot.header).await {
+        if let Err(error) = verify_imported_target(connection, snapshot).await {
             let _ = mark_import_journal_error(connection, &journal.id, error.to_string().as_str())
                 .await;
             return Err(error);
@@ -987,7 +1058,7 @@ impl TursoStore {
                     return Err(error);
                 }
             };
-            if let Err(error) = verify_imported_target(connection, &snapshot.header).await {
+            if let Err(error) = verify_imported_target(connection, snapshot).await {
                 let _ =
                     mark_import_journal_error(connection, &journal.id, error.to_string().as_str())
                         .await;
@@ -1070,7 +1141,7 @@ impl TursoStore {
                 .transaction_with_behavior(TransactionBehavior::Immediate)
                 .await?;
             let imported_records = replace_records_in_transaction(&transaction, snapshot).await?;
-            verify_imported_target(&transaction, &snapshot.header).await?;
+            verify_imported_target(&transaction, snapshot).await?;
             let doctor = doctor_connection(&transaction).await?;
             if !doctor_replace_safe(&doctor) {
                 return Err(StoreError::InvalidInput(format!(
@@ -1108,7 +1179,7 @@ impl TursoStore {
                 return Err(error);
             }
         };
-        if let Err(error) = verify_imported_target(connection, &snapshot.header).await {
+        if let Err(error) = verify_imported_target(connection, snapshot).await {
             let _ = mark_import_journal_error(connection, &journal_id, error.to_string().as_str())
                 .await;
             return Err(error);
@@ -1195,7 +1266,7 @@ impl TursoStore {
         .await?;
         import_records_into_connection(&mut staged_connection, snapshot).await?;
         let jobs = enqueue_rebuild_jobs(&staged_connection, snapshot_fingerprint).await?;
-        verify_imported_target(&staged_connection, &snapshot.header).await?;
+        verify_imported_target(&staged_connection, snapshot).await?;
         drop(staged_connection);
         drop(staged);
         verify_database_file(staged_path).await?;
@@ -1782,6 +1853,14 @@ async fn doctor_connection(connection: &Connection) -> Result<StoreDoctorReport,
             record_ids: Vec::new(),
         });
     }
+    for issue in crate::object_model::portable::diagnostic_messages(connection).await? {
+        consistency_issues.push(StoreDoctorIssue {
+            severity: "error".to_owned(),
+            code: issue.code,
+            message: issue.detail,
+            record_ids: issue.object_id.into_iter().collect(),
+        });
+    }
     let consistency_errors = consistency_issues
         .iter()
         .filter(|issue| issue.severity == "error")
@@ -2037,9 +2116,20 @@ async fn import_records_into_transaction(
     transaction: &turso::transaction::Transaction<'_>,
     snapshot: &PortableSnapshot,
 ) -> Result<u64, StoreError> {
+    if snapshot.header.version == 2 {
+        crate::object_model::portable::before_legacy_portable(transaction).await?;
+    } else {
+        crate::object_model::portable::before_import(transaction).await?;
+    }
     let mut deferred = Vec::new();
-    for record in &snapshot.records {
-        insert_portable_record(transaction, record, &mut deferred).await?;
+    for table in PORTABLE_TABLES {
+        for record in snapshot
+            .records
+            .iter()
+            .filter(|record| record.table == *table)
+        {
+            insert_portable_record(transaction, record, &mut deferred).await?;
+        }
     }
     for value in deferred {
         let sql = format!(
@@ -2056,6 +2146,12 @@ async fn import_records_into_transaction(
             )));
         }
     }
+    if snapshot.header.version == 2 {
+        crate::object_model::portable::finish_legacy_rows(transaction).await?;
+    } else {
+        crate::object_model::portable::after_import(transaction).await?;
+    }
+    verify_imported_target(transaction, snapshot).await?;
     Ok(snapshot.records.len() as u64)
 }
 
@@ -2076,6 +2172,7 @@ async fn insert_portable_record(
             record.table
         )));
     }
+    crate::object_model::portable::validate_wire_record(&record.data)?;
     let columns = record.data.keys().cloned().collect::<Vec<_>>();
     let quoted = columns
         .iter()
@@ -2192,21 +2289,36 @@ async fn portable_schema_identity(
     let lineage = text_value(row.get_value(1)?, "schema_identity.lineage")?;
     let version = integer_value(row.get_value(2)?, "schema_identity.version")?;
     let fingerprint = text_value(row.get_value(3)?, "schema_identity.fingerprint")?;
-    Ok((family, lineage, version, fingerprint))
+    if fingerprint != migration::full_schema_fingerprint() {
+        return Err(StoreError::SchemaMismatch(
+            "portable 基线指纹不匹配".to_owned(),
+        ));
+    }
+    crate::object_model::migration::validate(connection).await?;
+    crate::object_model::files::migration::validate(connection).await?;
+    Ok((
+        family,
+        lineage,
+        version,
+        crate::object_model::portable::schema_fingerprint(),
+    ))
 }
 
 async fn validate_portable_columns(
     connection: &Connection,
     snapshot: &PortableSnapshot,
 ) -> Result<(), StoreError> {
-    let mut expected_columns = BTreeMap::<String, Vec<String>>::new();
-    for table in PORTABLE_TABLES {
+    let mut expected_columns = BTreeMap::<String, BTreeMap<String, String>>::new();
+    for table in portable_tables(snapshot.header.version) {
         let mut rows = connection
             .query(&format!("PRAGMA table_info('{table}')"), ())
             .await?;
-        let mut columns = Vec::new();
+        let mut columns = BTreeMap::new();
         while let Some(row) = rows.next().await? {
-            columns.push(text_value(row.get_value(1)?, "portable.table_info.name")?);
+            columns.insert(
+                text_value(row.get_value(1)?, "portable.table_info.name")?,
+                text_value(row.get_value(2)?, "portable.table_info.type")?,
+            );
         }
         expected_columns.insert((*table).to_owned(), columns);
     }
@@ -2216,14 +2328,36 @@ async fn validate_portable_columns(
         })?;
         let mut actual = record.data.keys().cloned().collect::<Vec<_>>();
         actual.sort();
-        let mut expected = expected.clone();
-        expected.sort();
-        if actual != expected {
+        let expected_names = expected.keys().cloned().collect::<Vec<_>>();
+        if actual != expected_names {
             return Err(StoreError::InvalidInput(format!(
                 "portable 表 {} 的列清单不匹配: expected={expected:?}, actual={actual:?}",
                 record.table
             )));
         }
+        for (column, value) in &record.data {
+            let kind = expected[column].to_ascii_uppercase();
+            let valid = value.is_null()
+                || match kind.as_str() {
+                    "TEXT" => value.is_string(),
+                    "INTEGER" => value.as_i64().is_some(),
+                    "REAL" => value.as_f64().is_some_and(f64::is_finite),
+                    "BLOB" => value.as_object().is_some_and(|value| {
+                        value.len() == 1
+                            && value
+                                .get("$kanban_blob_hex")
+                                .is_some_and(serde_json::Value::is_string)
+                    }),
+                    _ => false,
+                };
+            if !valid {
+                return Err(StoreError::InvalidInput(format!(
+                    "portable {}.{column} 的值与 SQL {kind} 不匹配",
+                    record.table
+                )));
+            }
+        }
+        crate::object_model::portable::validate_wire_record(&record.data)?;
     }
     Ok(())
 }
@@ -2231,10 +2365,24 @@ async fn validate_portable_columns(
 async fn collect_portable_records(
     connection: &Connection,
 ) -> Result<Vec<PortableLine>, StoreError> {
+    collect_portable_version(connection, 5).await
+}
+
+async fn collect_portable_version(
+    connection: &Connection,
+    version: u32,
+) -> Result<Vec<PortableLine>, StoreError> {
     let mut records = Vec::new();
-    for table in PORTABLE_TABLES {
+    for table in portable_tables(version) {
         let mut rows = connection
-            .query(format!("SELECT * FROM {table}"), ())
+            .query(
+                if version == 2 && *table == "task_attachments" {
+                    crate::object_model::portable::LEGACY_ATTACHMENTS_SQL.to_owned()
+                } else {
+                    format!("SELECT * FROM {table}")
+                },
+                (),
+            )
             .await?;
         let columns = rows.column_names();
         while let Some(row) = rows.next().await? {
@@ -2243,13 +2391,14 @@ async fn collect_portable_records(
                 data.insert(column.clone(), value_to_json(row.get_value(index)?));
             }
             scrub_portable_record(table, &mut data, now_ms());
+            let data = crate::object_model::portable::canonical_fields(data);
             records.push(PortableLine {
                 table: (*table).to_owned(),
                 data,
             });
         }
     }
-    Ok(records)
+    canonicalize_portable_records(records)
 }
 
 /// live claim 和绝对 run-log 路径不属于可移植事实。导出时将其转换为可重放的终态，
@@ -2305,6 +2454,20 @@ fn scrub_portable_record(
     }
 }
 
+fn canonicalize_portable_records(
+    records: Vec<PortableLine>,
+) -> Result<Vec<PortableLine>, StoreError> {
+    let mut keyed = records
+        .into_iter()
+        .map(|mut record| {
+            record.data = crate::object_model::portable::canonical_fields(record.data);
+            Ok((serde_json::to_string(&record).map_err(json_error)?, record))
+        })
+        .collect::<Result<Vec<_>, StoreError>>()?;
+    keyed.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(keyed.into_iter().map(|(_, record)| record).collect())
+}
+
 fn serialize_portable_records(
     records: &[PortableLine],
 ) -> Result<(Vec<u8>, BTreeMap<String, u64>), StoreError> {
@@ -2322,15 +2485,20 @@ fn validate_portable_snapshot(
     header: &PortableHeader,
     snapshot: &PortableSnapshot,
 ) -> Result<(), StoreError> {
-    if header.format != "kanban.portable.jsonl" || header.version != 2 {
+    if header.format != "kanban.portable.jsonl" || !matches!(header.version, 2 | 5) {
         return Err(StoreError::InvalidInput(
-            "不支持的 portable export 格式或版本（需要 kanban.portable.jsonl v2）".to_owned(),
+            "不支持的 portable export 格式或版本（需要 kanban.portable.jsonl v2 或 v5）".to_owned(),
         ));
     }
     if header.schema_family != schema::SCHEMA_FAMILY
         || header.schema_lineage != schema::SCHEMA_LINEAGE
         || header.schema_version != schema::FULL_SCHEMA_VERSION
-        || header.schema_fingerprint != migration::full_schema_fingerprint()
+        || header.schema_fingerprint
+            != if header.version == 2 {
+                migration::full_schema_fingerprint()
+            } else {
+                crate::object_model::portable::schema_fingerprint()
+            }
     {
         return Err(StoreError::SchemaMismatch(format!(
             "portable schema lineage 不匹配: family={}, lineage={}, version={}, fingerprint={}",
@@ -2346,7 +2514,7 @@ fn validate_portable_snapshot(
             header.attachments_mode
         )));
     }
-    let expected_tables = PORTABLE_TABLES
+    let expected_tables = portable_tables(header.version)
         .iter()
         .map(|table| (*table).to_owned())
         .collect::<Vec<_>>();
@@ -2378,8 +2546,15 @@ fn validate_portable_snapshot(
             "portable manifest checksum 不匹配".to_owned(),
         ));
     }
+    let canonical = canonicalize_portable_records(snapshot.records.clone())?;
+    let (canonical_payload, _) = serialize_portable_records(&canonical)?;
+    if header.version == 5 && digest_bytes(&canonical_payload) != snapshot.payload_checksum_sha256 {
+        return Err(StoreError::InvalidInput(
+            "portable v5 payload 必须使用规范字段与记录顺序".to_owned(),
+        ));
+    }
     for record in &snapshot.records {
-        if !PORTABLE_TABLES.contains(&record.table.as_str()) {
+        if !portable_tables(header.version).contains(&record.table.as_str()) {
             return Err(StoreError::InvalidInput(format!(
                 "portable record type 不受支持: {}",
                 record.table
@@ -2427,8 +2602,9 @@ fn validate_portable_snapshot(
 
 async fn verify_imported_target(
     connection: &Connection,
-    header: &PortableHeader,
+    snapshot: &PortableSnapshot,
 ) -> Result<(), StoreError> {
+    let header = &snapshot.header;
     let integrity = scalar_text(connection, "PRAGMA integrity_check", "integrity_check").await?;
     if !integrity.eq_ignore_ascii_case("ok") {
         return Err(StoreError::InvalidInput(format!(
@@ -2445,17 +2621,28 @@ async fn verify_imported_target(
     if family != header.schema_family
         || lineage != header.schema_lineage
         || version != header.schema_version
-        || fingerprint != header.schema_fingerprint
+        || (if header.version == 2 {
+            migration::full_schema_fingerprint()
+        } else {
+            fingerprint
+        }) != header.schema_fingerprint
     {
         return Err(StoreError::SchemaMismatch(
             "portable import target schema lineage 不匹配".to_owned(),
         ));
     }
-    for table in PORTABLE_TABLES {
+    for table in portable_tables(header.version) {
         let expected = header.table_counts.get(*table).copied().unwrap_or_default();
         let actual = scalar_integer(
             connection,
-            &format!("SELECT COUNT(*) FROM {table}"),
+            &if header.version == 2 && *table == "task_attachments" {
+                format!(
+                    "SELECT COUNT(*) FROM ({})",
+                    crate::object_model::portable::LEGACY_ATTACHMENTS_SQL
+                )
+            } else {
+                format!("SELECT COUNT(*) FROM {table}")
+            },
             "portable.import.table_count",
         )
         .await? as u64;
@@ -2479,13 +2666,22 @@ async fn verify_imported_target(
     // 行数/schema 相同并不代表导入的是同一批 facts（例如两个 snapshot
     // 都只有一个 task）。重新序列化 canonical rows，绑定 payload checksum，
     // 也让 prepared-journal recovery 不会把另一份数据误判为已提交。
-    let records = collect_portable_records(connection).await?;
+    if header.version == 2 {
+        crate::object_model::portable::require_legacy_only(connection).await?;
+    }
+    let records = collect_portable_version(connection, header.version).await?;
     let (payload, _) = serialize_portable_records(&records)?;
     let observed_payload = digest_bytes(&payload);
-    if observed_payload != header.payload_checksum_sha256 {
+    let expected_payload = if header.version == 2 {
+        let records = canonicalize_portable_records(snapshot.records.clone())?;
+        digest_bytes(&serialize_portable_records(&records)?.0)
+    } else {
+        header.payload_checksum_sha256.clone()
+    };
+    if observed_payload != expected_payload {
         return Err(StoreError::InvalidInput(format!(
             "portable import canonical payload 不匹配: expected={}, observed={}",
-            header.payload_checksum_sha256, observed_payload
+            expected_payload, observed_payload
         )));
     }
     Ok(())
@@ -2493,8 +2689,9 @@ async fn verify_imported_target(
 
 async fn verify_staged_database(
     path: &Path,
-    header: &PortableHeader,
+    snapshot: &PortableSnapshot,
 ) -> Result<(String, u64), StoreError> {
+    let header = &snapshot.header;
     if !fs::symlink_metadata(path)
         .map(|metadata| metadata.file_type().is_file())
         .unwrap_or(false)
@@ -2511,7 +2708,7 @@ async fn verify_staged_database(
         .await?;
     let connection = database.connect()?;
     connection.execute("PRAGMA foreign_keys = ON", ()).await?;
-    verify_imported_target(&connection, header).await?;
+    verify_imported_target(&connection, snapshot).await?;
     let jobs = count_rebuild_jobs(&connection, &portable_snapshot_fingerprint(header)).await?;
     drop(connection);
     drop(database);
@@ -2744,7 +2941,7 @@ async fn verify_journal_staging(
     staged_path: &Path,
     snapshot: &PortableSnapshot,
 ) -> Result<(String, u64), StoreError> {
-    let (staged_fingerprint, jobs) = verify_staged_database(staged_path, &snapshot.header).await?;
+    let (staged_fingerprint, jobs) = verify_staged_database(staged_path, snapshot).await?;
     if let Some(expected) = journal_identity_value(journal)?
         .get("staged_fingerprint")
         .and_then(serde_json::Value::as_str)
@@ -2959,18 +3156,18 @@ async fn canonical_record_count(connection: &Connection) -> Result<i64, StoreErr
     // `initialize()` 会写入默认 board/columns 和 relation predicates。它们是 host
     // bootstrap metadata，而不是导入事实，因此全新的目标必须仍可导入。
     let mut total = 0;
-    for table in PORTABLE_TABLES
-        .iter()
-        .filter(|table| !matches!(**table, "boards" | "board_columns" | "relation_predicates"))
-    {
+    for table in PORTABLE_TABLES.iter().filter(|table| {
+        !matches!(**table, "boards" | "board_columns" | "relation_predicates")
+            && !crate::object_model::portable::is_catalog_table(table)
+    }) {
         total += scalar_integer(
             connection,
             &format!("SELECT COUNT(*) FROM {table}"),
             "canonical_record_count",
         )
-        .await
-        .unwrap_or(0);
+        .await?;
     }
+    total += crate::object_model::portable::custom_catalog_count(connection).await?;
     Ok(total)
 }
 
@@ -3067,7 +3264,7 @@ fn value_to_json(value: Value) -> serde_json::Value {
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         Value::Text(value) => value.into(),
-        Value::Blob(value) => serde_json::Value::String(format!("hex:{}", hex_encode(&value))),
+        Value::Blob(value) => serde_json::json!({"$kanban_blob_hex": hex_encode(&value)}),
     }
 }
 
@@ -3080,8 +3277,14 @@ fn json_to_value(value: &serde_json::Value) -> Value {
             .map(Value::Integer)
             .or_else(|| value.as_f64().map(Value::Real))
             .unwrap_or(Value::Null),
-        serde_json::Value::String(value) if value.starts_with("hex:") => {
-            Value::Blob(hex_decode(&value[5..]).unwrap_or_default())
+        serde_json::Value::Object(value)
+            if value.len() == 1 && value.contains_key("$kanban_blob_hex") =>
+        {
+            // 所有值已通过 validate_wire_record；解码失败会中止，不替换为空 BLOB。
+            let hex = value["$kanban_blob_hex"]
+                .as_str()
+                .expect("validated BLOB tag");
+            Value::Blob(hex_decode(hex).expect("validated BLOB hex"))
         }
         serde_json::Value::String(value) => Value::Text(value.clone()),
         serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
@@ -3229,6 +3432,104 @@ mod tests {
     use super::{integer_value, optional_text, text_value};
     use crate::test_support::{create_input, store};
     use crate::{StoreError, TursoStore, maintenance::scalar_integer_params, shared::now_ms};
+
+    #[tokio::test]
+    async fn portable_v2_converts_attachments_and_recovers_without_losing_hex_text() {
+        let (directory, source, _) = store("portable-v2-source").await;
+        source.initialize().await.unwrap();
+        source
+            .create_task("default", create_input("t_legacy", None, "hex:0102 原文"))
+            .await
+            .unwrap();
+        let root = directory.path().join("attachments");
+        fs::create_dir(&root).unwrap();
+        let mut service = crate::KanbanService::new(source.clone());
+        service.attachment_root = Some(Arc::new(root.clone()));
+        let file = service
+            .create_attachment(crate::CreateAttachmentCommand {
+                task_id: "t_legacy".into(),
+                id: Some("a_legacy".into()),
+                filename: "原始.txt".into(),
+                rel_path: None,
+                content_type: Some("text/plain".into()),
+                content: b"hex:literal bytes".to_vec(),
+                sha256: None,
+                created_by: "legacy-agent".into(),
+            })
+            .await
+            .unwrap();
+        let path = directory.path().join("v2.jsonl");
+        source.export(&path).await.unwrap();
+        let mut header = super::read_portable(&path).unwrap().header;
+        let connection = source.connection().await.unwrap();
+        let mut records = super::collect_portable_version(&connection, 2)
+            .await
+            .unwrap();
+        // v2 不要求排序；校验原始 payload 后才统一规范化。
+        records.reverse();
+        let (payload, counts) = super::serialize_portable_records(&records).unwrap();
+        header.version = 2;
+        header.schema_fingerprint = crate::migration::full_schema_fingerprint();
+        header.canonical_tables = super::LEGACY_PORTABLE_TABLES
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        header.record_count = records.len() as u64;
+        header.table_counts = counts;
+        header.payload_checksum_sha256 = super::digest_bytes(&payload);
+        header.manifest_checksum_sha256 = super::manifest_checksum(&header).unwrap();
+        let mut bytes = serde_json::to_vec(&header).unwrap();
+        bytes.push(b'\n');
+        bytes.extend(payload);
+        fs::write(&path, bytes).unwrap();
+        let (_target_directory, target, _) = store("portable-v2-target").await;
+        target.initialize().await.unwrap();
+        target.set_import_failpoint(super::FAILPOINT_PUBLISHED_JOURNAL);
+        assert!(
+            target
+                .import(&path, false)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("故障注入")
+        );
+        let completed = target.import(&path, false).await.unwrap();
+        assert_eq!(completed.phase, "completed");
+        assert_eq!(
+            target.import(&path, false).await.unwrap().journal_id,
+            completed.journal_id
+        );
+        let mut imported = crate::KanbanService::new(target.clone());
+        // portable 的 metadata_only 契约要求恢复同一附件目录。
+        imported.attachment_root = Some(Arc::new(root));
+        assert_eq!(
+            imported
+                .object_get("b_default", "t_legacy")
+                .await
+                .unwrap()
+                .title,
+            "hex:0102 原文"
+        );
+        let read = imported
+            .read_attachment("t_legacy", "a_legacy")
+            .await
+            .unwrap();
+        assert_eq!(read.content, b"hex:literal bytes");
+        assert_eq!(read.attachment, file);
+        let v5 = directory.path().join("v5.jsonl");
+        target.export(&v5).await.unwrap();
+        let (_roundtrip_directory, roundtrip, _) = store("portable-v5-target").await;
+        roundtrip.initialize().await.unwrap();
+        roundtrip.import(&v5, false).await.unwrap();
+        assert_eq!(
+            crate::KanbanService::new(roundtrip)
+                .object_get("b_default", "t_legacy")
+                .await
+                .unwrap()
+                .title,
+            "hex:0102 原文"
+        );
+    }
 
     #[tokio::test]
     async fn maintenance_status_and_run_release_owner_lease() {
@@ -4454,16 +4755,23 @@ mod tests {
             )
             .await
             .expect("attachment task");
-        source
-            .connection()
+        let root = source_directory.path().join("attachments");
+        fs::create_dir(&root).unwrap();
+        let mut service = crate::KanbanService::new(source.clone());
+        service.attachment_root = Some(Arc::new(root));
+        let original = service
+            .create_attachment(crate::CreateAttachmentCommand {
+                task_id: "t_attachment".into(),
+                id: Some("a_fixture".into()),
+                filename: "report.txt".into(),
+                rel_path: None,
+                content_type: Some("text/plain".into()),
+                content: b"report bytes".to_vec(),
+                sha256: None,
+                created_by: "tester".into(),
+            })
             .await
-            .expect("source connection")
-            .execute(
-                "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, content_type, size_bytes, sha256, created_by, created_at) VALUES ('a_fixture', 'b_default', 't_attachment', 'report.txt', 't_attachment/report.txt', 'text/plain', 12, 'sha256:fixture', 'tester', 424242)",
-                (),
-            )
-            .await
-            .expect("attachment metadata");
+            .unwrap();
         let export_path = source_directory.path().join("portable.jsonl");
         source.export(&export_path).await.expect("portable export");
 
@@ -4478,7 +4786,7 @@ mod tests {
         let connection = target.connection().await.expect("target connection");
         let mut rows = connection
             .query(
-                "SELECT filename, rel_path, content_type, size_bytes, sha256, created_at FROM task_attachments WHERE id='a_fixture'",
+                format!("SELECT filename, rel_path, content_type, size_bytes, sha256, created_at FROM ({}) WHERE id='a_fixture'", crate::object_model::portable::LEGACY_ATTACHMENTS_SQL),
                 (),
             )
             .await
@@ -4494,7 +4802,7 @@ mod tests {
         );
         assert_eq!(
             text_value(row.get_value(1).expect("rel path"), "rel_path").expect("rel path text"),
-            "t_attachment/report.txt"
+            original.rel_path
         );
         assert_eq!(
             text_value(row.get_value(2).expect("content type"), "content_type")
@@ -4507,11 +4815,11 @@ mod tests {
         );
         assert_eq!(
             text_value(row.get_value(4).expect("sha"), "sha").expect("sha text"),
-            "sha256:fixture"
+            original.sha256.unwrap()
         );
         assert_eq!(
             integer_value(row.get_value(5).expect("created"), "created").expect("created integer"),
-            424242
+            original.created_at
         );
         let repeated = target
             .import(&export_path, true)
@@ -4521,7 +4829,7 @@ mod tests {
         assert_eq!(repeated.journal_id, first.journal_id);
         let count = super::scalar_integer(
             &connection,
-            "SELECT COUNT(*) FROM task_attachments",
+            "SELECT COUNT(*) FROM file_objects",
             "attachments",
         )
         .await

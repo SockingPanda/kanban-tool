@@ -1,0 +1,634 @@
+{
+  "types": [
+    {
+      "definition": {
+        "key": "task",
+        "name": "任务",
+        "layout": {
+          "view": "task",
+          "title_field": "title",
+          "body_format": "markdown"
+        }
+      },
+      "capability": "task"
+    },
+    {
+      "definition": {
+        "key": "module",
+        "name": "模块",
+        "layout": {
+          "view": "module",
+          "title_field": "title",
+          "body_format": "markdown"
+        }
+      },
+      "capability": "plain"
+    },
+    {
+      "definition": {
+        "key": "cycle",
+        "name": "迭代",
+        "layout": {
+          "view": "cycle",
+          "title_field": "title",
+          "body_format": "markdown"
+        }
+      },
+      "capability": "plain"
+    },
+    {
+      "definition": {
+        "key": "resource",
+        "name": "资料",
+        "layout": {
+          "view": "resource",
+          "title_field": "title",
+          "body_format": "markdown"
+        }
+      },
+      "capability": "plain"
+    },
+    {
+      "definition": {
+        "key": "note",
+        "name": "笔记",
+        "layout": {
+          "view": "note",
+          "title_field": "title",
+          "body_format": "markdown"
+        }
+      },
+      "capability": "plain"
+    }
+  ],
+  "properties": [
+    {
+      "key": "owner",
+      "name": "负责人",
+      "kind": "text",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "position",
+      "name": "排序",
+      "kind": "number",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "module.purpose",
+      "name": "职责范围",
+      "kind": "text",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "module.status",
+      "name": "模块状态",
+      "kind": "select",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": [
+        {
+          "key": "planned",
+          "name": "计划中"
+        },
+        {
+          "key": "active",
+          "name": "进行中"
+        },
+        {
+          "key": "paused",
+          "name": "暂停"
+        },
+        {
+          "key": "completed",
+          "name": "已完成"
+        },
+        {
+          "key": "cancelled",
+          "name": "已取消"
+        }
+      ]
+    },
+    {
+      "key": "cycle.goal",
+      "name": "迭代目标",
+      "kind": "text",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "cycle.starts_at",
+      "name": "计划开始",
+      "kind": "date",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "cycle.ends_at",
+      "name": "计划结束",
+      "kind": "date",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "cycle.started_at",
+      "name": "实际启动",
+      "kind": "date",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "cycle.closed_at",
+      "name": "关闭时间",
+      "kind": "date",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "cycle.status",
+      "name": "迭代状态",
+      "kind": "select",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": [
+        {
+          "key": "planned",
+          "name": "计划中"
+        },
+        {
+          "key": "active",
+          "name": "进行中"
+        },
+        {
+          "key": "completed",
+          "name": "已完成"
+        },
+        {
+          "key": "cancelled",
+          "name": "已取消"
+        }
+      ]
+    },
+    {
+      "key": "resource.url",
+      "name": "资料位置",
+      "kind": "text",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "resource.kind",
+      "name": "资料类别",
+      "kind": "select",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": [
+        {
+          "key": "document",
+          "name": "文档"
+        },
+        {
+          "key": "code",
+          "name": "代码"
+        },
+        {
+          "key": "entrypoint",
+          "name": "入口"
+        },
+        {
+          "key": "reference",
+          "name": "参考"
+        }
+      ]
+    },
+    {
+      "key": "task.status",
+      "name": "任务状态",
+      "kind": "select",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": [
+        {
+          "key": "triage",
+          "name": "triage"
+        },
+        {
+          "key": "todo",
+          "name": "todo"
+        },
+        {
+          "key": "scheduled",
+          "name": "scheduled"
+        },
+        {
+          "key": "ready",
+          "name": "ready"
+        },
+        {
+          "key": "running",
+          "name": "running"
+        },
+        {
+          "key": "blocked",
+          "name": "blocked"
+        },
+        {
+          "key": "review",
+          "name": "review"
+        },
+        {
+          "key": "done",
+          "name": "done"
+        },
+        {
+          "key": "archived",
+          "name": "archived"
+        }
+      ]
+    },
+    {
+      "key": "task.priority",
+      "name": "优先级",
+      "kind": "number",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "task.assignee",
+      "name": "执行者",
+      "kind": "text",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    },
+    {
+      "key": "task.due_at",
+      "name": "截止时间",
+      "kind": "date",
+      "cardinality": "one",
+      "reference_type": null,
+      "options": []
+    }
+  ],
+  "bindings": [
+    {
+      "binding": {
+        "type_key": "module",
+        "property_key": "owner",
+        "required": false,
+        "position": 0,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "cycle",
+        "property_key": "owner",
+        "required": false,
+        "position": 10,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "resource",
+        "property_key": "owner",
+        "required": false,
+        "position": 20,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "note",
+        "property_key": "owner",
+        "required": false,
+        "position": 30,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "module",
+        "property_key": "position",
+        "required": true,
+        "position": 40,
+        "defaults": [
+          {
+            "kind": "number",
+            "value": 0
+          }
+        ]
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "cycle",
+        "property_key": "position",
+        "required": true,
+        "position": 50,
+        "defaults": [
+          {
+            "kind": "number",
+            "value": 0
+          }
+        ]
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "module",
+        "property_key": "module.purpose",
+        "required": false,
+        "position": 60,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "module",
+        "property_key": "module.status",
+        "required": true,
+        "position": 80,
+        "defaults": [
+          {
+            "kind": "select",
+            "value": "planned"
+          }
+        ]
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "cycle",
+        "property_key": "cycle.goal",
+        "required": false,
+        "position": 120,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "cycle",
+        "property_key": "cycle.starts_at",
+        "required": true,
+        "position": 130,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "cycle",
+        "property_key": "cycle.ends_at",
+        "required": true,
+        "position": 140,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "cycle",
+        "property_key": "cycle.started_at",
+        "required": false,
+        "position": 150,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": false
+    },
+    {
+      "binding": {
+        "type_key": "cycle",
+        "property_key": "cycle.closed_at",
+        "required": false,
+        "position": 160,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": false
+    },
+    {
+      "binding": {
+        "type_key": "cycle",
+        "property_key": "cycle.status",
+        "required": true,
+        "position": 170,
+        "defaults": [
+          {
+            "kind": "select",
+            "value": "planned"
+          }
+        ]
+      },
+      "storage": "value",
+      "writable": false
+    },
+    {
+      "binding": {
+        "type_key": "resource",
+        "property_key": "resource.url",
+        "required": true,
+        "position": 180,
+        "defaults": []
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "resource",
+        "property_key": "resource.kind",
+        "required": true,
+        "position": 190,
+        "defaults": [
+          {
+            "kind": "select",
+            "value": "reference"
+          }
+        ]
+      },
+      "storage": "value",
+      "writable": true
+    },
+    {
+      "binding": {
+        "type_key": "task",
+        "property_key": "task.status",
+        "required": false,
+        "position": 200,
+        "defaults": []
+      },
+      "storage": "task.status",
+      "writable": false
+    },
+    {
+      "binding": {
+        "type_key": "task",
+        "property_key": "task.priority",
+        "required": false,
+        "position": 210,
+        "defaults": []
+      },
+      "storage": "task.priority",
+      "writable": false
+    },
+    {
+      "binding": {
+        "type_key": "task",
+        "property_key": "task.assignee",
+        "required": false,
+        "position": 220,
+        "defaults": []
+      },
+      "storage": "task.assignee",
+      "writable": false
+    },
+    {
+      "binding": {
+        "type_key": "task",
+        "property_key": "task.due_at",
+        "required": false,
+        "position": 230,
+        "defaults": []
+      },
+      "storage": "task.due_at",
+      "writable": false
+    }
+  ],
+  "relations": [
+    {
+      "key": "cycle_members",
+      "name": "迭代任务",
+      "source_type": "cycle",
+      "target_type": "task",
+      "source_property": "cycle.tasks",
+      "target_property": "task.cycle",
+      "source_cardinality": "many",
+      "target_cardinality": "one",
+      "acyclic": false
+    },
+    {
+      "key": "module_members",
+      "name": "模块任务",
+      "source_type": "module",
+      "target_type": "task",
+      "source_property": "module.tasks",
+      "target_property": "task.modules",
+      "source_cardinality": "many",
+      "target_cardinality": "many",
+      "acyclic": false
+    },
+    {
+      "key": "module_hierarchy",
+      "name": "模块层级",
+      "source_type": "module",
+      "target_type": "module",
+      "source_property": "module.children",
+      "target_property": "module.parent",
+      "source_cardinality": "many",
+      "target_cardinality": "one",
+      "acyclic": true
+    },
+    {
+      "key": "module_resources",
+      "name": "模块资料",
+      "source_type": "module",
+      "target_type": "resource",
+      "source_property": "module.resources",
+      "target_property": "resource.modules",
+      "source_cardinality": "many",
+      "target_cardinality": "many",
+      "acyclic": false
+    }
+  ],
+  "workflows": [
+    {
+      "key": "cycle_lifecycle",
+      "type_key": "cycle",
+      "status_property": "cycle.status",
+      "starts_property": "cycle.starts_at",
+      "ends_property": "cycle.ends_at",
+      "started_property": "cycle.started_at",
+      "closed_property": "cycle.closed_at",
+      "planned_value": "planned",
+      "active_value": "active",
+      "completed_value": "completed",
+      "cancelled_value": "cancelled",
+      "members_property": "cycle.tasks",
+      "member_status_property": "task.status",
+      "done_values": [
+        "done"
+      ],
+      "excluded_values": [
+        "archived"
+      ]
+    }
+  ],
+  "rollups": [
+    {
+      "key": "module_progress",
+      "type_key": "module",
+      "members_property": "module.tasks",
+      "status_property": "task.status",
+      "done_values": [
+        "done"
+      ],
+      "excluded_values": [
+        "archived"
+      ],
+      "blocked_values": [
+        "blocked"
+      ]
+    },
+    {
+      "key": "cycle_progress",
+      "type_key": "cycle",
+      "members_property": "cycle.tasks",
+      "status_property": "task.status",
+      "done_values": [
+        "done"
+      ],
+      "excluded_values": [
+        "archived"
+      ],
+      "blocked_values": [
+        "blocked"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+apps/web/build/contract-validator.ts
+  s_5b054b517a26b6::t_1bfd1d9f445393 70
+apps/web/build/bfcache-proof.mjs
+  s_5b054b517a26b6::t_1bfd1d9f445393 100-107,167-169,205,227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d664ed5620ee0d9a1e7c80cf7a8ed02a30aae935",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,727 @@
+.gitattributes
+  s_5b054b517a26b6::t_6970cead42e174 5-7
+Cargo.lock
+  s_5b054b517a26b6::t_5c7c2c317d2448 3180,3182,3184
+Cargo.toml
+  s_5b054b517a26b6::t_ea4b2db1068c29 15,93-96
+vendor/README.md
+  s_5b054b517a26b6::t_0f1a16b8941840 1-37
+vendor/tantivy-0.26.1/.cargo_vcs_info.json
+  s_5b054b517a26b6::t_16d72a8183b1fc 1-6
+vendor/tantivy-0.26.1/.claude/skills/rationalize-deps/SKILL.md
+  s_5b054b517a26b6::t_41955f5f25f367 1-125
+vendor/tantivy-0.26.1/.claude/skills/simple-pr/SKILL.md
+  s_5b054b517a26b6::t_5df697c476698e 1-60
+vendor/tantivy-0.26.1/.claude/skills/update-changelog/SKILL.md
+  s_5b054b517a26b6::t_ba307b3e9f5209 1-87
+vendor/tantivy-0.26.1/.github/FUNDING.yml
+  s_5b054b517a26b6::t_ba02331231ce19 1-12
+vendor/tantivy-0.26.1/.github/ISSUE_TEMPLATE/actions.md
+  s_5b054b517a26b6::t_780eb02d87b3f7 1-13
+vendor/tantivy-0.26.1/.github/ISSUE_TEMPLATE/bug_report.md
+  s_5b054b517a26b6::t_f56485912416a4 1-19
+vendor/tantivy-0.26.1/.github/ISSUE_TEMPLATE/feature_request.md
+  s_5b054b517a26b6::t_54814e2e094116 1-14
+vendor/tantivy-0.26.1/.github/ISSUE_TEMPLATE/question.md
+  s_5b054b517a26b6::t_c6e6a1ba1a0667 1-7
+vendor/tantivy-0.26.1/.github/dependabot.yml
+  s_5b054b517a26b6::t_0377813751b118 1-15
+vendor/tantivy-0.26.1/.github/workflows/coverage.yml
+  s_5b054b517a26b6::t_96b5b274bddfef 1-29
+vendor/tantivy-0.26.1/.github/workflows/long_running.yml
+  s_5b054b517a26b6::t_a4314bcf5df666 1-33
+vendor/tantivy-0.26.1/.github/workflows/test.yml
+  s_5b054b517a26b6::t_6006d67b8c6fc0 1-100
+vendor/tantivy-0.26.1/.gitignore
+  s_5b054b517a26b6::t_4390d0e1eae227 1-17
+vendor/tantivy-0.26.1/ARCHITECTURE.md
+  s_5b054b517a26b6::t_75b73539f178e0 1-295
+vendor/tantivy-0.26.1/AUTHORS
+  s_5b054b517a26b6::t_b9bdbe169b7958 1-11
+vendor/tantivy-0.26.1/CHANGELOG.md
+  s_5b054b517a26b6::t_432ed160f2a07f 1-889
+vendor/tantivy-0.26.1/CITATION.cff
+  s_5b054b517a26b6::t_4ba8bff60140b5 1-10
+vendor/tantivy-0.26.1/Cargo.lock
+  s_5b054b517a26b6::t_5f6e9c18d60969 1-2377
+vendor/tantivy-0.26.1/Cargo.toml
+  s_5b054b517a26b6::t_3395b4f0f69b43 1-469
+vendor/tantivy-0.26.1/Cargo.toml.orig
+  s_5b054b517a26b6::t_55ff4f95c40804 1-203
+vendor/tantivy-0.26.1/LICENSE
+  s_5b054b517a26b6::t_2fda298424240c 1-7
+vendor/tantivy-0.26.1/Makefile
+  s_5b054b517a26b6::t_adc694d92d949b 1-6
+vendor/tantivy-0.26.1/README.md
+  s_5b054b517a26b6::t_9c49abda0cc6d7 1-143
+vendor/tantivy-0.26.1/RELEASE.md
+  s_5b054b517a26b6::t_465b473cf73e84 1-38
+vendor/tantivy-0.26.1/TODO.txt
+  s_5b054b517a26b6::t_f03730d25ea632 1-18
+vendor/tantivy-0.26.1/benches/agg_bench.rs
+  s_5b054b517a26b6::t_fa1057e84a6eb3 1-748
+vendor/tantivy-0.26.1/benches/analyzer.rs
+  s_5b054b517a26b6::t_d7414739cb8648 1-43
+vendor/tantivy-0.26.1/benches/and_or_queries.rs
+  s_5b054b517a26b6::t_a0d8819372509a 1-249
+vendor/tantivy-0.26.1/benches/bool_queries_with_range.rs
+  s_5b054b517a26b6::t_d8b7e826dabd84 1-288
+vendor/tantivy-0.26.1/benches/exists_json.rs
+  s_5b054b517a26b6::t_2b6a8ab835e6e6 1-69
+vendor/tantivy-0.26.1/benches/index-bench.rs
+  s_5b054b517a26b6::t_e238150d03cb10 1-218
+vendor/tantivy-0.26.1/benches/merge_segments.rs
+  s_5b054b517a26b6::t_60d2d93f7ffc03 1-224
+vendor/tantivy-0.26.1/benches/range_queries.rs
+  s_5b054b517a26b6::t_1b386b98c6ba51 1-365
+vendor/tantivy-0.26.1/benches/range_query.rs
+  s_5b054b517a26b6::t_a3d2ca0cf106ee 1-260
+vendor/tantivy-0.26.1/benches/regex_all_terms.rs
+  s_5b054b517a26b6::t_94ab5b9b112602 1-113
+vendor/tantivy-0.26.1/benches/str_search_and_get.rs
+  s_5b054b517a26b6::t_085c99a259ffb0 1-421
+vendor/tantivy-0.26.1/cliff.toml
+  s_5b054b517a26b6::t_d1474effb59f97 1-93
+vendor/tantivy-0.26.1/doc/.gitignore
+  s_5b054b517a26b6::t_f2f8954661756d 1
+vendor/tantivy-0.26.1/doc/assets/images/element.io.svg
+  s_5b054b517a26b6::t_26c24bdf77e181 1-8
+vendor/tantivy-0.26.1/doc/book.toml
+  s_5b054b517a26b6::t_b9a1318389b107 1-5
+vendor/tantivy-0.26.1/doc/src/SUMMARY.md
+  s_5b054b517a26b6::t_c545916e913aec 1-14
+vendor/tantivy-0.26.1/doc/src/avant-propos.md
+  s_5b054b517a26b6::t_5fe54ba394844b 1-34
+vendor/tantivy-0.26.1/doc/src/basis.md
+  s_5b054b517a26b6::t_6d3c7d1561f978 1-68
+vendor/tantivy-0.26.1/doc/src/examples.md
+  s_5b054b517a26b6::t_bcee8c1d3b9fcd 1-3
+vendor/tantivy-0.26.1/doc/src/facetting.md
+  s_5b054b517a26b6::t_ee6ec4c60ca70d 1-5
+vendor/tantivy-0.26.1/doc/src/index_sorting.md
+  s_5b054b517a26b6::t_103e8750584ddb 1-67
+vendor/tantivy-0.26.1/doc/src/innerworkings.md
+  s_5b054b517a26b6::t_1800dfdb52e519 1
+vendor/tantivy-0.26.1/doc/src/inverted_index.md
+  s_5b054b517a26b6::t_0eac30481b4c90 1
+vendor/tantivy-0.26.1/doc/src/json.md
+  s_5b054b517a26b6::t_a1727f12cb832b 1-130
+vendor/tantivy-0.26.1/doc/src/schema.md
+  s_5b054b517a26b6::t_9b5beec4719eaa 1
+vendor/tantivy-0.26.1/examples/aggregation.rs
+  s_5b054b517a26b6::t_23e1295b70623c 1-266
+vendor/tantivy-0.26.1/examples/basic_search.rs
+  s_5b054b517a26b6::t_9fe8ba74ba8e8f 1-239
+vendor/tantivy-0.26.1/examples/custom_collector.rs
+  s_5b054b517a26b6::t_f9cc2aa2590a86 1-186
+vendor/tantivy-0.26.1/examples/custom_tokenizer.rs
+  s_5b054b517a26b6::t_bd8bf9697f6117 1-111
+vendor/tantivy-0.26.1/examples/date_time_field.rs
+  s_5b054b517a26b6::t_73ea7ccd8c31eb 1-77
+vendor/tantivy-0.26.1/examples/deleting_updating_documents.rs
+  s_5b054b517a26b6::t_a3be8b27a468f7 1-144
+vendor/tantivy-0.26.1/examples/faceted_search.rs
+  s_5b054b517a26b6::t_1b16ae52e889a5 1-114
+vendor/tantivy-0.26.1/examples/faceted_search_with_tweaked_score.rs
+  s_5b054b517a26b6::t_adc1e77a2132ae 1-104
+vendor/tantivy-0.26.1/examples/filter_aggregation.rs
+  s_5b054b517a26b6::t_ce03f6ff098631 1-212
+vendor/tantivy-0.26.1/examples/fuzzy_search.rs
+  s_5b054b517a26b6::t_2676767cf45a63 1-166
+vendor/tantivy-0.26.1/examples/index_from_multiple_threads.rs
+  s_5b054b517a26b6::t_164379825e7250 1-104
+vendor/tantivy-0.26.1/examples/index_with_json.rs
+  s_5b054b517a26b6::t_27a9c37007a892 1-40
+vendor/tantivy-0.26.1/examples/integer_range_search.rs
+  s_5b054b517a26b6::t_6c92cb3e662ff5 1-40
+vendor/tantivy-0.26.1/examples/ip_field.rs
+  s_5b054b517a26b6::t_4ab168a25214db 1-110
+vendor/tantivy-0.26.1/examples/iterating_docs_and_positions.rs
+  s_5b054b517a26b6::t_a39927b8d8fc1a 1-136
+vendor/tantivy-0.26.1/examples/json_field.rs
+  s_5b054b517a26b6::t_c366fe0bdc9a4f 1-107
+vendor/tantivy-0.26.1/examples/phrase_prefix_search.rs
+  s_5b054b517a26b6::t_f1354593ac037e 1-83
+vendor/tantivy-0.26.1/examples/pre_tokenized_text.rs
+  s_5b054b517a26b6::t_c3a6220721fba9 1-138
+vendor/tantivy-0.26.1/examples/snippet.rs
+  s_5b054b517a26b6::t_00b09994702dc8 1-83
+vendor/tantivy-0.26.1/examples/stop_words.rs
+  s_5b054b517a26b6::t_f3e2527708d621 1-114
+vendor/tantivy-0.26.1/examples/warmer.rs
+  s_5b054b517a26b6::t_4921e9ebe69ebb 1-225
+vendor/tantivy-0.26.1/rustfmt.toml
+  s_5b054b517a26b6::t_0904648e9a7fe5 1-7
+vendor/tantivy-0.26.1/src/aggregation/README.md
+  s_5b054b517a26b6::t_57021e5a69d8ad 1-35
+vendor/tantivy-0.26.1/src/aggregation/accessor_helpers.rs
+  s_5b054b517a26b6::t_e507165b312231 1-105
+vendor/tantivy-0.26.1/src/aggregation/agg_data.rs
+  s_5b054b517a26b6::t_fe2fbc6be83e5f 1-1158
+vendor/tantivy-0.26.1/src/aggregation/agg_limits.rs
+  s_5b054b517a26b6::t_956f1a63897559 1-257
+vendor/tantivy-0.26.1/src/aggregation/agg_req.rs
+  s_5b054b517a26b6::t_c725525a013148 1-408
+vendor/tantivy-0.26.1/src/aggregation/agg_result.rs
+  s_5b054b517a26b6::t_870277ed07595d 1-436
+vendor/tantivy-0.26.1/src/aggregation/agg_tests.rs
+  s_5b054b517a26b6::t_7b71495b010796 1-1438
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/accessors.rs
+  s_5b054b517a26b6::t_c947a37a554ff6 1-518
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/calendar_interval.rs
+  s_5b054b517a26b6::t_d87ce1c2881caf 1-136
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/collector.rs
+  s_5b054b517a26b6::t_0754d72bc0da3c 1-649
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/map.rs
+  s_5b054b517a26b6::t_7348ece0237af4 1-329
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/mod.rs
+  s_5b054b517a26b6::t_31f9c7aa2bee25 1-1848
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/numeric_types.rs
+  s_5b054b517a26b6::t_ed42fb8e69d956 1-460
+vendor/tantivy-0.26.1/src/aggregation/bucket/filter.rs
+  s_5b054b517a26b6::t_25428b47895609 1-1802
+vendor/tantivy-0.26.1/src/aggregation/bucket/histogram/date_histogram.rs
+  s_5b054b517a26b6::t_cb849b68c0ffef 1-675
+vendor/tantivy-0.26.1/src/aggregation/bucket/histogram/histogram.rs
+  s_5b054b517a26b6::t_6fbb1b7c9115a5 1-1422
+vendor/tantivy-0.26.1/src/aggregation/bucket/histogram/mod.rs
+  s_5b054b517a26b6::t_cdf683b118cb98 1-4
+vendor/tantivy-0.26.1/src/aggregation/bucket/mod.rs
+  s_5b054b517a26b6::t_26a618c5d892b9 1-210
+vendor/tantivy-0.26.1/src/aggregation/bucket/range.rs
+  s_5b054b517a26b6::t_76d639e2fdb7da 1-963
+vendor/tantivy-0.26.1/src/aggregation/bucket/term_agg.rs
+  s_5b054b517a26b6::t_42b182e67a73ac 1-2897
+vendor/tantivy-0.26.1/src/aggregation/bucket/term_missing_agg.rs
+  s_5b054b517a26b6::t_98e37426887ba0 1-543
+vendor/tantivy-0.26.1/src/aggregation/cached_sub_aggs.rs
+  s_5b054b517a26b6::t_e365bf474d46d7 1-245
+vendor/tantivy-0.26.1/src/aggregation/collector.rs
+  s_5b054b517a26b6::t_defe7dd7372cda 1-221
+vendor/tantivy-0.26.1/src/aggregation/date.rs
+  s_5b054b517a26b6::t_4dfea6246986b8 1-16
+vendor/tantivy-0.26.1/src/aggregation/error.rs
+  s_5b054b517a26b6::t_a3ff02f9cfff48 1-39
+vendor/tantivy-0.26.1/src/aggregation/intermediate_agg_result.rs
+  s_5b054b517a26b6::t_9715959a44defd 1-1247
+vendor/tantivy-0.26.1/src/aggregation/metric/average.rs
+  s_5b054b517a26b6::t_8c481cad7a5c5b 1-140
+vendor/tantivy-0.26.1/src/aggregation/metric/cardinality.rs
+  s_5b054b517a26b6::t_9c49eea697a72c 1-613
+vendor/tantivy-0.26.1/src/aggregation/metric/count.rs
+  s_5b054b517a26b6::t_0ae1434696318f 1-66
+vendor/tantivy-0.26.1/src/aggregation/metric/extended_stats.rs
+  s_5b054b517a26b6::t_4218cca4a3fc58 1-1156
+vendor/tantivy-0.26.1/src/aggregation/metric/max.rs
+  s_5b054b517a26b6::t_eb81d74532b1fc 1-118
+vendor/tantivy-0.26.1/src/aggregation/metric/min.rs
+  s_5b054b517a26b6::t_bd08a0aeab7a2c 1-66
+vendor/tantivy-0.26.1/src/aggregation/metric/mod.rs
+  s_5b054b517a26b6::t_231851afd74655 1-204
+vendor/tantivy-0.26.1/src/aggregation/metric/percentiles.rs
+  s_5b054b517a26b6::t_13049a46051b1c 1-683
+vendor/tantivy-0.26.1/src/aggregation/metric/stats.rs
+  s_5b054b517a26b6::t_6e59a9806610c9 1-737
+vendor/tantivy-0.26.1/src/aggregation/metric/sum.rs
+  s_5b054b517a26b6::t_7f36a621d74094 1-66
+vendor/tantivy-0.26.1/src/aggregation/metric/top_hits.rs
+  s_5b054b517a26b6::t_27676fe0245bea 1-942
+vendor/tantivy-0.26.1/src/aggregation/mod.rs
+  s_5b054b517a26b6::t_bba16ff57ab660 1-673
+vendor/tantivy-0.26.1/src/aggregation/segment_agg_result.rs
+  s_5b054b517a26b6::t_72ced0aa9d8c46 1-140
+vendor/tantivy-0.26.1/src/collector/count_collector.rs
+  s_5b054b517a26b6::t_602cb76a526e40 1-110
+vendor/tantivy-0.26.1/src/collector/docset_collector.rs
+  s_5b054b517a26b6::t_5d97987a30b5c9 1-60
+vendor/tantivy-0.26.1/src/collector/facet_collector.rs
+  s_5b054b517a26b6::t_e19282ab795c18 1-860
+vendor/tantivy-0.26.1/src/collector/filter_collector_wrapper.rs
+  s_5b054b517a26b6::t_dd0529c674ee8d 1-382
+vendor/tantivy-0.26.1/src/collector/histogram_collector.rs
+  s_5b054b517a26b6::t_1a5ef199318f38 1-305
+vendor/tantivy-0.26.1/src/collector/mod.rs
+  s_5b054b517a26b6::t_6cf36c7e677499 1-565
+vendor/tantivy-0.26.1/src/collector/multi_collector.rs
+  s_5b054b517a26b6::t_441b3a5d579ee1 1-322
+vendor/tantivy-0.26.1/src/collector/sort_key/mod.rs
+  s_5b054b517a26b6::t_9f3531b29c2d76 1-456
+vendor/tantivy-0.26.1/src/collector/sort_key/order.rs
+  s_5b054b517a26b6::t_8d2b6647a131d9 1-567
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_bytes.rs
+  s_5b054b517a26b6::t_b4daa211327e5c 1-168
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_erased_type.rs
+  s_5b054b517a26b6::t_ca63d813ac8a78 1-430
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_score.rs
+  s_5b054b517a26b6::t_98798cb4c3eef8 1-77
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_static_fast_value.rs
+  s_5b054b517a26b6::t_5c6830533ee8e8 1-96
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_string.rs
+  s_5b054b517a26b6::t_02a63720a5d7f8 1-72
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_key_computer.rs
+  s_5b054b517a26b6::t_3a97d2339acc06 1-643
+vendor/tantivy-0.26.1/src/collector/sort_key_top_collector.rs
+  s_5b054b517a26b6::t_df840d4773e189 1-193
+vendor/tantivy-0.26.1/src/collector/tests.rs
+  s_5b054b517a26b6::t_37b11e80d0256e 1-309
+vendor/tantivy-0.26.1/src/collector/top_collector.rs
+  s_5b054b517a26b6::t_d9a440067c00ab 1-22
+vendor/tantivy-0.26.1/src/collector/top_score_collector.rs
+  s_5b054b517a26b6::t_fa11b4322f357e 1-1836
+vendor/tantivy-0.26.1/src/compat_tests.rs
+  s_5b054b517a26b6::t_6b79907c0fbd66 1-91
+vendor/tantivy-0.26.1/src/core/executor.rs
+  s_5b054b517a26b6::t_c4f022ddabd58b 1-242
+vendor/tantivy-0.26.1/src/core/json_utils.rs
+  s_5b054b517a26b6::t_c53b89f1ca6de9 1-501
+vendor/tantivy-0.26.1/src/core/mod.rs
+  s_5b054b517a26b6::t_e20f531bed0181 1-25
+vendor/tantivy-0.26.1/src/core/searcher.rs
+  s_5b054b517a26b6::t_7960da4356e724 1-308
+vendor/tantivy-0.26.1/src/core/tests.rs
+  s_5b054b517a26b6::t_a5fb8d45e6a501 1-468
+vendor/tantivy-0.26.1/src/directory/composite_file.rs
+  s_5b054b517a26b6::t_1b1f19072f4913 1-288
+vendor/tantivy-0.26.1/src/directory/directory.rs
+  s_5b054b517a26b6::t_14b4f445e48b3e 1-252
+vendor/tantivy-0.26.1/src/directory/directory_lock.rs
+  s_5b054b517a26b6::t_196c8894361bec 1-60
+vendor/tantivy-0.26.1/src/directory/error.rs
+  s_5b054b517a26b6::t_a54bb3395309ae 1-202
+vendor/tantivy-0.26.1/src/directory/footer.rs
+  s_5b054b517a26b6::t_24ca9cdf403609 1-241
+vendor/tantivy-0.26.1/src/directory/managed_directory.rs
+  s_5b054b517a26b6::t_75124198c6af0b 1-413
+vendor/tantivy-0.26.1/src/directory/mmap_directory/file_watcher.rs
+  s_5b054b517a26b6::t_31caba24b4dbab 1-185
+vendor/tantivy-0.26.1/src/directory/mmap_directory/mod.rs
+  s_5b054b517a26b6::t_4063a94cf88159 1-703
+vendor/tantivy-0.26.1/src/directory/mod.rs
+  s_5b054b517a26b6::t_9be450701ca6ef 1-58
+vendor/tantivy-0.26.1/src/directory/ram_directory.rs
+  s_5b054b517a26b6::t_0ecf71fab85ac4 1-285
+vendor/tantivy-0.26.1/src/directory/tests.rs
+  s_5b054b517a26b6::t_6786e1bd778ddc 1-276
+vendor/tantivy-0.26.1/src/directory/watch_event_router.rs
+  s_5b054b517a26b6::t_5907e3189926da 1-173
+vendor/tantivy-0.26.1/src/docset.rs
+  s_5b054b517a26b6::t_bbebdb39fd7dcb 1-283
+vendor/tantivy-0.26.1/src/error.rs
+  s_5b054b517a26b6::t_3c5311cde0374b 1-188
+vendor/tantivy-0.26.1/src/fastfield/alive_bitset.rs
+  s_5b054b517a26b6::t_58e504e651ae56 1-218
+vendor/tantivy-0.26.1/src/fastfield/error.rs
+  s_5b054b517a26b6::t_cea9ae003fc0b6 1-26
+vendor/tantivy-0.26.1/src/fastfield/facet_reader.rs
+  s_5b054b517a26b6::t_105a0333ab9523 1-194
+vendor/tantivy-0.26.1/src/fastfield/mod.rs
+  s_5b054b517a26b6::t_72aca88fecd396 1-1306
+vendor/tantivy-0.26.1/src/fastfield/readers.rs
+  s_5b054b517a26b6::t_668d56e2e23c1a 1-517
+vendor/tantivy-0.26.1/src/fastfield/writer.rs
+  s_5b054b517a26b6::t_14a43fda1b7c2a 1-484
+vendor/tantivy-0.26.1/src/fieldnorm/code.rs
+  s_5b054b517a26b6::t_0612d9fde3ef94 1-329
+vendor/tantivy-0.26.1/src/fieldnorm/mod.rs
+  s_5b054b517a26b6::t_285725f40e7ef6 1-154
+vendor/tantivy-0.26.1/src/fieldnorm/reader.rs
+  s_5b054b517a26b6::t_cba84332101bf9 1-194
+vendor/tantivy-0.26.1/src/fieldnorm/serializer.rs
+  s_5b054b517a26b6::t_b60b64aa0266e5 1-34
+vendor/tantivy-0.26.1/src/fieldnorm/writer.rs
+  s_5b054b517a26b6::t_686b4bfd5d0852 1-107
+vendor/tantivy-0.26.1/src/functional_test.rs
+  s_5b054b517a26b6::t_5664dc36e7a571 1-140
+vendor/tantivy-0.26.1/src/future_result.rs
+  s_5b054b517a26b6::t_9aa968447950b2 1-130
+vendor/tantivy-0.26.1/src/index/index.rs
+  s_5b054b517a26b6::t_fdbbc88f98821c 1-714
+vendor/tantivy-0.26.1/src/index/index_meta.rs
+  s_5b054b517a26b6::t_3bdd8b17f69dc8 1-506
+vendor/tantivy-0.26.1/src/index/inverted_index_reader.rs
+  s_5b054b517a26b6::t_e877994ca33141 1-494
+vendor/tantivy-0.26.1/src/index/mod.rs
+  s_5b054b517a26b6::t_0763da247bf4fd 1-20
+vendor/tantivy-0.26.1/src/index/segment.rs
+  s_5b054b517a26b6::t_ebc2f405360116 1-90
+vendor/tantivy-0.26.1/src/index/segment_component.rs
+  s_5b054b517a26b6::t_9463dc6f28cac3 1-45
+vendor/tantivy-0.26.1/src/index/segment_id.rs
+  s_5b054b517a26b6::t_1e6e82afbce63e 1-142
+vendor/tantivy-0.26.1/src/index/segment_reader.rs
+  s_5b054b517a26b6::t_9f69a871ba8e09 1-813
+vendor/tantivy-0.26.1/src/indexer/delete_queue.rs
+  s_5b054b517a26b6::t_48903c39c653bf 1-305
+vendor/tantivy-0.26.1/src/indexer/doc_id_mapping.rs
+  s_5b054b517a26b6::t_130f3001706912 1-46
+vendor/tantivy-0.26.1/src/indexer/doc_opstamp_mapping.rs
+  s_5b054b517a26b6::t_6d3b406e83fff9 1-62
+vendor/tantivy-0.26.1/src/indexer/flat_map_with_buffer.rs
+  s_5b054b517a26b6::t_4c877e4be8a06f 1-70
+vendor/tantivy-0.26.1/src/indexer/index_writer.rs
+  s_5b054b517a26b6::t_5cc10ffb207ddf 1-2588
+vendor/tantivy-0.26.1/src/indexer/index_writer_status.rs
+  s_5b054b517a26b6::t_8f50e51828dd67 1-122
+vendor/tantivy-0.26.1/src/indexer/indexing_term.rs
+  s_5b054b517a26b6::t_f163dd839034e0 1-214
+vendor/tantivy-0.26.1/src/indexer/log_merge_policy.rs
+  s_5b054b517a26b6::t_394e73b6b8ff8d 1-392
+vendor/tantivy-0.26.1/src/indexer/merge_index_test.rs
+  s_5b054b517a26b6::t_280a6a03d5f120 1-148
+vendor/tantivy-0.26.1/src/indexer/merge_operation.rs
+  s_5b054b517a26b6::t_610819409a22ca 1-77
+vendor/tantivy-0.26.1/src/indexer/merge_policy.rs
+  s_5b054b517a26b6::t_abb0fe5daf7062 1-63
+vendor/tantivy-0.26.1/src/indexer/merger.rs
+  s_5b054b517a26b6::t_a26a5f80d1c551 1-1582
+vendor/tantivy-0.26.1/src/indexer/mod.rs
+  s_5b054b517a26b6::t_75a116fbcd9607 1-696
+vendor/tantivy-0.26.1/src/indexer/operation.rs
+  s_5b054b517a26b6::t_46ea454d63ad65 1-32
+vendor/tantivy-0.26.1/src/indexer/path_to_unordered_id.rs
+  s_5b054b517a26b6::t_daf17d598f7bcd 1-93
+vendor/tantivy-0.26.1/src/indexer/prepared_commit.rs
+  s_5b054b517a26b6::t_9b6147bc1ae575 1-53
+vendor/tantivy-0.26.1/src/indexer/segment_entry.rs
+  s_5b054b517a26b6::t_82378c675291a4 1-69
+vendor/tantivy-0.26.1/src/indexer/segment_manager.rs
+  s_5b054b517a26b6::t_575467857adca2 1-222
+vendor/tantivy-0.26.1/src/indexer/segment_register.rs
+  s_5b054b517a26b6::t_f3ba197f4653b2 1-147
+vendor/tantivy-0.26.1/src/indexer/segment_serializer.rs
+  s_5b054b517a26b6::t_42bbf7ef38b6d8 1-89
+vendor/tantivy-0.26.1/src/indexer/segment_updater.rs
+  s_5b054b517a26b6::t_81120c08d3f384 1-1143
+vendor/tantivy-0.26.1/src/indexer/segment_writer.rs
+  s_5b054b517a26b6::t_58a847483c8dc7 1-1082
+vendor/tantivy-0.26.1/src/indexer/single_segment_index_writer.rs
+  s_5b054b517a26b6::t_b2775ec8566e35 1-56
+vendor/tantivy-0.26.1/src/indexer/stamper.rs
+  s_5b054b517a26b6::t_f1d9ac5e8a3e55 1-73
+vendor/tantivy-0.26.1/src/lib.rs
+  s_5b054b517a26b6::t_865429382acd85 1-1277
+vendor/tantivy-0.26.1/src/macros.rs
+  s_5b054b517a26b6::t_a3c6e69bf9b049 1-97
+vendor/tantivy-0.26.1/src/positions/mod.rs
+  s_5b054b517a26b6::t_fe456581229a1e 1-236
+vendor/tantivy-0.26.1/src/positions/reader.rs
+  s_5b054b517a26b6::t_2508c418504c40 1-149
+vendor/tantivy-0.26.1/src/positions/serializer.rs
+  s_5b054b517a26b6::t_27309793d8c526 1-93
+vendor/tantivy-0.26.1/src/postings/block_search.rs
+  s_5b054b517a26b6::t_183b7a21194329 1-100
+vendor/tantivy-0.26.1/src/postings/block_segment_postings.rs
+  s_5b054b517a26b6::t_18c39ec1fa8c9f 1-560
+vendor/tantivy-0.26.1/src/postings/compression/mod.rs
+  s_5b054b517a26b6::t_c396e9fca99f8d 1-463
+vendor/tantivy-0.26.1/src/postings/compression/vint.rs
+  s_5b054b517a26b6::t_8454dcf8b13f32 1-108
+vendor/tantivy-0.26.1/src/postings/indexing_context.rs
+  s_5b054b517a26b6::t_60a509a9ffc850 1-31
+vendor/tantivy-0.26.1/src/postings/json_postings_writer.rs
+  s_5b054b517a26b6::t_4bb6f7e870f89e 1-154
+vendor/tantivy-0.26.1/src/postings/loaded_postings.rs
+  s_5b054b517a26b6::t_9799c5bb76443f 1-155
+vendor/tantivy-0.26.1/src/postings/mod.rs
+  s_5b054b517a26b6::t_041f954d3f5a80 1-764
+vendor/tantivy-0.26.1/src/postings/per_field_postings_writer.rs
+  s_5b054b517a26b6::t_78ed311bff296f 1-73
+vendor/tantivy-0.26.1/src/postings/postings.rs
+  s_5b054b517a26b6::t_97c280fb50015e 1-44
+vendor/tantivy-0.26.1/src/postings/postings_writer.rs
+  s_5b054b517a26b6::t_79210b8a0fef37 1-247
+vendor/tantivy-0.26.1/src/postings/recorder.rs
+  s_5b054b517a26b6::t_bc2a0cf56c865f 1-317
+vendor/tantivy-0.26.1/src/postings/segment_postings.rs
+  s_5b054b517a26b6::t_4472e3087edeed 1-298
+vendor/tantivy-0.26.1/src/postings/serializer.rs
+  s_5b054b517a26b6::t_00af5122aef72a 1-487
+vendor/tantivy-0.26.1/src/postings/skip.rs
+  s_5b054b517a26b6::t_e052f5b00a941d 1-452
+vendor/tantivy-0.26.1/src/postings/term_info.rs
+  s_5b054b517a26b6::t_d29ba71ac371d6 1-78
+vendor/tantivy-0.26.1/src/query/all_query.rs
+  s_5b054b517a26b6::t_289ea73a4ed176 1-196
+vendor/tantivy-0.26.1/src/query/automaton_weight.rs
+  s_5b054b517a26b6::t_6929b4192b6aec 1-211
+vendor/tantivy-0.26.1/src/query/bitset/mod.rs
+  s_5b054b517a26b6::t_cd8fcc51cd5d7d 1-275
+vendor/tantivy-0.26.1/src/query/bm25.rs
+  s_5b054b517a26b6::t_31dc958dd8b6bd 1-240
+vendor/tantivy-0.26.1/src/query/boolean_query/block_wand.rs
+  s_5b054b517a26b6::t_96407332f050f9 1-628
+vendor/tantivy-0.26.1/src/query/boolean_query/boolean_query.rs
+  s_5b054b517a26b6::t_0518ce8f49c057 1-450
+vendor/tantivy-0.26.1/src/query/boolean_query/boolean_weight.rs
+  s_5b054b517a26b6::t_61754b98248a65 1-540
+vendor/tantivy-0.26.1/src/query/boolean_query/mod.rs
+  s_5b054b517a26b6::t_57ae2ed76151f6 1-841
+vendor/tantivy-0.26.1/src/query/boost_query.rs
+  s_5b054b517a26b6::t_fe2bc08f64e973 1-167
+vendor/tantivy-0.26.1/src/query/const_score_query.rs
+  s_5b054b517a26b6::t_7a7bdd90ff3c69 1-179
+vendor/tantivy-0.26.1/src/query/disjunction.rs
+  s_5b054b517a26b6::t_7dae0ffdf830f5 1-354
+vendor/tantivy-0.26.1/src/query/disjunction_max_query.rs
+  s_5b054b517a26b6::t_16a17608b3d0c5 1-130
+vendor/tantivy-0.26.1/src/query/empty_query.rs
+  s_5b054b517a26b6::t_131da9c001676e 1-77
+vendor/tantivy-0.26.1/src/query/exclude.rs
+  s_5b054b517a26b6::t_a3bfb0aa5fc017 1-166
+vendor/tantivy-0.26.1/src/query/exist_query.rs
+  s_5b054b517a26b6::t_cb59d86d26265d 1-470
+vendor/tantivy-0.26.1/src/query/explanation.rs
+  s_5b054b517a26b6::t_8208b397b1ef8c 1-82
+vendor/tantivy-0.26.1/src/query/fuzzy_query.rs
+  s_5b054b517a26b6::t_ae20ff73b023ce 1-352
+vendor/tantivy-0.26.1/src/query/intersection.rs
+  s_5b054b517a26b6::t_f02de3a687f907 1-448
+vendor/tantivy-0.26.1/src/query/mod.rs
+  s_5b054b517a26b6::t_923f0a5a56ce37 1-191
+vendor/tantivy-0.26.1/src/query/more_like_this/mod.rs
+  s_5b054b517a26b6::t_2704d7302a5f55 1-7
+vendor/tantivy-0.26.1/src/query/more_like_this/more_like_this.rs
+  s_5b054b517a26b6::t_a049225b63f655 1-371
+vendor/tantivy-0.26.1/src/query/more_like_this/query.rs
+  s_5b054b517a26b6::t_aeba4e467e5834 1-294
+vendor/tantivy-0.26.1/src/query/phrase_prefix_query/mod.rs
+  s_5b054b517a26b6::t_3ea0abffcc4be6 1-34
+vendor/tantivy-0.26.1/src/query/phrase_prefix_query/phrase_prefix_query.rs
+  s_5b054b517a26b6::t_482b7e37a1505c 1-165
+vendor/tantivy-0.26.1/src/query/phrase_prefix_query/phrase_prefix_scorer.rs
+  s_5b054b517a26b6::t_c81714e1b88dd0 1-229
+vendor/tantivy-0.26.1/src/query/phrase_prefix_query/phrase_prefix_weight.rs
+  s_5b054b517a26b6::t_2a93eac78e6d92 1-266
+vendor/tantivy-0.26.1/src/query/phrase_query/mod.rs
+  s_5b054b517a26b6::t_06808b00a23dec 1-399
+vendor/tantivy-0.26.1/src/query/phrase_query/phrase_query.rs
+  s_5b054b517a26b6::t_b8969aa26c7035 1-149
+vendor/tantivy-0.26.1/src/query/phrase_query/phrase_scorer.rs
+  s_5b054b517a26b6::t_d319654d470c1e 1-812
+vendor/tantivy-0.26.1/src/query/phrase_query/phrase_weight.rs
+  s_5b054b517a26b6::t_55112ee0a75978 1-135
+vendor/tantivy-0.26.1/src/query/phrase_query/regex_phrase_query.rs
+  s_5b054b517a26b6::t_582375b12c1beb 1-171
+vendor/tantivy-0.26.1/src/query/phrase_query/regex_phrase_weight.rs
+  s_5b054b517a26b6::t_8a2cdebd0eb341 1-474
+vendor/tantivy-0.26.1/src/query/query.rs
+  s_5b054b517a26b6::t_8f50cc4e7a190a 1-199
+vendor/tantivy-0.26.1/src/query/query_parser/logical_ast.rs
+  s_5b054b517a26b6::t_7a4aef665229b4 1-164
+vendor/tantivy-0.26.1/src/query/query_parser/mod.rs
+  s_5b054b517a26b6::t_5397fbee67a241 1-4
+vendor/tantivy-0.26.1/src/query/query_parser/query_parser.rs
+  s_5b054b517a26b6::t_d5c1a7e2055f5e 1-2124
+vendor/tantivy-0.26.1/src/query/range_query/fast_field_range_doc_set.rs
+  s_5b054b517a26b6::t_849a1cef0e139a 1-308
+vendor/tantivy-0.26.1/src/query/range_query/mod.rs
+  s_5b054b517a26b6::t_243bb4e0c2c06f 1-26
+vendor/tantivy-0.26.1/src/query/range_query/range_query.rs
+  s_5b054b517a26b6::t_23cd701ef4e009 1-706
+vendor/tantivy-0.26.1/src/query/range_query/range_query_fastfield.rs
+  s_5b054b517a26b6::t_e016ed01bb5832 1-1679
+vendor/tantivy-0.26.1/src/query/regex_query.rs
+  s_5b054b517a26b6::t_c489b4b523232f 1-197
+vendor/tantivy-0.26.1/src/query/reqopt_scorer.rs
+  s_5b054b517a26b6::t_5473c8200e4330 1-209
+vendor/tantivy-0.26.1/src/query/score_combiner.rs
+  s_5b054b517a26b6::t_9183829b3c1e47 1-95
+vendor/tantivy-0.26.1/src/query/scorer.rs
+  s_5b054b517a26b6::t_900d848c7a0f68 1-25
+vendor/tantivy-0.26.1/src/query/set_query.rs
+  s_5b054b517a26b6::t_af564f18b43a12 1-263
+vendor/tantivy-0.26.1/src/query/size_hint.rs
+  s_5b054b517a26b6::t_973a9bf4bf781e 1-141
+vendor/tantivy-0.26.1/src/query/term_query/mod.rs
+  s_5b054b517a26b6::t_a56e677c75df8e 1-525
+vendor/tantivy-0.26.1/src/query/term_query/term_query.rs
+  s_5b054b517a26b6::t_30c34f300d74a0 1-217
+vendor/tantivy-0.26.1/src/query/term_query/term_scorer.rs
+  s_5b054b517a26b6::t_17634e8c492e2c 1-341
+vendor/tantivy-0.26.1/src/query/term_query/term_weight.rs
+  s_5b054b517a26b6::t_ec0951aa0d5aa5 1-220
+vendor/tantivy-0.26.1/src/query/union/bitset_union.rs
+  s_5b054b517a26b6::t_3806201a700cfc 1-89
+vendor/tantivy-0.26.1/src/query/union/buffered_union.rs
+  s_5b054b517a26b6::t_6a78a09cd78422 1-358
+vendor/tantivy-0.26.1/src/query/union/mod.rs
+  s_5b054b517a26b6::t_571d6b1d7b9e35 1-332
+vendor/tantivy-0.26.1/src/query/union/simple_union.rs
+  s_5b054b517a26b6::t_1ba8d56fc81e98 1-117
+vendor/tantivy-0.26.1/src/query/vec_docset.rs
+  s_5b054b517a26b6::t_41bfc3908987dd 1-90
+vendor/tantivy-0.26.1/src/query/weight.rs
+  s_5b054b517a26b6::t_58df4e08d9f2a7 1-133
+vendor/tantivy-0.26.1/src/reader/mod.rs
+  s_5b054b517a26b6::t_9bf9a28245ba53 1-301
+vendor/tantivy-0.26.1/src/reader/warming.rs
+  s_5b054b517a26b6::t_6b0b33056c4403 1-345
+vendor/tantivy-0.26.1/src/schema/bytes_options.rs
+  s_5b054b517a26b6::t_9d39821f70f452 1-295
+vendor/tantivy-0.26.1/src/schema/date_time_options.rs
+  s_5b054b517a26b6::t_c8fa6ed356a94e 1-239
+vendor/tantivy-0.26.1/src/schema/document/de.rs
+  s_5b054b517a26b6::t_7deb3638e97ad7 1-1158
+vendor/tantivy-0.26.1/src/schema/document/default_document.rs
+  s_5b054b517a26b6::t_3a396f6970f1c0 1-784
+vendor/tantivy-0.26.1/src/schema/document/existing_type_impls.rs
+  s_5b054b517a26b6::t_d1b95ea7c7b5ef 1-343
+vendor/tantivy-0.26.1/src/schema/document/mod.rs
+  s_5b054b517a26b6::t_665c4e58b1d2bb 1-276
+vendor/tantivy-0.26.1/src/schema/document/owned_value.rs
+  s_5b054b517a26b6::t_830b43c4da02f5 1-528
+vendor/tantivy-0.26.1/src/schema/document/se.rs
+  s_5b054b517a26b6::t_ff7c25a3ac6a53 1-743
+vendor/tantivy-0.26.1/src/schema/document/value.rs
+  s_5b054b517a26b6::t_0ffdc16e96945f 1-451
+vendor/tantivy-0.26.1/src/schema/facet.rs
+  s_5b054b517a26b6::t_be0d32100052b4 1-348
+vendor/tantivy-0.26.1/src/schema/facet_options.rs
+  s_5b054b517a26b6::t_16b9a99f441c0a 1-82
+vendor/tantivy-0.26.1/src/schema/field.rs
+  s_5b054b517a26b6::t_98cfd9d1f2f5e8 1-33
+vendor/tantivy-0.26.1/src/schema/field_entry.rs
+  s_5b054b517a26b6::t_1568732ccf658a 1-217
+vendor/tantivy-0.26.1/src/schema/field_type.rs
+  s_5b054b517a26b6::t_a6460566720292 1-806
+vendor/tantivy-0.26.1/src/schema/flags.rs
+  s_5b054b517a26b6::t_5df8a780b9fd87 1-102
+vendor/tantivy-0.26.1/src/schema/index_record_option.rs
+  s_5b054b517a26b6::t_43029e8cddaeff 1-62
+vendor/tantivy-0.26.1/src/schema/ip_options.rs
+  s_5b054b517a26b6::t_e0c1cdbd63fbfc 1-159
+vendor/tantivy-0.26.1/src/schema/json_object_options.rs
+  s_5b054b517a26b6::t_5f1390070a6b8c 1-261
+vendor/tantivy-0.26.1/src/schema/mod.rs
+  s_5b054b517a26b6::t_cb6f30063c0947 1-189
+vendor/tantivy-0.26.1/src/schema/named_field_document.rs
+  s_5b054b517a26b6::t_42ea31be9e2422 1-13
+vendor/tantivy-0.26.1/src/schema/numeric_options.rs
+  s_5b054b517a26b6::t_1256c88b3f1b4f 1-318
+vendor/tantivy-0.26.1/src/schema/schema.rs
+  s_5b054b517a26b6::t_89a0d852aa5101 1-1023
+vendor/tantivy-0.26.1/src/schema/term.rs
+  s_5b054b517a26b6::t_1bff9b8dbf73ec 1-577
+vendor/tantivy-0.26.1/src/schema/text_options.rs
+  s_5b054b517a26b6::t_6790dba0cd71ee 1-436
+vendor/tantivy-0.26.1/src/snippet/mod.rs
+  s_5b054b517a26b6::t_0e26334e96023d 1-907
+vendor/tantivy-0.26.1/src/space_usage/mod.rs
+  s_5b054b517a26b6::t_d75d8baa5c5bdf 1-558
+vendor/tantivy-0.26.1/src/store/compression_lz4_block.rs
+  s_5b054b517a26b6::t_6646e657a0cf8b 1-49
+vendor/tantivy-0.26.1/src/store/compression_zstd_block.rs
+  s_5b054b517a26b6::t_ff6639d3f9e169 1-54
+vendor/tantivy-0.26.1/src/store/compressors.rs
+  s_5b054b517a26b6::t_98216c8eab8182 1-221
+vendor/tantivy-0.26.1/src/store/decompressors.rs
+  s_5b054b517a26b6::t_ee821666035238 1-95
+vendor/tantivy-0.26.1/src/store/footer.rs
+  s_5b054b517a26b6::t_edf7a3904be111 1-87
+vendor/tantivy-0.26.1/src/store/index/block.rs
+  s_5b054b517a26b6::t_718e39c1b958d1 1-174
+vendor/tantivy-0.26.1/src/store/index/mod.rs
+  s_5b054b517a26b6::t_df283527355929 1-246
+vendor/tantivy-0.26.1/src/store/index/skip_index.rs
+  s_5b054b517a26b6::t_4ae51d7e092574 1-107
+vendor/tantivy-0.26.1/src/store/index/skip_index_builder.rs
+  s_5b054b517a26b6::t_2a7519ed46d13e 1-117
+vendor/tantivy-0.26.1/src/store/mod.rs
+  s_5b054b517a26b6::t_713984a00b877f 1-406
+vendor/tantivy-0.26.1/src/store/reader.rs
+  s_5b054b517a26b6::t_e8f1f4108a75dc 1-506
+vendor/tantivy-0.26.1/src/store/store_compressor.rs
+  s_5b054b517a26b6::t_55c1686b170882 1-272
+vendor/tantivy-0.26.1/src/store/writer.rs
+  s_5b054b517a26b6::t_3e598ae41776d1 1-142
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/merger.rs
+  s_5b054b517a26b6::t_bf4195fbdb9a97 1-155
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/mod.rs
+  s_5b054b517a26b6::t_85f7c7fe23f1b9 1-28
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/streamer.rs
+  s_5b054b517a26b6::t_61eb3b2877486e 1-147
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/term_info_store.rs
+  s_5b054b517a26b6::t_ae05f0a84d8d92 1-366
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/termdict.rs
+  s_5b054b517a26b6::t_f2026be5ffdd01 1-221
+vendor/tantivy-0.26.1/src/termdict/mod.rs
+  s_5b054b517a26b6::t_6c8ea4c000e618 1-224
+vendor/tantivy-0.26.1/src/termdict/sstable_termdict/merger.rs
+  s_5b054b517a26b6::t_69bc1d3d0a71cb 1-110
+vendor/tantivy-0.26.1/src/termdict/sstable_termdict/mod.rs
+  s_5b054b517a26b6::t_ea1e751e4d104b 1-151
+vendor/tantivy-0.26.1/src/termdict/tests.rs
+  s_5b054b517a26b6::t_69e8649ea6a561 1-431
+vendor/tantivy-0.26.1/src/tokenizer/alphanum_only.rs
+  s_5b054b517a26b6::t_19eb247009a171 1-110
+vendor/tantivy-0.26.1/src/tokenizer/ascii_folding_filter.rs
+  s_5b054b517a26b6::t_99d7dfc794ee09 1-4066
+vendor/tantivy-0.26.1/src/tokenizer/empty_tokenizer.rs
+  s_5b054b517a26b6::t_5cc3ac923db5f9 1-42
+vendor/tantivy-0.26.1/src/tokenizer/facet_tokenizer.rs
+  s_5b054b517a26b6::t_5aa29357e1ce1f 1-128
+vendor/tantivy-0.26.1/src/tokenizer/lower_caser.rs
+  s_5b054b517a26b6::t_3259458b1ea4f5 1-108
+vendor/tantivy-0.26.1/src/tokenizer/mod.rs
+  s_5b054b517a26b6::t_c1d02293687a2f 1-258
+vendor/tantivy-0.26.1/src/tokenizer/ngram_tokenizer.rs
+  s_5b054b517a26b6::t_8081256885762b 1-491
+vendor/tantivy-0.26.1/src/tokenizer/raw_tokenizer.rs
+  s_5b054b517a26b6::t_56ccb824c762f0 1-69
+vendor/tantivy-0.26.1/src/tokenizer/regex_tokenizer.rs
+  s_5b054b517a26b6::t_3c8ec8f47896be 1-165
+vendor/tantivy-0.26.1/src/tokenizer/remove_long.rs
+  s_5b054b517a26b6::t_3700b2c3389088 1-117
+vendor/tantivy-0.26.1/src/tokenizer/simple_tokenizer.rs
+  s_5b054b517a26b6::t_cc68108becdcfb 1-91
+vendor/tantivy-0.26.1/src/tokenizer/split_compound_words.rs
+  s_5b054b517a26b6::t_5527870aa83802 1-282
+vendor/tantivy-0.26.1/src/tokenizer/stemmer.rs
+  s_5b054b517a26b6::t_9c358dc15c334a 1-201
+vendor/tantivy-0.26.1/src/tokenizer/stop_word_filter/gen_stopwords.py
+  s_5b054b517a26b6::t_811780d614bc33 1-43
+vendor/tantivy-0.26.1/src/tokenizer/stop_word_filter/mod.rs
+  s_5b054b517a26b6::t_c40605cc818fc4 1-166
+vendor/tantivy-0.26.1/src/tokenizer/stop_word_filter/stopwords.rs
+  s_5b054b517a26b6::t_8fb00a3ea36512 1-2319
+vendor/tantivy-0.26.1/src/tokenizer/tokenized_string.rs
+  s_5b054b517a26b6::t_ceef6e4d9fcb6f 1-127
+vendor/tantivy-0.26.1/src/tokenizer/tokenizer.rs
+  s_5b054b517a26b6::t_cbcdd14b295821 1-175
+vendor/tantivy-0.26.1/src/tokenizer/tokenizer_manager.rs
+  s_5b054b517a26b6::t_6a74dd88ae3e0b 1-81
+vendor/tantivy-0.26.1/src/tokenizer/whitespace_tokenizer.rs
+  s_5b054b517a26b6::t_8635b4435b8875 1-90
+vendor/tantivy-0.26.1/tests/compat_tests_data/index_v6/.managed.json
+  s_5b054b517a26b6::t_631bf19c59170b 1
+vendor/tantivy-0.26.1/tests/compat_tests_data/index_v6/meta.json
+  s_5b054b517a26b6::t_4a9144627d12c0 1-40
+vendor/tantivy-0.26.1/tests/compat_tests_data/index_v7/.managed.json
+  s_5b054b517a26b6::t_039a238efa8d26 1
+vendor/tantivy-0.26.1/tests/compat_tests_data/index_v7/meta.json
+  s_5b054b517a26b6::t_9612dabd42c6ff 1-40
+vendor/tantivy-0.26.1/tests/failpoints/mod.rs
+  s_5b054b517a26b6::t_3569a2e3b0621f 1-124
+xtask/src/check/dependencies.rs
+  s_5b054b517a26b6::t_6a2a02f81f643a 508-509,534-555,2145-2187
+xtask/src/check/tooling.rs
+  s_5b054b517a26b6::t_7dc98ef2602765 5-6,103-105,542-575
+xtask/src/repository.rs
+  s_5b054b517a26b6::t_f656c9fe91e007 76,81-95,117,362-364,376-384,387-394
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea00ebf8eb0e899c18395381253fbee764dec2cc",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

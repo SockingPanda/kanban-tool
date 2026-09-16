@@ -6,6 +6,7 @@ import tseslint from "typescript-eslint"
 export default tseslint.config(
   { ignores: ["dist", "src/generated/rpc/**"] },
   js.configs.recommended,
+  { files: ["build/i18n/**/*.mjs"], languageOptions: { globals: { process: "readonly", console: "readonly" } } },
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{ts,tsx}"],

@@ -96,11 +96,11 @@ test.describe("Inspector integration seam", () => {
     const fixture = await installExplorerFixture(page, { withAssets: true })
     await page.goto(`${boardPath}/list?task=${taskId}`, { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("task-inspector")).toBeVisible()
-    await page.getByText("标签与附件", { exact: true }).first().click()
+    await page.locator('summary').filter({ hasText: /^标签$/ }).click()
     await expect(page.getByTestId("inspector-assets")).toBeVisible()
 
     const suggestionRequests = () => fixture.apiRequests.filter((request) => request === "SuggestTaskLabels")
-    const downloadRequests = () => fixture.apiRequests.filter((request) => request === "DownloadAttachment")
+    const downloadRequests = () => fixture.apiRequests.filter((request) => request === "DownloadFile")
     expect(suggestionRequests()).toHaveLength(0)
     expect(downloadRequests()).toHaveLength(0)
 
@@ -137,7 +137,7 @@ test.describe("Inspector integration seam", () => {
     const fixture = await installExplorerFixture(page, { withAssets: true, failLabelAddOnce: true })
     await page.goto(`${boardPath}/list?task=${taskId}`, { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("task-inspector")).toBeVisible()
-    await page.getByText("标签与附件", { exact: true }).first().click()
+    await page.locator('summary').filter({ hasText: /^标签$/ }).click()
     await expect(page.getByTestId("attachment-row")).toHaveCount(1)
 
     const labelInput = page.getByRole("textbox", { name: "标签名称" })
@@ -153,10 +153,11 @@ test.describe("Inspector integration seam", () => {
     await expect(page.getByTestId("inspector-labels")).not.toContainText("first-label")
     expect(fixture.writeRequests.filter((request) => request === "AddTaskLabel")).toHaveLength(2)
 
-    const downloadRequests = () => fixture.apiRequests.filter((request) => request === "DownloadAttachment")
+    const downloadRequests = () => fixture.apiRequests.filter((request) => request === "DownloadFile")
     await page.getByTestId("attachment-download").click()
     await expect.poll(() => downloadRequests().length).toBe(1)
     await page.getByTestId("attachment-delete").click()
+    await page.getByRole('button', { name: '确认解除引用', exact: true }).click()
     await expect(page.getByTestId("attachment-row")).toHaveCount(0)
     await expect(page).toHaveURL(new RegExp(`/list\\?task=${taskId}$`))
   })
@@ -165,7 +166,7 @@ test.describe("Inspector integration seam", () => {
     const fixture = await installExplorerFixture(page, { failInspectorReadsAfterLabelAdd: 4 })
     await page.goto(`${boardPath}/list?task=${taskId}`, { waitUntil: "domcontentloaded" })
     await expect(page.getByTestId("task-inspector")).toBeVisible()
-    await page.getByText("标签与附件", { exact: true }).first().click()
+    await page.locator('summary').filter({ hasText: /^标签$/ }).click()
 
     const labelInput = page.getByRole("textbox", { name: "标签名称" })
     await labelInput.fill("reload-gated")

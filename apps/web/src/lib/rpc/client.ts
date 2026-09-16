@@ -1,3 +1,4 @@
+import { ObjectService, FileService } from '../../generated/rpc/kanban/extensions/v1/workspace_pb';
 import { createClient } from '@connectrpc/connect'
 import { createGrpcWebTransport } from '@connectrpc/connect-web'
 import { KanbanService } from '../../generated/rpc/kanban/v1/kanban_pb'
@@ -12,6 +13,8 @@ export function createRpcClients(baseUrl: string, fetcher?: typeof globalThis.fe
     fetch: createRpcFetch(baseUrl, fetcher, onMessageBytes),
   })
   return {
+    objects: createClient(ObjectService, transport),
+    files: createClient(FileService, transport),
     business: createClient(KanbanService, transport),
     query: createClient(QueryService, transport),
   }

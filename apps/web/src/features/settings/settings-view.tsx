@@ -1,3 +1,4 @@
+import { settingsCopy } from "../../platform/localization/settings-view-copy";
 import { useId, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -41,15 +42,12 @@ export interface SettingsViewProps {
   diagnosticFacts: readonly { label: string; value: string }[];
 }
 
-const copy = {
-  zh: { title:'设置', description:'管理界面偏好、操作身份与本机服务。', appearance:'外观', identity:'操作身份', connection:'连接与诊断', display:'界面显示', displayNote:'修改立即应用，只影响当前浏览器。', theme:'主题', themeNote:'跟随系统，或固定使用浅色、深色。', light:'浅色', dark:'深色', system:'跟随系统', density:'信息密度', densityNote:'调整列表和控件的间距。', comfortable:'舒适', compact:'紧凑', sidebar:'左侧导航', sidebarNote:'收起后仍保留图标入口。', expanded:'展开', collapsed:'收起为图标栏', language:'语言', languageNote:'用于支持多语言的页面和控件。', identityNote:'这个名字会写入后续操作记录，不是登录账号。', actor:'操作名称', actorPlaceholder:'输入操作名称', save:'保存名称', reset:'使用服务默认值', saved:'操作名称已保存。', service:'本机服务', serviceNote:'状态来自最近一次健康检查；与实时事件同步分开判断。', available:'服务可用', warning:'需要检查', error:'服务不可用', loading:'正在检查', reconnect:'重新连接', reconnecting:'正在重连…', health:'系统状态', maintenance:'数据维护', tools:'诊断工具', toolsNote:'出现连接或数据问题时再查看。', technical:'技术详情', copy:'复制诊断信息', copying:'正在复制…' },
-  en: { title:'Settings', description:'Appearance, operation identity and local service.', appearance:'Appearance', identity:'Identity', connection:'Connection', display:'Display', displayNote:'Changes apply immediately in this browser.', theme:'Theme', themeNote:'Follow the system, or choose light or dark.', light:'Light', dark:'Dark', system:'System', density:'Density', densityNote:'Adjust spacing in lists and controls.', comfortable:'Comfortable', compact:'Compact', sidebar:'Sidebar', sidebarNote:'The collapsed rail keeps navigation available.', expanded:'Expanded', collapsed:'Icon rail', language:'Language', languageNote:'Applied to localized pages and controls.', identityNote:'This name identifies future operations. It is not a login account.', actor:'Operation name', actorPlaceholder:'Enter a name', save:'Save name', reset:'Use service default', saved:'Operation name saved.', service:'Local service', serviceNote:'Based on the last health check, independent of event sync.', available:'Service available', warning:'Check required', error:'Service unavailable', loading:'Checking', reconnect:'Reconnect', reconnecting:'Reconnecting…', health:'System status', maintenance:'Data maintenance', tools:'Diagnostics', toolsNote:'Inspect these when troubleshooting.', technical:'Technical details', copy:'Copy diagnostics', copying:'Copying…' },
-};
+
 
 /** 只负责设置界面展示，异步操作由生产容器提供。 */
 export function SettingsView(props: SettingsViewProps) {
   const [tab, setTab] = useState<SettingsTab>(props.initialTab ?? 'appearance');
-  const id = useId(), c = copy[props.locale];
+  const id = useId(), c = settingsCopy(props.locale);
   const tabs: { value: SettingsTab; label: string; icon: 'sun' | 'user' | 'database' }[] = [
     { value:'appearance',label:c.appearance,icon:'sun' },
     { value:'identity',label:c.identity,icon:'user' },
@@ -73,7 +71,7 @@ export function SettingsView(props: SettingsViewProps) {
   </div>;
 }
 
-type PanelProps = { settings: SettingsViewProps; copy: typeof copy.zh; id: string };
+type PanelProps = { settings: SettingsViewProps; copy: ReturnType<typeof settingsCopy>; id: string };
 
 function AppearancePanel({settings:props,copy:c,id}:PanelProps) {
   return <SettingsSection title={c.display} description={c.displayNote}>
@@ -88,7 +86,7 @@ function IdentityPanel({settings:props,copy:c,id}:PanelProps) {
   return <SettingsSection title={c.identity} description={c.identityNote}>
         <form className="settings-identity-form" onSubmit={event=>{event.preventDefault();props.onActorSave();}}>
           <label htmlFor={id+'-actor'}>{c.actor}</label>
-          <Input id={id+'-actor'} name="actor" data-testid="identity-actor" value={props.actorDraft} placeholder={c.actorPlaceholder} onChange={event=>props.onActorChange(event.target.value)} aria-invalid={Boolean(props.actorError)} aria-describedby={props.actorError?id+'-actor-error':undefined}/>
+          <Input id={id+'-actor'} name="actor" data-testid="identity-actor" value={props.actorDraft} placeholder={c.actorPlaceholder} onChange={event=>props.onActorChange(event.target.value)} onBlur={props.onActorSave} aria-invalid={Boolean(props.actorError)} aria-describedby={props.actorError?id+'-actor-error':undefined}/>
           {props.actorError&&<p className="settings-feedback is-error" id={id+'-actor-error'} role="alert">{props.actorError}</p>}
           <div className="settings-button-row"><Button type="submit" variant="default" data-testid="identity-save">{c.save}</Button><Button onClick={props.onActorReset} data-testid="identity-reset">{c.reset}</Button></div>
           {props.actorSaved&&<p className="settings-feedback" role="status">{c.saved}</p>}
@@ -97,7 +95,7 @@ function IdentityPanel({settings:props,copy:c,id}:PanelProps) {
 }
 
 function ConnectionPanel({settings:props,copy:c}:PanelProps) {
-  const healthRetryLabel = props.locale === 'en' ? 'Retry health check' : '重试健康检查';
+  const healthRetryLabel = c.healthRetry;
   return <div className="settings-connection-stack">
         <SettingsSection title={c.service} description={c.serviceNote}>
           <div className="settings-connection-summary"><span className={'settings-service-status is-'+props.connection} role="status" data-testid="settings-health-status"><Icon name={props.connection==='available'?'checkCircle':props.connection==='loading'?'active':'warning'} size={18}/>{c[props.connection]}</span><Button onClick={props.onReconnect} disabled={!props.reconnectEnabled||props.reconnectPending} data-testid="connection-reconnect">{props.reconnectPending?c.reconnecting:c.reconnect}</Button></div>

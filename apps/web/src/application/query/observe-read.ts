@@ -107,3 +107,15 @@ export function observeRead<T>(
   if (signal.aborted) stop()
   else void run()
 }
+
+/** 写后的一次确认也等待各依赖的 Ready，再释放本次读取作用域。 */
+export function refreshRead<T>(load: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const controller = new AbortController()
+    const cancel = () => { controller.abort(); reject(signal?.reason ?? new DOMException('读取已取消。', 'AbortError')) }
+    if (signal?.aborted) { cancel(); return }
+    signal?.addEventListener('abort', cancel, { once: true })
+    const stop = () => { signal?.removeEventListener('abort', cancel); controller.abort() }
+    observeRead(load, controller.signal, value => { stop(); resolve(value) }, error => { stop(); reject(error) }, true)
+  })
+}

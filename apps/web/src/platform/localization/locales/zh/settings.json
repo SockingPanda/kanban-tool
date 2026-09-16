@@ -1,0 +1,14 @@
+{
+  "description": "管理当前项目的连接、界面偏好与数据维护。",
+  "projectData": "项目数据",
+  "projectDataDescription": "连接当前本机服务，修改由服务保存。",
+  "reconnect": "重连",
+  "healthCheck": "健康检查",
+  "dataMaintenance": "数据维护",
+  "interfaceTheme": "界面主题",
+  "themeDescription": "当前使用{{theme}}主题。",
+  "toggleTheme": "切换",
+  "appearanceLanguage": "外观与语言",
+  "connectionDiagnostics": "连接与诊断",
+  "shortcuts": "快捷键：{{search}} 搜索；{{create}} 新建任务；{{close}} 关闭对话框。"
+}

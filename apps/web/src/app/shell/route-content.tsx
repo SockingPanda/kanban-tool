@@ -1,3 +1,4 @@
+import { ObjectWorkspace } from '../../features/objects';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '../../components/ui/button';
 import { usePreferences } from '../../platform/preferences/use-preferences';
@@ -48,6 +49,8 @@ function CurrentRoute({ props, online }: { props: ProductShellProps; online: boo
   if (route.kind === 'health') return <HealthPage runtime={runtime} />;
   if (route.kind === 'maintenance') return <MaintenancePage runtime={runtime} boardSlug={route.boardSlug} />;
   if (route.kind !== 'board') return null;
+  const objectType = new URLSearchParams(route.query).get('objects');
+  if (objectType) return <ObjectWorkspace key={route.boardSlug+':'+objectType} runtime={runtime} boardSelector={route.boardSlug} initialType={/^[a-z][a-z0-9_.-]{0,127}$/.test(objectType) ? objectType : 'module'} />;
   return <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={online} syncStatus={syncStatus} taskMutations={taskMutations} onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange} />;
 }
 export function RouteContent(props: ProductShellProps) {

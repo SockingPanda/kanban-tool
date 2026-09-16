@@ -5,6 +5,7 @@ import { QueryFrameSchema, WatchQueriesRequestSchema, type QueryDefinition, type
 import { grpcWebFrame, queryResultBytes, readyFrame, resultFrames } from '../../lib/rpc/query-test-support'
 import type { WebRuntimeConfig } from '../../lib/runtime'
 import { createHostDataSource } from './data-source'
+import { observeRead } from '../../application/query/observe-read'
 
 const runtime: WebRuntimeConfig = {
   apiBaseUrl: '', webBasePath: '/app/', actor: 'test', defaultBoard: 'default', serverVersion: '3.1.0', protocolVersion: 'v2', webBuildId: 'test',
@@ -98,3 +99,28 @@ describe('生产 Host 数据源', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 })
+
+test('对象与附件读取复用同一 QueryRegistry，跨 53 位整数不丢失', async () => {
+  const object = { id: 'obj_one', board_id: board.id, type_key: 'module', title: '模块', body: null, version: { object: 9007199254740993n, source: null }, created_at: 9007199254740993n, updated_at: 2, archived_at: null, properties: {} };
+  const replies = { listBoards: { data: [board] }, listObjects: { items: [object], next: null }, getObjectCatalog: { version: 1, types: [], relations: [], properties: [], bindings: [], workflows: [], rollups: [] }, listObjectFiles: { items: [{ id: 'a_one', boardId: board.id, ownerId: object.id, filename: 'empty', contentType: '', sizeBytes: '0', sha256: '', createdBy: '原作者', createdAt: '9007199254740993', objectVersion: '1' }], nextId: '' } };
+  const calls: QueryDefinition[] = [];
+  let active = 0, peak = 0;
+  const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+    expect(String(input)).toBe(endpoint);
+    active++; peak = Math.max(peak, active);
+    init?.signal?.addEventListener('abort', () => active--, { once: true });
+    return queryResponse(String(input), init, replies, calls);
+  });
+  const source = createHostDataSource(runtime, { fetcher, documentBaseURI });
+  const objects = source.createObjectClient(runtime), files = source.createAttachmentTransferClient(runtime, 'default');
+  const controller = new AbortController(), next = vi.fn(), failed = vi.fn();
+  try {
+    observeRead(signal => Promise.all([source.readBoardDirectory(signal), objects.catalog(signal), objects.list({ board_id: board.id }, signal), files.list(object.id, signal)]), controller.signal, next, failed);
+    await vi.waitFor(() => expect(next).toHaveBeenCalled());
+    const result = next.mock.calls.at(-1)![0];
+    expect(result[2].items[0].version.object).toBe(9007199254740993n);
+    expect(result[3][0].created_at).toBe(9007199254740993n);
+    expect(new Set(calls.map(query => query.query.case))).toEqual(new Set(['listBoards', 'getObjectCatalog', 'listObjects', 'listObjectFiles']));
+    expect(peak).toBe(1); expect(failed).not.toHaveBeenCalled();
+  } finally { controller.abort(); }
+});

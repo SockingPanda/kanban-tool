@@ -11,9 +11,11 @@ import { ErrorDetailSchema } from "../src/generated/rpc/kanban/v1/kanban_pb"
 import { QueryCursorSchema, QueryDefinitionSchema, QueryFrameSchema, QueryResultSchema, WatchQueriesRequestSchema, type QueryCursor, type QueryDefinition, type QueryFrame } from "../src/generated/rpc/kanban/v1/query_pb"
 import { decodeRpcRequest, encodeRpcResponse } from "../src/lib/rpc/codec.generated"
 import { grpcWebFrame, readyFrame, resultFrames } from "../src/lib/rpc/query-test-support"
+import { FileIdentityInputSchema, FileDownloadFrameSchema } from "../src/generated/rpc/kanban/extensions/v1/workspace_pb"
+import { bytes, int64, record, text } from "../src/lib/rpc/value-codec"
 
 export interface FixtureCall {
-  readonly method: RpcMethod | "RecentEvents"
+  readonly method: RpcMethod | "RecentEvents" | "DownloadFile"
   readonly path: Record<string, unknown>
   readonly query: Record<string, unknown>
   readonly input: Record<string, unknown>
@@ -117,6 +119,26 @@ export class RpcFixture {
   }
 
   async install(): Promise<void> {
+    await this.page.route("**/kanban.extensions.v1.FileService/DownloadFile", async route => {
+      try {
+        const input = fromBinary(FileIdentityInputSchema, unframe(route.request().postDataBuffer()!))
+        const payload = record(await this.read({ method: "DownloadFile", path: { board_id: input.boardId, task_id: input.ownerId, attachment_id: input.fileId }, input: {}, query: {}, headers: route.request().headers(), kind: "unary", refresh: false }))
+        const attachment = record(payload.attachment), content = bytes(payload.content)
+        const sha256 = createHash("sha256").update(content).digest("hex")
+        const frame = (value: Parameters<typeof create<typeof FileDownloadFrameSchema>>[1]) => grpcWebFrame(toBinary(FileDownloadFrameSchema, create(FileDownloadFrameSchema, value)))
+        const frames = [frame({ frame: { case: "header", value: {
+          id: text(attachment.id), boardId: text(attachment.board_id), ownerId: text(attachment.task_id),
+          filename: text(attachment.filename), contentType: text(attachment.content_type ?? ""),
+          sizeBytes: int64(attachment.size_bytes, true), sha256, createdBy: text(attachment.created_by),
+          createdAt: int64(attachment.created_at), objectVersion: 1n,
+        } } })]
+        for (let offset = 0; offset < content.length; offset += 65536) frames.push(frame({ frame: { case: "chunk", value: { offset: BigInt(offset), data: content.subarray(offset, offset + 65536) } } }))
+        frames.push(frame({ frame: { case: "complete", value: { sizeBytes: BigInt(content.length), sha256 } } }))
+        await route.fulfill({ contentType: "application/grpc-web+proto", body: Buffer.concat([...frames, trailer()]) })
+      } catch (error) {
+        await route.fulfill({ contentType: "application/grpc-web+proto", body: trailer(error instanceof ConnectError ? error : unavailable(String(error))) })
+      }
+    })
     await this.page.route("**/kanban.v1.KanbanService/*", async route => {
       const method = new URL(route.request().url()).pathname.split("/").at(-1) as RpcMethod
       try {

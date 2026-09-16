@@ -137,6 +137,35 @@ grpc-contracts-check:
 web-test:
     pnpm --filter @kanban-tool/web test
 
+web-i18n-check:
+    pnpm --filter @kanban-tool/web i18n:check
+
+web-i18n-test:
+    pnpm --filter @kanban-tool/web i18n:test
+
+web-i18n-generate:
+    pnpm --filter @kanban-tool/web i18n:generate
+
+web-i18n-sync:
+    pnpm --filter @kanban-tool/web i18n:sync
+
+web-i18n-accept key origin note:
+    pnpm --filter @kanban-tool/web i18n:accept --locale en --key {{quote(key)}} --origin {{quote(origin)}} --note {{quote(note)}}
+
+web-i18n-report output:
+    node apps/web/build/i18n/cli.mjs report --output {{quote(output)}}
+
+# 全站增量检查供后续迁移使用；当前 gate 只严格检查已迁移文件。
+web-i18n-scan base:
+    pnpm --filter @kanban-tool/web i18n:scan --base {{quote(base)}}
+
+web-i18n-e2e base_url:
+    KANBAN_I18N_BASE_URL={{quote(base_url)}} pnpm --filter @kanban-tool/web exec playwright test -c playwright.i18n.config.ts
+
+# 使用当前已构建的 Web artifact；测试 Host 与临时数据库由 launcher 管理。
+web-i18n-proof:
+    scripts/web-i18n-proof.sh
+
 web-typecheck:
     pnpm --filter @kanban-tool/web typecheck
 
@@ -178,6 +207,8 @@ web-check:
     just node-lock-check
     just web-contracts-check
     just grpc-contracts-check
+    just web-i18n-check
+    just web-i18n-test
     just web-typecheck
     just web-lint
     just web-react-doctor

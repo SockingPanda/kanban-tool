@@ -1,0 +1,12 @@
+{
+  "count_other": "{{count}} 个任务",
+  "status.archived": "已归档",
+  "status.blocked": "受阻",
+  "status.done": "已完成",
+  "status.ready": "就绪",
+  "status.review": "待审核",
+  "status.running": "进行中",
+  "status.scheduled": "已安排",
+  "status.todo": "待办",
+  "status.triage": "待分拣"
+}

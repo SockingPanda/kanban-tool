@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { create } from '@bufbuild/protobuf'
-import { observeRead } from '../../application/query/observe-read'
+import { observeRead, refreshRead } from '../../application/query/observe-read'
 import { QueryFrameSchema, type QueryDefinition, type QueryFrame, type WatchQueriesRequest } from '../../generated/rpc/kanban/v1/query_pb'
 import type { QueryCall } from '../../lib/rpc/query-codec'
 import { cursor, queryResultBytes, QueryFrameQueue, readyFrame, resultFrames } from '../../lib/rpc/query-test-support'
@@ -294,3 +294,22 @@ describe('单连接 multiplex 查询 registry', () => {
     expect(failed).not.toHaveBeenCalled()
   })
 })
+
+test('一次写后确认等待新的 Ready，完成后只释放自己的引用', async () => {
+  const h = harness(), reader = h.subscribe();
+  await vi.waitFor(() => expect(h.connections).toHaveLength(1));
+  const definition = h.latest().request.queries[0];
+  const previous = await h.publish(definition, '原结果');
+  await vi.waitFor(() => expect(reader.next).toHaveBeenCalledTimes(1));
+  const completed = vi.fn();
+  const refreshed = refreshRead(signal => h.registry.read({ ...call, signal })).then(completed);
+  await vi.waitFor(() => expect(h.connections).toHaveLength(2));
+  expect(h.latest().request.queries[0].refresh).toBe(true);
+  expect(completed).not.toHaveBeenCalled();
+  h.latest().queue.push(readyFrame(definition.clientQueryId, previous.cursor));
+  await refreshed;
+  expect(completed).toHaveBeenCalledWith(expect.objectContaining({ payload: payload('原结果') }));
+  expect(h.registry.activeCount).toBe(1);
+  reader.controller.abort();
+  expect(h.registry.activeCount).toBe(0);
+});

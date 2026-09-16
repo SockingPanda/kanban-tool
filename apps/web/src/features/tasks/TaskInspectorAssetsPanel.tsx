@@ -28,6 +28,7 @@ import styles from "./TaskInspectorAssetsPanel.module.css"
 export type { InspectorAssetAttachment, InspectorAssetLabel, InspectorAssetsActions, InspectorAssetsMutationHandlers, InspectorAssetsScopeIdentity, InspectorLabelSuggestionResult, SuggestLabelsHandler }
 
 export interface TaskInspectorAssetsPanelProps {
+  readonly hideAttachments?: boolean
   readonly taskId: string
   readonly labels: readonly InspectorAssetLabel[]
   readonly attachments: readonly InspectorAssetAttachment[]
@@ -695,7 +696,7 @@ export function TaskInspectorAssetsPanel(props: Parameters<typeof useTaskInspect
   return (
     <section className={styles.panel} data-testid="inspector-assets" aria-labelledby={`${panelId}-heading`} aria-busy={panelBusy}>
       <header className={styles.heading}>
-        <h2 id={`${panelId}-heading`}>{copy.title}</h2>
+        <h2 id={`${panelId}-heading`}>{props.hideAttachments ? copy.labels : copy.title}</h2>
         <p className={styles.taskId} translate="no">{taskId}</p>
       </header>
 
@@ -713,7 +714,7 @@ export function TaskInspectorAssetsPanel(props: Parameters<typeof useTaskInspect
 
       <InspectorLabels panelId={panelId} copy={copy} labels={labels} writePending={writePending} removeLabel={removeLabel} onLabelSubmit={onLabelSubmit} labelInputId={labelInputId} labelInput={labelInput} labelsError={labelsError} addLabelSnapshotError={addLabelSnapshotError} labelErrorId={labelErrorId} labelInputElementRef={labelInputElementRef} setLabelInput={setLabelInput} existingLabelNames={existingLabelNames} addLabelRetryLocked={addLabelRetryLocked} isPending={isPending} suggestionPending={suggestionPending} requestSuggestions={requestSuggestions} suggestionRequested={suggestionRequested} suggestionLocalRequested={suggestionLocalRequested} currentSuggestions={currentSuggestions} showSuggestions={showSuggestions} suggestionsError={suggestionsError} duplicateSuggestionIds={duplicateSuggestionIds} duplicateIdsText={duplicateIdsText} selectedSuggestions={selectedSuggestions} applySuggestion={applySuggestion} candidateSuggestions={candidateSuggestions} />
 
-      <InspectorAttachments panelId={panelId} copy={copy} attachmentFileId={attachmentFileId} fileInputKey={fileInputKey} attachmentsError={attachmentsError} uploadSnapshotError={uploadSnapshotError} attachmentErrorId={attachmentErrorId} fileInputElementRef={fileInputElementRef} writePending={writePending} setSelectedFile={setSelectedFile} selectedFile={selectedFile} uploadRetryLocked={uploadRetryLocked} uploadFile={uploadFile} uploadPending={uploadPending} attachmentLoading={attachmentLoading} attachments={attachments} locale={locale} isPending={isPending} downloadAttachment={downloadAttachment} deleteAttachment={deleteAttachment} />
+      {!props.hideAttachments && (<InspectorAttachments panelId={panelId} copy={copy} attachmentFileId={attachmentFileId} fileInputKey={fileInputKey} attachmentsError={attachmentsError} uploadSnapshotError={uploadSnapshotError} attachmentErrorId={attachmentErrorId} fileInputElementRef={fileInputElementRef} writePending={writePending} setSelectedFile={setSelectedFile} selectedFile={selectedFile} uploadRetryLocked={uploadRetryLocked} uploadFile={uploadFile} uploadPending={uploadPending} attachmentLoading={attachmentLoading} attachments={attachments} locale={locale} isPending={isPending} downloadAttachment={downloadAttachment} deleteAttachment={deleteAttachment} />)}
     </section>
   )
 }

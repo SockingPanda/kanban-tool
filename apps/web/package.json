@@ -13,7 +13,14 @@
     "typecheck": "tsc -b",
     "vite-build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
-    "doctor": "node build/react-doctor.mjs full"
+    "doctor": "node build/react-doctor.mjs full",
+    "i18n:generate": "node build/i18n/cli.mjs generate",
+    "i18n:check": "node build/i18n/cli.mjs check",
+    "i18n:scan": "node build/i18n/cli.mjs scan",
+    "i18n:sync": "node build/i18n/cli.mjs sync",
+    "i18n:accept": "node build/i18n/cli.mjs accept",
+    "i18n:test": "node --test build/i18n/tests/*.node-test.mjs",
+    "i18n:e2e": "playwright test --config playwright.i18n.config.ts"
   },
   "dependencies": {
     "ajv": "8.20.0",
@@ -22,7 +29,8 @@
     "react-dom": "19.2.8",
     "@bufbuild/protobuf": "2.15.0",
     "@connectrpc/connect": "2.2.0",
-    "@connectrpc/connect-web": "2.2.0"
+    "@connectrpc/connect-web": "2.2.0",
+    "i18next": "26.4.2"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",

@@ -1,0 +1,540 @@
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-board-task-map-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-step-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/integer-values.test.tsx
+  s_5b054b517a26b6::t_e688065d45d3f7 1-64
+apps/web/src/lib/api/generated/contracts/api-block-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-claim-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-label-ontology-signals-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-mark-execution-plan-not-required-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/rpc/value-codec.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,59,123
+xtask/src/web_contracts.rs
+  s_5b054b517a26b6::t_e688065d45d3f7 302,599,602,615-619,659,677,1517
+apps/web/src/lib/api/generated/contracts/api-add-dependency-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-specify-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-backup-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-attachments-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-step-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/lossless-json.test.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1-29
+apps/web/src/lib/api/generated/contracts/api-add-dependency-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-label-ontology-signal-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-run-log-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/runtime.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2-6,46,64
+apps/web/src/lib/api/generated/contracts/api-reopen-step-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-specify-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-checkpoint-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-reopen-step-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/EventsView.tsx
+  s_5b054b517a26b6::t_e688065d45d3f7 1,140-143
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 3,7
+apps/web/src/lib/api/generated/contracts/api-error-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/adapters/host/integer-contracts.test.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1-52
+apps/web/src/lib/api/generated/contracts/api-list-boards-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-search-status-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/rpc/query-projection.test.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 16-30
+apps/web/src/lib/api/generated/contracts/api-list-task-labels-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-explain-label-atom-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-run-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-add-task-label-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-label-ontology-signal-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-dependencies-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-board-task-map-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-attachments-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-health-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-step-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-archive-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-step-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/task-discussion.tsx
+  s_5b054b517a26b6::t_e688065d45d3f7 1,15
+apps/web/src/application/tasks/task-mutation-state.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,273-276
+apps/web/src/features/tasks/inspector-model.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,13-15,22-25,28-29,31-34,50,58-60,65,68
+apps/web/src/lib/api/generated/contracts/api-get-label-ontology-signal-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/manifest.json
+  s_5b054b517a26b6::t_e688065d45d3f7 3067
+apps/web/src/lib/api/generated/contracts/api-maintenance-cleanup-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-boards-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-update-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-events-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/TaskInspectorAssetsPanel.tsx
+  s_5b054b517a26b6::t_e688065d45d3f7 1,235-238
+apps/web/src/lib/api/generated/contracts/api-skip-step-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-review-signals-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-attachment-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 3,7
+apps/web/src/adapters/host/task-mutations.test.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 8-12,32-50
+apps/web/src/lib/api/generated/contracts/api-create-comment-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/task-list-model.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,13-16,21
+apps/web/src/lib/api/generated/contracts/api-block-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-suggest-task-labels-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-skip-step-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-search-status-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-signal-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/TaskInspectorEditActions.tsx
+  s_5b054b517a26b6::t_e688065d45d3f7 9,74,78,81
+apps/web/src/lib/api/generated/contracts/api-list-attachments-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-update-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-attachment-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-comments-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-label-ontology-signals-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-steps-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-step-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-unblock-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-delete-attachment-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-runs-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/task-page.tsx
+  s_5b054b517a26b6::t_e688065d45d3f7 1,31,74
+apps/web/src/lib/api/generated/contracts/api-list-dependencies-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-reopen-step-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-task-labels-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-label-ontology-signals-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-mark-execution-plan-not-required-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-step-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-unblock-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-dependency-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/inspector-relations-model.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,20
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-v30-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-download-attachment-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/application/tasks/task-mutation-controller.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,132
+apps/web/src/lib/api/generated/contracts/api-add-task-label-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-health-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/README.md
+  s_5b054b517a26b6::t_e688065d45d3f7 96-99
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/TaskMapView.logic.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 69-70,80
+apps/web/src/lib/api/generated/contracts/api-doctor-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-review-signals-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-reopen-step-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-events-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-update-step-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-stats-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-steps-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-stats-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/TaskInspectorRelationsPanel.logic.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,12,103,124-126
+apps/web/src/lib/api/generated/contracts/api-remove-step-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-comments-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-attachment-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-review-label-ontology-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-runs-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-step-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/rpc/query-codec.test.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 11-18
+apps/web/src/lib/api/generated/contracts/api-claim-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-add-dependency-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-dependency-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-rebuild-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-export-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-archive-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/adapters/host/board-read-model.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,99-100,166
+apps/web/src/lib/api/generated/contracts/api-create-step-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-backup-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-specify-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-signal-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-run-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-v30-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-export-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-rebuild-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/runtime-web-config-output.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-vacuum-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-unblock-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-board-columns-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-board-task-map-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-add-task-label-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/application/data/explorer-read-model.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,272,370-371,378-379,383,389
+apps/web/src/lib/api/generated/contracts/api-list-task-labels-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-update-step-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-claim-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-label-ontology-review-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-block-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-explain-label-atom-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-board-task-map-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-suggest-task-labels-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-download-attachment-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/TaskRunsView.tsx
+  s_5b054b517a26b6::t_e688065d45d3f7 1,103,105-106,108
+apps/web/src/lib/api/generated/generated.sha256
+  s_5b054b517a26b6::t_e688065d45d3f7 2-219,657,660
+apps/web/src/lib/api/generated/contracts/api-search-status-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-stats-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-runs-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-promote-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-label-suggestion-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-v30-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-dependency-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-archive-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-attachment-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-label-ontology-action-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-update-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-cleanup-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-label-ontology-action-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-status-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-doctor-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-checkpoint-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-boards-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-update-step-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-run-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-events-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/application/tasks/task-mutation-state.test.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 55-67
+apps/web/src/lib/api/generated/contracts/api-complete-step-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-promote-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-task-label-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-skip-step-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/domain/integer.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1-31
+apps/web/src/lib/api/generated/contracts/api-archive-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-run-log-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-cleanup-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-task-label-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-review-signals-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-specify-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-comment-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-status-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-promote-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-task-label-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-suggest-task-labels-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-comment-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-add-task-label-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-label-ontology-action-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-steps-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-backup-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/use-task-detail-state.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 342,345,362,368
+apps/web/src/lib/api/generated/contracts/api-delete-attachment-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-delete-attachment-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-label-atom-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-comments-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-review-label-ontology-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+xtask/src/rpc_codegen/web.rs
+  s_5b054b517a26b6::t_e688065d45d3f7 408
+apps/web/src/lib/api/generated/contracts/api-get-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/maintenance/MaintenancePage.tsx
+  s_5b054b517a26b6::t_e688065d45d3f7 1,99,113,115-116,120,557
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-mark-execution-plan-not-required-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-add-dependency-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-update-step-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-unblock-task-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/tests/integer-values.spec.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1-58
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/features/tasks/TaskInspector.edit-actions.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1-2,45,62,154-160,163,166-168,170-171,187-190,196-197
+apps/web/src/lib/api/generated/contracts/api-get-signal-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-comment-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-step-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/application/data/task-mutations.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,74
+apps/web/src/lib/api/generated/contracts/api-review-signals-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-run-log-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/build/contract-validator.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 6-8,34,36-45,52-70
+  s_5b054b517a26b6::t_c080d5c59e2179 71-72
+apps/web/src/lib/api/generated/contracts/api-label-ontology-signal-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-vacuum-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-block-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-get-task-query.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-event-data.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-mark-execution-plan-not-required-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/rpc/codec.test.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 8,50-51,61
+apps/web/src/lib/api/generated/contracts/api-update-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-label-ontology-action-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-claim-task-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-rebuild-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-download-attachment-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-export-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/domain/tasks/board.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,34,40,42-44,55,60-63,66,111,120-121,163-164,167-169
+apps/web/src/lib/api/generated/contracts/api-review-label-ontology-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-list-board-columns-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-skip-step-path.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/application/data/board-read-model.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,351
+apps/web/src/lib/api/generated/contracts/api-list-board-columns-headers.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/lossless-json.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1-99
+apps/web/src/application/tasks/attachment-intents.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 1,64-65
+apps/web/src/lib/api/generated/contracts/api-list-dependencies-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/docs/numeric-values.md
+  s_5b054b517a26b6::t_e688065d45d3f7 1-41
+apps/web/src/lib/api/generated/contracts/api-promote-task-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-response.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/api/generated/contracts/api-create-task-request.ts
+  s_5b054b517a26b6::t_e688065d45d3f7 2,6
+apps/web/src/lib/rpc/codec.generated.ts
+  s_5b054b517a26b6::t_69b60b0341ce08 1632,1635,1657-1659,1683,1685-1687,1705,1735,1839,1868-1869,1894-1895,1912,1941,1943-1945,2035,2042-2044,2046-2050,2052-2053,2055-2056,2060,2062,2064-2066,2139,2144,2146,2148,2181,2196,2276-2278,2310-2312,2397-2403,2419-2422,2515,2560-2565,2615,2617,2661-2662,2665-2667,2726-2744,2746-2747,2749-2750,2882-2883,2910-2915,2989-2991,3122,3170,3172-3173,3209,3211,3302,3400,3434,3496-3503,3506-3507,3510,3544,3607,3689,3696-3699,3873-3875,3907-3908,4014,4030-4031,4043,4091-4092,4094,4117,4121,4141,4155,4168-4169,4203-4204,4206-4208,4213,4232,4236-4237,4256,4286,4291-4292,4306-4308,4335,4340-4341,4359,4432,4464,4560,4562-4563,4585,4588-4589,4591-4592,4606,4635,4643,4751,4797-4801,4808,4926,4931-4934,4966-4982,5052-5053,5073,5098-5099,5143,5171-5173,5189-5190,5235,5265,5293,5317,6726-6728,6730-6731,6733,6736,6744-6745,6763,6780-6782,6785-6789,6791,6793-6794,6803-6806,6810,6812-6813,6816-6817,6820,6823-6824,6838
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "57870d01dd7f50eb50228ab74986d1acefd7de57",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

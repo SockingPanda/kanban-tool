@@ -339,7 +339,6 @@ check_browser_evidence() {
     --argjson task_target "$task_target" \
     --argjson final_total "$final_total" \
     --argjson map_required "$map_required" \
-    --arg ui_kind "$ui_kind" \
     '(
       .browser == $browser
       and .run_id == $run_id
@@ -380,94 +379,10 @@ check_browser_evidence() {
         end)
       and (if $final_total == null then true else .final_task_total == $final_total end)
       and (if $map_required == 1 then .map != null and .map.node_count > 0 and .map.node_count <= .map.limit_nodes and .map.limit_nodes == 240 and (.map.truncated | type) == "boolean" and .map.ui_node_count == .map.node_count and .map.ui_edge_count == .map.edge_count and .map.ui_truncated == .map.truncated and .map.zoom_before == 100 and .map.zoom_after == 115 else .map == null end)
-      and (if $ui_kind == "none"
-        then .ui == null
-        elif $ui_kind == "functional_2k"
-        then .ui != null and .ui.functional_2k != null and .ui.stress_5k == null
-          and .ui.functional_2k.board_total == 2000
-          and .ui.functional_2k.board_rendered_count > 0
-          and .ui.functional_2k.board_rendered_count <= ((.ui.functional_2k.board_columns | length) * 100)
-          and .ui.functional_2k.board_rendered_count == ([.ui.functional_2k.board_columns[].rendered_card_count] | add // 0)
-          and ([.ui.functional_2k.board_columns[].total] | add // 0) == 2000
-          and ([.ui.functional_2k.board_columns[] | select(.rendered_card_count > 100 or .total != .range_total or .range_start > .range_end or .range_end > .total or .page != 1 or .total_pages < 1 or (.total == 0 and (.range_start != 0 or .range_end != 0 or .rendered_card_count != 0)) or (.total > 0 and (.range_start != 1 or .rendered_card_count != (.range_end - .range_start + 1))))] | length) == 0
-          and .ui.functional_2k.board_ready.budget_ms == 120000
-          and .ui.functional_2k.board_ready.within_budget == true
-          and (.ui.functional_2k.board_ready.navigation_start_ms | type) == "number"
-          and (.ui.functional_2k.board_ready.ready_ms | type) == "number"
-          and .ui.functional_2k.board_ready.ready_ms <= .ui.functional_2k.board_ready.budget_ms
-          and .ui.functional_2k.board_window.page_size == 100
-          and .ui.functional_2k.board_window.page1.page == 1
-          and .ui.functional_2k.board_window.page1.range_start == 1
-          and .ui.functional_2k.board_window.page1.range_end == 100
-          and .ui.functional_2k.board_window.page1.total == .ui.functional_2k.board_window.page2.total
-          and .ui.functional_2k.board_window.page1.total >= 101
-          and ((.ui.functional_2k.board_window.column_id) as $column_id | (.ui.functional_2k.board_window.page1.total) as $window_total | ([.ui.functional_2k.board_columns[] | select(.column_id == $column_id and .total == $window_total and .total_pages >= 2 and .rendered_card_count <= 100)] | length) == 1)
-          and .ui.functional_2k.board_window.page1.first_task_id != null
-          and .ui.functional_2k.board_window.page1.last_task_id != null
-          and .ui.functional_2k.board_window.page2.page == 2
-          and .ui.functional_2k.board_window.page2.range_start == 101
-          and .ui.functional_2k.board_window.page2.range_end == 200
-          and .ui.functional_2k.board_window.page2.total == .ui.functional_2k.board_window.page1.total
-          and .ui.functional_2k.board_window.page2.first_task_id != null
-          and .ui.functional_2k.board_window.page2.last_task_id != null
-          and .ui.functional_2k.board_window.page2.first_task_id != .ui.functional_2k.board_window.page1.first_task_id
-          and .ui.functional_2k.board_window.page2.last_task_id != .ui.functional_2k.board_window.page1.last_task_id
-          and .ui.functional_2k.list_total == 2000
-          and .ui.functional_2k.page1.row_count == 100
-          and .ui.functional_2k.page1.range == "1–100 / 2000"
-          and .ui.functional_2k.page1.first_task_id != null
-          and .ui.functional_2k.page1.last_task_id != null
-          and .ui.functional_2k.page2.row_count == 100
-          and .ui.functional_2k.page2.range == "101–200 / 2000"
-          and .ui.functional_2k.page2.first_task_id != null
-          and .ui.functional_2k.page2.last_task_id != null
-        elif $ui_kind == "stress_5k"
-        then .ui != null and .ui.functional_2k == null and .ui.stress_5k != null
-          and .ui.stress_5k.board_total == 5000
-          and .ui.stress_5k.board_rendered_count > 0
-          and .ui.stress_5k.board_rendered_count <= ((.ui.stress_5k.board_columns | length) * 100)
-          and .ui.stress_5k.board_rendered_count == ([.ui.stress_5k.board_columns[].rendered_card_count] | add // 0)
-          and ([.ui.stress_5k.board_columns[].total] | add // 0) == 5000
-          and ([.ui.stress_5k.board_columns[] | select(.rendered_card_count > 100 or .total != .range_total or .range_start > .range_end or .range_end > .total or .page != 1 or .total_pages < 1 or (.total == 0 and (.range_start != 0 or .range_end != 0 or .rendered_card_count != 0)) or (.total > 0 and (.range_start != 1 or .rendered_card_count != (.range_end - .range_start + 1))))] | length) == 0
-          and .ui.stress_5k.board_ready.budget_ms == 120000
-          and .ui.stress_5k.board_ready.within_budget == true
-          and (.ui.stress_5k.board_ready.navigation_start_ms | type) == "number"
-          and (.ui.stress_5k.board_ready.ready_ms | type) == "number"
-          and .ui.stress_5k.board_ready.ready_ms <= .ui.stress_5k.board_ready.budget_ms
-          and .ui.stress_5k.board_window.page_size == 100
-          and .ui.stress_5k.board_window.page1.page == 1
-          and .ui.stress_5k.board_window.page1.range_start == 1
-          and .ui.stress_5k.board_window.page1.range_end == 100
-          and .ui.stress_5k.board_window.page1.total == .ui.stress_5k.board_window.page2.total
-          and .ui.stress_5k.board_window.page1.total >= 101
-          and ((.ui.stress_5k.board_window.column_id) as $column_id | (.ui.stress_5k.board_window.page1.total) as $window_total | ([.ui.stress_5k.board_columns[] | select(.column_id == $column_id and .total == $window_total and .total_pages >= 2 and .rendered_card_count <= 100)] | length) == 1)
-          and .ui.stress_5k.board_window.page1.first_task_id != null
-          and .ui.stress_5k.board_window.page1.last_task_id != null
-          and .ui.stress_5k.board_window.page2.page == 2
-          and .ui.stress_5k.board_window.page2.range_start == 101
-          and .ui.stress_5k.board_window.page2.range_end == 200
-          and .ui.stress_5k.board_window.page2.total == .ui.stress_5k.board_window.page1.total
-          and .ui.stress_5k.board_window.page2.first_task_id != null
-          and .ui.stress_5k.board_window.page2.last_task_id != null
-          and .ui.stress_5k.board_window.page2.first_task_id != .ui.stress_5k.board_window.page1.first_task_id
-          and .ui.stress_5k.board_window.page2.last_task_id != .ui.stress_5k.board_window.page1.last_task_id
-          and .ui.stress_5k.list_total == 5000
-          and .ui.stress_5k.before_limit == 100
-          and .ui.stress_5k.before.row_count == 100
-          and .ui.stress_5k.before.range == "1–100 / 5000"
-          and .ui.stress_5k.after_limit == 200
-          and .ui.stress_5k.after.row_count == 200
-          and .ui.stress_5k.after.range == "1–200 / 5000"
-          and .ui.stress_5k.map.node_count == .map.node_count
-          and .ui.stress_5k.map.edge_count == .map.edge_count
-          and .ui.stress_5k.map.truncated == .map.truncated
-          and .ui.stress_5k.map.limit_nodes == 240
-          and .ui.stress_5k.map.zoom_before == 100
-          and .ui.stress_5k.map.zoom_after == 115
-        else false
-        end)
     )' \
     -- "$file" >/dev/null || error "browser evidence contract failed: $file"
+  node "$ROOT/scripts/release-proof-09d.mjs" ui-evidence --kind "$ui_kind" \
+    <"$file" || error "browser Atlas UI evidence contract failed: $file"
   node "$ROOT/scripts/release-proof-09d.mjs" query-evidence \
     --stream-min "$stream_min" --reconnect-required "$reconnect_required" \
     <"$file" || error "browser query evidence contract failed: $file"
@@ -559,96 +474,6 @@ if [[ "$FORMAL_MODE" == "true" ]]; then EXPECTED_RELEASE_STATUS="passed"; fi
 jq -e --arg expected_status "$EXPECTED_RELEASE_STATUS" '.release_status == $expected_status and .formal == ($expected_status == "passed") and .fixtures.exact_2k and .fixtures.exact_5k and .cleanup.host_stopped and .cleanup.port_free and .cleanup.db_removed and .cleanup.temp_root_removed and .initial_brotli.bytes <= .initial_brotli.budget_bytes' "$EVIDENCE_DIR/release-09d-evidence.json" >/dev/null
 jq -e --arg host_log_path "$HOST_LOG_RELATIVE_PATH" --arg host_log_sha "$HOST_LOG_SHA256" --arg start_sha "$START_SHA" --arg end_sha "$END_SHA" --arg host_starttime "$HOST_STARTTIME_RECORDED" --argjson host_pid "$HOST_PID_RECORDED" '.host.host_log_path == $host_log_path and .host.host_log_sha256 == $host_log_sha and .host.start_sha == $start_sha and .host.end_sha == $end_sha and .host.pid == $host_pid and .host.starttime == $host_starttime and .host.live_binary_bound == true' "$EVIDENCE_DIR/release-09d-evidence.json" >/dev/null
 jq -e '
-  def ui_ok($kind):
-    if $kind == "none" then .ui == null
-    elif $kind == "functional_2k"
-    then .ui != null and .ui.functional_2k != null and .ui.stress_5k == null
-      and .ui.functional_2k.board_total == 2000
-      and .ui.functional_2k.board_rendered_count > 0
-      and .ui.functional_2k.board_rendered_count <= ((.ui.functional_2k.board_columns | length) * 100)
-      and .ui.functional_2k.board_rendered_count == ([.ui.functional_2k.board_columns[].rendered_card_count] | add // 0)
-      and ([.ui.functional_2k.board_columns[].total] | add // 0) == 2000
-      and ([.ui.functional_2k.board_columns[] | select(.rendered_card_count > 100 or .total != .range_total or .range_start > .range_end or .range_end > .total or .page != 1 or .total_pages < 1 or (.total == 0 and (.range_start != 0 or .range_end != 0 or .rendered_card_count != 0)) or (.total > 0 and (.range_start != 1 or .rendered_card_count != (.range_end - .range_start + 1))))] | length) == 0
-      and .ui.functional_2k.board_ready.budget_ms == 120000
-      and .ui.functional_2k.board_ready.within_budget == true
-      and (.ui.functional_2k.board_ready.navigation_start_ms | type) == "number"
-      and (.ui.functional_2k.board_ready.ready_ms | type) == "number"
-      and .ui.functional_2k.board_ready.ready_ms <= .ui.functional_2k.board_ready.budget_ms
-      and .ui.functional_2k.board_window.page_size == 100
-      and .ui.functional_2k.board_window.page1.page == 1
-      and .ui.functional_2k.board_window.page1.range_start == 1
-      and .ui.functional_2k.board_window.page1.range_end == 100
-      and .ui.functional_2k.board_window.page1.total == .ui.functional_2k.board_window.page2.total
-      and .ui.functional_2k.board_window.page1.total >= 101
-      and ((.ui.functional_2k.board_window.column_id) as $column_id | (.ui.functional_2k.board_window.page1.total) as $window_total | ([.ui.functional_2k.board_columns[] | select(.column_id == $column_id and .total == $window_total and .total_pages >= 2 and .rendered_card_count <= 100)] | length) == 1)
-      and .ui.functional_2k.board_window.page1.first_task_id != null
-      and .ui.functional_2k.board_window.page1.last_task_id != null
-      and .ui.functional_2k.board_window.page2.page == 2
-      and .ui.functional_2k.board_window.page2.range_start == 101
-      and .ui.functional_2k.board_window.page2.range_end == 200
-      and .ui.functional_2k.board_window.page2.total == .ui.functional_2k.board_window.page1.total
-      and .ui.functional_2k.board_window.page2.first_task_id != null
-      and .ui.functional_2k.board_window.page2.last_task_id != null
-      and .ui.functional_2k.board_window.page2.first_task_id != .ui.functional_2k.board_window.page1.first_task_id
-      and .ui.functional_2k.board_window.page2.last_task_id != .ui.functional_2k.board_window.page1.last_task_id
-      and .ui.functional_2k.list_total == 2000
-      and .ui.functional_2k.page1.row_count == 100
-      and .ui.functional_2k.page1.range == "1–100 / 2000"
-      and .ui.functional_2k.page1.first_task_id != null
-      and .ui.functional_2k.page1.last_task_id != null
-      and .ui.functional_2k.page2.row_count == 100
-      and .ui.functional_2k.page2.range == "101–200 / 2000"
-      and .ui.functional_2k.page2.first_task_id != null
-      and .ui.functional_2k.page2.last_task_id != null
-    elif $kind == "stress_5k"
-    then .ui != null and .ui.functional_2k == null and .ui.stress_5k != null
-      and .ui.stress_5k.board_total == 5000
-      and .ui.stress_5k.board_rendered_count > 0
-      and .ui.stress_5k.board_rendered_count <= ((.ui.stress_5k.board_columns | length) * 100)
-      and .ui.stress_5k.board_rendered_count == ([.ui.stress_5k.board_columns[].rendered_card_count] | add // 0)
-      and ([.ui.stress_5k.board_columns[].total] | add // 0) == 5000
-      and ([.ui.stress_5k.board_columns[] | select(.rendered_card_count > 100 or .total != .range_total or .range_start > .range_end or .range_end > .total or .page != 1 or .total_pages < 1 or (.total == 0 and (.range_start != 0 or .range_end != 0 or .rendered_card_count != 0)) or (.total > 0 and (.range_start != 1 or .rendered_card_count != (.range_end - .range_start + 1))))] | length) == 0
-      and .ui.stress_5k.board_ready.budget_ms == 120000
-      and .ui.stress_5k.board_ready.within_budget == true
-      and (.ui.stress_5k.board_ready.navigation_start_ms | type) == "number"
-      and (.ui.stress_5k.board_ready.ready_ms | type) == "number"
-      and .ui.stress_5k.board_ready.ready_ms <= .ui.stress_5k.board_ready.budget_ms
-      and .ui.stress_5k.board_window.page_size == 100
-      and .ui.stress_5k.board_window.page1.page == 1
-      and .ui.stress_5k.board_window.page1.range_start == 1
-      and .ui.stress_5k.board_window.page1.range_end == 100
-      and .ui.stress_5k.board_window.page1.total == .ui.stress_5k.board_window.page2.total
-      and .ui.stress_5k.board_window.page1.total >= 101
-      and ((.ui.stress_5k.board_window.column_id) as $column_id | (.ui.stress_5k.board_window.page1.total) as $window_total | ([.ui.stress_5k.board_columns[] | select(.column_id == $column_id and .total == $window_total and .total_pages >= 2 and .rendered_card_count <= 100)] | length) == 1)
-      and .ui.stress_5k.board_window.page1.first_task_id != null
-      and .ui.stress_5k.board_window.page1.last_task_id != null
-      and .ui.stress_5k.board_window.page2.page == 2
-      and .ui.stress_5k.board_window.page2.range_start == 101
-      and .ui.stress_5k.board_window.page2.range_end == 200
-      and .ui.stress_5k.board_window.page2.total == .ui.stress_5k.board_window.page1.total
-      and .ui.stress_5k.board_window.page2.first_task_id != null
-      and .ui.stress_5k.board_window.page2.last_task_id != null
-      and .ui.stress_5k.board_window.page2.first_task_id != .ui.stress_5k.board_window.page1.first_task_id
-      and .ui.stress_5k.board_window.page2.last_task_id != .ui.stress_5k.board_window.page1.last_task_id
-      and .ui.stress_5k.list_total == 5000
-      and .ui.stress_5k.before_limit == 100
-      and .ui.stress_5k.before.row_count == 100
-      and .ui.stress_5k.before.range == "1–100 / 5000"
-      and .ui.stress_5k.after_limit == 200
-      and .ui.stress_5k.after.row_count == 200
-      and .ui.stress_5k.after.range == "1–200 / 5000"
-      and .ui.stress_5k.map.node_count == .map.node_count
-      and .ui.stress_5k.map.edge_count == .map.edge_count
-      and .ui.stress_5k.map.truncated == .map.truncated
-      and .ui.stress_5k.map.limit_nodes == 240
-      and .ui.stress_5k.map.zoom_before == 100
-      and .ui.stress_5k.map.zoom_after == 115
-      and .map.ui_node_count == .map.node_count
-      and .map.ui_edge_count == .map.edge_count
-      and .map.ui_truncated == .map.truncated
-      and .map.zoom_before == 100
-      and .map.zoom_after == 115
-    else false end;
   def record($phase; $browser; $performance; $query; $functional; $stress; $metrics; $events; $target; $latency; $key_path; $ui):
     .phase == $phase
     and .browser == $browser
@@ -663,7 +488,7 @@ jq -e '
     and (.browser_errors | length) == 0
     and .failure == null
     and (if $target == 0 then ((.task_counts // []) | length) == 0 else ((.task_counts // []) | length) == 1 and .task_counts[0].target == $target and .task_counts[0].total == $target end)
-    and ui_ok($ui);
+    and (if $ui == "none" then .ui == null else .ui[$ui] != null end);
   (.browsers | length) == 6
   and ([.browsers[] | select(record("small-perf-query"; "chromium"; "passed"; "passed"; "not-run"; "not-run"; 20; 21; 0; "passed"; "passed"; "none"))] | length) == 1
   and ([.browsers[] | select(record("small-query"; "firefox"; "not-run"; "passed"; "not-run"; "not-run"; 0; 2; 0; "not_applicable"; "passed"; "none"))] | length) == 1
@@ -672,4 +497,6 @@ jq -e '
   and ([.browsers[] | select(record("stress-5k"; "chromium"; "not-run"; "not-run"; "not-run"; "passed"; 0; 0; 5000; "not_run"; "not_run"; "stress_5k"))] | length) == 1
   and ([.browsers[] | select(record("stress-5k"; "firefox"; "not-run"; "not-run"; "not-run"; "passed"; 0; 0; 5000; "not_run"; "not_run"; "stress_5k"))] | length) == 1
 ' "$EVIDENCE_DIR/release-09d-evidence.json" >/dev/null
+node "$ROOT/scripts/release-proof-09d.mjs" ui-evidence --kind all \
+  <"$EVIDENCE_DIR/release-09d-evidence.json" || error "aggregate Atlas UI evidence contract failed"
 echo "release-proof 09D ${EXPECTED_RELEASE_STATUS}: run_id=$RUN_ID final_tasks=$FINAL_TOTAL initial_brotli_bytes=$INITIAL_BROTLI_BYTES evidence=$EVIDENCE_DIR/release-09d-evidence.json"

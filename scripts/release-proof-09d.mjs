@@ -7,7 +7,7 @@ import { lstat, open, readFile, rename, rm } from "node:fs/promises"
 import path from "node:path"
 
 function usage() {
-  throw new Error("usage: release-proof-09d.mjs artifact --root <workspace> | write-json --path <file> | task-total --board-id <id> | query-evidence --stream-min <count> --reconnect-required <0|1> | self-test")
+  throw new Error("usage: release-proof-09d.mjs artifact --root <workspace> | write-json --path <file> | task-total --board-id <id> | query-evidence --stream-min <count> --reconnect-required <0|1> | ui-evidence --kind <none|functional_2k|stress_5k|all> | self-test")
 }
 
 function nonArchivedTaskTotal(envelope, boardId) {
@@ -27,6 +27,230 @@ function nonArchivedTaskTotal(envelope, boardId) {
     assert(Number.isSafeInteger(total), "stats total exceeds the exact integer range")
   }
   return total
+}
+
+const listStatuses = ["running", "blocked", "review", "ready", "scheduled", "todo", "triage", "done", "archived"]
+const atlasColumns = [
+  ["待开始", ["triage", "todo", "scheduled", "ready"]],
+  ["进行中", ["running", "blocked"]], ["待验收", ["review"]], ["已完成", ["done", "archived"]],
+]
+const defaultQuery = { page: 1, limit: 100, sort: "updated_at", status: [], q: "" }
+
+function checkedIds(ids) {
+  assert(Array.isArray(ids) && ids.every(id => typeof id === "string" && id.length > 0), "task identities are missing")
+  assert.equal(new Set(ids).size, ids.length, "a task window contains duplicate identities")
+  return ids
+}
+
+function sameIds(actual, expected) {
+  assert.deepEqual([...checkedIds(actual)].sort(), [...checkedIds(expected)].sort(), "UI and canonical task identities differ")
+}
+
+function validateWindow(window, origin, view, query, total) {
+  assert(window && typeof window === "object", "task window evidence is missing")
+  assert.equal(window.view, view)
+  assert.deepEqual(window.query, query)
+  const url = new URL(window.url)
+  assert.equal(url.origin, origin, "task window belongs to another Host")
+  assert.equal(url.pathname, `/app/boards/default/${view}`)
+  assert.equal(url.hash, "")
+  assert([...url.searchParams.keys()].every(key => ["page", "limit", "sort", "status", "q"].includes(key)), "unproven query filters")
+  assert.deepEqual({
+    page: Number(url.searchParams.get("page") ?? 1), limit: Number(url.searchParams.get("limit") ?? 100),
+    sort: url.searchParams.get("sort") ?? "updated_at", status: url.searchParams.getAll("status"), q: url.searchParams.get("q") ?? "",
+  }, query, "window query differs from the observed URL")
+  const canonical = window.canonical
+  assert.equal(canonical?.total, total)
+  assert.equal(canonical.offset, (query.page - 1) * query.limit)
+  assert.equal(canonical.limit, query.limit)
+  assert(query.limit > 0 && query.limit <= 100, "Atlas window exceeds the 100-task cap")
+  assert(Array.isArray(canonical.tasks), "canonical ListTasks result is missing")
+  assert(canonical.tasks.every(task => listStatuses.includes(task.status) && typeof task.title === "string"), "canonical task fields are incomplete")
+  const canonicalIds = checkedIds(canonical.tasks.map(task => task.id))
+  const count = Math.min(query.limit, total - canonical.offset)
+  assert(count > 0 && canonicalIds.length === count, "canonical window is incomplete")
+  sameIds(window.task_ids, canonicalIds)
+  assert.equal(window.displayed_count, count)
+  assert.equal(window.displayed_total, total)
+  const footer = window.footer_text?.match(/^显示 (\d+) \/ (\d+) 个任务/)
+  assert(footer && Number(footer[1]) === count && Number(footer[2]) === total, "visible footer count/total differs from canonical")
+  const totalPages = Math.ceil(total / query.limit)
+  assert.equal(window.pager_text, `${query.page} / ${totalPages}`)
+  assert.equal(window.page, query.page)
+  assert.equal(window.total_pages, totalPages)
+  assert.equal(window.previous_enabled, query.page > 1)
+  assert.equal(window.next_enabled, query.page < totalPages)
+  if (view === "list") {
+    assert.equal(window.columns, null)
+    const orderedIds = listStatuses.flatMap(status => canonical.tasks.filter(task => task.status === status).map(task => task.id))
+    assert.deepEqual(window.task_ids, orderedIds, "list grouping changed the canonical order within a status")
+  } else {
+    assert.equal(window.columns?.length, atlasColumns.length)
+    assert.deepEqual(window.columns.flatMap(column => column.task_ids), window.task_ids)
+    atlasColumns.forEach(([label, statuses], index) => {
+      const column = window.columns[index]
+      const expected = canonical.tasks.filter(task => statuses.includes(task.status))
+      assert.equal(column.label, label)
+      assert.equal(column.count_text, String(expected.length))
+      assert.equal(column.displayed_count, expected.length)
+      sameIds(column.task_ids, expected.map(task => task.id))
+      assert.deepEqual(column.task_statuses, column.task_ids.map(id => expected.find(task => task.id === id).status))
+    })
+  }
+}
+
+function validateUiEvidence(evidence, kind) {
+  if (kind === "none") { assert.equal(evidence.ui, null); return }
+  assert(["functional_2k", "stress_5k"].includes(kind), "unknown UI evidence lane")
+  const total = kind === "functional_2k" ? 2000 : 5000
+  assert.equal(evidence.phase, kind.replace("_", "-"))
+  const origin = new URL(evidence.base_url).origin
+  const ui = evidence.ui?.[kind]
+  assert(ui, "Atlas UI evidence is missing")
+  assert.equal(evidence.ui[kind === "functional_2k" ? "stress_5k" : "functional_2k"], null)
+  assert.equal(Number(ui.stats?.text?.match(/^(\d+)\s+个任务$/)?.[1]), total, "visible Stats total differs from canonical")
+  assert.equal(ui.stats.total, total)
+  assert.equal(ui.stats.canonical_total, total)
+  assert.equal(ui.board_ready?.budget_ms, 120000, "board ready budget changed")
+  assert.equal(ui.board_ready.within_budget, true)
+  assert(Number.isFinite(ui.board_ready.navigation_start_ms) && ui.board_ready.navigation_start_ms >= 0)
+  assert(Number.isFinite(ui.board_ready.ready_ms) && ui.board_ready.ready_ms >= 0 && ui.board_ready.ready_ms <= 120000)
+  assert.equal(ui.list_pages?.length, total / 100, "full UI pagination coverage is missing")
+  ui.list_pages.forEach((window, index) => validateWindow(window, origin, "list", { ...defaultQuery, page: index + 1 }, total))
+  const allIds = checkedIds(ui.list_pages.flatMap(window => window.task_ids))
+  assert.equal(allIds.length, total, "UI pages omit tasks")
+  assert.equal(ui.board_pages?.length, 2)
+  ui.board_pages.forEach((window, index) => {
+    validateWindow(window, origin, "board", { ...defaultQuery, page: index + 1 }, total)
+    sameIds(window.task_ids, ui.list_pages[index].task_ids)
+    assert.deepEqual(window.canonical, ui.list_pages[index].canonical)
+  })
+  checkedIds(ui.board_pages.flatMap(window => window.task_ids))
+  const filtered = ui.filter_sort
+  assert.equal(filtered?.status_text, "待开始")
+  assert.equal(filtered.search_text, "load task 1")
+  assert.equal(filtered.sort_text, "标题")
+  assert.equal(filtered.changed_sort_text, "最近更新")
+  assert.equal(filtered.pages?.length, 2)
+  const filteredQuery = { ...defaultQuery, status: ["todo"], q: "load task 1", sort: "title" }
+  filtered.pages.forEach((window, index) => validateWindow(window, origin, "list", { ...filteredQuery, page: index + 1 }, 1000))
+  checkedIds(filtered.pages.flatMap(window => window.task_ids))
+  const filteredTasks = filtered.pages.flatMap(window => window.canonical.tasks)
+  assert(filteredTasks.every(task => allIds.includes(task.id)), "filter window contains tasks absent from the full listing")
+  assert(filteredTasks.every(task => task.status === "todo" && task.title.includes("load task 1")), "filter results contain unrelated tasks")
+  const titles = filteredTasks.map(task => task.title)
+  assert.deepEqual(titles, [...titles].sort(), "title sort is not ascending across pages")
+  validateWindow(filtered.changed_sort, origin, "list", { ...filteredQuery, sort: "updated_at" }, 1000)
+  assert(filtered.changed_sort.task_ids.every(id => allIds.includes(id)))
+  assert(filtered.changed_sort.canonical.tasks.every(task => task.status === "todo" && task.title.includes("load task 1")))
+  assert.notDeepEqual(filtered.changed_sort.task_ids, filtered.pages[0].task_ids, "sort change did not change the visible window")
+  validateWindow(filtered.cleared, origin, "list", defaultQuery, total)
+  assert.deepEqual(filtered.cleared.task_ids, ui.list_pages[0].task_ids, "clearing filters did not restore the full first page")
+  if (kind === "stress_5k") {
+    const size = ui.page_size
+    assert.deepEqual(size?.options, ["每页 10 项", "每页 25 项", "每页 50 项", "每页 100 项"])
+    assert.equal(size.before_text, "每页 50 项")
+    assert.equal(size.after_text, "每页 100 项")
+    assert.equal(size.before_pages?.length, 2)
+    size.before_pages.forEach((window, index) => validateWindow(window, origin, "list", { ...defaultQuery, limit: 50, page: index + 1 }, total))
+    validateWindow(size.after, origin, "list", defaultQuery, total)
+    sameIds(size.before_pages.flatMap(window => window.task_ids), size.after.task_ids)
+    assert.deepEqual(size.after.task_ids, ui.list_pages[0].task_ids)
+    const map = evidence.map
+    assert(map && Number.isSafeInteger(map.node_count) && map.node_count > 0 && map.node_count <= 240)
+    assert(Number.isSafeInteger(map.edge_count) && map.edge_count >= 0)
+    assert.equal(map.limit_nodes, 240)
+    assert.equal(typeof map.truncated, "boolean")
+    assert.equal(map.ui_node_count, map.node_count)
+    assert.equal(map.ui_edge_count, map.edge_count)
+    assert.equal(map.ui_truncated, map.truncated)
+    assert.equal(map.zoom_before, 100)
+    assert.equal(map.zoom_after, 115)
+    for (const key of ["node_count", "edge_count", "truncated", "limit_nodes", "zoom_before", "zoom_after"]) assert.equal(ui.map?.[key], map[key])
+  }
+}
+
+function uiEvidenceSelfTest() {
+  const total = 2000, origin = "http://127.0.0.1:18729"
+  const window = (view, query, countTotal = total, reverse = false) => {
+    const offset = (query.page - 1) * query.limit
+    const tasks = Array.from({ length: query.limit }, (_, index) => {
+      const sequence = String(reverse ? 1999 - index : query.q ? 1000 + offset + index : offset + index).padStart(4, "0")
+      return { id: `t_${sequence}`, status: "todo", title: `Stage09 09D load task ${sequence}` }
+    })
+    const ids = tasks.map(task => task.id)
+    const params = new URLSearchParams({ page: String(query.page), limit: String(query.limit), sort: query.sort })
+    query.status.forEach(status => params.append("status", status))
+    if (query.q) params.set("q", query.q)
+    const totalPages = Math.ceil(countTotal / query.limit)
+    return {
+      view, url: `${origin}/app/boards/default/${view}?${params}`, query,
+      footer_text: `显示 ${ids.length} / ${countTotal} 个任务`, displayed_count: ids.length, displayed_total: countTotal,
+      pager_text: `${query.page} / ${totalPages}`, page: query.page, total_pages: totalPages,
+      previous_enabled: query.page > 1, next_enabled: query.page < totalPages,
+      task_ids: ids, canonical: { total: countTotal, offset, limit: query.limit, tasks },
+      columns: view === "list" ? null : atlasColumns.map(([label], index) => ({ label, count_text: String(index === 0 ? ids.length : 0), displayed_count: index === 0 ? ids.length : 0, task_ids: index === 0 ? ids : [], task_statuses: index === 0 ? ids.map(() => "todo") : [] })),
+    }
+  }
+  const filtered = { ...defaultQuery, status: ["todo"], q: "load task 1", sort: "title" }
+  const makeUi = () => ({
+    stats: { text: `${total}\n个任务`, total, canonical_total: total },
+    board_ready: { navigation_start_ms: 0, ready_ms: 1000, budget_ms: 120000, within_budget: true },
+    board_pages: [1, 2].map(page => window("board", { ...defaultQuery, page })),
+    list_pages: Array.from({ length: 20 }, (_, index) => window("list", { ...defaultQuery, page: index + 1 })),
+    filter_sort: { status_text: "待开始", search_text: "load task 1", sort_text: "标题", changed_sort_text: "最近更新",
+      pages: [1, 2].map(page => window("list", { ...filtered, page }, 1000)),
+      changed_sort: window("list", { ...filtered, sort: "updated_at" }, 1000, true), cleared: window("list", defaultQuery) },
+  })
+  const evidence = { phase: "functional-2k", base_url: origin, ui: { functional_2k: makeUi(), stress_5k: null } }
+  validateUiEvidence(evidence, "functional_2k")
+  for (const change of [
+    value => { value.list_pages.pop() },
+    value => { value.list_pages[1].task_ids[0] = value.list_pages[0].task_ids[0] },
+    value => { value.list_pages[1].task_ids = value.list_pages[0].task_ids; value.list_pages[1].canonical.tasks = value.list_pages[0].canonical.tasks },
+    value => { value.list_pages[0].footer_text = "显示 100 / 1999 个任务" },
+    value => { value.list_pages[0].canonical.total = 1999 },
+    value => { value.list_pages[0].query.limit = 200 },
+    value => { value.list_pages[0].url = value.list_pages[0].url.replace("18729", "18730") },
+    value => { value.list_pages[1].previous_enabled = false },
+    value => { value.board_pages[0].columns[0].count_text = "2000" },
+    value => { value.filter_sort.pages[1].task_ids.reverse() },
+    value => { value.filter_sort.changed_sort = value.filter_sort.pages[0] },
+    value => { value.board_ready.budget_ms = 240000 },
+  ]) {
+    const invalid = structuredClone(evidence)
+    change(invalid.ui.functional_2k)
+    assert.throws(() => validateUiEvidence(invalid, "functional_2k"), "invalid Atlas UI evidence was accepted")
+  }
+  const stressUi = makeUi()
+  stressUi.stats = { text: "5000 个任务", total: 5000, canonical_total: 5000 }
+  stressUi.list_pages = Array.from({ length: 50 }, (_, index) => window("list", { ...defaultQuery, page: index + 1 }, 5000))
+  stressUi.board_pages = [1, 2].map(page => window("board", { ...defaultQuery, page }, 5000))
+  stressUi.filter_sort.cleared = window("list", defaultQuery, 5000)
+  stressUi.page_size = {
+    options: ["每页 10 项", "每页 25 项", "每页 50 项", "每页 100 项"], before_text: "每页 50 项", after_text: "每页 100 项",
+    before_pages: [1, 2].map(page => window("list", { ...defaultQuery, limit: 50, page }, 5000)), after: window("list", defaultQuery, 5000),
+  }
+  stressUi.map = { node_count: 240, edge_count: 0, truncated: true, limit_nodes: 240, zoom_before: 100, zoom_after: 115 }
+  const stress = {
+    phase: "stress-5k", base_url: origin, ui: { functional_2k: null, stress_5k: stressUi },
+    map: { ...stressUi.map, ui_node_count: 240, ui_edge_count: 0, ui_truncated: true },
+  }
+  validateUiEvidence(stress, "stress_5k")
+  for (const change of [
+    value => { value.ui.stress_5k.page_size.options.push("每页 200 项") },
+    value => { value.ui.stress_5k.page_size.before_pages.pop() },
+    value => { value.ui.stress_5k.page_size.after = value.ui.stress_5k.list_pages[1] },
+    value => { value.map.node_count = 241 },
+    value => { value.map.ui_node_count = 239 },
+    value => { value.map.ui_truncated = false },
+    value => { value.map.zoom_after = 100 },
+    value => { value.ui.stress_5k.map.limit_nodes = 500 },
+  ]) {
+    const invalid = structuredClone(stress)
+    change(invalid)
+    assert.throws(() => validateUiEvidence(invalid, "stress_5k"), "invalid stress UI evidence was accepted")
+  }
 }
 
 function isQueryCursor(value) {
@@ -204,6 +428,7 @@ function referencesFor(file, text) {
 
 function selfTest() {
   queryEvidenceSelfTest()
+  uiEvidenceSelfTest()
   const javascript = [
     'import{entry}from"./entry.js";',
     'import "./side-effect.js";',
@@ -322,13 +547,22 @@ async function artifact(root) {
 const args = process.argv.slice(2)
 if (args.length === 1 && args[0] === "self-test") selfTest()
 else if (args[0] === "write-json") await writeStdin(args)
-else if (args[0] === "task-total" || args[0] === "query-evidence") {
+else if (["task-total", "query-evidence", "ui-evidence"].includes(args[0])) {
   const chunks = []
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk))
   const value = JSON.parse(Buffer.concat(chunks).toString("utf8"))
   if (args[0] === "task-total") {
     if (args.length !== 3 || args[1] !== "--board-id") usage()
     process.stdout.write(`${nonArchivedTaskTotal(value, args[2])}\n`)
+  } else if (args[0] === "ui-evidence") {
+    if (args.length !== 3 || args[1] !== "--kind") usage()
+    if (args[2] === "all") {
+      assert(Array.isArray(value.browsers) && value.browsers.length === 6)
+      for (const browser of value.browsers) {
+        const kind = browser.phase === "functional-2k" ? "functional_2k" : browser.phase === "stress-5k" ? "stress_5k" : "none"
+        validateUiEvidence(browser, kind)
+      }
+    } else validateUiEvidence(value, args[2])
   } else {
     if (args.length !== 5 || args[1] !== "--stream-min" || !/^[0-9]+$/.test(args[2])
       || args[3] !== "--reconnect-required" || !["0", "1"].includes(args[4])) usage()

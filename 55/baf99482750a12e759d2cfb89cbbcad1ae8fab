@@ -1,0 +1,25 @@
+apps/web/tests/release-09d-performance.spec.ts
+  s_5b054b517a26b6::t_1d4e8d0d858e53 52-68,79-83,87,89-99,102-109,319-329,331-332,336-337,340-350,353-397,401-405,409-413,415-417,420-476,1024,1033-1045,1095-1096
+scripts/release-proof-09d.sh
+  s_5b054b517a26b6::t_1d4e8d0d858e53 384-385,491,500-501
+scripts/release-proof-09d.mjs
+  s_5b054b517a26b6::t_1d4e8d0d858e53 10,32-255,431,550,557-565
+apps/web/README.md
+  s_5b054b517a26b6::t_1d4e8d0d858e53 65-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55baf99482750a12e759d2cfb89cbbcad1ae8fab",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

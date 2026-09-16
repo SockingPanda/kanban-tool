@@ -55,13 +55,17 @@
 CI 在同一个 runner 内为所有 recipe 设置相同的 target root。锁只串行化 Cargo target 写入，不串行化
 源码、迁移、锁文件或任务状态。并行源码编辑仍需独立 worktree 和明确写入者。
 
+本地 Cargo、nextest 和 libtest 默认并发为 8，显式环境变量仍可覆盖；并发发生在持锁命令内部。
+仓库契约 CI 的构建并发为 2，Full CI 为 1，分别按 runner 的负载设置。两个 workflow 使用 runner
+临时目录作为统一 target root，缓存入口由这个目录计算，避免缓存空的默认 target。
+
 现有 wrapper 依赖 Linux 的 flock、setsid、/proc 与 GNU 工具。Linux/WSL 是这组脚本的执行环境。
 项目能够构建某个平台的产物，不等于这组构建脚本已经支持该平台的原生命令行。
 
 ## 验证与交付
 
 以当前 `justfile` 选择最小充分验证。纯文档与导航先运行 `just docs-structure-check`；skill 与根契约
-同时运行 `just agents-check`。涉及 Rust 文档示例、include 或公开 Rust 契约时保留 `just docs-check`。
+以及文档治理/协作指南同时运行 `just agents-check`。涉及 Rust 文档示例、include 或公开 Rust 契约时保留 `just docs-check`。
 `just repo-check` 组合仓库结构检查，它仍需编译 xtask，不是无编译成本的文本检查。
 
 验证记录绑定实际提交或 diff，区分 passed、failed、blocked、not_run，并写明环境和限制。新测试已编写、

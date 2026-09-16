@@ -48,8 +48,16 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: just@1.57.0,cargo-nextest,cargo-deny,cargo-audit
+      - name: Configure shared Cargo target
+        id: cargo-target
+        run: |
+          cargo_target_root="$RUNNER_TEMP/kanban-tool-cargo-target"
+          printf 'KANBAN_CARGO_TARGET_ROOT=%s\n' "$cargo_target_root" >> "$GITHUB_ENV"
+          printf 'target=%s\n' "$(realpath -m --relative-to="$GITHUB_WORKSPACE" "$cargo_target_root")" >> "$GITHUB_OUTPUT"
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> ${{ steps.cargo-target.outputs.target }}
       - name: Setup pnpm
         uses: pnpm/action-setup@v4.4.0
         with:

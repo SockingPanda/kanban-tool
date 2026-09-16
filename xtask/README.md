@@ -57,6 +57,13 @@ provenance；Shell 只负责编排平台工具、环境与进程；frontend Type
 文档、Rust 示例和公开 Rust 文档契约变化仍需要这个完整 gate。根契约、技能和治理指南还需
 `just agents-check`。具体入口由根 `justfile` 持有。
 
+affected 调用时显式指定本任务的比较基线，例如 `just affected-plan base=<起点提交>`；它合并基线以来
+已提交、暂存、工作树和未跟踪路径，不把默认 `main` 当成所有任务的父分支。普通 Markdown 选择结构
+检查；根契约、技能和治理指南补 agents 检查；Rust `include_str!` 引用的文档选择完整 docs gate。
+动态 include 的已知前缀限定保守检查范围，无法确定来源或已删除的文档升级为完整检查。
+重命名前后的路径均参与判定。文档与代码混合时合并各自 gate，完整 docs gate 覆盖结构检查后去重。
+JSON 保留 `base`、`changed_files`、`classifications`、`recipes`、`sources`，recipe 名称与 just 入口一致。
+
 ## CLI package
 
 通过 `just cli-package`（或 `xtask package cli --format deb`）构建 standalone `kanban` Debian package。

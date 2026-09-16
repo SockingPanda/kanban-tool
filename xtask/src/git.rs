@@ -34,10 +34,23 @@ pub(crate) fn changed_sources(root: &Path, base: &str) -> ToolResult<Sources> {
         return Err(std::io::Error::other("base 不能为空").into());
     }
     Ok(Sources {
-        base: git_names(root, &["diff", "--name-only", &format!("{base}...HEAD")])?,
-        staged: git_names(root, &["diff", "--name-only", "--cached"])?,
-        working_tree: git_names(root, &["diff", "--name-only"])?,
-        untracked: git_names(root, &["ls-files", "--others", "--exclude-standard"])?,
+        // 禁用 rename 折叠，保留旧路径供文档删除/迁移的保守判定。
+        base: git_names(
+            root,
+            &[
+                "diff",
+                "--no-renames",
+                "--name-only",
+                "-z",
+                &format!("{base}...HEAD"),
+            ],
+        )?,
+        staged: git_names(
+            root,
+            &["diff", "--no-renames", "--name-only", "-z", "--cached"],
+        )?,
+        working_tree: git_names(root, &["diff", "--no-renames", "--name-only", "-z"])?,
+        untracked: git_names(root, &["ls-files", "--others", "--exclude-standard", "-z"])?,
     })
 }
 
@@ -59,7 +72,7 @@ fn git_names(root: &Path, arguments: &[&str]) -> ToolResult<Vec<String>> {
     }
 
     let mut paths = String::from_utf8_lossy(&output.stdout)
-        .lines()
+        .split('\0')
         .filter(|path| !path.is_empty())
         .map(str::to_owned)
         .collect::<Vec<_>>();

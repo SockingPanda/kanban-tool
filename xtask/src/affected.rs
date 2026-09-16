@@ -1,3 +1,5 @@
+mod documentation;
+
 use std::{collections::BTreeMap, path::Path, process::Command};
 
 use serde::Serialize;
@@ -9,7 +11,9 @@ use xtask::ToolResult;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Recipe {
+    DocsStructureCheck,
     DocsCheck,
+    AgentsCheck,
     RustFast,
     RustFull,
     WebCheck,
@@ -24,7 +28,9 @@ pub(crate) enum Recipe {
 impl Recipe {
     fn name(self) -> &'static str {
         match self {
+            Self::DocsStructureCheck => "docs-structure-check",
             Self::DocsCheck => "docs-check",
+            Self::AgentsCheck => "agents-check",
             Self::RustFast => "rust-fast",
             Self::RustFull => "rust-full",
             Self::WebCheck => "web-check",
@@ -58,7 +64,8 @@ pub(crate) fn run(root: &Path, command: &str, base: &str) -> ToolResult<()> {
 
     let base = normalise_base(base)?;
     let sources = git::changed_sources(root, &base)?;
-    let plan = build_plan(base, sources);
+    let full_docs = documentation::needs_full_check(root, &sources.merged())?;
+    let plan = build_plan_with_documentation(base, sources, full_docs);
     match command {
         "plan" => print_plan(&plan),
         "json" => println!(
@@ -83,9 +90,13 @@ pub(crate) fn normalise_base(base: &str) -> ToolResult<String> {
 }
 
 fn build_plan(base: String, sources: Sources) -> Plan {
+    build_plan_with_documentation(base, sources, false)
+}
+
+fn build_plan_with_documentation(base: String, sources: Sources, full_docs: bool) -> Plan {
     let changed_files = sources.merged();
     let classifications = classify(&changed_files);
-    let recipes = plan_recipes(&changed_files);
+    let recipes = plan_recipes(&changed_files, full_docs);
     Plan {
         base,
         changed_files,
@@ -118,17 +129,26 @@ fn classify(paths: &[String]) -> BTreeMap<String, Vec<String>> {
     classifications
 }
 
-fn plan_recipes(paths: &[String]) -> Vec<Recipe> {
+fn plan_recipes(paths: &[String], full_docs: bool) -> Vec<Recipe> {
     if paths.is_empty() {
         return Vec::new();
     }
 
     let mut recipes = Vec::new();
+    let governance = paths.iter().any(|path| is_governance(path));
+    if paths.iter().any(|path| is_document(path)) || governance {
+        recipes.push(if full_docs {
+            Recipe::DocsCheck
+        } else {
+            Recipe::DocsStructureCheck
+        });
+    }
+    if governance {
+        recipes.push(Recipe::AgentsCheck);
+    }
     let docs_only =
         paths.iter().all(|path| is_document(path)) && paths.iter().all(|path| !is_tooling(path));
-    if docs_only {
-        recipes.push(Recipe::DocsCheck);
-    } else {
+    if !docs_only {
         let root_risk = paths.iter().any(|path| is_root_risk(path));
         if root_risk {
             recipes.push(Recipe::RustFull);
@@ -166,6 +186,13 @@ fn dedupe_recipes(recipes: Vec<Recipe>) -> Vec<Recipe> {
 
 fn is_document(path: &str) -> bool {
     path == "README.md" || path.starts_with("docs/") || path.ends_with(".md")
+}
+
+fn is_governance(path: &str) -> bool {
+    matches!(
+        path,
+        "AGENTS.md" | "docs/documentation.md" | "docs/collaboration.md"
+    ) || path.starts_with(".agents/")
 }
 
 fn is_root_risk(path: &str) -> bool {
@@ -296,7 +323,7 @@ fn self_test() {
     };
     assert_eq!(
         build_plan("main".to_owned(), docs).recipes,
-        vec![Recipe::DocsCheck, Recipe::DiffCheck]
+        vec![Recipe::DocsStructureCheck, Recipe::DiffCheck]
     );
 
     let overlap = Sources {
@@ -394,7 +421,80 @@ mod tests {
             "main".to_owned(),
             sources(&["README.md", "docs/architecture.md"]),
         );
-        assert_eq!(plan.recipes, vec![Recipe::DocsCheck, Recipe::DiffCheck]);
+        assert_eq!(
+            plan.recipes,
+            vec![Recipe::DocsStructureCheck, Recipe::DiffCheck]
+        );
+    }
+
+    #[test]
+    fn governance_documents_and_skill_metadata_select_agents_check() {
+        for path in [
+            "AGENTS.md",
+            "docs/documentation.md",
+            "docs/collaboration.md",
+        ] {
+            assert_eq!(
+                build_plan("base".to_owned(), sources(&[path])).recipes,
+                vec![
+                    Recipe::DocsStructureCheck,
+                    Recipe::AgentsCheck,
+                    Recipe::DiffCheck
+                ]
+            );
+        }
+        for path in [
+            ".agents/skills/check/SKILL.md",
+            ".agents/skills/check/agents/openai.yaml",
+        ] {
+            assert_eq!(
+                build_plan("base".to_owned(), sources(&[path])).recipes,
+                vec![
+                    Recipe::DocsStructureCheck,
+                    Recipe::AgentsCheck,
+                    Recipe::ToolingCheck,
+                    Recipe::DiffCheck
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_docs_and_code_keep_both_gates() {
+        let paths = ["docs/guide.md", "crates/kanban-service/src/lib.rs"];
+        assert_eq!(
+            build_plan("base".to_owned(), sources(&paths)).recipes,
+            vec![
+                Recipe::DocsStructureCheck,
+                Recipe::RustFast,
+                Recipe::DiffCheck
+            ]
+        );
+        let full = build_plan_with_documentation("base".to_owned(), sources(&paths), true);
+        assert_eq!(
+            full.recipes,
+            vec![Recipe::DocsCheck, Recipe::RustFast, Recipe::DiffCheck]
+        );
+        assert!(!full.recipes.contains(&Recipe::DocsStructureCheck));
+    }
+
+    #[test]
+    fn untracked_governance_files_participate_in_the_plan() {
+        let plan = build_plan(
+            "base".to_owned(),
+            Sources {
+                untracked: vec!["docs/collaboration.md".to_owned()],
+                ..Sources::default()
+            },
+        );
+        assert_eq!(
+            plan.recipes,
+            vec![
+                Recipe::DocsStructureCheck,
+                Recipe::AgentsCheck,
+                Recipe::DiffCheck
+            ]
+        );
     }
 
     #[test]
@@ -617,6 +717,14 @@ mod tests {
         );
         assert!(value.get("full_gate_recommended").is_none());
         assert!(value.get("full_gate_commands").is_none());
+        assert_eq!(
+            serde_json::to_value(Recipe::DocsStructureCheck).unwrap(),
+            "docs-structure-check"
+        );
+        assert_eq!(
+            serde_json::to_value(Recipe::AgentsCheck).unwrap(),
+            "agents-check"
+        );
     }
 
     #[test]

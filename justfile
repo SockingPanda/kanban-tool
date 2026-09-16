@@ -161,10 +161,18 @@ web-e2e:
     just node-lock-check
     pnpm --filter @kanban-tool/web e2e
 
+# 直接启动隔离 Chromium 和 Host，验证真实 BFCache 往返；每次使用新的证据目录。
+web-bfcache binary web_dir evidence_dir:
+    node apps/web/build/bfcache-proof.mjs {{quote(binary)}} {{quote(web_dir)}} {{quote(evidence_dir)}}
+
 # Stage09 09A real-host lane；mock/preview specs 仍由 `web-e2e` 单独编排。
 release-proof-09a:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- release check --root .
     KANBAN_RELEASE_SKIP_RECEIPT=0 scripts/release-proof-09a.sh
+
+# 同一隔离 Host 的性能、查询恢复、2k 分页及 5k 压力验收。
+release-proof-09d:
+    scripts/release-proof-09d.sh
 
 web-check:
     just node-lock-check

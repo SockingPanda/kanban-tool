@@ -1,5 +1,5 @@
 import { useLayoutEffect } from "react";
-import { useCallback, useRef, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 
 import { ProductShell } from "./shell/app-shell"
 // 功能只公开显式出口；Vite 静态树摇保留所用导出；最小复现见 build/react-doctor-regressions.test.ts。
@@ -9,6 +9,7 @@ import type { BoardTaskCanonicalReloadHandler, BoardTaskCanonicalReloadOptions, 
 import type { BoardSyncStatus } from "../domain/tasks/board"
 import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "../domain/board-slug"
 import { PreferencesProvider } from "../platform/preferences/preferences-provider"
+import { installPageFocusRecovery } from "../platform/browser/page-focus-recovery"
 import { routePath, useAppRouter } from "../application/navigation/router"
 import { useWebRuntime } from "../lib/runtime-context"
 import { boardSessionRevision, hasActiveBoardSession, reconnectActiveBoardSession, subscribeBoardSessions } from "../application/workspace/board-session-registry"
@@ -163,6 +164,7 @@ function RuntimeThemedShell() {
 
 
 export default function App() {
+  useEffect(() => installPageFocusRecovery(window), [])
   return (
     <PreferencesProvider>
       <RuntimeThemedShell />

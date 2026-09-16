@@ -38,9 +38,20 @@ URL 持有筛选、排序、分页和 Inspector 选择，组件展示映射保�
 也覆盖浏览器保留旧 document 的情况，不依赖 React 卸载一定发生。在线恢复及用户重试继续
 使用 QueryService；健康页面的稳定诊断同样使用查询，启动阶段的 `/health` 探测保持独立。
 
+浏览器进入 BFCache 前可能先清空输入焦点。页面 shell 保留最近聚焦的控件，只在实际缓存恢复、
+原控件仍存在且没有新焦点时恢复，并使用 `preventScroll` 避免滚动跳动。用户主动点击其他区域
+或用 Tab 移开的焦点不会被抢回；草稿仍由原组件持有。
+
 ## 验证边界
 
 单元测试验证原子提交、精确 delta 基线、迟到确认、预算、共享查询、故障恢复及最后卸载释放。
 浏览器产品 fixture 使用正式 binary gRPC-Web 帧和完整 QueryResult，检查布局、URL、筛选分页、
 草稿、claim、焦点和滚动。真实 Host 验收另行检查外部写入、途中中断、断流重试、生命周期恢复
 以及稳定订阅期间没有 unary 跟读。两类证据分别记录，配置声明不代表真实浏览器已经通过。
+
+`just web-bfcache <候选 kanban binary> <Web dist> <新证据目录>` 启动临时数据库、Host 和独立
+Chromium profile，直接通过 CDP 执行两次真实离开与后退。验收要求同一个 Document、浏览器
+可信的 `pageshow.persisted`、冻结期间外部写入追赶、草稿和焦点保留，并检查主动移开焦点后的
+恢复不抢焦点。产物 SHA、runtime、浏览器版本、请求、截图及退出结果写入证据目录。
+该工具直接使用已安装的 Chromium；Playwright 默认禁用且不支持 BFCache，因此不使用其
+导航封装或合成 `PageTransitionEvent` 代替真实缓存命中。

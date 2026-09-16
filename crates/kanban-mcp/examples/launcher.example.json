@@ -1,0 +1,7 @@
+{
+  "command": "/absolute/path/kanban-mcp",
+  "args": [],
+  "env": {
+    "KANBAN_MCP_CONFIG": "/absolute/path/mcp-config.work.json"
+  }
+}

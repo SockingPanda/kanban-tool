@@ -1,24 +1,42 @@
-use std::{env, fmt::Display, future::Future, sync::Arc};
+use std::{future::Future, sync::Arc};
 
-use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
-use rmcp::ErrorData as McpError;
+use kanban_client::{ClientError, KanbanClient};
+use rmcp::{ErrorData as McpError, handler::server::router::tool::ToolRouter};
+use tokio::sync::Semaphore;
+
+use crate::{config::Config, errors::Failure, policy::ToolPolicy};
 
 #[derive(Clone)]
 pub(crate) struct KanbanMcp {
     pub(crate) client: KanbanClient,
     pub(crate) default_board: Arc<str>,
+    pub(crate) config: Arc<Config>,
+    pub(crate) policy: Arc<ToolPolicy>,
+    pub(crate) router: Arc<ToolRouter<Self>>,
+    pub(crate) in_flight: Arc<Semaphore>,
 }
 
 impl KanbanMcp {
     pub(crate) fn from_env() -> anyhow::Result<Self> {
-        let server_url =
-            env::var("KANBAN_SERVER_URL").unwrap_or_else(|_| DEFAULT_SERVER_URL.to_owned());
-        let actor = env::var("KANBAN_ACTOR").unwrap_or_else(|_| "mcp".to_owned());
-        let default_board = env::var("KB_BOARD").unwrap_or_else(|_| "default".to_owned());
+        Self::from_config(Config::load()?)
+    }
 
+    pub(crate) fn from_config(config: Config) -> anyhow::Result<Self> {
+        config.validate()?;
+        let router = Arc::new(Self::tool_router());
+        let work = Self::work_tool_router()
+            .list_all()
+            .into_iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
+        let policy = Arc::new(ToolPolicy::build(&config, router.list_all(), work)?);
         Ok(Self {
-            client: KanbanClient::new(server_url, actor)?,
-            default_board: Arc::from(default_board),
+            client: KanbanClient::new(config.server_url.clone(), config.actor.clone())?,
+            default_board: Arc::from(config.default_board.as_str()),
+            in_flight: Arc::new(Semaphore::new(config.limits.max_in_flight)),
+            config: Arc::new(config),
+            policy,
+            router,
         })
     }
 
@@ -27,22 +45,18 @@ impl KanbanMcp {
     }
 }
 
-pub(crate) async fn call_client<T, E, F>(operation: F) -> Result<T, McpError>
+pub(crate) async fn call_client<T, F>(operation: F) -> Result<T, McpError>
 where
-    E: Display,
-    F: Future<Output = Result<T, E>>,
+    F: Future<Output = Result<T, ClientError>>,
 {
     operation
         .await
-        .map_err(|error| McpError::invalid_params(error.to_string(), None))
+        .map_err(|error| Failure::from_client(error).into_internal())
 }
 
-pub(crate) async fn call_client_internal<T, E, F>(operation: F) -> Result<T, McpError>
+pub(crate) async fn call_client_internal<T, F>(operation: F) -> Result<T, McpError>
 where
-    E: Display,
-    F: Future<Output = Result<T, E>>,
+    F: Future<Output = Result<T, ClientError>>,
 {
-    operation
-        .await
-        .map_err(|error| McpError::internal_error(error.to_string(), None))
+    call_client(operation).await
 }

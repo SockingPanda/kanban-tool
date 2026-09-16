@@ -1,4 +1,4 @@
-use std::{path::Path, process::Stdio, time::Duration};
+use std::{io::Write, process::Stdio, time::Duration};
 
 use kanban_server::{AppState, ShutdownSignal, serve_with_dispatcher_shutdown};
 use serde_json::{Value, json};
@@ -71,16 +71,23 @@ pub struct Mcp {
     input: Option<ChildStdin>,
     output: Lines<BufReader<ChildStdout>>,
     next_id: u64,
-    pub initialized: Value,
+    _config: tempfile::NamedTempFile,
+    pub discovered: Value,
 }
 
 impl Mcp {
     pub async fn start(url: &str, board: &str) -> Self {
-        Self::start_binary(Path::new(env!("CARGO_BIN_EXE_kanban-mcp")), url, board).await
+        Self::start_with_config(url, board, json!({"profile": "all"}), true).await
     }
 
-    async fn start_binary(binary: &Path, url: &str, board: &str) -> Self {
-        let mut process = Command::new(binary)
+    pub async fn start_with_config(url: &str, board: &str, config: Value, discover: bool) -> Self {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(&serde_json::to_vec(&config).unwrap())
+            .unwrap();
+        file.flush().unwrap();
+        let mut process = Command::new(env!("CARGO_BIN_EXE_kanban-mcp"))
+            .env("KANBAN_MCP_CONFIG", file.path())
+            .env_remove("KANBAN_MCP_PROFILE")
             .env("KANBAN_SERVER_URL", url)
             .env("KANBAN_ACTOR", ACTOR)
             .env("KB_BOARD", board)
@@ -97,23 +104,20 @@ impl Mcp {
             input: Some(input),
             output,
             next_id: 1,
-            initialized: Value::Null,
+            _config: file,
+            discovered: Value::Null,
         };
-        let response = session
-            .request(
-                "initialize",
-                json!({
-                    "protocolVersion": "2025-06-18",
-                    "capabilities": {},
-                    "clientInfo": {"name": "stdio-native-test", "version": "1"}
-                }),
-            )
-            .await;
-        assert!(response.get("error").is_none(), "{response}");
-        session.initialized = response["result"].clone();
-        assert_eq!(session.initialized["protocolVersion"], "2025-06-18");
-        assert!(session.initialized["capabilities"]["tools"].is_object());
-        session.notify("notifications/initialized", json!({})).await;
+        if discover {
+            let response = session.request("server/discover", json!({})).await;
+            assert!(response.get("error").is_none(), "{response}");
+            session.discovered = response["result"].clone();
+            assert_eq!(
+                session.discovered["supportedVersions"],
+                json!(["2026-07-28"])
+            );
+            assert!(session.discovered["capabilities"]["tools"].is_object());
+            assert_cached_result(&session.discovered);
+        }
         session
     }
 
@@ -133,7 +137,12 @@ impl Mcp {
             .await;
     }
 
-    pub async fn send_request(&mut self, method: &str, params: Value) -> u64 {
+    pub async fn send_request(&mut self, method: &str, mut params: Value) -> u64 {
+        params["_meta"] = request_meta();
+        self.send_raw_request(method, params).await
+    }
+
+    async fn send_raw_request(&mut self, method: &str, params: Value) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
         self.write(json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}))
@@ -143,6 +152,19 @@ impl Mcp {
 
     pub async fn request(&mut self, method: &str, params: Value) -> Value {
         let id = self.send_request(method, params).await;
+        self.receive(id, method).await
+    }
+
+    pub async fn raw_request(&mut self, method: &str, params: Value) -> Value {
+        let id = self.send_raw_request(method, params).await;
+        self.receive(id, method).await
+    }
+
+    pub async fn receive_for(&mut self, id: u64) -> Value {
+        self.receive(id, "pending request").await
+    }
+
+    async fn receive(&mut self, id: u64, method: &str) -> Value {
         timeout(WAIT, async {
             loop {
                 let line = self
@@ -180,7 +202,7 @@ impl Mcp {
         structured.clone()
     }
 
-    pub async fn call_error(&mut self, name: &str, arguments: Value) -> Value {
+    pub async fn call_protocol_error(&mut self, name: &str, arguments: Value) -> Value {
         let response = self
             .request("tools/call", json!({"name": name, "arguments": arguments}))
             .await;
@@ -188,6 +210,43 @@ impl Mcp {
             .get("error")
             .unwrap_or_else(|| panic!("{name} 应失败：{response}"))
             .clone()
+    }
+
+    pub async fn call_error(&mut self, name: &str, arguments: Value) -> Value {
+        let response = self
+            .request("tools/call", json!({"name": name, "arguments": arguments}))
+            .await;
+        assert!(
+            response.get("error").is_none(),
+            "业务错误不应成为 JSON-RPC 错误：{response}"
+        );
+        let result = &response["result"];
+        assert_eq!(result["isError"], true, "{name} 应返回工具错误：{response}");
+        assert!(result.get("structuredContent").is_none());
+        let error = result["_meta"]["io.github.sockingpanda.kanban-tool/error"].clone();
+        assert!(error["code"].is_string(), "缺少业务错误码：{result}");
+        let text: Value =
+            serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(error, text);
+        error
+    }
+
+    pub async fn list_all(&mut self, method: &str, field: &str) -> Vec<Value> {
+        let mut all = Vec::new();
+        let mut params = json!({});
+        let mut seen = std::collections::BTreeSet::new();
+        loop {
+            let response = self.request(method, params).await;
+            assert!(response.get("error").is_none(), "{response}");
+            let result = &response["result"];
+            assert_cached_result(result);
+            all.extend(result[field].as_array().unwrap().iter().cloned());
+            let Some(cursor) = result["nextCursor"].as_str() else {
+                return all;
+            };
+            assert!(seen.insert(cursor.to_owned()), "分页游标形成循环");
+            params = json!({"cursor": cursor});
+        }
     }
 
     pub async fn finish(mut self) {
@@ -198,4 +257,22 @@ impl Mcp {
             .unwrap();
         assert!(status.success(), "MCP 退出失败：{status}");
     }
+}
+
+pub fn request_meta() -> Value {
+    json!({
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": {"name": "kanban-mcp-native-test", "version": "2"}
+    })
+}
+
+pub fn assert_cached_result(result: &Value) {
+    assert_eq!(result["resultType"], "complete", "{result}");
+    assert!(result["ttlMs"].is_u64(), "{result}");
+    assert_eq!(result["cacheScope"], "private", "{result}");
+    assert_eq!(
+        result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "kanban-mcp"
+    );
 }

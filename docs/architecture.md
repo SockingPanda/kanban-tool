@@ -40,8 +40,14 @@ Web artifact filesystem adapter 只能沿 `kanban-web-artifact -> kanban-protoco
 
 ## 规范事实与派生数据
 
-业务事实包括 board/task/lifecycle、execution plan、依赖、评论、附件 metadata、labels/ontology/
-signals、entities/relations、runs 和 events。`tasks.status` 是唯一状态事实，event 是追加审计事实。
+业务事实包括 board/task/lifecycle、execution plan、依赖、评论、对象目录与关系、文件 metadata、
+labels/ontology/signals、entities/relations、runs 和 events。`tasks.status` 是唯一任务状态事实，
+event 是追加审计事实。
+
+模块、迭代和文件通过同一对象关系模型工作，`object_relation_edges` 持有关系事实。任务对象
+复用原任务 ID，以 object/source 双版本保护通用修改，执行状态仍由任务 service 管理。文件对象
+引用附件目录中的不可变 blob，所属对象通过关系连接；旧任务附件入口适配同一事实模型。
+对象与文件的 mutation 共享 service 写锁、事务和通知边界，全部读取复用现有查询注册表。
 
 FTS、vector、graph/context、projection jobs、缓存和 capability probe 是可重建的派生或运行时状态；
 它们可以删除后重建，不能反向写 canonical facts。详细事务和迁移边界归

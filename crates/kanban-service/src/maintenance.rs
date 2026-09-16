@@ -363,7 +363,7 @@ struct PortableHeader {
     record_count: u64,
     payload_checksum_sha256: String,
     manifest_checksum_sha256: String,
-    /// 当前 JSONL 只携带 `task_attachments` metadata；二进制文件需独立 attachment
+    /// 当前 JSONL 携带对象、关系与文件 metadata；二进制文件需独立 attachment
     /// staging/publish 协议，不能在导入时静默声称已迁移。
     attachments_mode: String,
 }

@@ -1629,10 +1629,10 @@ export function decodeDtoApiAttachment(wire: d.DtoApiAttachment): Record<string,
     "filename": c.required(wire.filename, "filename"),
     "rel_path": c.required(wire.relPath, "rel_path"),
     "content_type": wire.contentType === undefined ? null : ((value) => value)(wire.contentType),
-    "size_bytes": c.safeNumber(c.required(wire.sizeBytes, "size_bytes")),
+    "size_bytes": c.integerValue(c.required(wire.sizeBytes, "size_bytes")),
     "sha256": wire.sha256 === undefined ? null : ((value) => value)(wire.sha256),
     "created_by": c.required(wire.createdBy, "created_by"),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
   })
 }
 
@@ -1654,9 +1654,9 @@ export function decodeDtoApiBoard(wire: d.DtoApiBoard): Record<string, unknown> 
     "slug": c.required(wire.slug, "slug"),
     "name": c.required(wire.name, "name"),
     "description": wire.description === undefined ? null : ((value) => value)(wire.description),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
-    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.archivedAt),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.integerValue(value))(wire.archivedAt),
   })
 }
 
@@ -1680,11 +1680,11 @@ export function decodeDtoApiBoardColumn(wire: d.DtoApiBoardColumn): Record<strin
     "board_id": c.required(wire.boardId, "board_id"),
     "status": decodeDtoApiTaskStatus(c.required(wire.status, "status")),
     "title": c.required(wire.title, "title"),
-    "position": c.safeNumber(c.required(wire.position, "position")),
+    "position": c.integerValue(c.required(wire.position, "position")),
     "hidden": c.required(wire.hidden, "hidden"),
-    "wip_limit": wire.wipLimit === undefined ? null : ((value) => c.safeNumber(value))(wire.wipLimit),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "wip_limit": wire.wipLimit === undefined ? null : ((value) => c.integerValue(value))(wire.wipLimit),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
   })
 }
 
@@ -1702,7 +1702,7 @@ export function decodeDtoApiClaim(wire: d.DtoApiClaim): Record<string, unknown> 
     "task": decodeDtoApiTask(c.required(wire.task, "task")),
     "run": decodeDtoApiRun(c.required(wire.run, "run")),
     "claim_token": c.required(wire.claimToken, "claim_token"),
-    "claim_expires_at": wire.claimExpiresAt === undefined ? null : ((value) => c.safeNumber(value))(wire.claimExpiresAt),
+    "claim_expires_at": wire.claimExpiresAt === undefined ? null : ((value) => c.integerValue(value))(wire.claimExpiresAt),
   })
 }
 
@@ -1732,7 +1732,7 @@ export function decodeDtoApiComment(wire: d.DtoApiComment): Record<string, unkno
     "body": c.required(wire.body, "body"),
     "kind": decodeDtoCommentsCommentKind(c.required(wire.kind, "kind")),
     "metadata": decodeDtoStructuredMetadataJsonObject(c.required(wire.metadata, "metadata")),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
   })
 }
 
@@ -1836,7 +1836,7 @@ export function decodeDtoApiExecutionPlan(wire: d.DtoApiExecutionPlan): Record<s
     "state": decodeDtoApiExecutionPlanState(c.required(wire.state, "state")),
     "reason": wire.reason === undefined ? null : ((value) => value)(wire.reason),
     "updated_by": c.required(wire.updatedBy, "updated_by"),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
   })
 }
 
@@ -1865,8 +1865,8 @@ export function decodeDtoApiLabel(wire: d.DtoApiLabel): Record<string, unknown> 
     "board_id": c.required(wire.boardId, "board_id"),
     "name": c.required(wire.name, "name"),
     "color": wire.color === undefined ? null : ((value) => value)(wire.color),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
   })
 }
 
@@ -1891,8 +1891,8 @@ export function decodeDtoApiRelation(wire: d.DtoApiRelation): Record<string, unk
     "graph_uri": c.required(wire.graphUri, "graph_uri"),
     "provenance": decodeDtoApiRelationProvenance(c.required(wire.provenance, "provenance")),
     "metadata": c.decodeJson(c.required(wire.metadata, "metadata")),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
   })
 }
 
@@ -1909,7 +1909,7 @@ export function decodeDtoApiRelationProvenance(wire: d.DtoApiRelationProvenance)
   return c.omitUndefined({
     "source_table": wire.sourceTable === undefined ? null : ((value) => value)(wire.sourceTable),
     "source_id": wire.sourceId === undefined ? null : ((value) => value)(wire.sourceId),
-    "source_event_id": wire.sourceEventId === undefined ? null : ((value) => c.safeNumber(value))(wire.sourceEventId),
+    "source_event_id": wire.sourceEventId === undefined ? null : ((value) => c.integerValue(value))(wire.sourceEventId),
     "authoritative_store": c.required(wire.authoritativeStore, "authoritative_store"),
   })
 }
@@ -1938,11 +1938,11 @@ export function decodeDtoApiRun(wire: d.DtoApiRun): Record<string, unknown> {
     "task_id": c.required(wire.taskId, "task_id"),
     "status": decodeDtoApiRunStatus(c.required(wire.status, "status")),
     "worker_profile": wire.workerProfile === undefined ? null : ((value) => value)(wire.workerProfile),
-    "worker_pid": wire.workerPid === undefined ? null : ((value) => c.safeNumber(value))(wire.workerPid),
+    "worker_pid": wire.workerPid === undefined ? null : ((value) => c.integerValue(value))(wire.workerPid),
     "claim_owner": c.required(wire.claimOwner, "claim_owner"),
-    "started_at": c.safeNumber(c.required(wire.startedAt, "started_at")),
-    "finished_at": wire.finishedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.finishedAt),
-    "exit_code": wire.exitCode === undefined ? null : ((value) => c.safeNumber(value))(wire.exitCode),
+    "started_at": c.integerValue(c.required(wire.startedAt, "started_at")),
+    "finished_at": wire.finishedAt === undefined ? null : ((value) => c.integerValue(value))(wire.finishedAt),
+    "exit_code": wire.exitCode === undefined ? null : ((value) => c.integerValue(value))(wire.exitCode),
     "summary": wire.summary === undefined ? null : ((value) => value)(wire.summary),
     "error": wire.error === undefined ? null : ((value) => value)(wire.error),
     "has_log": c.required(wire.hasLog, "has_log"),
@@ -2032,38 +2032,38 @@ export function decodeDtoApiTask(wire: d.DtoApiTask): Record<string, unknown> {
     "board_id": c.required(wire.boardId, "board_id"),
     "board_slug": c.required(wire.boardSlug, "board_slug"),
     "ref": c.required(wire.taskRef, "task_ref"),
-    "seq": c.safeNumber(c.required(wire.seq, "seq")),
+    "seq": c.integerValue(c.required(wire.seq, "seq")),
     "title": c.required(wire.title, "title"),
     "description": wire.description === undefined ? null : ((value) => value)(wire.description),
     "status": decodeDtoApiTaskStatus(c.required(wire.status, "status")),
     "status_reason": wire.statusReason === undefined ? null : ((value) => value)(wire.statusReason),
     "assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),
     "priority": decodeDtoApiTaskPriority(c.required(wire.priority, "priority")),
-    "position": c.safeNumber(c.required(wire.position, "position")),
-    "scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.safeNumber(value))(wire.scheduledAt),
-    "due_at": wire.dueAt === undefined ? null : ((value) => c.safeNumber(value))(wire.dueAt),
+    "position": c.integerValue(c.required(wire.position, "position")),
+    "scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.integerValue(value))(wire.scheduledAt),
+    "due_at": wire.dueAt === undefined ? null : ((value) => c.integerValue(value))(wire.dueAt),
     "created_by": c.required(wire.createdBy, "created_by"),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
-    "started_at": wire.startedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.startedAt),
-    "completed_at": wire.completedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.completedAt),
-    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.archivedAt),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "started_at": wire.startedAt === undefined ? null : ((value) => c.integerValue(value))(wire.startedAt),
+    "completed_at": wire.completedAt === undefined ? null : ((value) => c.integerValue(value))(wire.completedAt),
+    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.integerValue(value))(wire.archivedAt),
     "claim_owner": wire.claimOwner === undefined ? null : ((value) => value)(wire.claimOwner),
-    "claim_expires_at": wire.claimExpiresAt === undefined ? null : ((value) => c.safeNumber(value))(wire.claimExpiresAt),
-    "last_heartbeat_at": wire.lastHeartbeatAt === undefined ? null : ((value) => c.safeNumber(value))(wire.lastHeartbeatAt),
+    "claim_expires_at": wire.claimExpiresAt === undefined ? null : ((value) => c.integerValue(value))(wire.claimExpiresAt),
+    "last_heartbeat_at": wire.lastHeartbeatAt === undefined ? null : ((value) => c.integerValue(value))(wire.lastHeartbeatAt),
     "current_run_id": wire.currentRunId === undefined ? null : ((value) => value)(wire.currentRunId),
-    "retry_count": c.safeNumber(c.required(wire.retryCount, "retry_count")),
-    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.safeNumber(value))(wire.maxRetries),
+    "retry_count": c.integerValue(c.required(wire.retryCount, "retry_count")),
+    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.integerValue(value))(wire.maxRetries),
     "result_summary": wire.resultSummary === undefined ? null : ((value) => value)(wire.resultSummary),
     "result": wire.result === undefined ? null : ((value) => c.decodeJson(value))(wire.result),
     "metadata": c.decodeJson(c.required(wire.metadata, "metadata")),
-    "lock_version": c.safeNumber(c.required(wire.lockVersion, "lock_version")),
+    "lock_version": c.integerValue(c.required(wire.lockVersion, "lock_version")),
     "dependency_blocked": c.required(wire.dependencyBlocked, "dependency_blocked"),
-    "unfinished_parent_count": c.safeNumber(c.required(wire.unfinishedParentCount, "unfinished_parent_count")),
+    "unfinished_parent_count": c.integerValue(c.required(wire.unfinishedParentCount, "unfinished_parent_count")),
     "execution_plan_state": decodeDtoApiExecutionPlanState(c.required(wire.executionPlanState, "execution_plan_state")),
-    "required_step_count": c.safeNumber(c.required(wire.requiredStepCount, "required_step_count")),
-    "completed_required_step_count": c.safeNumber(c.required(wire.completedRequiredStepCount, "completed_required_step_count")),
-    "optional_step_count": c.safeNumber(c.required(wire.optionalStepCount, "optional_step_count")),
+    "required_step_count": c.integerValue(c.required(wire.requiredStepCount, "required_step_count")),
+    "completed_required_step_count": c.integerValue(c.required(wire.completedRequiredStepCount, "completed_required_step_count")),
+    "optional_step_count": c.integerValue(c.required(wire.optionalStepCount, "optional_step_count")),
     "labels": wire.labels.map((value) => decodeDtoApiLabel(value)),
   })
 }
@@ -2136,16 +2136,16 @@ export function decodeDtoApiTaskStep(wire: d.DtoApiTaskStep): Record<string, unk
     "title": c.required(wire.title, "title"),
     "body": wire.body === undefined ? null : ((value) => value)(wire.body),
     "linked_task": wire.linkedTask === undefined ? null : ((value) => decodeDtoApiTask(value))(wire.linkedTask),
-    "position": c.safeNumber(c.required(wire.position, "position")),
+    "position": c.integerValue(c.required(wire.position, "position")),
     "required": c.required(wire.required, "required"),
     "status": decodeDtoApiStepStatus(c.required(wire.status, "status")),
     "resolution_note": wire.resolutionNote === undefined ? null : ((value) => value)(wire.resolutionNote),
     "resolved_by": wire.resolvedBy === undefined ? null : ((value) => value)(wire.resolvedBy),
-    "resolved_at": wire.resolvedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.resolvedAt),
+    "resolved_at": wire.resolvedAt === undefined ? null : ((value) => c.integerValue(value))(wire.resolvedAt),
     "created_by": c.required(wire.createdBy, "created_by"),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
     "updated_by": c.required(wire.updatedBy, "updated_by"),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
   })
 }
 
@@ -2178,7 +2178,7 @@ export function decodeDtoBackupReport(wire: d.DtoBackupReport): Record<string, u
   return c.omitUndefined({
     "out_path": c.required(wire.outPath, "out_path"),
     "checksum_sha256": c.required(wire.checksumSha256, "checksum_sha256"),
-    "bytes": c.safeNumber(c.required(wire.bytes, "bytes")),
+    "bytes": c.integerValue(c.required(wire.bytes, "bytes")),
     "source_fingerprint": c.required(wire.sourceFingerprint, "source_fingerprint"),
   })
 }
@@ -2193,7 +2193,7 @@ export function encodeDtoBlockedReasonCount(value: unknown): d.DtoBlockedReasonC
 export function decodeDtoBlockedReasonCount(wire: d.DtoBlockedReasonCount): Record<string, unknown> {
   return c.omitUndefined({
     "reason": c.required(wire.reason, "reason"),
-    "count": c.safeNumber(c.required(wire.count, "count")),
+    "count": c.integerValue(c.required(wire.count, "count")),
   })
 }
 
@@ -2273,9 +2273,9 @@ export function encodeDtoCheckpointReport(value: unknown): d.DtoCheckpointReport
 }
 export function decodeDtoCheckpointReport(wire: d.DtoCheckpointReport): Record<string, unknown> {
   return c.omitUndefined({
-    "busy": c.safeNumber(c.required(wire.busy, "busy")),
-    "log_frames": c.safeNumber(c.required(wire.logFrames, "log_frames")),
-    "checkpointed_frames": c.safeNumber(c.required(wire.checkpointedFrames, "checkpointed_frames")),
+    "busy": c.integerValue(c.required(wire.busy, "busy")),
+    "log_frames": c.integerValue(c.required(wire.logFrames, "log_frames")),
+    "checkpointed_frames": c.integerValue(c.required(wire.checkpointedFrames, "checkpointed_frames")),
   })
 }
 
@@ -2307,9 +2307,9 @@ export function decodeDtoCliEntity(wire: d.DtoCliEntity): Record<string, unknown
     "title": wire.title === undefined ? null : ((value) => value)(wire.title),
     "summary": wire.summary === undefined ? null : ((value) => value)(wire.summary),
     "content_hash": wire.contentHash === undefined ? null : ((value) => value)(wire.contentHash),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
-    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.archivedAt),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.integerValue(value))(wire.archivedAt),
   })
 }
 
@@ -2394,13 +2394,13 @@ export function decodeDtoCliLabelOntologyQualityDenominator(wire: d.DtoCliLabelO
   return c.omitUndefined({
     "source": c.required(wire.source, "source"),
     "description": c.required(wire.description, "description"),
-    "observation_count": c.safeNumber(c.required(wire.observationCount, "observation_count")),
-    "distinct_task_count": c.safeNumber(c.required(wire.distinctTaskCount, "distinct_task_count")),
-    "agreement_observation_count": c.safeNumber(c.required(wire.agreementObservationCount, "agreement_observation_count")),
-    "agreement_task_count": c.safeNumber(c.required(wire.agreementTaskCount, "agreement_task_count")),
-    "degraded_observation_count": c.safeNumber(c.required(wire.degradedObservationCount, "degraded_observation_count")),
-    "first_observed_at": wire.firstObservedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.firstObservedAt),
-    "latest_observed_at": wire.latestObservedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.latestObservedAt),
+    "observation_count": c.integerValue(c.required(wire.observationCount, "observation_count")),
+    "distinct_task_count": c.integerValue(c.required(wire.distinctTaskCount, "distinct_task_count")),
+    "agreement_observation_count": c.integerValue(c.required(wire.agreementObservationCount, "agreement_observation_count")),
+    "agreement_task_count": c.integerValue(c.required(wire.agreementTaskCount, "agreement_task_count")),
+    "degraded_observation_count": c.integerValue(c.required(wire.degradedObservationCount, "degraded_observation_count")),
+    "first_observed_at": wire.firstObservedAt === undefined ? null : ((value) => c.integerValue(value))(wire.firstObservedAt),
+    "latest_observed_at": wire.latestObservedAt === undefined ? null : ((value) => c.integerValue(value))(wire.latestObservedAt),
     "sample_task_refs": wire.sampleTaskRefs.map((value) => value),
   })
 }
@@ -2416,10 +2416,10 @@ export function encodeDtoCliLabelOntologyQualityDisagreement(value: unknown): d.
 }
 export function decodeDtoCliLabelOntologyQualityDisagreement(wire: d.DtoCliLabelOntologyQualityDisagreement): Record<string, unknown> {
   return c.omitUndefined({
-    "signal_count": c.safeNumber(c.required(wire.signalCount, "signal_count")),
-    "distinct_task_count": c.safeNumber(c.required(wire.distinctTaskCount, "distinct_task_count")),
-    "by_kind": Object.fromEntries(Object.entries(wire.byKind).map(([key, value]) => [key, c.safeNumber(value)])),
-    "by_status": Object.fromEntries(Object.entries(wire.byStatus).map(([key, value]) => [key, c.safeNumber(value)])),
+    "signal_count": c.integerValue(c.required(wire.signalCount, "signal_count")),
+    "distinct_task_count": c.integerValue(c.required(wire.distinctTaskCount, "distinct_task_count")),
+    "by_kind": Object.fromEntries(Object.entries(wire.byKind).map(([key, value]) => [key, c.integerValue(value)])),
+    "by_status": Object.fromEntries(Object.entries(wire.byStatus).map(([key, value]) => [key, c.integerValue(value)])),
   })
 }
 
@@ -2512,7 +2512,7 @@ export function decodeDtoContextItem(wire: d.DtoContextItem): Record<string, unk
     "score": wire.score === undefined ? null : ((value) => c.float(value))(wire.score),
     "title": wire.title === undefined ? null : ((value) => value)(wire.title),
     "snippet": wire.snippet === undefined ? null : ((value) => value)(wire.snippet),
-    "rank": c.safeNumber(c.required(wire.rank, "rank")),
+    "rank": c.integerValue(c.required(wire.rank, "rank")),
     "reason": c.required(wire.reason, "reason"),
     "evidence": wire.evidence.map((value) => decodeDtoContextEvidence(value)),
   })
@@ -2557,12 +2557,12 @@ export function encodeDtoContextPolicy(value: unknown): d.DtoContextPolicy {
 }
 export function decodeDtoContextPolicy(wire: d.DtoContextPolicy): Record<string, unknown> {
   return c.omitUndefined({
-    "depth": c.safeNumber(c.required(wire.depth, "depth")),
-    "lexical_limit": c.safeNumber(c.required(wire.lexicalLimit, "lexical_limit")),
-    "graph_limit": c.safeNumber(c.required(wire.graphLimit, "graph_limit")),
-    "vector_limit": c.safeNumber(c.required(wire.vectorLimit, "vector_limit")),
-    "max_items": c.safeNumber(c.required(wire.maxItems, "max_items")),
-    "budget": wire.budget === undefined ? undefined : ((value) => c.safeNumber(value))(wire.budget),
+    "depth": c.integerValue(c.required(wire.depth, "depth")),
+    "lexical_limit": c.integerValue(c.required(wire.lexicalLimit, "lexical_limit")),
+    "graph_limit": c.integerValue(c.required(wire.graphLimit, "graph_limit")),
+    "vector_limit": c.integerValue(c.required(wire.vectorLimit, "vector_limit")),
+    "max_items": c.integerValue(c.required(wire.maxItems, "max_items")),
+    "budget": wire.budget === undefined ? undefined : ((value) => c.integerValue(value))(wire.budget),
   })
 }
 
@@ -2612,9 +2612,9 @@ export function decodeDtoDeleteBoardLabelResult(wire: d.DtoDeleteBoardLabelResul
   return c.omitUndefined({
     "label": decodeDtoApiLabel(c.required(wire.label, "label")),
     "forced": c.required(wire.forced, "forced"),
-    "removed_task_bindings": c.safeNumber(c.required(wire.removedTaskBindings, "removed_task_bindings")),
+    "removed_task_bindings": c.integerValue(c.required(wire.removedTaskBindings, "removed_task_bindings")),
     "removed_semantics": c.required(wire.removedSemantics, "removed_semantics"),
-    "removed_atoms": c.safeNumber(c.required(wire.removedAtoms, "removed_atoms")),
+    "removed_atoms": c.integerValue(c.required(wire.removedAtoms, "removed_atoms")),
   })
 }
 
@@ -2658,13 +2658,13 @@ export function encodeDtoDoctorDerivedStore(value: unknown): d.DtoDoctorDerivedS
 export function decodeDtoDoctorDerivedStore(wire: d.DtoDoctorDerivedStore): Record<string, unknown> {
   return c.omitUndefined({
     "store_name": c.required(wire.storeName, "store_name"),
-    "schema_version": c.safeNumber(c.required(wire.schemaVersion, "schema_version")),
-    "last_event_id": c.safeNumber(c.required(wire.lastEventId, "last_event_id")),
+    "schema_version": c.integerValue(c.required(wire.schemaVersion, "schema_version")),
+    "last_event_id": c.integerValue(c.required(wire.lastEventId, "last_event_id")),
     "dirty": c.required(wire.dirty, "dirty"),
     "last_error": wire.lastError === undefined ? null : ((value) => value)(wire.lastError),
-    "pending_outbox": c.safeNumber(c.required(wire.pendingOutbox, "pending_outbox")),
-    "running_outbox": c.safeNumber(c.required(wire.runningOutbox, "running_outbox")),
-    "failed_outbox": c.safeNumber(c.required(wire.failedOutbox, "failed_outbox")),
+    "pending_outbox": c.integerValue(c.required(wire.pendingOutbox, "pending_outbox")),
+    "running_outbox": c.integerValue(c.required(wire.runningOutbox, "running_outbox")),
+    "failed_outbox": c.integerValue(c.required(wire.failedOutbox, "failed_outbox")),
   })
 }
 
@@ -2723,31 +2723,31 @@ export function decodeDtoDoctorReport(wire: d.DtoDoctorReport): Record<string, u
   return c.omitUndefined({
     "ok": c.required(wire.ok, "ok"),
     "integrity_check": c.required(wire.integrityCheck, "integrity_check"),
-    "migration_version": wire.migrationVersion === undefined ? null : ((value) => c.safeNumber(value))(wire.migrationVersion),
-    "user_version": c.safeNumber(c.required(wire.userVersion, "user_version")),
-    "expired_running_tasks": c.safeNumber(c.required(wire.expiredRunningTasks, "expired_running_tasks")),
-    "running_tasks_without_active_run": c.safeNumber(c.required(wire.runningTasksWithoutActiveRun, "running_tasks_without_active_run")),
-    "orphan_running_runs": c.safeNumber(c.required(wire.orphanRunningRuns, "orphan_running_runs")),
-    "dependency_cycles": c.safeNumber(c.required(wire.dependencyCycles, "dependency_cycles")),
-    "archived_dependency_edges": c.safeNumber(c.required(wire.archivedDependencyEdges, "archived_dependency_edges")),
-    "missing_run_logs": c.safeNumber(c.required(wire.missingRunLogs, "missing_run_logs")),
-    "suspicious_run_log_paths": c.safeNumber(c.required(wire.suspiciousRunLogPaths, "suspicious_run_log_paths")),
-    "executable_dependency_violations": c.safeNumber(c.required(wire.executableDependencyViolations, "executable_dependency_violations")),
-    "executable_spec_violations": c.safeNumber(c.required(wire.executableSpecViolations, "executable_spec_violations")),
-    "executable_schedule_violations": c.safeNumber(c.required(wire.executableScheduleViolations, "executable_schedule_violations")),
-    "unplanned_active_tasks": c.safeNumber(c.required(wire.unplannedActiveTasks, "unplanned_active_tasks")),
-    "active_parents_with_incomplete_required_steps": c.safeNumber(c.required(wire.activeParentsWithIncompleteRequiredSteps, "active_parents_with_incomplete_required_steps")),
-    "outbox_pending": c.safeNumber(c.required(wire.outboxPending, "outbox_pending")),
-    "outbox_running": c.safeNumber(c.required(wire.outboxRunning, "outbox_running")),
-    "outbox_failed": c.safeNumber(c.required(wire.outboxFailed, "outbox_failed")),
-    "derived_dirty_stores": c.safeNumber(c.required(wire.derivedDirtyStores, "derived_dirty_stores")),
-    "derived_error_stores": c.safeNumber(c.required(wire.derivedErrorStores, "derived_error_stores")),
+    "migration_version": wire.migrationVersion === undefined ? null : ((value) => c.integerValue(value))(wire.migrationVersion),
+    "user_version": c.integerValue(c.required(wire.userVersion, "user_version")),
+    "expired_running_tasks": c.integerValue(c.required(wire.expiredRunningTasks, "expired_running_tasks")),
+    "running_tasks_without_active_run": c.integerValue(c.required(wire.runningTasksWithoutActiveRun, "running_tasks_without_active_run")),
+    "orphan_running_runs": c.integerValue(c.required(wire.orphanRunningRuns, "orphan_running_runs")),
+    "dependency_cycles": c.integerValue(c.required(wire.dependencyCycles, "dependency_cycles")),
+    "archived_dependency_edges": c.integerValue(c.required(wire.archivedDependencyEdges, "archived_dependency_edges")),
+    "missing_run_logs": c.integerValue(c.required(wire.missingRunLogs, "missing_run_logs")),
+    "suspicious_run_log_paths": c.integerValue(c.required(wire.suspiciousRunLogPaths, "suspicious_run_log_paths")),
+    "executable_dependency_violations": c.integerValue(c.required(wire.executableDependencyViolations, "executable_dependency_violations")),
+    "executable_spec_violations": c.integerValue(c.required(wire.executableSpecViolations, "executable_spec_violations")),
+    "executable_schedule_violations": c.integerValue(c.required(wire.executableScheduleViolations, "executable_schedule_violations")),
+    "unplanned_active_tasks": c.integerValue(c.required(wire.unplannedActiveTasks, "unplanned_active_tasks")),
+    "active_parents_with_incomplete_required_steps": c.integerValue(c.required(wire.activeParentsWithIncompleteRequiredSteps, "active_parents_with_incomplete_required_steps")),
+    "outbox_pending": c.integerValue(c.required(wire.outboxPending, "outbox_pending")),
+    "outbox_running": c.integerValue(c.required(wire.outboxRunning, "outbox_running")),
+    "outbox_failed": c.integerValue(c.required(wire.outboxFailed, "outbox_failed")),
+    "derived_dirty_stores": c.integerValue(c.required(wire.derivedDirtyStores, "derived_dirty_stores")),
+    "derived_error_stores": c.integerValue(c.required(wire.derivedErrorStores, "derived_error_stores")),
     "derived_stores": wire.derivedStores.map((value) => decodeDtoDoctorDerivedStore(value)),
-    "consistency_errors": c.safeNumber(c.required(wire.consistencyErrors, "consistency_errors")),
-    "consistency_warnings": c.safeNumber(c.required(wire.consistencyWarnings, "consistency_warnings")),
+    "consistency_errors": c.integerValue(c.required(wire.consistencyErrors, "consistency_errors")),
+    "consistency_warnings": c.integerValue(c.required(wire.consistencyWarnings, "consistency_warnings")),
     "consistency_issues": wire.consistencyIssues.map((value) => decodeDtoDoctorIssue(value)),
-    "ontology_ledger_errors": c.safeNumber(c.required(wire.ontologyLedgerErrors, "ontology_ledger_errors")),
-    "ontology_ledger_warnings": c.safeNumber(c.required(wire.ontologyLedgerWarnings, "ontology_ledger_warnings")),
+    "ontology_ledger_errors": c.integerValue(c.required(wire.ontologyLedgerErrors, "ontology_ledger_errors")),
+    "ontology_ledger_warnings": c.integerValue(c.required(wire.ontologyLedgerWarnings, "ontology_ledger_warnings")),
     "ontology_ledger_issues": wire.ontologyLedgerIssues.map((value) => decodeDtoDoctorIssue(value)),
   })
 }
@@ -2879,8 +2879,8 @@ export function decodeDtoExportReport(wire: d.DtoExportReport): Record<string, u
   return c.omitUndefined({
     "out_path": c.required(wire.outPath, "out_path"),
     "checksum_sha256": c.required(wire.checksumSha256, "checksum_sha256"),
-    "bytes": c.safeNumber(c.required(wire.bytes, "bytes")),
-    "record_count": c.safeNumber(c.required(wire.recordCount, "record_count")),
+    "bytes": c.integerValue(c.required(wire.bytes, "bytes")),
+    "record_count": c.integerValue(c.required(wire.recordCount, "record_count")),
     "source_fingerprint": c.required(wire.sourceFingerprint, "source_fingerprint"),
   })
 }
@@ -2907,12 +2907,12 @@ export function decodeDtoGraphMaintenance(wire: d.DtoGraphMaintenance): Record<s
     "board_id": c.required(wire.boardId, "board_id"),
     "generation": c.required(wire.generation, "generation"),
     "fingerprint": c.required(wire.fingerprint, "fingerprint"),
-    "validated_tasks": c.safeNumber(c.required(wire.validatedTasks, "validated_tasks")),
-    "validated_entities": c.safeNumber(c.required(wire.validatedEntities, "validated_entities")),
-    "validated_relations": c.safeNumber(c.required(wire.validatedRelations, "validated_relations")),
-    "pending_jobs": c.safeNumber(c.required(wire.pendingJobs, "pending_jobs")),
-    "consumed_jobs": c.safeNumber(c.required(wire.consumedJobs, "consumed_jobs")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "validated_tasks": c.integerValue(c.required(wire.validatedTasks, "validated_tasks")),
+    "validated_entities": c.integerValue(c.required(wire.validatedEntities, "validated_entities")),
+    "validated_relations": c.integerValue(c.required(wire.validatedRelations, "validated_relations")),
+    "pending_jobs": c.integerValue(c.required(wire.pendingJobs, "pending_jobs")),
+    "consumed_jobs": c.integerValue(c.required(wire.consumedJobs, "consumed_jobs")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
     "message": c.required(wire.message, "message"),
   })
 }
@@ -2986,9 +2986,9 @@ export function decodeDtoImportReport(wire: d.DtoImportReport): Record<string, u
   return c.omitUndefined({
     "in_path": c.required(wire.inPath, "in_path"),
     "source_fingerprint": c.required(wire.sourceFingerprint, "source_fingerprint"),
-    "imported_records": c.safeNumber(c.required(wire.importedRecords, "imported_records")),
-    "skipped_records": c.safeNumber(c.required(wire.skippedRecords, "skipped_records")),
-    "rebuild_jobs_enqueued": c.safeNumber(c.required(wire.rebuildJobsEnqueued, "rebuild_jobs_enqueued")),
+    "imported_records": c.integerValue(c.required(wire.importedRecords, "imported_records")),
+    "skipped_records": c.integerValue(c.required(wire.skippedRecords, "skipped_records")),
+    "rebuild_jobs_enqueued": c.integerValue(c.required(wire.rebuildJobsEnqueued, "rebuild_jobs_enqueued")),
     "journal_id": c.required(wire.journalId, "journal_id"),
     "phase": c.required(wire.phase, "phase"),
     "restart_required": c.required(wire.restartRequired, "restart_required"),
@@ -3119,7 +3119,7 @@ export function decodeDtoLabelAtomIndexHit(wire: d.DtoLabelAtomIndexHit): Record
     "polarity": c.required(wire.polarity, "polarity"),
     "kind": c.required(wire.kind, "kind"),
     "text": c.required(wire.text, "text"),
-    "ordinal": c.safeNumber(c.required(wire.ordinal, "ordinal")),
+    "ordinal": c.integerValue(c.required(wire.ordinal, "ordinal")),
     "content_hash": c.required(wire.contentHash, "content_hash"),
     "embedding_model": c.required(wire.embeddingModel, "embedding_model"),
     "distance": c.float(c.required(wire.distance, "distance")),
@@ -3167,10 +3167,10 @@ export function decodeDtoLabelAtomWire(wire: d.DtoLabelAtomWire): Record<string,
     "polarity": c.required(wire.polarity, "polarity"),
     "kind": c.required(wire.kind, "kind"),
     "text": c.required(wire.text, "text"),
-    "ordinal": c.safeNumber(c.required(wire.ordinal, "ordinal")),
+    "ordinal": c.integerValue(c.required(wire.ordinal, "ordinal")),
     "content_hash": c.required(wire.contentHash, "content_hash"),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
   })
 }
 
@@ -3206,9 +3206,9 @@ export function decodeDtoLabelDeletedPayload(wire: d.DtoLabelDeletedPayload): Re
     "label_id": c.required(wire.labelId, "label_id"),
     "label": c.required(wire.label, "label"),
     "forced": c.required(wire.forced, "forced"),
-    "removed_task_bindings": c.safeNumber(c.required(wire.removedTaskBindings, "removed_task_bindings")),
+    "removed_task_bindings": c.integerValue(c.required(wire.removedTaskBindings, "removed_task_bindings")),
     "removed_semantics": c.required(wire.removedSemantics, "removed_semantics"),
-    "removed_atoms": c.safeNumber(c.required(wire.removedAtoms, "removed_atoms")),
+    "removed_atoms": c.integerValue(c.required(wire.removedAtoms, "removed_atoms")),
   })
 }
 
@@ -3299,7 +3299,7 @@ export function decodeDtoLabelOntologyActionWire(wire: d.DtoLabelOntologyActionW
     "created_by": c.required(wire.createdBy, "created_by"),
     "created_by_type": c.required(wire.createdByType, "created_by_type"),
     "agent_type": wire.agentType === undefined ? null : ((value) => value)(wire.agentType),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
     "signal_ids": wire.signalIds.map((value) => value),
   })
 }
@@ -3397,7 +3397,7 @@ export function decodeDtoLabelOntologyObservationWire(wire: d.DtoLabelOntologyOb
     "created_by": c.required(wire.createdBy, "created_by"),
     "created_by_type": c.required(wire.createdByType, "created_by_type"),
     "agent_type": wire.agentType === undefined ? null : ((value) => value)(wire.agentType),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
     "signals": wire.signals.map((value) => decodeDtoLabelOntologySignalWire(value)),
   })
 }
@@ -3431,7 +3431,7 @@ export function decodeDtoLabelOntologyReviewAtomVariantWire(wire: d.DtoLabelOnto
     "polarity": wire.polarity === undefined ? null : ((value) => value)(wire.polarity),
     "kind": wire.kind === undefined ? null : ((value) => value)(wire.kind),
     "text": wire.text === undefined ? null : ((value) => value)(wire.text),
-    "signal_count": c.safeNumber(c.required(wire.signalCount, "signal_count")),
+    "signal_count": c.integerValue(c.required(wire.signalCount, "signal_count")),
   })
 }
 
@@ -3493,21 +3493,21 @@ export function decodeDtoLabelOntologyReviewGroupWire(wire: d.DtoLabelOntologyRe
     "proposed_label_name_normalized": wire.proposedLabelNameNormalized === undefined ? null : ((value) => value)(wire.proposedLabelNameNormalized),
     "cluster_key": wire.clusterKey === undefined ? null : ((value) => value)(wire.clusterKey),
     "cluster_reason": wire.clusterReason === undefined ? null : ((value) => value)(wire.clusterReason),
-    "task_count": c.safeNumber(c.required(wire.taskCount, "task_count")),
-    "signal_count": c.safeNumber(c.required(wire.signalCount, "signal_count")),
-    "open_count": c.safeNumber(c.required(wire.openCount, "open_count")),
-    "confirmed_count": c.safeNumber(c.required(wire.confirmedCount, "confirmed_count")),
-    "resolved_count": c.safeNumber(c.required(wire.resolvedCount, "resolved_count")),
-    "rejected_count": c.safeNumber(c.required(wire.rejectedCount, "rejected_count")),
-    "superseded_count": c.safeNumber(c.required(wire.supersededCount, "superseded_count")),
-    "degraded_count": c.safeNumber(c.required(wire.degradedCount, "degraded_count")),
+    "task_count": c.integerValue(c.required(wire.taskCount, "task_count")),
+    "signal_count": c.integerValue(c.required(wire.signalCount, "signal_count")),
+    "open_count": c.integerValue(c.required(wire.openCount, "open_count")),
+    "confirmed_count": c.integerValue(c.required(wire.confirmedCount, "confirmed_count")),
+    "resolved_count": c.integerValue(c.required(wire.resolvedCount, "resolved_count")),
+    "rejected_count": c.integerValue(c.required(wire.rejectedCount, "rejected_count")),
+    "superseded_count": c.integerValue(c.required(wire.supersededCount, "superseded_count")),
+    "degraded_count": c.integerValue(c.required(wire.degradedCount, "degraded_count")),
     "average_score": wire.averageScore === undefined ? null : ((value) => c.float(value))(wire.averageScore),
     "median_score": wire.medianScore === undefined ? null : ((value) => c.float(value))(wire.medianScore),
-    "oldest_signal_at": c.safeNumber(c.required(wire.oldestSignalAt, "oldest_signal_at")),
-    "latest_signal_at": c.safeNumber(c.required(wire.latestSignalAt, "latest_signal_at")),
+    "oldest_signal_at": c.integerValue(c.required(wire.oldestSignalAt, "oldest_signal_at")),
+    "latest_signal_at": c.integerValue(c.required(wire.latestSignalAt, "latest_signal_at")),
     "sample_task_refs": wire.sampleTaskRefs.map((value) => value),
     "signal_ids": wire.signalIds.map((value) => value),
-    "action_count": c.safeNumber(c.required(wire.actionCount, "action_count")),
+    "action_count": c.integerValue(c.required(wire.actionCount, "action_count")),
     "action_ids": wire.actionIds.map((value) => value),
     "proposal_ids": wire.proposalIds.map((value) => value),
     "labels": wire.labels.map((value) => decodeDtoLabelOntologyReviewLabelRefWire(value)),
@@ -3541,7 +3541,7 @@ export function decodeDtoLabelOntologyReviewMeta(wire: d.DtoLabelOntologyReviewM
   return c.omitUndefined({
     "group_by": c.required(wire.groupBy, "group_by"),
     "include_all": c.required(wire.includeAll, "include_all"),
-    "limit": c.safeNumber(c.required(wire.limit, "limit")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
   })
 }
 
@@ -3604,7 +3604,7 @@ export function decodeDtoLabelOntologySignalRequest(wire: d.DtoLabelOntologySign
     "agent_selected": c.required(wire.agentSelected, "agent_selected"),
     "suggest_state": wire.suggestState === undefined ? null : ((value) => decodeDtoLabelOntologySuggestStateWire(value))(wire.suggestState),
     "suggest_score": wire.suggestScore === undefined ? null : ((value) => c.float(value))(wire.suggestScore),
-    "suggest_rank": wire.suggestRank === undefined ? null : ((value) => c.safeNumber(value))(wire.suggestRank),
+    "suggest_rank": wire.suggestRank === undefined ? null : ((value) => c.integerValue(value))(wire.suggestRank),
     "final_selected": c.required(wire.finalSelected, "final_selected"),
     "rationale": c.required(wire.rationale, "rationale"),
     "confidence": wire.confidence === undefined ? null : ((value) => c.float(value))(wire.confidence),
@@ -3686,17 +3686,17 @@ export function decodeDtoLabelOntologySignalWire(wire: d.DtoLabelOntologySignalW
     "agent_selected": c.required(wire.agentSelected, "agent_selected"),
     "suggest_state": wire.suggestState === undefined ? null : ((value) => value)(wire.suggestState),
     "suggest_score": wire.suggestScore === undefined ? null : ((value) => c.float(value))(wire.suggestScore),
-    "suggest_rank": wire.suggestRank === undefined ? null : ((value) => c.safeNumber(value))(wire.suggestRank),
+    "suggest_rank": wire.suggestRank === undefined ? null : ((value) => c.integerValue(value))(wire.suggestRank),
     "final_selected": c.required(wire.finalSelected, "final_selected"),
     "rationale": c.required(wire.rationale, "rationale"),
     "confidence": wire.confidence === undefined ? null : ((value) => c.float(value))(wire.confidence),
     "signal_key": c.required(wire.signalKey, "signal_key"),
     "superseded_by_signal_id": wire.supersededBySignalId === undefined ? null : ((value) => value)(wire.supersededBySignalId),
     "status_reason": wire.statusReason === undefined ? null : ((value) => value)(wire.statusReason),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
-    "reviewed_at": wire.reviewedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.reviewedAt),
-    "closed_at": wire.closedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.closedAt),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "reviewed_at": wire.reviewedAt === undefined ? null : ((value) => c.integerValue(value))(wire.reviewedAt),
+    "closed_at": wire.closedAt === undefined ? null : ((value) => c.integerValue(value))(wire.closedAt),
   })
 }
 
@@ -3870,9 +3870,9 @@ export function decodeDtoLabelSemanticProposalWire(wire: d.DtoLabelSemanticPropo
     "created_by": c.required(wire.createdBy, "created_by"),
     "decision_reason": wire.decisionReason === undefined ? null : ((value) => value)(wire.decisionReason),
     "resolved_label_id": wire.resolvedLabelId === undefined ? null : ((value) => value)(wire.resolvedLabelId),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
-    "decided_at": wire.decidedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.decidedAt),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "decided_at": wire.decidedAt === undefined ? null : ((value) => c.integerValue(value))(wire.decidedAt),
   })
 }
 
@@ -3904,8 +3904,8 @@ export function decodeDtoLabelSemanticsWire(wire: d.DtoLabelSemanticsWire): Reco
     "excludes_when": wire.excludesWhen.map((value) => value),
     "positive_examples": wire.positiveExamples.map((value) => value),
     "negative_examples": wire.negativeExamples.map((value) => value),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
     "atoms": wire.atoms.map((value) => decodeDtoLabelAtomWire(value)),
   })
 }
@@ -4011,7 +4011,7 @@ export function decodeDtoLegacyImportReport(wire: d.DtoLegacyImportReport): Reco
     "source_fingerprint": c.required(wire.sourceFingerprint, "source_fingerprint"),
     "schema_fingerprint": c.required(wire.schemaFingerprint, "schema_fingerprint"),
     "resumed": c.required(wire.resumed, "resumed"),
-    "attachment_count": c.safeNumber(c.required(wire.attachmentCount, "attachment_count")),
+    "attachment_count": c.integerValue(c.required(wire.attachmentCount, "attachment_count")),
     "table_counts": wire.tableCounts.map((value) => decodeDtoLegacyImportTableCount(value)),
   })
 }
@@ -4027,8 +4027,8 @@ export function encodeDtoLegacyImportTableCount(value: unknown): d.DtoLegacyImpo
 export function decodeDtoLegacyImportTableCount(wire: d.DtoLegacyImportTableCount): Record<string, unknown> {
   return c.omitUndefined({
     "table": c.required(wire.table, "table"),
-    "source_rows": c.safeNumber(c.required(wire.sourceRows, "source_rows")),
-    "target_rows": c.safeNumber(c.required(wire.targetRows, "target_rows")),
+    "source_rows": c.integerValue(c.required(wire.sourceRows, "source_rows")),
+    "target_rows": c.integerValue(c.required(wire.targetRows, "target_rows")),
   })
 }
 
@@ -4040,7 +4040,7 @@ export function encodeDtoLimitMeta(value: unknown): d.DtoLimitMeta {
 }
 export function decodeDtoLimitMeta(wire: d.DtoLimitMeta): Record<string, unknown> {
   return c.omitUndefined({
-    "limit": c.safeNumber(c.required(wire.limit, "limit")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
   })
 }
 
@@ -4088,10 +4088,10 @@ export function decodeDtoMaintenanceOwnerStatus(wire: d.DtoMaintenanceOwnerStatu
   return c.omitUndefined({
     "owner": wire.owner === undefined ? null : ((value) => value)(wire.owner),
     "mode": wire.mode === undefined ? null : ((value) => value)(wire.mode),
-    "lease_expires_at": wire.leaseExpiresAt === undefined ? null : ((value) => c.safeNumber(value))(wire.leaseExpiresAt),
-    "fence_epoch": c.safeNumber(c.required(wire.fenceEpoch, "fence_epoch")),
+    "lease_expires_at": wire.leaseExpiresAt === undefined ? null : ((value) => c.integerValue(value))(wire.leaseExpiresAt),
+    "fence_epoch": c.integerValue(c.required(wire.fenceEpoch, "fence_epoch")),
     "build_identity": wire.buildIdentity === undefined ? null : ((value) => value)(wire.buildIdentity),
-    "last_heartbeat_at": wire.lastHeartbeatAt === undefined ? null : ((value) => c.safeNumber(value))(wire.lastHeartbeatAt),
+    "last_heartbeat_at": wire.lastHeartbeatAt === undefined ? null : ((value) => c.integerValue(value))(wire.lastHeartbeatAt),
     "active": c.required(wire.active, "active"),
   })
 }
@@ -4114,11 +4114,11 @@ export function encodeDtoMaintenanceRunReport(value: unknown): d.DtoMaintenanceR
 export function decodeDtoMaintenanceRunReport(wire: d.DtoMaintenanceRunReport): Record<string, unknown> {
   return c.omitUndefined({
     "database_instance_id": c.required(wire.databaseInstanceId, "database_instance_id"),
-    "protocol_version": c.safeNumber(c.required(wire.protocolVersion, "protocol_version")),
+    "protocol_version": c.integerValue(c.required(wire.protocolVersion, "protocol_version")),
     "owner": c.required(wire.owner, "owner"),
     "mode": c.required(wire.mode, "mode"),
     "action": c.required(wire.action, "action"),
-    "processed": c.safeNumber(c.required(wire.processed, "processed")),
+    "processed": c.integerValue(c.required(wire.processed, "processed")),
     "phase": c.required(wire.phase, "phase"),
     "degraded": c.required(wire.degraded, "degraded"),
     "errors": wire.errors.map((value) => value),
@@ -4138,7 +4138,7 @@ export function encodeDtoMaintenanceStatusReport(value: unknown): d.DtoMaintenan
 export function decodeDtoMaintenanceStatusReport(wire: d.DtoMaintenanceStatusReport): Record<string, unknown> {
   return c.omitUndefined({
     "database_instance_id": c.required(wire.databaseInstanceId, "database_instance_id"),
-    "protocol_version": c.safeNumber(c.required(wire.protocolVersion, "protocol_version")),
+    "protocol_version": c.integerValue(c.required(wire.protocolVersion, "protocol_version")),
     "owner": decodeDtoMaintenanceOwnerStatus(c.required(wire.owner, "owner")),
     "stores": wire.stores.map((value) => decodeDtoProjectionStoreStatus(value)),
   })
@@ -4152,7 +4152,7 @@ export function encodeDtoNextAfterMeta(value: unknown): d.DtoNextAfterMeta {
 }
 export function decodeDtoNextAfterMeta(wire: d.DtoNextAfterMeta): Record<string, unknown> {
   return c.omitUndefined({
-    "next_after": c.safeNumber(c.required(wire.nextAfter, "next_after")),
+    "next_after": c.integerValue(c.required(wire.nextAfter, "next_after")),
   })
 }
 
@@ -4165,8 +4165,8 @@ export function encodeDtoOffsetPaginationMeta(value: unknown): d.DtoOffsetPagina
 }
 export function decodeDtoOffsetPaginationMeta(wire: d.DtoOffsetPaginationMeta): Record<string, unknown> {
   return c.omitUndefined({
-    "limit": c.safeNumber(c.required(wire.limit, "limit")),
-    "offset": c.safeNumber(c.required(wire.offset, "offset")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
+    "offset": c.integerValue(c.required(wire.offset, "offset")),
   })
 }
 
@@ -4200,17 +4200,17 @@ export function decodeDtoProjectionStoreStatus(wire: d.DtoProjectionStoreStatus)
     "previous_generation": wire.previousGeneration === undefined ? null : ((value) => value)(wire.previousGeneration),
     "building_generation": wire.buildingGeneration === undefined ? null : ((value) => value)(wire.buildingGeneration),
     "lifecycle_status": c.required(wire.lifecycleStatus, "lifecycle_status"),
-    "fence_epoch": c.safeNumber(c.required(wire.fenceEpoch, "fence_epoch")),
-    "last_event_id": c.safeNumber(c.required(wire.lastEventId, "last_event_id")),
+    "fence_epoch": c.integerValue(c.required(wire.fenceEpoch, "fence_epoch")),
+    "last_event_id": c.integerValue(c.required(wire.lastEventId, "last_event_id")),
     "dirty": c.required(wire.dirty, "dirty"),
-    "pending": c.safeNumber(c.required(wire.pending, "pending")),
-    "running": c.safeNumber(c.required(wire.running, "running")),
-    "failed": c.safeNumber(c.required(wire.failed, "failed")),
+    "pending": c.integerValue(c.required(wire.pending, "pending")),
+    "running": c.integerValue(c.required(wire.running, "running")),
+    "failed": c.integerValue(c.required(wire.failed, "failed")),
     "last_error": wire.lastError === undefined ? null : ((value) => value)(wire.lastError),
     "phase": c.required(wire.phase, "phase"),
     "degraded": c.required(wire.degraded, "degraded"),
     "errors": wire.errors.map((value) => value),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
   })
 }
 
@@ -4229,12 +4229,12 @@ export function encodeDtoQueueStats(value: unknown): d.DtoQueueStats {
 export function decodeDtoQueueStats(wire: d.DtoQueueStats): Record<string, unknown> {
   return c.omitUndefined({
     "board_id": c.required(wire.boardId, "board_id"),
-    "generated_at": c.safeNumber(c.required(wire.generatedAt, "generated_at")),
+    "generated_at": c.integerValue(c.required(wire.generatedAt, "generated_at")),
     "status_counts": wire.statusCounts.map((value) => decodeDtoStatusCount(value)),
     "stale_claims": wire.staleClaims.map((value) => decodeDtoStaleClaim(value)),
     "blocked_reasons": wire.blockedReasons.map((value) => decodeDtoBlockedReasonCount(value)),
-    "unplanned_active_tasks": c.safeNumber(c.required(wire.unplannedActiveTasks, "unplanned_active_tasks")),
-    "active_parents_with_incomplete_required_steps": c.safeNumber(c.required(wire.activeParentsWithIncompleteRequiredSteps, "active_parents_with_incomplete_required_steps")),
+    "unplanned_active_tasks": c.integerValue(c.required(wire.unplannedActiveTasks, "unplanned_active_tasks")),
+    "active_parents_with_incomplete_required_steps": c.integerValue(c.required(wire.activeParentsWithIncompleteRequiredSteps, "active_parents_with_incomplete_required_steps")),
   })
 }
 
@@ -4253,7 +4253,7 @@ export function encodeDtoRetryPolicyPayload(value: unknown): d.DtoRetryPolicyPay
 }
 export function decodeDtoRetryPolicyPayload(wire: d.DtoRetryPolicyPayload): Record<string, unknown> {
   return c.omitUndefined({
-    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.safeNumber(value))(wire.maxRetries),
+    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.integerValue(value))(wire.maxRetries),
   })
 }
 
@@ -4283,13 +4283,13 @@ export function decodeDtoSearchMeta(wire: d.DtoSearchMeta): Record<string, unkno
     "backend": c.required(wire.backend, "backend"),
     "stale": c.required(wire.stale, "stale"),
     "database_instance_id": wire.databaseInstanceId === undefined ? null : ((value) => value)(wire.databaseInstanceId),
-    "protocol_version": wire.protocolVersion === undefined ? null : ((value) => c.safeNumber(value))(wire.protocolVersion),
+    "protocol_version": wire.protocolVersion === undefined ? null : ((value) => c.integerValue(value))(wire.protocolVersion),
     "generation": wire.generation === undefined ? null : ((value) => value)(wire.generation),
     "resolved_board_id": c.required(wire.resolvedBoardId, "resolved_board_id"),
     "fallback_reason": wire.fallbackReason === undefined ? null : ((value) => value)(wire.fallbackReason),
     "index_version": wire.indexVersion === undefined ? null : ((value) => value)(wire.indexVersion),
-    "last_event_id": wire.lastEventId === undefined ? null : ((value) => c.safeNumber(value))(wire.lastEventId),
-    "index_lag_events": wire.indexLagEvents === undefined ? null : ((value) => c.safeNumber(value))(wire.indexLagEvents),
+    "last_event_id": wire.lastEventId === undefined ? null : ((value) => c.integerValue(value))(wire.lastEventId),
+    "index_lag_events": wire.indexLagEvents === undefined ? null : ((value) => c.integerValue(value))(wire.indexLagEvents),
   })
 }
 
@@ -4303,9 +4303,9 @@ export function encodeDtoSearchPageMeta(value: unknown): d.DtoSearchPageMeta {
 }
 export function decodeDtoSearchPageMeta(wire: d.DtoSearchPageMeta): Record<string, unknown> {
   return c.omitUndefined({
-    "limit": c.safeNumber(c.required(wire.limit, "limit")),
-    "offset": c.safeNumber(c.required(wire.offset, "offset")),
-    "total": wire.total === undefined ? null : ((value) => c.safeNumber(value))(wire.total),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
+    "offset": c.integerValue(c.required(wire.offset, "offset")),
+    "total": wire.total === undefined ? null : ((value) => c.integerValue(value))(wire.total),
   })
 }
 
@@ -4332,13 +4332,13 @@ export function decodeDtoSearchStatus(wire: d.DtoSearchStatus): Record<string, u
     "derived_index": c.required(wire.derivedIndex, "derived_index"),
     "stale": c.required(wire.stale, "stale"),
     "database_instance_id": wire.databaseInstanceId === undefined ? null : ((value) => value)(wire.databaseInstanceId),
-    "protocol_version": wire.protocolVersion === undefined ? null : ((value) => c.safeNumber(value))(wire.protocolVersion),
+    "protocol_version": wire.protocolVersion === undefined ? null : ((value) => c.integerValue(value))(wire.protocolVersion),
     "generation": wire.generation === undefined ? null : ((value) => value)(wire.generation),
     "resolved_board_id": c.required(wire.resolvedBoardId, "resolved_board_id"),
     "fallback_reason": wire.fallbackReason === undefined ? null : ((value) => value)(wire.fallbackReason),
     "index_version": wire.indexVersion === undefined ? null : ((value) => value)(wire.indexVersion),
-    "last_event_id": wire.lastEventId === undefined ? null : ((value) => c.safeNumber(value))(wire.lastEventId),
-    "index_lag_events": wire.indexLagEvents === undefined ? null : ((value) => c.safeNumber(value))(wire.indexLagEvents),
+    "last_event_id": wire.lastEventId === undefined ? null : ((value) => c.integerValue(value))(wire.lastEventId),
+    "index_lag_events": wire.indexLagEvents === undefined ? null : ((value) => c.integerValue(value))(wire.indexLagEvents),
     "message": c.required(wire.message, "message"),
   })
 }
@@ -4356,7 +4356,7 @@ export function encodeDtoSearchTaskHit(value: unknown): d.DtoSearchTaskHit {
 export function decodeDtoSearchTaskHit(wire: d.DtoSearchTaskHit): Record<string, unknown> {
   return c.omitUndefined({
     "task_id": c.required(wire.taskId, "task_id"),
-    "seq": c.safeNumber(c.required(wire.seq, "seq")),
+    "seq": c.integerValue(c.required(wire.seq, "seq")),
     "score": c.float(c.required(wire.score, "score")),
     "snippet": wire.snippet === undefined ? null : ((value) => value)(wire.snippet),
     "task": decodeDtoApiTask(c.required(wire.task, "task")),
@@ -4429,7 +4429,7 @@ export function encodeDtoSignalFilterMeta(value: unknown): d.DtoSignalFilterMeta
 export function decodeDtoSignalFilterMeta(wire: d.DtoSignalFilterMeta): Record<string, unknown> {
   return c.omitUndefined({
     "include_all": c.required(wire.includeAll, "include_all"),
-    "limit": c.safeNumber(c.required(wire.limit, "limit")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
   })
 }
 
@@ -4461,7 +4461,7 @@ export function decodeDtoSignalObservationWire(wire: d.DtoSignalObservationWire)
     "agent_type": wire.agentType === undefined ? null : ((value) => value)(wire.agentType),
     "source": wire.source === undefined ? null : ((value) => value)(wire.source),
     "evidence": decodeDtoStructuredMetadataJsonObject(c.required(wire.evidence, "evidence")),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
   })
 }
 
@@ -4557,10 +4557,10 @@ export function decodeDtoSignalWire(wire: d.DtoSignalWire): Record<string, unkno
     "dedupe_key": wire.dedupeKey === undefined ? null : ((value) => value)(wire.dedupeKey),
     "superseded_by_signal_id": wire.supersededBySignalId === undefined ? null : ((value) => value)(wire.supersededBySignalId),
     "reviewed_by": wire.reviewedBy === undefined ? null : ((value) => value)(wire.reviewedBy),
-    "reviewed_at": wire.reviewedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.reviewedAt),
+    "reviewed_at": wire.reviewedAt === undefined ? null : ((value) => c.integerValue(value))(wire.reviewedAt),
     "review_reason": wire.reviewReason === undefined ? null : ((value) => value)(wire.reviewReason),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
     "observation": decodeDtoSignalObservationWire(c.required(wire.observation, "observation")),
   })
 }
@@ -4582,14 +4582,14 @@ export function encodeDtoStaleClaim(value: unknown): d.DtoStaleClaim {
 export function decodeDtoStaleClaim(wire: d.DtoStaleClaim): Record<string, unknown> {
   return c.omitUndefined({
     "task_id": c.required(wire.taskId, "task_id"),
-    "seq": c.safeNumber(c.required(wire.seq, "seq")),
+    "seq": c.integerValue(c.required(wire.seq, "seq")),
     "title": c.required(wire.title, "title"),
     "claim_owner": wire.claimOwner === undefined ? null : ((value) => value)(wire.claimOwner),
-    "claim_expires_at": wire.claimExpiresAt === undefined ? null : ((value) => c.safeNumber(value))(wire.claimExpiresAt),
-    "last_heartbeat_at": wire.lastHeartbeatAt === undefined ? null : ((value) => c.safeNumber(value))(wire.lastHeartbeatAt),
+    "claim_expires_at": wire.claimExpiresAt === undefined ? null : ((value) => c.integerValue(value))(wire.claimExpiresAt),
+    "last_heartbeat_at": wire.lastHeartbeatAt === undefined ? null : ((value) => c.integerValue(value))(wire.lastHeartbeatAt),
     "current_run_id": wire.currentRunId === undefined ? null : ((value) => value)(wire.currentRunId),
-    "retry_count": c.safeNumber(c.required(wire.retryCount, "retry_count")),
-    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.safeNumber(value))(wire.maxRetries),
+    "retry_count": c.integerValue(c.required(wire.retryCount, "retry_count")),
+    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.integerValue(value))(wire.maxRetries),
   })
 }
 
@@ -4603,7 +4603,7 @@ export function encodeDtoStatusCount(value: unknown): d.DtoStatusCount {
 export function decodeDtoStatusCount(wire: d.DtoStatusCount): Record<string, unknown> {
   return c.omitUndefined({
     "status": decodeDtoApiTaskStatus(c.required(wire.status, "status")),
-    "count": c.safeNumber(c.required(wire.count, "count")),
+    "count": c.integerValue(c.required(wire.count, "count")),
   })
 }
 
@@ -4632,7 +4632,7 @@ export function encodeDtoStreamEventData(value: unknown): d.DtoStreamEventData {
 }
 export function decodeDtoStreamEventData(wire: d.DtoStreamEventData): Record<string, unknown> {
   const value = c.omitUndefined({
-    "id": c.safeNumber(c.required(wire.id, "id")),
+    "id": c.integerValue(c.required(wire.id, "id")),
     "event_id": c.required(wire.eventId, "event_id"),
     "board_id": c.required(wire.boardId, "board_id"),
     "task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),
@@ -4640,7 +4640,7 @@ export function decodeDtoStreamEventData(wire: d.DtoStreamEventData): Record<str
     "kind": c.required(wire.kind, "kind"),
     "actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),
     "payload": decodeDtoEventPayload(c.required(wire.payload), c.required(wire.kind)),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
   })
   validateStreamEvent(value)
   return value
@@ -4748,7 +4748,7 @@ export function decodeDtoTaskExportSanitizedPayload(wire: d.DtoTaskExportSanitiz
     "run_status": decodeDtoRunStatus(c.required(wire.runStatus, "run_status")),
     "original_run_id": wire.originalRunId === undefined ? null : ((value) => value)(wire.originalRunId),
     "claim_owner": wire.claimOwner === undefined ? null : ((value) => value)(wire.claimOwner),
-    "claim_expires_at": wire.claimExpiresAt === undefined ? null : ((value) => c.safeNumber(value))(wire.claimExpiresAt),
+    "claim_expires_at": wire.claimExpiresAt === undefined ? null : ((value) => c.integerValue(value))(wire.claimExpiresAt),
     "reason": c.required(wire.reason, "reason"),
   })
 }
@@ -4794,18 +4794,18 @@ export function encodeDtoTaskGraphMeta(value: unknown): d.DtoTaskGraphMeta {
 }
 export function decodeDtoTaskGraphMeta(wire: d.DtoTaskGraphMeta): Record<string, unknown> {
   return c.omitUndefined({
-    "depth": c.safeNumber(c.required(wire.depth, "depth")),
-    "context_depth": c.safeNumber(c.required(wire.contextDepth, "context_depth")),
-    "generated_at": c.safeNumber(c.required(wire.generatedAt, "generated_at")),
-    "node_count": c.safeNumber(c.required(wire.nodeCount, "node_count")),
-    "edge_count": c.safeNumber(c.required(wire.edgeCount, "edge_count")),
+    "depth": c.integerValue(c.required(wire.depth, "depth")),
+    "context_depth": c.integerValue(c.required(wire.contextDepth, "context_depth")),
+    "generated_at": c.integerValue(c.required(wire.generatedAt, "generated_at")),
+    "node_count": c.integerValue(c.required(wire.nodeCount, "node_count")),
+    "edge_count": c.integerValue(c.required(wire.edgeCount, "edge_count")),
     "truncated": c.required(wire.truncated, "truncated"),
     "active_statuses": wire.activeStatuses.map((value) => decodeDtoApiTaskStatus(value)),
     "active_only": c.required(wire.activeOnly, "active_only"),
     "include_done_context": c.required(wire.includeDoneContext, "include_done_context"),
     "include_archived_context": c.required(wire.includeArchivedContext, "include_archived_context"),
     "hide_isolated": c.required(wire.hideIsolated, "hide_isolated"),
-    "limit_nodes": c.safeNumber(c.required(wire.limitNodes, "limit_nodes")),
+    "limit_nodes": c.integerValue(c.required(wire.limitNodes, "limit_nodes")),
   })
 }
 
@@ -4923,15 +4923,15 @@ export function decodeDtoTaskOntologySignalSummary(wire: d.DtoTaskOntologySignal
     "proposed_label_name": wire.proposedLabelName === undefined ? null : ((value) => value)(wire.proposedLabelName),
     "proposed_label_name_normalized": wire.proposedLabelNameNormalized === undefined ? null : ((value) => value)(wire.proposedLabelNameNormalized),
     "suggest_score": wire.suggestScore === undefined ? null : ((value) => c.float(value))(wire.suggestScore),
-    "suggest_rank": wire.suggestRank === undefined ? null : ((value) => c.safeNumber(value))(wire.suggestRank),
+    "suggest_rank": wire.suggestRank === undefined ? null : ((value) => c.integerValue(value))(wire.suggestRank),
     "degraded": c.required(wire.degraded, "degraded"),
     "stale": c.required(wire.stale, "stale"),
     "legacy_incomparable": c.required(wire.legacyIncomparable, "legacy_incomparable"),
     "suggest_input_drift": c.required(wire.suggestInputDrift, "suggest_input_drift"),
-    "created_at": c.safeNumber(c.required(wire.createdAt, "created_at")),
-    "updated_at": c.safeNumber(c.required(wire.updatedAt, "updated_at")),
-    "latest_action_at": wire.latestActionAt === undefined ? null : ((value) => c.safeNumber(value))(wire.latestActionAt),
-    "action_count": c.safeNumber(c.required(wire.actionCount, "action_count")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "latest_action_at": wire.latestActionAt === undefined ? null : ((value) => c.integerValue(value))(wire.latestActionAt),
+    "action_count": c.integerValue(c.required(wire.actionCount, "action_count")),
   })
 }
 
@@ -4963,23 +4963,23 @@ export function encodeDtoTaskOntologySummary(value: unknown): d.DtoTaskOntologyS
 export function decodeDtoTaskOntologySummary(wire: d.DtoTaskOntologySummary): Record<string, unknown> {
   return c.omitUndefined({
     "task_id": c.required(wire.taskId, "task_id"),
-    "observation_count": c.safeNumber(c.required(wire.observationCount, "observation_count")),
-    "signal_count": c.safeNumber(c.required(wire.signalCount, "signal_count")),
-    "open_count": c.safeNumber(c.required(wire.openCount, "open_count")),
-    "confirmed_count": c.safeNumber(c.required(wire.confirmedCount, "confirmed_count")),
-    "resolved_count": c.safeNumber(c.required(wire.resolvedCount, "resolved_count")),
-    "rejected_count": c.safeNumber(c.required(wire.rejectedCount, "rejected_count")),
-    "superseded_count": c.safeNumber(c.required(wire.supersededCount, "superseded_count")),
-    "degraded_count": c.safeNumber(c.required(wire.degradedCount, "degraded_count")),
-    "stale_count": c.safeNumber(c.required(wire.staleCount, "stale_count")),
-    "suggest_input_drift_count": c.safeNumber(c.required(wire.suggestInputDriftCount, "suggest_input_drift_count")),
-    "legacy_incomparable_count": c.safeNumber(c.required(wire.legacyIncomparableCount, "legacy_incomparable_count")),
-    "incomparable_count": c.safeNumber(c.required(wire.incomparableCount, "incomparable_count")),
-    "action_count": c.safeNumber(c.required(wire.actionCount, "action_count")),
-    "oldest_open_confirmed_signal_at": wire.oldestOpenConfirmedSignalAt === undefined ? null : ((value) => c.safeNumber(value))(wire.oldestOpenConfirmedSignalAt),
-    "oldest_open_confirmed_signal_age_ms": wire.oldestOpenConfirmedSignalAgeMs === undefined ? null : ((value) => c.safeNumber(value))(wire.oldestOpenConfirmedSignalAgeMs),
-    "latest_signal_at": wire.latestSignalAt === undefined ? null : ((value) => c.safeNumber(value))(wire.latestSignalAt),
-    "latest_action_at": wire.latestActionAt === undefined ? null : ((value) => c.safeNumber(value))(wire.latestActionAt),
+    "observation_count": c.integerValue(c.required(wire.observationCount, "observation_count")),
+    "signal_count": c.integerValue(c.required(wire.signalCount, "signal_count")),
+    "open_count": c.integerValue(c.required(wire.openCount, "open_count")),
+    "confirmed_count": c.integerValue(c.required(wire.confirmedCount, "confirmed_count")),
+    "resolved_count": c.integerValue(c.required(wire.resolvedCount, "resolved_count")),
+    "rejected_count": c.integerValue(c.required(wire.rejectedCount, "rejected_count")),
+    "superseded_count": c.integerValue(c.required(wire.supersededCount, "superseded_count")),
+    "degraded_count": c.integerValue(c.required(wire.degradedCount, "degraded_count")),
+    "stale_count": c.integerValue(c.required(wire.staleCount, "stale_count")),
+    "suggest_input_drift_count": c.integerValue(c.required(wire.suggestInputDriftCount, "suggest_input_drift_count")),
+    "legacy_incomparable_count": c.integerValue(c.required(wire.legacyIncomparableCount, "legacy_incomparable_count")),
+    "incomparable_count": c.integerValue(c.required(wire.incomparableCount, "incomparable_count")),
+    "action_count": c.integerValue(c.required(wire.actionCount, "action_count")),
+    "oldest_open_confirmed_signal_at": wire.oldestOpenConfirmedSignalAt === undefined ? null : ((value) => c.integerValue(value))(wire.oldestOpenConfirmedSignalAt),
+    "oldest_open_confirmed_signal_age_ms": wire.oldestOpenConfirmedSignalAgeMs === undefined ? null : ((value) => c.integerValue(value))(wire.oldestOpenConfirmedSignalAgeMs),
+    "latest_signal_at": wire.latestSignalAt === undefined ? null : ((value) => c.integerValue(value))(wire.latestSignalAt),
+    "latest_action_at": wire.latestActionAt === undefined ? null : ((value) => c.integerValue(value))(wire.latestActionAt),
     "current_suggest_input_hash": c.required(wire.currentSuggestInputHash, "current_suggest_input_hash"),
     "sample_signals": wire.sampleSignals.map((value) => decodeDtoTaskOntologySignalSummary(value)),
   })
@@ -5049,8 +5049,8 @@ export function encodeDtoTaskReclaimedPayload(value: unknown): d.DtoTaskReclaime
 }
 export function decodeDtoTaskReclaimedPayload(wire: d.DtoTaskReclaimedPayload): Record<string, unknown> {
   return c.omitUndefined({
-    "retry_count": c.safeNumber(c.required(wire.retryCount, "retry_count")),
-    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.safeNumber(value))(wire.maxRetries),
+    "retry_count": c.integerValue(c.required(wire.retryCount, "retry_count")),
+    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.integerValue(value))(wire.maxRetries),
     "to_status": decodeDtoTaskStatus(c.required(wire.toStatus, "to_status")),
     "reason": c.required(wire.reason, "reason"),
   })
@@ -5070,7 +5070,7 @@ export function decodeDtoTaskReopenedPayload(wire: d.DtoTaskReopenedPayload): Re
     "from": decodeDtoTaskStatus(c.required(wire.from, "from")),
     "to": decodeDtoTaskStatus(c.required(wire.to, "to")),
     "reason": c.required(wire.reason, "reason"),
-    "original_completed_at": wire.originalCompletedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.originalCompletedAt),
+    "original_completed_at": wire.originalCompletedAt === undefined ? null : ((value) => c.integerValue(value))(wire.originalCompletedAt),
   })
 }
 
@@ -5095,8 +5095,8 @@ export function encodeDtoTaskRetryPayload(value: unknown): d.DtoTaskRetryPayload
 }
 export function decodeDtoTaskRetryPayload(wire: d.DtoTaskRetryPayload): Record<string, unknown> {
   return c.omitUndefined({
-    "retry_count": c.safeNumber(c.required(wire.retryCount, "retry_count")),
-    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.safeNumber(value))(wire.maxRetries),
+    "retry_count": c.integerValue(c.required(wire.retryCount, "retry_count")),
+    "max_retries": wire.maxRetries === undefined ? null : ((value) => c.integerValue(value))(wire.maxRetries),
   })
 }
 
@@ -5140,7 +5140,7 @@ export function decodeDtoTaskStepPayload(wire: d.DtoTaskStepPayload): Record<str
   return c.omitUndefined({
     "step_id": c.required(wire.stepId, "step_id"),
     "linked_task_id": wire.linkedTaskId === undefined ? null : ((value) => value)(wire.linkedTaskId),
-    "position": c.safeNumber(c.required(wire.position, "position")),
+    "position": c.integerValue(c.required(wire.position, "position")),
     "required": c.required(wire.required, "required"),
     "status": decodeDtoStepStatus(c.required(wire.status, "status")),
   })
@@ -5168,9 +5168,9 @@ export function encodeDtoTotalPaginationMeta(value: unknown): d.DtoTotalPaginati
 }
 export function decodeDtoTotalPaginationMeta(wire: d.DtoTotalPaginationMeta): Record<string, unknown> {
   return c.omitUndefined({
-    "limit": c.safeNumber(c.required(wire.limit, "limit")),
-    "offset": c.safeNumber(c.required(wire.offset, "offset")),
-    "total": c.safeNumber(c.required(wire.total, "total")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
+    "offset": c.integerValue(c.required(wire.offset, "offset")),
+    "total": c.integerValue(c.required(wire.total, "total")),
   })
 }
 
@@ -5186,8 +5186,8 @@ export function encodeDtoVacuumReport(value: unknown): d.DtoVacuumReport {
 export function decodeDtoVacuumReport(wire: d.DtoVacuumReport): Record<string, unknown> {
   return c.omitUndefined({
     "ok": c.required(wire.ok, "ok"),
-    "before_bytes": c.safeNumber(c.required(wire.beforeBytes, "before_bytes")),
-    "after_bytes": c.safeNumber(c.required(wire.afterBytes, "after_bytes")),
+    "before_bytes": c.integerValue(c.required(wire.beforeBytes, "before_bytes")),
+    "after_bytes": c.integerValue(c.required(wire.afterBytes, "after_bytes")),
     "source_fingerprint": c.required(wire.sourceFingerprint, "source_fingerprint"),
   })
 }
@@ -5232,7 +5232,7 @@ export function decodeDtoVectorConfigureRequest(wire: d.DtoVectorConfigureReques
     "provider": c.required(wire.provider, "provider"),
     "endpoint": c.required(wire.endpoint, "endpoint"),
     "model": c.required(wire.model, "model"),
-    "dimensions": c.safeNumber(c.required(wire.dimensions, "dimensions")),
+    "dimensions": c.integerValue(c.required(wire.dimensions, "dimensions")),
   })
 }
 
@@ -5262,7 +5262,7 @@ export function decodeDtoVectorLabelAtomResult(wire: d.DtoVectorLabelAtomResult)
     "polarity": c.required(wire.polarity, "polarity"),
     "kind": c.required(wire.kind, "kind"),
     "text": c.required(wire.text, "text"),
-    "ordinal": c.safeNumber(c.required(wire.ordinal, "ordinal")),
+    "ordinal": c.integerValue(c.required(wire.ordinal, "ordinal")),
     "content_hash": c.required(wire.contentHash, "content_hash"),
     "embedding_model": c.required(wire.embeddingModel, "embedding_model"),
     "distance": c.float(c.required(wire.distance, "distance")),
@@ -5290,7 +5290,7 @@ export function decodeDtoVectorStatus(wire: d.DtoVectorStatus): Record<string, u
     "diagnostics": wire.diagnostics.map((value) => value),
     "dirty": wire.dirty === undefined ? null : ((value) => value)(wire.dirty),
     "board_dirty": wire.boardDirty === undefined ? null : ((value) => value)(wire.boardDirty),
-    "generation": wire.generation === undefined ? undefined : ((value) => c.safeNumber(value))(wire.generation),
+    "generation": wire.generation === undefined ? undefined : ((value) => c.integerValue(value))(wire.generation),
   })
 }
 
@@ -5314,7 +5314,7 @@ export function decodeDtoVectorStoreStatusWire(wire: d.DtoVectorStoreStatusWire)
     "diagnostics": wire.diagnostics.map((value) => value),
     "dirty": wire.dirty === undefined ? null : ((value) => value)(wire.dirty),
     "board_dirty": wire.boardDirty === undefined ? null : ((value) => value)(wire.boardDirty),
-    "generation": wire.generation === undefined ? null : ((value) => c.safeNumber(value))(wire.generation),
+    "generation": wire.generation === undefined ? null : ((value) => c.integerValue(value))(wire.generation),
   })
 }
 
@@ -6723,17 +6723,17 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "GetBoard": { const wire = fromBinary(s.GetBoardRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
     case "ArchiveBoard": { const wire = fromBinary(s.ArchiveBoardRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
     case "ListBoardColumns": { const wire = fromBinary(s.ListBoardColumnsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
-    case "ListTasks": { const wire = fromBinary(s.ListTasksRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"priority": wire.priority.map((value) => decodeDtoApiTaskPriority(value)),"label": wire.label.map((value) => decodeDtoTaskReadLabel(value)),"plan_filter": wire.planFilter.map((value) => decodeDtoTaskReadPlanFilter(value)),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.safeNumber(c.required(wire.offset, "offset")),"sort": wire.sort === undefined ? undefined : decodeDtoTaskReadSort(c.required(wire.sort, "sort")),}),} }
-    case "ListTasksByStatus": { const wire = fromBinary(s.ListTasksByStatusRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"priority": wire.priority.map((value) => decodeDtoApiTaskPriority(value)),"label": wire.label.map((value) => decodeDtoTaskReadLabel(value)),"plan_filter": wire.planFilter.map((value) => decodeDtoTaskReadPlanFilter(value)),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.safeNumber(c.required(wire.offset, "offset")),"sort": wire.sort === undefined ? undefined : decodeDtoTaskReadSort(c.required(wire.sort, "sort")),}),} }
-    case "CreateTask": { const wire = fromBinary(s.CreateTaskRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"idempotency_key": wire.idempotencyKey === undefined ? null : ((value) => value)(wire.idempotencyKey),"title": c.required(wire.title, "title"),"description": wire.description === undefined ? null : ((value) => value)(wire.description),"status": wire.status === undefined ? null : ((value) => decodeDtoApiCreateTaskStatus(value))(wire.status),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"priority": wire.priority === undefined ? undefined : c.safeNumber(c.required(wire.priority, "priority")),"scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.safeNumber(value))(wire.scheduledAt),"due_at": wire.dueAt === undefined ? null : ((value) => c.safeNumber(value))(wire.dueAt),"max_retries": wire.maxRetries === undefined ? null : ((value) => c.safeNumber(value))(wire.maxRetries),"metadata": wire.metadata === undefined ? null : ((value) => decodeMapOfJsonValue(value))(wire.metadata),"labels": wire.labels.map((value) => value),"depends_on": wire.dependsOn.map((value) => value),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
+    case "ListTasks": { const wire = fromBinary(s.ListTasksRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"priority": wire.priority.map((value) => decodeDtoApiTaskPriority(value)),"label": wire.label.map((value) => decodeDtoTaskReadLabel(value)),"plan_filter": wire.planFilter.map((value) => decodeDtoTaskReadPlanFilter(value)),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"sort": wire.sort === undefined ? undefined : decodeDtoTaskReadSort(c.required(wire.sort, "sort")),}),} }
+    case "ListTasksByStatus": { const wire = fromBinary(s.ListTasksByStatusRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"priority": wire.priority.map((value) => decodeDtoApiTaskPriority(value)),"label": wire.label.map((value) => decodeDtoTaskReadLabel(value)),"plan_filter": wire.planFilter.map((value) => decodeDtoTaskReadPlanFilter(value)),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"sort": wire.sort === undefined ? undefined : decodeDtoTaskReadSort(c.required(wire.sort, "sort")),}),} }
+    case "CreateTask": { const wire = fromBinary(s.CreateTaskRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"idempotency_key": wire.idempotencyKey === undefined ? null : ((value) => value)(wire.idempotencyKey),"title": c.required(wire.title, "title"),"description": wire.description === undefined ? null : ((value) => value)(wire.description),"status": wire.status === undefined ? null : ((value) => decodeDtoApiCreateTaskStatus(value))(wire.status),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"priority": wire.priority === undefined ? undefined : c.integerValue(c.required(wire.priority, "priority")),"scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.integerValue(value))(wire.scheduledAt),"due_at": wire.dueAt === undefined ? null : ((value) => c.integerValue(value))(wire.dueAt),"max_retries": wire.maxRetries === undefined ? null : ((value) => c.integerValue(value))(wire.maxRetries),"metadata": wire.metadata === undefined ? null : ((value) => decodeMapOfJsonValue(value))(wire.metadata),"labels": wire.labels.map((value) => value),"depends_on": wire.dependsOn.map((value) => value),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
     case "GetTask": { const wire = fromBinary(s.GetTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"include": wire.include === undefined ? null : ((value) => value)(wire.include),}),} }
-    case "UpdateTask": { const wire = fromBinary(s.UpdateTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"title": wire.title === undefined ? undefined : ((value) => value)(wire.title),"description": c.decodePatch(wire.description?.change, (change) => change.value),"assignee": c.decodePatch(wire.assignee?.change, (change) => change.value),"priority": wire.priority === undefined ? undefined : ((value) => c.safeNumber(value))(wire.priority),"scheduled_at": c.decodePatch(wire.scheduledAt?.change, (change) => c.safeNumber(change.value)),"due_at": c.decodePatch(wire.dueAt?.change, (change) => c.safeNumber(change.value)),"max_retries": c.decodePatch(wire.maxRetries?.change, (change) => c.safeNumber(change.value)),"metadata": c.decodePatch(wire.metadata?.change, (change) => c.decodeJson(change.value)),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"expected_lock_version": wire.expectedLockVersion === undefined ? undefined : ((value) => c.safeNumber(value))(wire.expectedLockVersion),}),} }
-    case "SpecifyTask": { const wire = fromBinary(s.SpecifyTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"description": wire.description === undefined ? null : ((value) => value)(wire.description),"scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.safeNumber(value))(wire.scheduledAt),}),} }
+    case "UpdateTask": { const wire = fromBinary(s.UpdateTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"title": wire.title === undefined ? undefined : ((value) => value)(wire.title),"description": c.decodePatch(wire.description?.change, (change) => change.value),"assignee": c.decodePatch(wire.assignee?.change, (change) => change.value),"priority": wire.priority === undefined ? undefined : ((value) => c.integerValue(value))(wire.priority),"scheduled_at": c.decodePatch(wire.scheduledAt?.change, (change) => c.integerValue(change.value)),"due_at": c.decodePatch(wire.dueAt?.change, (change) => c.integerValue(change.value)),"max_retries": c.decodePatch(wire.maxRetries?.change, (change) => c.integerValue(change.value)),"metadata": c.decodePatch(wire.metadata?.change, (change) => c.decodeJson(change.value)),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"expected_lock_version": wire.expectedLockVersion === undefined ? undefined : ((value) => c.integerValue(value))(wire.expectedLockVersion),}),} }
+    case "SpecifyTask": { const wire = fromBinary(s.SpecifyTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"description": wire.description === undefined ? null : ((value) => value)(wire.description),"scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.integerValue(value))(wire.scheduledAt),}),} }
     case "PromoteTask": { const wire = fromBinary(s.PromoteTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
-    case "ClaimTask": { const wire = fromBinary(s.ClaimTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"ttl_ms": wire.ttlMs === undefined ? undefined : c.safeNumber(c.required(wire.ttlMs, "ttl_ms")),"worker_profile": wire.workerProfile === undefined ? null : ((value) => value)(wire.workerProfile),"metadata": wire.metadata === undefined ? null : ((value) => c.decodeJson(value))(wire.metadata),}),} }
+    case "ClaimTask": { const wire = fromBinary(s.ClaimTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"ttl_ms": wire.ttlMs === undefined ? undefined : c.integerValue(c.required(wire.ttlMs, "ttl_ms")),"worker_profile": wire.workerProfile === undefined ? null : ((value) => value)(wire.workerProfile),"metadata": wire.metadata === undefined ? null : ((value) => c.decodeJson(value))(wire.metadata),}),} }
     case "ReopenTask": { const wire = fromBinary(s.ReopenTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"reason": c.required(wire.reason, "reason"),}),} }
     case "ReclaimTask": { const wire = fromBinary(s.ReclaimTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"force": wire.force === undefined ? undefined : c.required(wire.force, "force"),"to_status": wire.toStatus === undefined ? null : ((value) => decodeDtoReclaimTargetStatus(value))(wire.toStatus),"reason": wire.reason === undefined ? null : ((value) => value)(wire.reason),}),} }
-    case "HeartbeatTask": { const wire = fromBinary(s.HeartbeatTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"claim_token": c.required(wire.claimToken, "claim_token"),"ttl_ms": wire.ttlMs === undefined ? undefined : c.safeNumber(c.required(wire.ttlMs, "ttl_ms")),"note": wire.note === undefined ? null : ((value) => value)(wire.note),}),} }
+    case "HeartbeatTask": { const wire = fromBinary(s.HeartbeatTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"claim_token": c.required(wire.claimToken, "claim_token"),"ttl_ms": wire.ttlMs === undefined ? undefined : c.integerValue(c.required(wire.ttlMs, "ttl_ms")),"note": wire.note === undefined ? null : ((value) => value)(wire.note),}),} }
     case "ReleaseTask": { const wire = fromBinary(s.ReleaseTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"claim_token": c.required(wire.claimToken, "claim_token"),}),} }
     case "CompleteTask": { const wire = fromBinary(s.CompleteTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"claim_token": wire.claimToken === undefined ? null : ((value) => value)(wire.claimToken),"force": wire.force === undefined ? undefined : c.required(wire.force, "force"),"summary": wire.summary === undefined ? null : ((value) => value)(wire.summary),"result": wire.result === undefined ? null : ((value) => c.decodeJson(value))(wire.result),}),} }
     case "SubmitReviewTask": { const wire = fromBinary(s.SubmitReviewTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"claim_token": wire.claimToken === undefined ? null : ((value) => value)(wire.claimToken),"force": wire.force === undefined ? undefined : c.required(wire.force, "force"),"summary": wire.summary === undefined ? null : ((value) => value)(wire.summary),}),} }
@@ -6741,8 +6741,8 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "UnblockTask": { const wire = fromBinary(s.UnblockTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
     case "ArchiveTask": { const wire = fromBinary(s.ArchiveTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"force": wire.force === undefined ? undefined : c.required(wire.force, "force"),}),} }
     case "ListSteps": { const wire = fromBinary(s.ListStepsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),} }
-    case "CreateStep": { const wire = fromBinary(s.CreateStepRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"idempotency_key": wire.idempotencyKey === undefined ? null : ((value) => value)(wire.idempotencyKey),"title": c.required(wire.title, "title"),"body": wire.body === undefined ? null : ((value) => value)(wire.body),"linked_task_ref": wire.linkedTaskRef === undefined ? null : ((value) => value)(wire.linkedTaskRef),"position": wire.position === undefined ? null : ((value) => c.safeNumber(value))(wire.position),"required": wire.required === undefined ? undefined : c.required(wire.required, "required"),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
-    case "UpdateStep": { const wire = fromBinary(s.UpdateStepRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),"step_id": c.required(wire.stepId, "step_id"),}),input: c.omitUndefined({"title": wire.title === undefined ? null : ((value) => value)(wire.title),"body": wire.body === undefined ? null : ((value) => value)(wire.body),"linked_task_ref": wire.linkedTaskRef === undefined ? null : ((value) => value)(wire.linkedTaskRef),"unlink_task": wire.unlinkTask === undefined ? undefined : c.required(wire.unlinkTask, "unlink_task"),"position": wire.position === undefined ? null : ((value) => c.safeNumber(value))(wire.position),"required": wire.required === undefined ? null : ((value) => value)(wire.required),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
+    case "CreateStep": { const wire = fromBinary(s.CreateStepRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"idempotency_key": wire.idempotencyKey === undefined ? null : ((value) => value)(wire.idempotencyKey),"title": c.required(wire.title, "title"),"body": wire.body === undefined ? null : ((value) => value)(wire.body),"linked_task_ref": wire.linkedTaskRef === undefined ? null : ((value) => value)(wire.linkedTaskRef),"position": wire.position === undefined ? null : ((value) => c.integerValue(value))(wire.position),"required": wire.required === undefined ? undefined : c.required(wire.required, "required"),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
+    case "UpdateStep": { const wire = fromBinary(s.UpdateStepRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),"step_id": c.required(wire.stepId, "step_id"),}),input: c.omitUndefined({"title": wire.title === undefined ? null : ((value) => value)(wire.title),"body": wire.body === undefined ? null : ((value) => value)(wire.body),"linked_task_ref": wire.linkedTaskRef === undefined ? null : ((value) => value)(wire.linkedTaskRef),"unlink_task": wire.unlinkTask === undefined ? undefined : c.required(wire.unlinkTask, "unlink_task"),"position": wire.position === undefined ? null : ((value) => c.integerValue(value))(wire.position),"required": wire.required === undefined ? null : ((value) => value)(wire.required),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
     case "RemoveStep": { const wire = fromBinary(s.RemoveStepRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),"step_id": c.required(wire.stepId, "step_id"),}),} }
     case "CompleteStep": { const wire = fromBinary(s.CompleteStepRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),"step_id": c.required(wire.stepId, "step_id"),}),input: c.omitUndefined({"note": c.required(wire.note, "note"),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
     case "SkipStep": { const wire = fromBinary(s.SkipStepRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),"step_id": c.required(wire.stepId, "step_id"),}),input: c.omitUndefined({"reason": c.required(wire.reason, "reason"),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
@@ -6760,7 +6760,7 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "CreateAttachment": { const wire = fromBinary(s.CreateAttachmentRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"id": wire.id === undefined ? undefined : ((value) => value)(wire.id),"filename": c.required(wire.filename, "filename"),"content": wire.content,"content_type": wire.contentType === undefined ? undefined : ((value) => value)(wire.contentType),"rel_path": wire.relPath === undefined ? undefined : ((value) => value)(wire.relPath),"sha256": wire.sha256 === undefined ? undefined : ((value) => value)(wire.sha256),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),}),} }
     case "DownloadAttachment": { const wire = fromBinary(s.DownloadAttachmentRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),"attachment_id": c.required(wire.attachmentId, "attachment_id"),}),} }
     case "DeleteAttachment": { const wire = fromBinary(s.DeleteAttachmentRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),"attachment_id": c.required(wire.attachmentId, "attachment_id"),}),} }
-    case "ListEvents": { const wire = fromBinary(s.ListEventsRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"after": wire.after === undefined ? undefined : c.safeNumber(c.required(wire.after, "after")),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
+    case "ListEvents": { const wire = fromBinary(s.ListEventsRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"after": wire.after === undefined ? undefined : c.integerValue(c.required(wire.after, "after")),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
     case "ListTaskLabels": { const wire = fromBinary(s.ListTaskLabelsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),} }
     case "AddTaskLabel": { const wire = fromBinary(s.AddTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"name": wire.name === undefined ? undefined : ((value) => value)(wire.name),"names": wire.names === undefined ? undefined : ((value) => decodeListOfString(value))(wire.names),"create_missing": wire.createMissing === undefined ? undefined : c.required(wire.createMissing, "create_missing"),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),}),} }
     case "BootstrapTaskLabel": { const wire = fromBinary(s.BootstrapTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"name": c.required(wire.name, "name"),"description": wire.description === undefined ? undefined : ((value) => value)(wire.description),"applies_when": wire.appliesWhen.map((value) => value),"excludes_when": wire.excludesWhen.map((value) => value),"positive_examples": wire.positiveExamples.map((value) => value),"negative_examples": wire.negativeExamples.map((value) => value),"verify": wire.verify === undefined ? undefined : c.required(wire.verify, "verify"),"min_verify_score": wire.minVerifyScore === undefined ? undefined : c.float(c.required(wire.minVerifyScore, "min_verify_score")),"vector_config": wire.vectorConfig === undefined ? undefined : ((value) => decodeDtoVectorConfigureRequest(value))(wire.vectorConfig),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),}),} }
@@ -6777,21 +6777,21 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "ExplainLabelAtom": { const wire = fromBinary(s.ExplainLabelAtomRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"atom_ref": c.required(wire.atomRef, "atom_ref"),}),} }
     case "LabelAtomIndexStatus": { const wire = fromBinary(s.LabelAtomIndexStatusRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
     case "RebuildLabelAtomIndex": { const wire = fromBinary(s.RebuildLabelAtomIndexRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
-    case "QueryLabelAtomIndex": { const wire = fromBinary(s.QueryLabelAtomIndexRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"q": wire.q === undefined ? undefined : ((value) => value)(wire.q),"vector_json": wire.vectorJson === undefined ? undefined : ((value) => value)(wire.vectorJson),"embedding_model": wire.embeddingModel === undefined ? undefined : ((value) => value)(wire.embeddingModel),"include_vector": wire.includeVector === undefined ? undefined : c.required(wire.includeVector, "include_vector"),"polarity": wire.polarity === undefined ? undefined : ((value) => value)(wire.polarity),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
-    case "ListSignals": { const wire = fromBinary(s.ListSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
-    case "ReviewSignals": { const wire = fromBinary(s.ReviewSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
+    case "QueryLabelAtomIndex": { const wire = fromBinary(s.QueryLabelAtomIndexRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"q": wire.q === undefined ? undefined : ((value) => value)(wire.q),"vector_json": wire.vectorJson === undefined ? undefined : ((value) => value)(wire.vectorJson),"embedding_model": wire.embeddingModel === undefined ? undefined : ((value) => value)(wire.embeddingModel),"include_vector": wire.includeVector === undefined ? undefined : c.required(wire.includeVector, "include_vector"),"polarity": wire.polarity === undefined ? undefined : ((value) => value)(wire.polarity),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
+    case "ListSignals": { const wire = fromBinary(s.ListSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
+    case "ReviewSignals": { const wire = fromBinary(s.ReviewSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
     case "GetSignal": { const wire = fromBinary(s.GetSignalRequestSchema, bytes); return {path: c.omitUndefined({"signal_id": c.required(wire.signalId, "signal_id"),}),} }
     case "RecordSignal": { const wire = fromBinary(s.RecordSignalRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"kind": c.required(wire.kind, "kind"),"title": c.required(wire.title, "title"),"summary": c.required(wire.summary, "summary"),"severity": wire.severity === undefined ? null : ((value) => value)(wire.severity),"task_ref": wire.taskRef === undefined ? null : ((value) => value)(wire.taskRef),"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"run_id": wire.runId === undefined ? null : ((value) => value)(wire.runId),"comment_id": wire.commentId === undefined ? null : ((value) => value)(wire.commentId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"agent_type": wire.agentType === undefined ? null : ((value) => value)(wire.agentType),"dedupe_key": wire.dedupeKey === undefined ? null : ((value) => value)(wire.dedupeKey),"source": wire.source === undefined ? null : ((value) => value)(wire.source),"evidence": wire.evidence === undefined ? null : ((value) => decodeDtoStructuredMetadataJsonObject(value))(wire.evidence),"comment": wire.comment === undefined ? null : ((value) => decodeDtoSignalCommentRequest(value))(wire.comment),}),} }
-    case "ConfirmSignals": { const wire = fromBinary(s.ConfirmSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.expectedUpdatedAt),}),} }
-    case "RejectSignals": { const wire = fromBinary(s.RejectSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.expectedUpdatedAt),}),} }
-    case "ResolveSignals": { const wire = fromBinary(s.ResolveSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.expectedUpdatedAt),}),} }
-    case "SupersedeSignals": { const wire = fromBinary(s.SupersedeSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.expectedUpdatedAt),}),} }
-    case "SuggestTaskLabels": { const wire = fromBinary(s.SuggestTaskLabelsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),"candidate_limit": wire.candidateLimit === undefined ? undefined : c.safeNumber(c.required(wire.candidateLimit, "candidate_limit")),"atom_limit": wire.atomLimit === undefined ? undefined : c.safeNumber(c.required(wire.atomLimit, "atom_limit")),"max_selected_labels": wire.maxSelectedLabels === undefined ? undefined : c.safeNumber(c.required(wire.maxSelectedLabels, "max_selected_labels")),"min_score": wire.minScore === undefined ? undefined : c.float(c.required(wire.minScore, "min_score")),}),} }
+    case "ConfirmSignals": { const wire = fromBinary(s.ConfirmSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.integerValue(value))(wire.expectedUpdatedAt),}),} }
+    case "RejectSignals": { const wire = fromBinary(s.RejectSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.integerValue(value))(wire.expectedUpdatedAt),}),} }
+    case "ResolveSignals": { const wire = fromBinary(s.ResolveSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.integerValue(value))(wire.expectedUpdatedAt),}),} }
+    case "SupersedeSignals": { const wire = fromBinary(s.SupersedeSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.integerValue(value))(wire.expectedUpdatedAt),}),} }
+    case "SuggestTaskLabels": { const wire = fromBinary(s.SuggestTaskLabelsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"candidate_limit": wire.candidateLimit === undefined ? undefined : c.integerValue(c.required(wire.candidateLimit, "candidate_limit")),"atom_limit": wire.atomLimit === undefined ? undefined : c.integerValue(c.required(wire.atomLimit, "atom_limit")),"max_selected_labels": wire.maxSelectedLabels === undefined ? undefined : c.integerValue(c.required(wire.maxSelectedLabels, "max_selected_labels")),"min_score": wire.minScore === undefined ? undefined : c.float(c.required(wire.minScore, "min_score")),}),} }
     case "ListTaskLabelProposals": { const wire = fromBinary(s.ListTaskLabelProposalsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"status": wire.status === undefined ? null : ((value) => value)(wire.status),}),} }
-    case "ProposeTaskLabel": { const wire = fromBinary(s.ProposeTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),"candidate_limit": wire.candidateLimit === undefined ? undefined : c.safeNumber(c.required(wire.candidateLimit, "candidate_limit")),"atom_limit": wire.atomLimit === undefined ? undefined : c.safeNumber(c.required(wire.atomLimit, "atom_limit")),"max_selected_labels": wire.maxSelectedLabels === undefined ? undefined : c.safeNumber(c.required(wire.maxSelectedLabels, "max_selected_labels")),"min_score": wire.minScore === undefined ? undefined : c.float(c.required(wire.minScore, "min_score")),}),input: c.omitUndefined({"proposal": wire.proposal === undefined ? undefined : ((value) => decodeDtoLabelProposalCandidateWire(value))(wire.proposal),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
+    case "ProposeTaskLabel": { const wire = fromBinary(s.ProposeTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"candidate_limit": wire.candidateLimit === undefined ? undefined : c.integerValue(c.required(wire.candidateLimit, "candidate_limit")),"atom_limit": wire.atomLimit === undefined ? undefined : c.integerValue(c.required(wire.atomLimit, "atom_limit")),"max_selected_labels": wire.maxSelectedLabels === undefined ? undefined : c.integerValue(c.required(wire.maxSelectedLabels, "max_selected_labels")),"min_score": wire.minScore === undefined ? undefined : c.float(c.required(wire.minScore, "min_score")),}),input: c.omitUndefined({"proposal": wire.proposal === undefined ? undefined : ((value) => decodeDtoLabelProposalCandidateWire(value))(wire.proposal),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
     case "RecordLabelOntologyObservation": { const wire = fromBinary(s.RecordLabelOntologyObservationRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"agent_candidates": wire.agentCandidates === undefined ? undefined : c.decodeJson(wire.agentCandidates),"suggestion_snapshot": wire.suggestionSnapshot === undefined ? undefined : c.decodeJson(wire.suggestionSnapshot),"final_decision": wire.finalDecision === undefined ? undefined : c.decodeJson(wire.finalDecision),"suggest_coverage": wire.suggestCoverage === undefined ? undefined : ((value) => c.float(value))(wire.suggestCoverage),"suggest_coverage_cosine": wire.suggestCoverageCosine === undefined ? undefined : ((value) => c.float(value))(wire.suggestCoverageCosine),"suggest_residual_norm": wire.suggestResidualNorm === undefined ? undefined : ((value) => c.float(value))(wire.suggestResidualNorm),"suggest_needs_new_label": wire.suggestNeedsNewLabel === undefined ? undefined : ((value) => value)(wire.suggestNeedsNewLabel),"suggest_degraded": wire.suggestDegraded === undefined ? undefined : ((value) => value)(wire.suggestDegraded),"diagnostics": wire.diagnostics === undefined ? undefined : c.decodeJson(wire.diagnostics),"capture_fingerprint": wire.captureFingerprint === undefined ? undefined : ((value) => value)(wire.captureFingerprint),"signals": wire.signals.map((value) => decodeDtoLabelOntologySignalRequest(value)),}),} }
-    case "ListLabelOntologySignals": { const wire = fromBinary(s.ListLabelOntologySignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"target_label_ref": wire.targetLabelRef === undefined ? undefined : ((value) => value)(wire.targetLabelRef),"proposed_label_name": wire.proposedLabelName === undefined ? undefined : ((value) => value)(wire.proposedLabelName),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
-    case "ReviewLabelOntology": { const wire = fromBinary(s.ReviewLabelOntologyRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"group_by": wire.groupBy === undefined ? undefined : decodeDtoLabelOntologyReviewGroupByWire(c.required(wire.groupBy, "group_by")),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
+    case "ListLabelOntologySignals": { const wire = fromBinary(s.ListLabelOntologySignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"target_label_ref": wire.targetLabelRef === undefined ? undefined : ((value) => value)(wire.targetLabelRef),"proposed_label_name": wire.proposedLabelName === undefined ? undefined : ((value) => value)(wire.proposedLabelName),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
+    case "ReviewLabelOntology": { const wire = fromBinary(s.ReviewLabelOntologyRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"group_by": wire.groupBy === undefined ? undefined : decodeDtoLabelOntologyReviewGroupByWire(c.required(wire.groupBy, "group_by")),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
     case "CreateLabelOntologyAction": { const wire = fromBinary(s.CreateLabelOntologyActionRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"idempotency_key": wire.idempotencyKey === undefined ? undefined : ((value) => value)(wire.idempotencyKey),"action_type": decodeDtoLabelOntologyActionTypeWire(c.required(wire.actionType, "action_type")),"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"superseded_by_signal_id": wire.supersededBySignalId === undefined ? undefined : ((value) => value)(wire.supersededBySignalId),"parent_action_id": wire.parentActionId === undefined ? undefined : ((value) => value)(wire.parentActionId),"target_label_ref": wire.targetLabelRef === undefined ? undefined : ((value) => value)(wire.targetLabelRef),"result_label_ref": wire.resultLabelRef === undefined ? undefined : ((value) => value)(wire.resultLabelRef),"result_atom_id": wire.resultAtomId === undefined ? undefined : ((value) => value)(wire.resultAtomId),"result_atom_content_hash": wire.resultAtomContentHash === undefined ? undefined : ((value) => value)(wire.resultAtomContentHash),"result_proposal_id": wire.resultProposalId === undefined ? undefined : ((value) => value)(wire.resultProposalId),"canonical_before_hash": wire.canonicalBeforeHash === undefined ? undefined : ((value) => value)(wire.canonicalBeforeHash),"canonical_after_hash": wire.canonicalAfterHash === undefined ? undefined : ((value) => value)(wire.canonicalAfterHash),"change": wire.change === undefined ? undefined : c.decodeJson(wire.change),"validation_status": wire.validationStatus === undefined ? undefined : ((value) => decodeDtoLabelOntologyValidationStatusWire(value))(wire.validationStatus),"validation": wire.validation === undefined ? undefined : c.decodeJson(wire.validation),}),} }
     case "ApplyLabelOntologyAtom": { const wire = fromBinary(s.ApplyLabelOntologyAtomRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"signal_ids": wire.signalIds.map((value) => value),"label_ref": c.required(wire.labelRef, "label_ref"),"kind": c.required(wire.kind, "kind"),"text": c.required(wire.text, "text"),"reason": c.required(wire.reason, "reason"),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
     case "RevertLabelOntologyMutation": { const wire = fromBinary(s.RevertLabelOntologyMutationRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"target_action_id": c.required(wire.targetActionId, "target_action_id"),"expected_current_hash": wire.expectedCurrentHash === undefined ? undefined : ((value) => value)(wire.expectedCurrentHash),"reason": c.required(wire.reason, "reason"),}),} }
@@ -6800,28 +6800,28 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "GetLabelProposal": { const wire = fromBinary(s.GetLabelProposalRequestSchema, bytes); return {path: c.omitUndefined({"proposal_id": c.required(wire.proposalId, "proposal_id"),}),} }
     case "AcceptLabelProposal": { const wire = fromBinary(s.AcceptLabelProposalRequestSchema, bytes); return {path: c.omitUndefined({"proposal_id": c.required(wire.proposalId, "proposal_id"),}),input: c.omitUndefined({"reason": wire.reason === undefined ? undefined : ((value) => value)(wire.reason),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
     case "RejectLabelProposal": { const wire = fromBinary(s.RejectLabelProposalRequestSchema, bytes); return {path: c.omitUndefined({"proposal_id": c.required(wire.proposalId, "proposal_id"),}),input: c.omitUndefined({"reason": wire.reason === undefined ? undefined : ((value) => value)(wire.reason),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
-    case "BoardTaskMap": { const wire = fromBinary(s.BoardTaskMapRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"active_only": wire.activeOnly === undefined ? undefined : c.required(wire.activeOnly, "active_only"),"context_depth": wire.contextDepth === undefined ? undefined : c.safeNumber(c.required(wire.contextDepth, "context_depth")),"limit_nodes": wire.limitNodes === undefined ? undefined : c.safeNumber(c.required(wire.limitNodes, "limit_nodes")),"include_done_context": wire.includeDoneContext === undefined ? undefined : c.required(wire.includeDoneContext, "include_done_context"),"include_archived_context": wire.includeArchivedContext === undefined ? undefined : c.required(wire.includeArchivedContext, "include_archived_context"),"hide_isolated": wire.hideIsolated === undefined ? undefined : c.required(wire.hideIsolated, "hide_isolated"),}),} }
-    case "TaskNeighborhood": { const wire = fromBinary(s.TaskNeighborhoodRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"depth": wire.depth === undefined ? undefined : c.safeNumber(c.required(wire.depth, "depth")),"limit_nodes": wire.limitNodes === undefined ? undefined : c.safeNumber(c.required(wire.limitNodes, "limit_nodes")),"include_archived_context": wire.includeArchivedContext === undefined ? undefined : c.required(wire.includeArchivedContext, "include_archived_context"),}),} }
-    case "SearchTasks": { const wire = fromBinary(s.SearchTasksRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"label": wire.label.map((value) => value),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.safeNumber(c.required(wire.offset, "offset")),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),}),} }
-    case "SearchTasksByStatus": { const wire = fromBinary(s.SearchTasksByStatusRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"label": wire.label.map((value) => value),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.safeNumber(c.required(wire.offset, "offset")),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),}),} }
+    case "BoardTaskMap": { const wire = fromBinary(s.BoardTaskMapRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"active_only": wire.activeOnly === undefined ? undefined : c.required(wire.activeOnly, "active_only"),"context_depth": wire.contextDepth === undefined ? undefined : c.integerValue(c.required(wire.contextDepth, "context_depth")),"limit_nodes": wire.limitNodes === undefined ? undefined : c.integerValue(c.required(wire.limitNodes, "limit_nodes")),"include_done_context": wire.includeDoneContext === undefined ? undefined : c.required(wire.includeDoneContext, "include_done_context"),"include_archived_context": wire.includeArchivedContext === undefined ? undefined : c.required(wire.includeArchivedContext, "include_archived_context"),"hide_isolated": wire.hideIsolated === undefined ? undefined : c.required(wire.hideIsolated, "hide_isolated"),}),} }
+    case "TaskNeighborhood": { const wire = fromBinary(s.TaskNeighborhoodRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"depth": wire.depth === undefined ? undefined : c.integerValue(c.required(wire.depth, "depth")),"limit_nodes": wire.limitNodes === undefined ? undefined : c.integerValue(c.required(wire.limitNodes, "limit_nodes")),"include_archived_context": wire.includeArchivedContext === undefined ? undefined : c.required(wire.includeArchivedContext, "include_archived_context"),}),} }
+    case "SearchTasks": { const wire = fromBinary(s.SearchTasksRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"label": wire.label.map((value) => value),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),}),} }
+    case "SearchTasksByStatus": { const wire = fromBinary(s.SearchTasksByStatusRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"label": wire.label.map((value) => value),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),}),} }
     case "SearchStatus": { const wire = fromBinary(s.SearchStatusRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
     case "RebuildSearchIndex": { const wire = fromBinary(s.RebuildSearchIndexRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
     case "SyncSearchIndex": { const wire = fromBinary(s.SyncSearchIndexRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
-    case "BuildContext": { const wire = fromBinary(s.BuildContextRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"lexical_limit": wire.lexicalLimit === undefined ? undefined : c.safeNumber(c.required(wire.lexicalLimit, "lexical_limit")),"graph_limit": wire.graphLimit === undefined ? undefined : c.safeNumber(c.required(wire.graphLimit, "graph_limit")),"vector_limit": wire.vectorLimit === undefined ? undefined : c.safeNumber(c.required(wire.vectorLimit, "vector_limit")),"max_items": wire.maxItems === undefined ? undefined : c.safeNumber(c.required(wire.maxItems, "max_items")),"task": wire.task === undefined ? undefined : ((value) => value)(wire.task),"reference": wire.reference === undefined ? undefined : ((value) => value)(wire.reference),"query": wire.query === undefined ? undefined : ((value) => value)(wire.query),"depth": wire.depth === undefined ? undefined : c.safeNumber(c.required(wire.depth, "depth")),"budget": wire.budget === undefined ? undefined : ((value) => c.safeNumber(value))(wire.budget),}),} }
+    case "BuildContext": { const wire = fromBinary(s.BuildContextRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"lexical_limit": wire.lexicalLimit === undefined ? undefined : c.integerValue(c.required(wire.lexicalLimit, "lexical_limit")),"graph_limit": wire.graphLimit === undefined ? undefined : c.integerValue(c.required(wire.graphLimit, "graph_limit")),"vector_limit": wire.vectorLimit === undefined ? undefined : c.integerValue(c.required(wire.vectorLimit, "vector_limit")),"max_items": wire.maxItems === undefined ? undefined : c.integerValue(c.required(wire.maxItems, "max_items")),"task": wire.task === undefined ? undefined : ((value) => value)(wire.task),"reference": wire.reference === undefined ? undefined : ((value) => value)(wire.reference),"query": wire.query === undefined ? undefined : ((value) => value)(wire.query),"depth": wire.depth === undefined ? undefined : c.integerValue(c.required(wire.depth, "depth")),"budget": wire.budget === undefined ? undefined : ((value) => c.integerValue(value))(wire.budget),}),} }
     case "GraphStatus": { const wire = fromBinary(s.GraphStatusRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
-    case "GraphNeighbors": { const wire = fromBinary(s.GraphNeighborsRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"entity_uri": c.required(wire.entityUri, "entity_uri"),"predicate": wire.predicate === undefined ? null : ((value) => value)(wire.predicate),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
-    case "GraphQuery": { const wire = fromBinary(s.GraphQueryRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"query": wire.query === undefined ? undefined : c.required(wire.query, "query"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
+    case "GraphNeighbors": { const wire = fromBinary(s.GraphNeighborsRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"entity_uri": c.required(wire.entityUri, "entity_uri"),"predicate": wire.predicate === undefined ? null : ((value) => value)(wire.predicate),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
+    case "GraphQuery": { const wire = fromBinary(s.GraphQueryRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"query": wire.query === undefined ? undefined : c.required(wire.query, "query"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
     case "GraphRebuild": { const wire = fromBinary(s.GraphRebuildRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
     case "GraphSync": { const wire = fromBinary(s.GraphSyncRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
-    case "ListEntities": { const wire = fromBinary(s.ListEntitiesRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"kind": wire.kind === undefined ? null : ((value) => value)(wire.kind),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),}),} }
-    case "UpsertEntity": { const wire = fromBinary(s.UpsertEntityRequestSchema, bytes); return {input: c.omitUndefined({"uri": c.required(wire.uri, "uri"),"kind": c.required(wire.kind, "kind"),"source_table": c.required(wire.sourceTable, "source_table"),"source_id": c.required(wire.sourceId, "source_id"),"board": wire.board === undefined ? null : ((value) => value)(wire.board),"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"title": wire.title === undefined ? null : ((value) => value)(wire.title),"summary": wire.summary === undefined ? null : ((value) => value)(wire.summary),"content_hash": wire.contentHash === undefined ? null : ((value) => value)(wire.contentHash),"archived_at": wire.archivedAt === undefined ? null : ((value) => c.safeNumber(value))(wire.archivedAt),}),} }
+    case "ListEntities": { const wire = fromBinary(s.ListEntitiesRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"kind": wire.kind === undefined ? null : ((value) => value)(wire.kind),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
+    case "UpsertEntity": { const wire = fromBinary(s.UpsertEntityRequestSchema, bytes); return {input: c.omitUndefined({"uri": c.required(wire.uri, "uri"),"kind": c.required(wire.kind, "kind"),"source_table": c.required(wire.sourceTable, "source_table"),"source_id": c.required(wire.sourceId, "source_id"),"board": wire.board === undefined ? null : ((value) => value)(wire.board),"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"title": wire.title === undefined ? null : ((value) => value)(wire.title),"summary": wire.summary === undefined ? null : ((value) => value)(wire.summary),"content_hash": wire.contentHash === undefined ? null : ((value) => value)(wire.contentHash),"archived_at": wire.archivedAt === undefined ? null : ((value) => c.integerValue(value))(wire.archivedAt),}),} }
     case "GetEntity": { const wire = fromBinary(s.GetEntityRequestSchema, bytes); return {path: c.omitUndefined({"uri": c.required(wire.uri, "uri"),}),} }
     case "VectorStatus": { const wire = fromBinary(s.VectorStatusRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
-    case "VectorConfigure": { const wire = fromBinary(s.VectorConfigureRequestSchema, bytes); return {input: c.omitUndefined({"provider": c.required(wire.provider, "provider"),"endpoint": c.required(wire.endpoint, "endpoint"),"model": c.required(wire.model, "model"),"dimensions": c.safeNumber(c.required(wire.dimensions, "dimensions")),}),} }
+    case "VectorConfigure": { const wire = fromBinary(s.VectorConfigureRequestSchema, bytes); return {input: c.omitUndefined({"provider": c.required(wire.provider, "provider"),"endpoint": c.required(wire.endpoint, "endpoint"),"model": c.required(wire.model, "model"),"dimensions": c.integerValue(c.required(wire.dimensions, "dimensions")),}),} }
     case "VectorRebuild": { const wire = fromBinary(s.VectorRebuildRequestSchema, bytes); return {input: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
     case "VectorSync": { const wire = fromBinary(s.VectorSyncRequestSchema, bytes); return {input: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
-    case "VectorQueryChunks": { const wire = fromBinary(s.VectorQueryChunksRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": c.required(wire.q, "q"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),"embedding_model": wire.embeddingModel === undefined ? undefined : ((value) => value)(wire.embeddingModel),"polarity": wire.polarity === undefined ? undefined : ((value) => value)(wire.polarity),"include_vector": wire.includeVector === undefined ? undefined : c.required(wire.includeVector, "include_vector"),}),} }
-    case "VectorQueryLabelAtoms": { const wire = fromBinary(s.VectorQueryLabelAtomsRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": c.required(wire.q, "q"),"limit": wire.limit === undefined ? undefined : c.safeNumber(c.required(wire.limit, "limit")),"embedding_model": wire.embeddingModel === undefined ? undefined : ((value) => value)(wire.embeddingModel),"polarity": wire.polarity === undefined ? undefined : ((value) => value)(wire.polarity),"include_vector": wire.includeVector === undefined ? undefined : c.required(wire.includeVector, "include_vector"),}),} }
+    case "VectorQueryChunks": { const wire = fromBinary(s.VectorQueryChunksRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": c.required(wire.q, "q"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"embedding_model": wire.embeddingModel === undefined ? undefined : ((value) => value)(wire.embeddingModel),"polarity": wire.polarity === undefined ? undefined : ((value) => value)(wire.polarity),"include_vector": wire.includeVector === undefined ? undefined : c.required(wire.includeVector, "include_vector"),}),} }
+    case "VectorQueryLabelAtoms": { const wire = fromBinary(s.VectorQueryLabelAtomsRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": c.required(wire.q, "q"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"embedding_model": wire.embeddingModel === undefined ? undefined : ((value) => value)(wire.embeddingModel),"polarity": wire.polarity === undefined ? undefined : ((value) => value)(wire.polarity),"include_vector": wire.includeVector === undefined ? undefined : c.required(wire.includeVector, "include_vector"),}),} }
     case "GetStats": { const wire = fromBinary(s.GetStatsRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),}),} }
     case "Doctor": { const wire = fromBinary(s.DoctorRequestSchema, bytes); void wire; return {} }
     case "Checkpoint": { const wire = fromBinary(s.CheckpointRequestSchema, bytes); void wire; return {} }
@@ -6835,6 +6835,6 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "MaintenanceCleanup": { const wire = fromBinary(s.MaintenanceCleanupRequestSchema, bytes); return {input: c.omitUndefined({"owner": wire.owner === undefined ? null : ((value) => value)(wire.owner),"action": wire.action === undefined ? null : ((value) => value)(wire.action),}),} }
     case "MaintenanceImportV30": { const wire = fromBinary(s.MaintenanceImportV30RequestSchema, bytes); return {input: c.omitUndefined({"path": c.required(wire.path, "path"),"canonical_attachment_root": wire.canonicalAttachmentRoot === undefined ? null : ((value) => value)(wire.canonicalAttachmentRoot),}),} }
     case "GetTaskDetails": { const wire = fromBinary(s.GetTaskDetailsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),} }
-    case "GetLabelOntologyQuality": { const wire = fromBinary(s.GetLabelOntologyQualityRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"sample_limit": wire.sampleLimit === undefined ? undefined : c.safeNumber(c.required(wire.sampleLimit, "sample_limit")),}),} }
+    case "GetLabelOntologyQuality": { const wire = fromBinary(s.GetLabelOntologyQualityRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"sample_limit": wire.sampleLimit === undefined ? undefined : c.integerValue(c.required(wire.sampleLimit, "sample_limit")),}),} }
   }
 }

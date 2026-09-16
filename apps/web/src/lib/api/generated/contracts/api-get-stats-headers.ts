@@ -1,10 +1,9 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import type { FromSchema } from "json-schema-to-ts";
-import { ContractValidationError, createContractValidator } from "../runtime";
+import { ContractValidationError, createContractValidator, type ContractValue } from "../runtime";
 import staticValidator from "virtual:kanban-contract-validator/api-get-stats-headers";
 
 export const ApiGetStatsHeadersSchema = {"$id":"urn:kanban-tool:schema:api:get-stats-headers:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"Accept-Language":{"type":["string","null"]}},"title":"Kanban api.get-stats request headers v1","type":"object"} as const;
-export type ApiGetStatsHeadersContract = FromSchema<typeof ApiGetStatsHeadersSchema>;
+export type ApiGetStatsHeadersContract = ContractValue<typeof ApiGetStatsHeadersSchema>;
 
 export const apiGetStatsHeadersValidator: ReturnType<typeof createContractValidator<ApiGetStatsHeadersContract>> = createContractValidator<ApiGetStatsHeadersContract>(
   "api.get-stats.headers",

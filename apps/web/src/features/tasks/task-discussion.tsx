@@ -1,3 +1,4 @@
+import { stringifyJson } from '../../lib/lossless-json'
 import { useRef, useState, type FormEvent } from 'react';
 import type { TaskWorkspaceState } from './use-task-workspace';
 import { Button } from '../../components/ui/button';
@@ -11,7 +12,7 @@ function Comment({ comment }: { comment: TaskInspectorViewModel['comments'][numb
   return <article className="comment">
     <div className="comment-meta"><span className="avatar tiny">{comment.author.slice(0, 1)}</span><strong>{comment.author}</strong><time dateTime={date.iso}>{date.label}</time></div>
     <p>{comment.body}</p>
-    {comment.metadata && <details><summary>附加信息</summary><pre>{JSON.stringify(comment.metadata, null, 2)}</pre></details>}
+    {comment.metadata && <details><summary>附加信息</summary><pre>{stringifyJson(comment.metadata, 2)}</pre></details>}
   </article>;
 }
 

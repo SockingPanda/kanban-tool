@@ -3064,7 +3064,7 @@
     "test-only.ts"
   ],
   "generatorVersion": 1,
-  "numericPolicy": "reject_unsafe_json_numbers",
+  "numericPolicy": "lossless_64_bit_integers",
   "operations": [
     {
       "id": "api.health",

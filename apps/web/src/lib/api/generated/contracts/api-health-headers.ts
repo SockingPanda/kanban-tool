@@ -1,10 +1,9 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import type { FromSchema } from "json-schema-to-ts";
-import { ContractValidationError, createContractValidator } from "../runtime";
+import { ContractValidationError, createContractValidator, type ContractValue } from "../runtime";
 import staticValidator from "virtual:kanban-contract-validator/api-health-headers";
 
 export const ApiHealthHeadersSchema = {"$id":"urn:kanban-tool:schema:api:health-headers:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"Accept-Language":{"type":["string","null"]}},"title":"Kanban api.health request headers v1","type":"object"} as const;
-export type ApiHealthHeadersContract = FromSchema<typeof ApiHealthHeadersSchema>;
+export type ApiHealthHeadersContract = ContractValue<typeof ApiHealthHeadersSchema>;
 
 export const apiHealthHeadersValidator: ReturnType<typeof createContractValidator<ApiHealthHeadersContract>> = createContractValidator<ApiHealthHeadersContract>(
   "api.health.headers",

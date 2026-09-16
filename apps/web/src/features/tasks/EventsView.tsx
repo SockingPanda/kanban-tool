@@ -1,3 +1,4 @@
+import { integerDate, type Integer } from '../../domain/integer'
 import { useAsyncRead } from '../../application/query/use-async-read';
 import './activity.css';
 import { PageHeader } from '../../components/layout/page-header';
@@ -136,10 +137,10 @@ function errorKind(error: Error | null): string | null {
 
 const eventTimeFormatters = { "zh-CN": new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }), "en-US": new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }) };
 
-function eventTimestamp(value: number, locale: Locale): { readonly display: string; readonly iso: string } {
-  const milliseconds = Math.abs(value) < 1_000_000_000_000 ? value * 1_000 : value
-  const date = new Date(milliseconds)
-  if (Number.isNaN(date.getTime())) return { display: String(value), iso: String(value) }
+function eventTimestamp(value: Integer, locale: Locale): { readonly display: string; readonly iso: string } {
+  const milliseconds = value > -1_000_000_000_000n && value < 1_000_000_000_000n ? Number(value) * 1_000 : value
+  const date = integerDate(milliseconds)
+  if (date === null) return { display: String(value), iso: String(value) }
   const language = locale === "en" ? "en-US" : "zh-CN"
   let display: string
   try {

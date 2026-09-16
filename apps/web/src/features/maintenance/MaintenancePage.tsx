@@ -1,3 +1,4 @@
+import { integerDate, type Integer } from '../../domain/integer'
 import { observeRead } from '../../application/query/observe-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 import { AlertDialog } from "../../components/ui/alert-dialog"
@@ -95,7 +96,7 @@ function safeErrorText(error: unknown, t: ReturnType<typeof createTranslator>): 
   return messages[errorCode(error)] ?? t("maintenanceErrorUnknown")
 }
 
-function reported(value: string | number | boolean | null | undefined): string {
+function reported(value: string | Integer | boolean | null | undefined): string {
   if (value === null || value === undefined) return "—"
   if (typeof value === "string") return value.trim() || "—"
   return String(value)
@@ -109,14 +110,14 @@ function diagnosticSummary(value: string | null | undefined, t: ReturnType<typeo
   return value?.trim() ? t("serverMessagePresent") : t("none")
 }
 
-function formatTimestamp(value: number | null | undefined, locale: Locale): string {
+function formatTimestamp(value: Integer | null | undefined, locale: Locale): string {
   if (value === null || value === undefined) return "—"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "—"
+  const date = integerDate(value)
+  if (date === null) return String(value)
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date)
 }
 
-function statusTone(status: { dirty: boolean; degraded: boolean; failed: number; last_error: string | null; lifecycle_status: string }): string {
+function statusTone(status: { dirty: boolean; degraded: boolean; failed: Integer; last_error: string | null; lifecycle_status: string }): string {
   return status.degraded || status.dirty || status.failed > 0 || Boolean(status.last_error) || /degraded|error|failed/i.test(status.lifecycle_status)
     ? styles.degraded
     : styles.ready
@@ -553,7 +554,7 @@ function DoctorContent({ report, t }: { report: DoctorReport; t: ReturnType<type
 }
 
 function Metric({ label, value, tone, labelTranslateNo = false }: { label: string; value: unknown; tone?: string; labelTranslateNo?: boolean }) {
-  return <div className={styles.metric}><dt translate={labelTranslateNo ? "no" : undefined}>{label}</dt><dd className={tone ?? styles.value} translate="no">{reported(value as string | number | boolean | null | undefined)}</dd></div>
+  return <div className={styles.metric}><dt translate={labelTranslateNo ? "no" : undefined}>{label}</dt><dd className={tone ?? styles.value} translate="no">{reported(value as string | Integer | boolean | null | undefined)}</dd></div>
 }
 
 function Boundary({ text }: { text: string }) { return <div className={styles.boundary} role="status" aria-live="polite">{text}</div> }

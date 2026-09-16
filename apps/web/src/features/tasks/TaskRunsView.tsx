@@ -1,3 +1,4 @@
+import { integerDate, type Integer } from '../../domain/integer'
 import { useAsyncRead } from '../../application/query/use-async-read';
 import { useWorkspaceOperations } from "../../application/workspace/use-workspace-operations";
 
@@ -99,10 +100,12 @@ function errorKind(error: Error | null): string | null {
   return typeof kind === "string" ? kind : null
 }
 
-function timestamp(value: number | null, locale: Locale): string {
+function timestamp(value: Integer | null, locale: Locale): string {
   if (value === null) return "—"
+  const date = integerDate(value)
+  if (date === null) return String(value)
   try {
-    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
+    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", { dateStyle: "short", timeStyle: "short" }).format(date)
   } catch {
     return String(value)
   }

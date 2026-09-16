@@ -1,3 +1,4 @@
+import { type Integer } from '../../domain/integer'
 export type InspectorTaskStatus = "triage" | "todo" | "scheduled" | "ready" | "running" | "blocked" | "review" | "done" | "archived"
 
 export type InspectorPlanState = "unplanned" | "planned" | "not_required"
@@ -9,28 +10,28 @@ export interface TaskInspectorViewModel {
     readonly title: string
     readonly status: InspectorTaskStatus
     /** UI-only optimistic concurrency inputs; canonical values come from the read mapper. */
-    readonly lockVersion?: number
-    readonly scheduledAt?: number | null
-    readonly dueAt?: number | null
+    readonly lockVersion?: Integer
+    readonly scheduledAt?: Integer | null
+    readonly dueAt?: Integer | null
     readonly priority: number
     readonly description: string | null
     readonly statusReason: string | null
     readonly assignee: string | null
     readonly executionPlanState: InspectorPlanState
     readonly dependencyBlocked: boolean
-    readonly unfinishedParentCount: number
-    readonly requiredStepCount: number
-    readonly completedRequiredStepCount: number
-    readonly optionalStepCount: number
+    readonly unfinishedParentCount: Integer
+    readonly requiredStepCount: Integer
+    readonly completedRequiredStepCount: Integer
+    readonly optionalStepCount: Integer
     readonly metadata: unknown
     readonly claimOwner: string | null
-    readonly claimExpiresAt: number | null
-    readonly lastHeartbeatAt: number | null
+    readonly claimExpiresAt: Integer | null
+    readonly lastHeartbeatAt: Integer | null
     readonly currentRunId: string | null
-    readonly retryCount: number
-    readonly maxRetries: number | null
-    readonly createdAt: number
-    readonly updatedAt: number
+    readonly retryCount: Integer
+    readonly maxRetries: Integer | null
+    readonly createdAt: Integer
+    readonly updatedAt: Integer
   }
   readonly steps: readonly {
     readonly id: string
@@ -46,7 +47,7 @@ export interface TaskInspectorViewModel {
     readonly author: string
     readonly kind: "note" | "decision" | "signal"
     readonly body: string
-    readonly createdAt: number
+    readonly createdAt: Integer
     readonly metadata?: Readonly<Record<string, unknown>>
   }[]
   readonly runs: readonly {
@@ -54,17 +55,17 @@ export interface TaskInspectorViewModel {
     readonly status: "running" | "succeeded" | "failed" | "canceled" | "expired"
     readonly workerProfile: string | null
     readonly claimOwner: string
-    readonly startedAt: number
-    readonly finishedAt: number | null
-    readonly exitCode: number | null
+    readonly startedAt: Integer
+    readonly finishedAt: Integer | null
+    readonly exitCode: Integer | null
     readonly error: string | null
     readonly hasLog: boolean
   }[]
   readonly events: readonly {
-    readonly id: number
+    readonly id: Integer
     readonly kind: string
     readonly actor: string | null
-    readonly createdAt: number
+    readonly createdAt: Integer
   }[]
   readonly neighborhood?: {
     readonly centerTaskId: string

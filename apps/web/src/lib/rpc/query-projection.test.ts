@@ -13,6 +13,21 @@ const acceptAll = async (projection: QueryProjection, frames: Awaited<ReturnType
 }
 
 describe('完整 QueryResult 原子提交', () => {
+  test('64 位业务值通过 snapshot、delta 完整提交并保留相邻整数', async () => {
+    const projection = new QueryProjection(definition)
+    const firstValue = { data: [{ ...board, created_at: -9223372036854775808n, updated_at: 9007199254740992n }] }
+    const secondValue = { data: [{ ...firstValue.data[0], updated_at: 9007199254740993n }] }
+    await acceptAll(projection, await resultFrames('q1', queryResultBytes(definition, firstValue)))
+    expect(projection.committed?.response.payload).toEqual(firstValue)
+    const previous = projection.committed!
+    const delta = await resultFrames('q1', queryResultBytes(definition, secondValue), cursor(18446744073709551615n), previous)
+    await acceptAll(projection, delta.slice(0, -1))
+    expect(projection.committed).toBe(previous)
+    await projection.accept(delta.at(-1)!)
+    expect(projection.committed?.response.payload).toEqual(secondValue)
+    expect(projection.committed?.cursor.revision).toBe(18446744073709551615n)
+  })
+
   test('snapshot 与深层 Unicode delta 在 end 前保持旧 data 和 cursor，完整重建与具名 DTO 相同', async () => {
     const projection = new QueryProjection(definition)
     const first = await resultFrames('q1', bytes('甲'))

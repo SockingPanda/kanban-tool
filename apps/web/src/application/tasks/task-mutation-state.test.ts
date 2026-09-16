@@ -52,6 +52,19 @@ const model: BoardViewModel = {
 }
 
 describe("board task mutation state", () => {
+  test('键盘列顺序和乐观尾部位置保留相邻大整数，最大位置等待 canonical 返回', () => {
+    expect(keyboardTransitionForDirection([
+      { id: 'b', status: 'ready', title: 'Ready', position: 9007199254740993n, hidden: false },
+      { id: 'a', status: 'todo', title: 'Todo', position: 9007199254740992n, hidden: false },
+    ], 'todo', 'next')).toMatchObject({ action: 'promote' })
+    const source = model.tasksByStatus.todo![0]!
+    const withPosition = (position: number | bigint): BoardViewModel => ({ ...model, tasksByStatus: { ...model.tasksByStatus, ready: [{ ...source, id: 't_2', status: 'ready', position }] } })
+    const moved = moveTaskOptimistically(withPosition(Number.MAX_SAFE_INTEGER), source.id, 'ready')
+    expect(moved.tasksByStatus.ready?.at(-1)?.position).toBe(9007199254740992n)
+    const full = withPosition(9223372036854775807n)
+    expect(moveTaskOptimistically(full, source.id, 'ready')).toBe(full)
+  })
+
   test("exposes only state-machine transitions for a target column", () => {
     expect(transitionForTarget("todo", "ready")).toMatchObject({ action: "promote", targetStatus: "ready" })
     expect(transitionForTarget("todo", "running")).toBeNull()

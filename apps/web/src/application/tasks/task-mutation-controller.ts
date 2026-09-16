@@ -1,3 +1,4 @@
+import { compareInteger } from '../../domain/integer'
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react"
 
 import type {
@@ -128,7 +129,7 @@ export function keyboardTransitionForDirection(
   const visibleColumns = columns
     .filter((column) => !column.hidden)
     .slice()
-    .sort((left, right) => left.position - right.position)
+    .sort((left, right) => compareInteger(left.position, right.position))
   const currentIndex = visibleColumns.findIndex((column) => column.status === taskStatus || column.representedStatuses?.includes(taskStatus))
   if (currentIndex < 0) return null
   const targetIndex = currentIndex + (direction === "next" ? 1 : -1)

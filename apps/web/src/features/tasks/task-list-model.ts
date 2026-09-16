@@ -1,3 +1,4 @@
+import type { Integer } from '../../domain/integer'
 import type { ExplorerReadError, TaskListPlanFilter, TaskListQueryState, TaskListStatus } from '../../application/data/explorer-read-model';
 import type { Locale } from '../../platform/preferences/preferences';
 export interface TaskListRow {
@@ -9,15 +10,15 @@ export interface TaskListRow {
   readonly assignee: string | null
   readonly executionPlanState: "unplanned" | "planned" | "not_required"
   readonly dependencyBlocked: boolean
-  readonly requiredStepCount: number
-  readonly completedRequiredStepCount: number
-  readonly optionalStepCount: number
-  readonly updatedAt: number
+  readonly requiredStepCount: Integer
+  readonly completedRequiredStepCount: Integer
+  readonly optionalStepCount: Integer
+  readonly updatedAt: Integer
 }
 
 export interface TaskListViewState {
   readonly query: TaskListQueryState
-  readonly meta: { readonly offset: number; readonly limit: number; readonly total: number }
+  readonly meta: { readonly offset: Integer; readonly limit: Integer; readonly total: Integer }
 }
 
 export interface TaskListViewProps {

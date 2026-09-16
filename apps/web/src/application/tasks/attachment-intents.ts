@@ -1,3 +1,4 @@
+import type { Integer } from '../../domain/integer'
 import type { ApiGetTaskResponseContract } from "../../lib/api/generated/contracts/api-get-task-response"
 import type { ApiListAttachmentsResponseContract } from "../../lib/api/generated/contracts/api-list-attachments-response"
 import type { ApiSuggestTaskLabelsResponseContract } from "../../lib/api/generated/contracts/api-suggest-task-labels-response"
@@ -60,7 +61,8 @@ export function requestSuggestedLabels(
   return Promise.resolve().then(() => handler(query))
 }
 
-export function formatAttachmentSize(size: number): string {
+export function formatAttachmentSize(size: Integer): string {
+  if (typeof size === "bigint") return `${size} B`
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`

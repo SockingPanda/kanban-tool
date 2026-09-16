@@ -1,3 +1,4 @@
+import { integerDate, type Integer } from '../../domain/integer'
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react"
 
 import type { Locale } from "../../platform/preferences/preferences"
@@ -231,10 +232,10 @@ function suggestionResidual(value: number): string {
 
 const attachmentTimeFormatters = { "zh-CN": new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }), "en-US": new Intl.DateTimeFormat("en-US", { dateStyle: "short", timeStyle: "short" }) };
 
-function attachmentTime(value: number, locale: Locale): { readonly iso: string; readonly display: string } {
-  const milliseconds = Math.abs(value) < 1_000_000_000_000 ? value * 1_000 : value
-  const date = new Date(milliseconds)
-  if (Number.isNaN(date.getTime())) return { iso: String(value), display: String(value) }
+function attachmentTime(value: Integer, locale: Locale): { readonly iso: string; readonly display: string } {
+  const milliseconds = value > -1_000_000_000_000n && value < 1_000_000_000_000n ? Number(value) * 1_000 : value
+  const date = integerDate(milliseconds)
+  if (date === null) return { iso: String(value), display: String(value) }
   const language = locale === "en" ? "en-US" : "zh-CN"
   try {
     return {

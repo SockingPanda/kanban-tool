@@ -6,6 +6,7 @@ import styles from "./TaskInspector.module.css"
 import {
   actionLabel,
   inspectorActionViews,
+  isInspectorDateInput,
   type InspectorActionId,
   type InspectorActionView,
   type InspectorEditDraft,
@@ -70,14 +71,14 @@ export function TaskInspectorEditForm({
         </label>
         <label>
           <span>{copy.editScheduledAt}</span>
-          <input type="datetime-local" name="task-scheduled-at" autoComplete="off" value={draft.scheduledAt} onChange={(event) => onChange({ ...draft, scheduledAt: event.target.value })} />
+          <input type={draft.scheduledAt && !draft.scheduledAt.includes("T") ? "text" : "datetime-local"} name="task-scheduled-at" autoComplete="off" aria-invalid={!isInspectorDateInput(draft.scheduledAt)} value={draft.scheduledAt} onChange={(event) => onChange({ ...draft, scheduledAt: event.target.value })} />
         </label>
         <label>
           <span>{copy.editDueAt}</span>
-          <input type="datetime-local" name="task-due-at" autoComplete="off" value={draft.dueAt} onChange={(event) => onChange({ ...draft, dueAt: event.target.value })} />
+          <input type={draft.dueAt && !draft.dueAt.includes("T") ? "text" : "datetime-local"} name="task-due-at" autoComplete="off" aria-invalid={!isInspectorDateInput(draft.dueAt)} value={draft.dueAt} onChange={(event) => onChange({ ...draft, dueAt: event.target.value })} />
         </label>
         <div className={styles.editorActions}>
-          <button type="submit" disabled={pending || retryBlocksSubmit || draft.title.trim().length === 0} aria-busy={pending || undefined}>
+          <button type="submit" disabled={pending || retryBlocksSubmit || draft.title.trim().length === 0 || !isInspectorDateInput(draft.scheduledAt) || !isInspectorDateInput(draft.dueAt)} aria-busy={pending || undefined}>
             {pending ? copy.saving : copy.save}
           </button>
           <button type="button" className={styles.secondaryButton} disabled={pending} onClick={onCancel}>{copy.cancel}</button>

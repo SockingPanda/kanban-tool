@@ -299,7 +299,7 @@ pub fn expected_files(repo_root: &Path) -> ToolResult<BTreeMap<String, Vec<u8>>>
     let manifest = WebManifest {
         generator_version: GENERATOR_VERSION,
         schema_dialect: DRAFT_2020_12,
-        numeric_policy: "reject_unsafe_json_numbers",
+        numeric_policy: "lossless_64_bit_integers",
         selection_path: SELECTION_RELATIVE_PATH,
         source_hashes,
         operations: operations.clone(),
@@ -596,10 +596,10 @@ fn contract_module(contract_id: &str, schema: &Value) -> ToolResult<Vec<u8>> {
         );
     }
     output.push_str(&format!(
-        "import type {{ FromSchema }} from \"json-schema-to-ts\";\nimport {{ ContractValidationError, createContractValidator }} from \"../runtime\";\nimport staticValidator from \"virtual:kanban-contract-validator/{slug}\";\n\n"
+        "import {{ ContractValidationError, createContractValidator, type ContractValue }} from \"../runtime\";\nimport staticValidator from \"virtual:kanban-contract-validator/{slug}\";\n\n"
     ));
     output.push_str(&format!(
-        "export const {const_name} = {schema_text} as const;\nexport type {type_name} = FromSchema<typeof {const_name}>;\n\n"
+        "export const {const_name} = {schema_text} as const;\nexport type {type_name} = ContractValue<typeof {const_name}>;\n\n"
     ));
     output.push_str(&format!(
         "export const {validator}: ReturnType<typeof createContractValidator<{type_name}>> = createContractValidator<{type_name}>(\n  {contract_id:?},\n  staticValidator,\n);\n\n"
@@ -612,6 +612,11 @@ fn contract_module(contract_id: &str, schema: &Value) -> ToolResult<Vec<u8>> {
 
 fn runtime_module() -> Vec<u8> {
     r###"// 由 `xtask web-contracts generate` 生成；请勿手工编辑。
+import type { FromSchema, JSONSchema } from "json-schema-to-ts";
+import { I64_MIN, U64_MAX, type Integer } from "../../../domain/integer";
+
+export type ContractValue<S extends JSONSchema> = FromSchema<S, { deserialize: [{ pattern: { type: "integer"; format: "int64" | "uint64" | "uint" }; output: Integer }, { pattern: { type: "integer"; format?: never }; output: Integer }] }>;
+
 export type ContractErrorObject = {
   readonly instancePath: string;
   readonly schemaPath: string;
@@ -651,6 +656,7 @@ function unsafeNumberPath(value: unknown, path = ""): string | null {
   if (typeof value === "number") {
     return !Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value)) ? path || "/" : null;
   }
+  if (typeof value === "bigint") return value < I64_MIN || value > U64_MAX ? path || "/" : null;
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
       const unsafe = unsafeNumberPath(value[index], `${path}/${index}`);
@@ -668,7 +674,7 @@ function unsafeNumberPath(value: unknown, path = ""): string | null {
   return null;
 }
 
-// 数字策略 `reject_unsafe_json_numbers`：先拒绝非有限数和非安全整数，再调用构建期生成的静态 validator。
+// 数字策略 `lossless_64_bit_integers`：拒绝已舍入的 number 与超 64 位 bigint；字段符号、范围和类型由静态 validator 校验。
 export function createContractValidator<T>(_id: string, staticValidator: StaticValidator): ContractValidator<T> {
   let errors: ContractErrorObject[] | null | undefined;
   const validate = Object.assign(
@@ -1508,7 +1514,7 @@ mod tests {
         let root = repository_root();
         let files = expected_files(&root).expect("expected files");
         let manifest: Value = serde_json::from_slice(&files["manifest.json"]).expect("manifest");
-        assert_eq!(manifest["numericPolicy"], "reject_unsafe_json_numbers");
+        assert_eq!(manifest["numericPolicy"], "lossless_64_bit_integers");
         let resolved = resolve_selection(&root).expect("selection resolves");
         for schema_root in &resolved.roots {
             let contract = resolved

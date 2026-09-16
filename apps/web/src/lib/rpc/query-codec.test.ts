@@ -8,6 +8,14 @@ import { decodeQueryResult, encodeQueryDefinition, isQueryCall, queryIdentity, t
 const list: QueryCall = { method: "ListTasks", path: { board: "b_demo" }, query: { limit: 25, offset: 0, sort: "-updated_at", status: ["ready", "todo"] } }
 
 describe("完整查询与具名业务契约的映射", () => {
+  test("相邻大整数分页和 cursor 身份不碰撞，安全整数两种输入编码相同", () => {
+    const call = (offset: number | bigint): QueryCall => ({ ...list, query: { offset, limit: 25 } })
+    expect(queryIdentity(call(9007199254740992n))).not.toBe(queryIdentity(call(9007199254740993n)))
+    expect(queryIdentity(call(Number.MAX_SAFE_INTEGER))).toBe(queryIdentity(call(BigInt(Number.MAX_SAFE_INTEGER))))
+    const events = (after: bigint): QueryCall => ({ method: 'ListEvents', query: { board: 'b_demo', after } })
+    expect(queryIdentity(events(9223372036854775806n))).not.toBe(queryIdentity(events(9223372036854775807n)))
+  })
+
   test("身份包含完整过滤、排序和分页，排除本地对象顺序与取消信号", () => {
     expect(queryIdentity(list)).toBe(queryIdentity({ ...list, query: { status: ["ready", "todo"], sort: "-updated_at", offset: 0, limit: 25 }, signal: new AbortController().signal }))
     for (const query of [{ limit: 25, offset: 25 }, { limit: 50, offset: 0 }, { sort: "title" }, { status: ["done"] }]) {

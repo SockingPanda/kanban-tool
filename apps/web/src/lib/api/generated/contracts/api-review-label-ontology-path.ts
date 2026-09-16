@@ -1,10 +1,9 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import type { FromSchema } from "json-schema-to-ts";
-import { ContractValidationError, createContractValidator } from "../runtime";
+import { ContractValidationError, createContractValidator, type ContractValue } from "../runtime";
 import staticValidator from "virtual:kanban-contract-validator/api-review-label-ontology-path";
 
 export const ApiReviewLabelOntologyPathSchema = {"$id":"urn:kanban-tool:schema:api:review-label-ontology-path:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"board":{"type":"string"}},"required":["board"],"title":"Review Label Ontology Path v1","type":"object"} as const;
-export type ApiReviewLabelOntologyPathContract = FromSchema<typeof ApiReviewLabelOntologyPathSchema>;
+export type ApiReviewLabelOntologyPathContract = ContractValue<typeof ApiReviewLabelOntologyPathSchema>;
 
 export const apiReviewLabelOntologyPathValidator: ReturnType<typeof createContractValidator<ApiReviewLabelOntologyPathContract>> = createContractValidator<ApiReviewLabelOntologyPathContract>(
   "api.review-label-ontology.path",

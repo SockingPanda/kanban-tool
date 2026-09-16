@@ -5,7 +5,7 @@ import * as common from "../../generated/rpc/kanban/v1/common_pb"
 import * as dto from "../../generated/rpc/kanban/v1/dto_pb"
 import * as rpc from "../../generated/rpc/kanban/v1/kanban_pb"
 import * as codec from "./codec.generated"
-import { decodeJson, encodeJson, int64, RpcCodecError, safeNumber } from "./value-codec"
+import { decodeJson, encodeJson, int64, RpcCodecError, integerValue } from "./value-codec"
 
 describe("业务 DTO 与 Protobuf 的字段语义", () => {
   test("PATCH 保留未提供、显式清空、空文本和零值", () => {
@@ -47,8 +47,8 @@ describe("业务 DTO 与 Protobuf 的字段语义", () => {
     expect(() => int64(-1, true)).toThrow("64 位范围")
     const message = codec.encodeUpdateTaskRequest({ method: "UpdateTask", path: { task_id: "t_1" }, input: { expected_lock_version: (1n << 63n) - 1n } })
     expect(fromBinary(rpc.UpdateTaskRequestSchema, toBinary(rpc.UpdateTaskRequestSchema, message)).expectedLockVersion).toBe((1n << 63n) - 1n)
-    expect(() => codec.decodeRpcRequest("UpdateTask", toBinary(rpc.UpdateTaskRequestSchema, message))).toThrow("当前页面可精确显示")
-    expect(safeNumber(BigInt(Number.MAX_SAFE_INTEGER))).toBe(Number.MAX_SAFE_INTEGER)
+    expect(codec.decodeRpcRequest("UpdateTask", toBinary(rpc.UpdateTaskRequestSchema, message)).input).toEqual({ expected_lock_version: (1n << 63n) - 1n })
+    expect(integerValue(BigInt(Number.MAX_SAFE_INTEGER))).toBe(Number.MAX_SAFE_INTEGER)
   })
 
   test("自然 metadata 保留 null、集合、非整数和精确 signed/unsigned wire", () => {
@@ -58,7 +58,7 @@ describe("业务 DTO 与 Protobuf 的字段语义", () => {
     const unsigned = encodeJson((1n << 64n) - 1n)
     expect(signed.kind).toEqual({ case: "signedValue", value: -(1n << 63n) })
     expect(unsigned.kind).toEqual({ case: "unsignedValue", value: (1n << 64n) - 1n })
-    expect(() => decodeJson(unsigned)).toThrow("避免数据失真")
+    expect(decodeJson(unsigned)).toBe((1n << 64n) - 1n)
     expect(() => encodeJson(Number.MAX_SAFE_INTEGER + 1)).toThrow("不能舍入")
     expect(() => encodeJson(Number.POSITIVE_INFINITY)).toThrow(RpcCodecError)
     expect(() => decodeJson(create(common.JsonValueSchema))).toThrow("值类型")

@@ -5,6 +5,11 @@ import type { ClaimTaskIntent,CompleteTaskIntent,StepMutationIntent } from '../.
 import { assertCanonicalBoardSlug } from '../../domain/board-slug'
 import type { WebRuntimeConfig } from '../../lib/runtime'
 import { createTaskMutationClient } from './task-mutations'
+import { fromBinary, toBinary } from '@bufbuild/protobuf'
+import { UpdateTaskRequestSchema } from '../../generated/rpc/kanban/v1/kanban_pb'
+import { UpdateTaskResponseSchema } from '../../generated/rpc/kanban/v1/dto_pb'
+import { encodeUpdateTaskRequest, decodeRpcRequest, encodeRpcResponse, decodeUpdateTaskResponse } from '../../lib/rpc/codec.generated'
+import { parseApiUpdateTaskResponse } from '../../lib/api/generated/contracts/api-update-task-response'
 
 const runtime = {
   apiBaseUrl: '/__kb_api__', webBasePath: '/app/', actor: 'web-user', defaultBoard: 'default',
@@ -24,6 +29,25 @@ function setup(actor?: string, board = 'default') {
 }
 
 describe('命名任务 RPC', () => {
+  test('真实 request/response bytes 与 adapter 校验完整传递 CAS、时间戳和动态 JSON', async () => {
+    const response = parseApiUpdateTaskResponse(fixture('UpdateTask'))
+    const maximum = 9223372036854775807n
+    const minimum = -9223372036854775808n
+    const metadata = { integer: 18446744073709551615n, text: '18446744073709551615' }
+    const transport: RpcTransport = { call: async call => {
+      const bytes = toBinary(UpdateTaskRequestSchema, encodeUpdateTaskRequest(call))
+      expect(fromBinary(UpdateTaskRequestSchema, bytes).expectedLockVersion).toBe(maximum - 1n)
+      expect(decodeRpcRequest('UpdateTask', bytes).input).toMatchObject({ expected_lock_version: maximum - 1n, scheduled_at: minimum, metadata })
+      const result = encodeRpcResponse('UpdateTask', { data: { ...response.data, lock_version: maximum, scheduled_at: minimum, metadata } })
+      return { payload: decodeUpdateTaskResponse(fromBinary(UpdateTaskResponseSchema, result)), bytes: result.length }
+    } }
+    const client = createTaskMutationClient(runtime, assertCanonicalBoardSlug('default'), { transport })
+    const result = await client.updateTask('t_1', { title: '精确更新', expected_lock_version: maximum - 1n, scheduled_at: minimum, metadata })
+    expect(result.data.lock_version).toBe(maximum)
+    expect(result.data.scheduled_at).toBe(minimum)
+    expect(result.data.metadata).toEqual(metadata)
+  })
+
   test('创建保持 canonical board、幂等键和中文 actor', async () => {
     const { client, call } = setup(' 作者甲 ', 'team-two')
     await client.createTask({ title: '任务', description: '说明', idempotency_key: 'same-key' })

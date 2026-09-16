@@ -1,3 +1,4 @@
+import { isInteger, type Integer } from '../integer'
 /**
  * Board feature 的只读 presentation contract。
  *
@@ -30,17 +31,17 @@ export interface BoardColumnViewModel {
   readonly id: string
   readonly status: BoardTaskStatus
   readonly title: string
-  readonly position: number
+  readonly position: Integer
   readonly hidden: boolean
 }
 
 export interface BoardTaskReadinessViewModel {
   readonly dependencyBlocked: boolean
-  readonly unfinishedParentCount: number
+  readonly unfinishedParentCount: Integer
   readonly executionPlanState: BoardExecutionPlanState
-  readonly requiredStepCount: number
-  readonly completedRequiredStepCount: number
-  readonly optionalStepCount: number
+  readonly requiredStepCount: Integer
+  readonly completedRequiredStepCount: Integer
+  readonly optionalStepCount: Integer
 }
 
 export interface BoardTaskLabelViewModel {
@@ -51,18 +52,18 @@ export interface BoardTaskLabelViewModel {
 
 export interface BoardTaskViewModel {
   readonly id: string
-  readonly seq: number
+  readonly seq: Integer
   readonly ref: string
   readonly title: string
   readonly description: string | null
   readonly status: BoardTaskStatus
-  readonly position: number
-  readonly scheduledAt: number | null
-  readonly dueAt: number | null
-  readonly lastHeartbeatAt: number | null
+  readonly position: Integer
+  readonly scheduledAt: Integer | null
+  readonly dueAt: Integer | null
+  readonly lastHeartbeatAt: Integer | null
   readonly statusReason: string | null
   readonly labels: readonly BoardTaskLabelViewModel[]
-  readonly lockVersion: number
+  readonly lockVersion: Integer
   readonly priority: 0 | 1 | 2 | 3
   readonly assignee: string | null
   readonly readiness: BoardTaskReadinessViewModel
@@ -107,7 +108,7 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
 
   const columnIds = new Set<string>()
   const statuses = new Set<string>()
-  const positions = new Set<number>()
+  const positions = new Set<Integer>()
   for (const columnValue of rawColumns as readonly unknown[]) {
     if (!isRecordWithOwnKeys(columnValue, ["id", "status", "title", "position", "hidden"])) {
       return { valid: false, message: "服务端列记录无效" }
@@ -116,8 +117,8 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
     if (!hasText(column.id)) return { valid: false, message: "服务端列 id 不能为空" }
     if (typeof column.status !== "string") return { valid: false, message: "服务端列 status 无效" }
     if (!hasText(column.title)) return { valid: false, message: "服务端列标题不能为空" }
-    if (!Number.isSafeInteger(column.position)) {
-      return { valid: false, message: `服务端列 ${column.id} 的 position 必须是 safe integer` }
+    if (!isInteger(column.position)) {
+      return { valid: false, message: `服务端列 ${column.id} 的 position 必须是 64 位整数` }
     }
     if (typeof column.hidden !== "boolean") return { valid: false, message: `服务端列 ${column.id} 的 hidden 无效` }
     if (columnIds.has(column.id)) return { valid: false, message: `服务端返回重复列 id：${column.id}` }
@@ -159,13 +160,13 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
       if (!hasText(task.ref)) return { valid: false, message: `任务 ${task.id} 的 ref 不能为空` }
       if (!hasText(task.title)) return { valid: false, message: `任务 ${task.ref} 的标题不能为空` }
       if (typeof task.status !== "string") return { valid: false, message: `任务 ${task.ref} 的 status 无效` }
-      if (!Number.isSafeInteger(task.position)) {
-        return { valid: false, message: `任务 ${task.ref} 的 position 必须是 safe integer` }
+      if (!isInteger(task.position)) {
+        return { valid: false, message: `任务 ${task.ref} 的 position 必须是 64 位整数` }
       }
       if (
-        (task.scheduledAt !== null && !Number.isSafeInteger(task.scheduledAt))
-        || (task.dueAt !== null && !Number.isSafeInteger(task.dueAt))
-        || (task.lastHeartbeatAt !== null && !Number.isSafeInteger(task.lastHeartbeatAt))
+        (task.scheduledAt !== null && !isInteger(task.scheduledAt))
+        || (task.dueAt !== null && !isInteger(task.dueAt))
+        || (task.lastHeartbeatAt !== null && !isInteger(task.lastHeartbeatAt))
         || (task.statusReason !== null && typeof task.statusReason !== "string")
       ) {
         return { valid: false, message: `任务 ${task.ref} 的 board card fact 类型无效` }

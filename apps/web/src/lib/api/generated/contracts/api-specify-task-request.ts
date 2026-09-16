@@ -1,10 +1,9 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import type { FromSchema } from "json-schema-to-ts";
-import { ContractValidationError, createContractValidator } from "../runtime";
+import { ContractValidationError, createContractValidator, type ContractValue } from "../runtime";
 import staticValidator from "virtual:kanban-contract-validator/api-specify-task-request";
 
 export const ApiSpecifyTaskRequestSchema = {"$id":"urn:kanban-tool:schema:api:specify-task-request:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"actor":{"type":["string","null"]},"description":{"type":["string","null"]},"scheduled_at":{"format":"int64","type":["integer","null"]}},"title":"Kanban specify task request v1","type":"object"} as const;
-export type ApiSpecifyTaskRequestContract = FromSchema<typeof ApiSpecifyTaskRequestSchema>;
+export type ApiSpecifyTaskRequestContract = ContractValue<typeof ApiSpecifyTaskRequestSchema>;
 
 export const apiSpecifyTaskRequestValidator: ReturnType<typeof createContractValidator<ApiSpecifyTaskRequestContract>> = createContractValidator<ApiSpecifyTaskRequestContract>(
   "api.specify-task.request",

@@ -93,5 +93,9 @@ DTO 中的 path/query 表示参数值，网络方法和路径由正式 RPC descr
 通过 `src/lib/rpc` 转换为页面使用的 DTO。基础控件使用 React 和静态 CSS，浅色、深色与响应式布局共享主题
 token；不在运行时注入样式。依赖图按需加载。
 
+64 位整数在 JavaScript 安全范围内使用 `number`，超出范围时保留 `bigint`，从查询结果到页面和
+写入请求都不经过浮点舍入。超出日期控件范围的时间戳显示完整十进制值；保存其他属性时保留原始
+时间戳。整数校验、动态 JSON、排序和编辑规则见 [数值契约](docs/numeric-values.md)。
+
 Web artifact manifest、runtime 身份与 strict CSP 是 Browser/Desktop 共用的启动边界，详见
 [架构决策](../../docs/adr/0006_browser_first_web_ui.md)。

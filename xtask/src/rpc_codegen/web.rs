@@ -405,7 +405,7 @@ impl WebEmitter<'_> {
     fn decode_value(&mut self, ty: &Ty, source: &str) -> ToolResult<String> {
         Ok(match ty {
             Ty::Scalar(s) if matches!(s.as_str(), "i64" | "u64" | "usize") => {
-                format!("c.safeNumber({source})")
+                format!("c.integerValue({source})")
             }
             Ty::Scalar(s) if matches!(s.as_str(), "f32" | "f64") => format!("c.float({source})"),
             Ty::Scalar(_) => source.into(),

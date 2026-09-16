@@ -1,10 +1,9 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import type { FromSchema } from "json-schema-to-ts";
-import { ContractValidationError, createContractValidator } from "../runtime";
+import { ContractValidationError, createContractValidator, type ContractValue } from "../runtime";
 import staticValidator from "virtual:kanban-contract-validator/api-submit-review-task-headers";
 
 export const ApiSubmitReviewTaskHeadersSchema = {"$id":"urn:kanban-tool:schema:api:submit-review-task-headers:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"Accept-Language":{"type":["string","null"]},"Content-Type":{"type":"string"},"X-KB-Actor":{"type":["string","null"]}},"required":["Content-Type"],"title":"Kanban api.submit-review-task request headers v1","type":"object"} as const;
-export type ApiSubmitReviewTaskHeadersContract = FromSchema<typeof ApiSubmitReviewTaskHeadersSchema>;
+export type ApiSubmitReviewTaskHeadersContract = ContractValue<typeof ApiSubmitReviewTaskHeadersSchema>;
 
 export const apiSubmitReviewTaskHeadersValidator: ReturnType<typeof createContractValidator<ApiSubmitReviewTaskHeadersContract>> = createContractValidator<ApiSubmitReviewTaskHeadersContract>(
   "api.submit-review-task.headers",

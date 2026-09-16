@@ -1,10 +1,9 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import type { FromSchema } from "json-schema-to-ts";
-import { ContractValidationError, createContractValidator } from "../runtime";
+import { ContractValidationError, createContractValidator, type ContractValue } from "../runtime";
 import staticValidator from "virtual:kanban-contract-validator/api-heartbeat-task-path";
 
 export const ApiHeartbeatTaskPathSchema = {"$id":"urn:kanban-tool:schema:api:heartbeat-task-path:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"task_id":{"type":"string"}},"required":["task_id"],"title":"Kanban heartbeat task path v1","type":"object"} as const;
-export type ApiHeartbeatTaskPathContract = FromSchema<typeof ApiHeartbeatTaskPathSchema>;
+export type ApiHeartbeatTaskPathContract = ContractValue<typeof ApiHeartbeatTaskPathSchema>;
 
 export const apiHeartbeatTaskPathValidator: ReturnType<typeof createContractValidator<ApiHeartbeatTaskPathContract>> = createContractValidator<ApiHeartbeatTaskPathContract>(
   "api.heartbeat-task.path",

@@ -1,3 +1,4 @@
+import { addInteger, type Integer } from '../../domain/integer'
 import { useBulkCompletion } from '../../application/tasks/use-bulk-completion';
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import type { TaskWorkspaceState } from './use-task-workspace';
@@ -27,7 +28,7 @@ function TaskStats({ workspace }: { workspace: TaskWorkspaceState }) {
   const api = useMemo(() => createMaintenanceApi(undefined, runtime), [createMaintenanceApi, runtime]);
   const counts = useAsyncRead(true, route.boardSlug, signal => api.stats(route.boardSlug, signal), online !== false);
   const count = (status: string) => counts.data ? counts.data.status_counts.find(item => item.status === status)?.count ?? 0 : "—";
-  return <div className="page-inline-stats"><span><b>{counts.data?.status_counts.reduce((total,item)=>total+item.count,0) ?? '—'}</b> 个任务</span><span><i className="state-dot green" /><b>{count('done')}</b> 已完成</span><span><i className="state-dot blue" /><b>{count('running')}</b> 进行中</span><span><i className="state-dot amber" /><b>{count('blocked')}</b> 已阻塞</span></div>;
+  return <div className="page-inline-stats"><span><b>{counts.data?.status_counts.reduce<Integer>((total,item)=>addInteger(total,item.count),0) ?? '—'}</b> 个任务</span><span><i className="state-dot green" /><b>{count('done')}</b> 已完成</span><span><i className="state-dot blue" /><b>{count('running')}</b> 进行中</span><span><i className="state-dot amber" /><b>{count('blocked')}</b> 已阻塞</span></div>;
 }
 function TaskFilters({ query, onChange }: { query: TaskListQueryState; onChange: (query: TaskListQueryState) => void }) {
   return <details className="task-extra-filters"><summary>筛选与排序</summary><div className="form-grid">
@@ -70,7 +71,7 @@ export function TaskPage({ workspace, children }: { workspace: TaskWorkspaceStat
     {bulk.error&&<p className="paper-banner banner-error" role="alert">{bulk.error}</p>}
     {controller && <MutationNotice controller={controller} copy={messages} />}{children ?? <TaskCollection workspace={workspace} selected={selected} onSelect={onSelect} />}
     <div className="table-footer">显示 {workspace.listRead.data?.tasks.length ?? 0} / {total} 个任务<span>{workspace.view==='board'?'可拖动卡片修改状态；也可在详情中选择状态':'点击任务查看详情，勾选任务进行批量安排'}</span></div>
-    <div className="paper-pagination"><TaskFilters query={query} onChange={workspace.updateListQuery} /><span /><Button size="sm" disabled={query.page<=1} onClick={()=>workspace.updateListQuery({...query,page:query.page-1})}>上一页</Button><span>{query.page} / {Math.max(1,Math.ceil(total/query.limit))}</span><Button size="sm" disabled={query.page*query.limit>=total} onClick={()=>workspace.updateListQuery({...query,page:query.page+1})}>下一页</Button></div>
+    <div className="paper-pagination"><TaskFilters query={query} onChange={workspace.updateListQuery} /><span /><Button size="sm" disabled={query.page<=1} onClick={()=>workspace.updateListQuery({...query,page:query.page-1})}>上一页</Button><span>{query.page} / {total > 0 ? (BigInt(total) + BigInt(query.limit) - 1n) / BigInt(query.limit) : 1}</span><Button size="sm" disabled={BigInt(query.page)*BigInt(query.limit)>=total} onClick={()=>workspace.updateListQuery({...query,page:query.page+1})}>下一页</Button></div>
     {controller && <MutationDialog controller={controller} copy={messages} />}
   </div>;
 }

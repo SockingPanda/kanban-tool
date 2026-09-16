@@ -66,8 +66,8 @@ export function serializeTaskMapUrlState(state: TaskMapUrlState): string {
   return params.toString()
 }
 
-function incompleteRequiredSteps(task: MapNode["task"]): number {
-  return Math.max(0, task.required_step_count - task.completed_required_step_count)
+function hasIncompleteRequiredSteps(task: MapNode["task"]): boolean {
+  return task.required_step_count > task.completed_required_step_count
 }
 
 function nodeMatchesFilter(node: MapNode, filter: BoardMapFilter): boolean {
@@ -77,7 +77,7 @@ function nodeMatchesFilter(node: MapNode, filter: BoardMapFilter): boolean {
   if (filter === "ready") return node.task.status === "ready"
   if (filter === "running") return node.task.status === "running"
   if (filter === "unplanned") return node.task.execution_plan_state === "unplanned"
-  return incompleteRequiredSteps(node.task) > 0
+  return hasIncompleteRequiredSteps(node.task)
 }
 
 export function filterTaskMap(

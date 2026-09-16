@@ -1,4 +1,5 @@
 import { create } from "@bufbuild/protobuf"
+import { compactInteger } from "../../domain/integer"
 import { EmptySchema, JsonArraySchema, JsonObjectSchema, JsonValueSchema, type JsonValue } from "../../generated/rpc/kanban/v1/common_pb"
 
 /** 只表示字段转换错误；transport 负责转换为页面的稳定错误类型。 */
@@ -55,10 +56,7 @@ export function int64(value: unknown, unsigned = false): bigint {
   if (integer < (unsigned ? 0n : -(1n << 63n)) || integer > (unsigned ? (1n << 64n) - 1n : (1n << 63n) - 1n)) throw new RpcCodecError("RPC 整数字段超出 64 位范围。")
   return integer
 }
-export function safeNumber(value: bigint): number {
-  if (value < BigInt(Number.MIN_SAFE_INTEGER) || value > BigInt(Number.MAX_SAFE_INTEGER)) throw new RpcCodecError("服务器返回的整数超出当前页面可精确显示的范围；为避免数据失真，已停止转换。")
-  return Number(value)
-}
+export { compactInteger as integerValue } from "../../domain/integer"
 export function taskPriority(value: unknown): number { return int32(value, true, 3) }
 export function unitInterval(value: unknown): number {
   const number = float(value)
@@ -122,7 +120,7 @@ export function decodeJson(message: JsonValue): unknown {
   switch (message.kind.case) {
     case "nullValue": return null
     case "boolValue": case "stringValue": return message.kind.value
-    case "signedValue": case "unsignedValue": return safeNumber(message.kind.value)
+    case "signedValue": case "unsignedValue": return compactInteger(message.kind.value)
     case "floatValue": return float(message.kind.value)
     case "arrayValue": return message.kind.value.items.map(decodeJson)
     case "objectValue": return Object.fromEntries(Object.entries(message.kind.value.entries).map(([key, item]) => [key, decodeJson(item)]))

@@ -1,3 +1,4 @@
+import type { Integer } from '../../domain/integer'
 import type { RpcCall } from "./rpc-transport";
 import { type CanonicalBoardId } from "../../domain/board-id";
 
@@ -347,7 +348,7 @@ export function parseColumns(
   )
   const columnIds = new Set<string>()
   const statuses = new Set<BoardTaskStatus>()
-  const positions = new Set<number>()
+  const positions = new Set<Integer>()
   for (const column of response.data) {
     if (column.id.trim().length === 0 || column.title.trim().length === 0) {
       throw new BoardReadError("anomaly", "看板列响应缺少 id 或 title。")

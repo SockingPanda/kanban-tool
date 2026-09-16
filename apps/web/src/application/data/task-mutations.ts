@@ -1,3 +1,4 @@
+import type { Integer } from '../../domain/integer'
 import { type RpcTransport,type RpcTransportOptions } from "./rpc-transport";
 
 import { type ApiAddDependencyResponseContract } from "../../lib/api/generated/contracts/api-add-dependency-response";
@@ -70,7 +71,7 @@ export type CreateTaskIntent = Pick<import("../../lib/api/generated/contracts/ap
   & Partial<Omit<import("../../lib/api/generated/contracts/api-create-task-request").ApiCreateTaskRequestContract, "actor" | "title">>
 
 export type UpdateTaskIntent = Omit<import("../../lib/api/generated/contracts/api-update-task-request").ApiUpdateTaskRequestContract, "actor" | "expected_lock_version"> & {
-  readonly expected_lock_version: number
+  readonly expected_lock_version: Integer
 }
 
 export type AddTaskLabelIntent = Omit<import("../../lib/api/generated/contracts/api-add-task-label-request").ApiAddTaskLabelRequestContract, "actor">

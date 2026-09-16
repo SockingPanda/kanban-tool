@@ -1,3 +1,4 @@
+import type { Integer } from '../../domain/integer'
 import type { RpcCall } from "../../application/data/rpc-transport";
 import { inheritReadScope } from '../../application/query/observe-read';
 import type { WebRuntimeConfig } from "../../lib/runtime";
@@ -95,8 +96,8 @@ export function parseTasksWindow(
   status: BoardTaskStatus,
   expectedOffset: number,
   expectedLimit: number,
-  expectedTotal: number | null,
-): { tasks: readonly WireBoardTask[]; total: number; nextOffset: number } {
+  expectedTotal: Integer | null,
+): { tasks: readonly WireBoardTask[]; total: Integer; nextOffset: number } {
   const response = parseContract(
     "api.list-tasks-by-status.response",
     parseApiListTasksByStatusResponse,
@@ -162,7 +163,7 @@ export async function loadTasksForStatus(
 ): Promise<readonly BoardTask[]> {
   const basePath = tasksPath(identity.slug)
   let offset = DEFAULT_TASK_OFFSET
-  let total: number | null = null
+  let total: Integer | null = null
   let pages = 0
   const tasks: BoardTask[] = []
   const taskIds = new Set<string>()

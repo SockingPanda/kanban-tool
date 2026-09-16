@@ -339,9 +339,10 @@ export function useTaskInspectorState({ model, onSelectTask, locale = "zh", iden
   const saveTask = useCallback(async (draft: InspectorEditDraft = editDraft): Promise<InspectorMutationOutcome | null> => {
     if (!mutationHandlers || draft.title.trim().length === 0) return null
     const input = buildInspectorSaveTaskInput(task, draft)
+    if (input === null) { setLocalMutationError("saveTask"); return null }
     const run = () => mutationHandlers.saveTask(input)
     return runMutation("saveTask", run)
-  }, [editDraft, mutationHandlers, runMutation, task])
+  }, [editDraft, mutationHandlers, runMutation, setLocalMutationError, task])
 
   const beginEditor = useCallback(() => {
     setEditDraft(inspectorEditDraft(task))
@@ -358,12 +359,13 @@ export function useTaskInspectorState({ model, onSelectTask, locale = "zh", iden
   const submitEditor = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const submittedInput = buildInspectorSaveTaskInput(task, editDraft)
+    if (submittedInput === null) { setLocalMutationError("saveTask"); return }
     void saveTask(editDraft).then((saved) => {
       const currentInput = buildInspectorSaveTaskInput(taskRef.current, editDraftRef.current)
       const submittedIntent = { operation: "saveTask" as const, taskId: task.id, input: submittedInput }
       if (inspectorMutationCommitted(saved) && inspectorRetryUserIntentMatches(submittedIntent, "saveTask", currentInput)) closeEditor()
     })
-  }, [closeEditor, editDraft, saveTask, task])
+  }, [closeEditor, editDraft, saveTask, setLocalMutationError, task])
 
   const executeTransition = useCallback(async (view: InspectorActionView, context: { readonly description?: string; readonly reason?: string; readonly confirmed?: boolean }): Promise<InspectorMutationOutcome | null> => {
     if (!mutationHandlers) return null

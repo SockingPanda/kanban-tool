@@ -1,3 +1,4 @@
+import { isInteger, type Integer } from '../../domain/integer'
 import type { RpcCall } from "./rpc-transport";
 import type { WebRuntimeConfig } from "../../lib/runtime";
 
@@ -268,7 +269,7 @@ export interface BoardEventsReadModel {
   readonly events: readonly ExplorerEvent[]
   readonly meta: {
     readonly count: number
-    readonly nextAfter: number
+    readonly nextAfter: Integer
     readonly limit: number
   }
 }
@@ -366,26 +367,26 @@ export function resolveBoard(boards: ApiListBoardsResponseContract["data"], sele
   return Object.freeze({ selector: requested, id: identity.id, slug: identity.slug, name: identity.candidate.name.trim() })
 }
 
-export function safeEventCursor(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+export function safeEventCursor(value: unknown): value is Integer {
+  return isInteger(value) && value >= 0
 }
 
 export function validateEventBatch(
   events: readonly ExplorerEvent[],
   board: ExplorerBoardIdentity,
   taskId: string | null,
-  after: number,
-  nextAfter: number,
+  after: Integer,
+  nextAfter: Integer,
   limit: number,
 ): void {
   if (!safeEventCursor(after) || !safeEventCursor(nextAfter)) {
-    throw new ExplorerReadError("anomaly", "事件响应的 cursor 不是非负安全整数。")
+    throw new ExplorerReadError("anomaly", "事件响应的 cursor 不是非负 64 位整数。")
   }
   if (!Number.isSafeInteger(limit) || limit < 0 || events.length > limit) {
     throw new ExplorerReadError("anomaly", "事件响应超过请求的 page limit。")
   }
   let previousId = after
-  const ids = new Set<number>()
+  const ids = new Set<Integer>()
   const eventIds = new Set<string>()
   for (const event of events) {
     if (!safeEventCursor(event.id) || event.id <= previousId) {

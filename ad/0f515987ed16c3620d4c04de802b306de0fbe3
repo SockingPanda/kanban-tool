@@ -1,0 +1,212 @@
+apps/web/build/i18n/config.json
+  s_15a3d10bc0d369::t_333c827a98207f 1-72
+apps/web/src/adapters/host/attachment-transfer.ts
+  s_15a3d10bc0d369::t_8d9844e62136ed 70
+  s_15a3d10bc0d369::t_333c827a98207f 5-59
+  s_15a3d10bc0d369::t_ab716eb71d2151 1-4,60-69,71-90
+apps/web/build/i18n/catalog.mjs
+  s_15a3d10bc0d369::t_333c827a98207f 1-206
+apps/web/src/application/i18n.ts
+  s_15a3d10bc0d369::t_9cc5c19dc8fbde 1-9,11
+apps/web/src/platform/localization/format.ts
+  s_15a3d10bc0d369::t_333c827a98207f 1-78
+apps/web/tests/i18n/objects-files.spec.ts
+  s_15a3d10bc0d369::t_e43afa0acbcc37 1-69,72-101,104,110,116,123,128,130,134
+  s_15a3d10bc0d369::t_9cc5c19dc8fbde 70-71,112-114
+  s_15a3d10bc0d369::t_eb7749bfbfec41 102-103,105-109,111,115,117-122,124-127,129,131-133
+apps/web/src/app/shell/route-content.tsx
+  s_15a3d10bc0d369::t_51f16eb5dadc02 1,52-53
+apps/web/src/application/workspace/data-source.ts
+  s_15a3d10bc0d369::t_5b47872c634667 19-20
+  s_15a3d10bc0d369::t_fae86206099832 1-2
+apps/web/tests/release-paper.spec.ts
+  s_15a3d10bc0d369::t_8d9844e62136ed 138
+  s_15a3d10bc0d369::t_e27ecac5aeb421 152
+apps/web/README.md
+  s_15a3d10bc0d369::t_e27034a24e30fb 14,17,29-40,75-76,79
+  s_15a3d10bc0d369::t_b53636b03fb272 77-78
+apps/web/src/platform/localization/runtime.ts
+  s_15a3d10bc0d369::t_51f16eb5dadc02 1-85
+apps/web/playwright.config.ts
+  s_15a3d10bc0d369::t_8d9844e62136ed 26
+apps/web/src/features/objects/ObjectWorkspace.tsx
+  s_15a3d10bc0d369::t_5b47872c634667 47-48
+  s_15a3d10bc0d369::t_e43afa0acbcc37 39,147-186
+  s_15a3d10bc0d369::t_758e4dbb426dac 13,222
+  s_15a3d10bc0d369::t_bc6eaf83c4bb4f 1-12,14-38,40-46,49-146,187-221,223-232
+scripts/web-i18n-proof.sh
+  s_15a3d10bc0d369::t_2cd21502a993e2 75-80
+  s_15a3d10bc0d369::t_333c827a98207f 1-74,81
+  s_15a3d10bc0d369::t_c01bb852ff6276 82-85
+apps/web/playwright.i18n.config.ts
+  s_15a3d10bc0d369::t_333c827a98207f 1-12
+apps/web/src/application/tasks/use-attachment-transfer.ts
+  s_15a3d10bc0d369::t_5b47872c634667 1-8
+apps/web/tests/inspector-integration.spec.ts
+  s_15a3d10bc0d369::t_8d9844e62136ed 99,103,140,156,160,169
+apps/web/src/adapters/host/object-client.ts
+  s_15a3d10bc0d369::t_333c827a98207f 8-47
+  s_15a3d10bc0d369::t_4482349e1543a7 1-7,48-49
+apps/web/src/domain/files/sha256.test.ts
+  s_15a3d10bc0d369::t_cf4b27b244e911 1-19
+apps/web/tests/explorer-fixture.ts
+  s_15a3d10bc0d369::t_8d9844e62136ed 136,191
+apps/web/tests/release-grpc-migration.spec.ts
+  s_15a3d10bc0d369::t_8d9844e62136ed 28,65,135,148-149
+apps/web/src/application/tasks/attachment-queue.test.ts
+  s_15a3d10bc0d369::t_cf4b27b244e911 1-62
+apps/web/src/application/tasks/attachment-queue.ts
+  s_15a3d10bc0d369::t_333c827a98207f 1-140
+apps/web/src/features/attachments/AttachmentManager.tsx
+  s_15a3d10bc0d369::t_8d9844e62136ed 1-103
+.github/workflows/web-i18n.yml
+  s_15a3d10bc0d369::t_333c827a98207f 1-35
+apps/web/tests/release-proof.spec.ts
+  s_15a3d10bc0d369::t_8d9844e62136ed 273
+apps/web/tests/rpc-fixture.ts
+  s_15a3d10bc0d369::t_3f9ead243b5224 14-15,18,122-141
+apps/web/src/application/query/observe-read.ts
+  s_15a3d10bc0d369::t_cf4b27b244e911 110-121
+justfile
+  s_15a3d10bc0d369::t_333c827a98207f 140-168,210-211
+apps/web/build/i18n/cli.mjs
+  s_15a3d10bc0d369::t_d82b5f7d8886c9 1-41
+apps/web/build/i18n/scan.mjs
+  s_15a3d10bc0d369::t_e99a38bf5a5b10 1-115
+apps/web/build/i18n/tests/catalog.node-test.mjs
+  s_15a3d10bc0d369::t_e55cbff0493273 1-39
+apps/web/build/i18n/tests/pure.node-test.mjs
+  s_15a3d10bc0d369::t_17c8d80c6c06be 1-36
+apps/web/build/i18n/tests/scan.node-test.mjs
+  s_15a3d10bc0d369::t_8346dc98782eb5 1-19
+apps/web/build/i18n/typescript.mjs
+  s_15a3d10bc0d369::t_e2d200d2080345 1-15
+apps/web/eslint.config.js
+  s_15a3d10bc0d369::t_73943f843f2f3e 9
+apps/web/package.json
+  s_15a3d10bc0d369::t_39f0ac73168fd1 16-23,32-33
+apps/web/src/adapters/host/data-source.test.ts
+  s_15a3d10bc0d369::t_818c7cae967050 8,102-126
+apps/web/src/adapters/host/data-source.ts
+  s_15a3d10bc0d369::t_176f8114457c50 1-2,30-31
+apps/web/src/adapters/host/query-registry.test.ts
+  s_15a3d10bc0d369::t_bfb6a403ea32b7 3,297-315
+apps/web/src/app/shell/project-navigation-view.tsx
+  s_15a3d10bc0d369::t_049ac472d9ef85 5-6,8,10-12,14-20,22-26,28-36,38-42
+apps/web/src/app/shell/project-navigation.tsx
+  s_15a3d10bc0d369::t_7b3247853ebdf0 4,11-25,27,30,34,37,39,42
+apps/web/src/application/data/attachment-transfer.ts
+  s_15a3d10bc0d369::t_34d3f97d581f4a 1-9
+apps/web/src/application/data/object-client.ts
+  s_15a3d10bc0d369::t_e5f25bd41857df 1-12
+apps/web/src/application/diagnostics.ts
+  s_15a3d10bc0d369::t_961451bc3f3d74 1
+apps/web/src/application/tasks/use-attachment-queue.ts
+  s_15a3d10bc0d369::t_4f24edb4e1cb02 1-29
+apps/web/src/domain/files/sha256.ts
+  s_15a3d10bc0d369::t_6e24b5f1fe80d3 1-65
+apps/web/src/domain/objects/model.ts
+  s_15a3d10bc0d369::t_19a50e4ddb2670 1-18
+apps/web/src/features/attachments/attachments.module.css
+  s_15a3d10bc0d369::t_4cb6e14a0ce667 1-21
+apps/web/src/features/attachments/copy.ts
+  s_15a3d10bc0d369::t_d40a1f0fc69870 1-12
+apps/web/src/features/attachments/index.ts
+  s_15a3d10bc0d369::t_d755b2b0d3cc60 1
+apps/web/src/features/objects/index.ts
+  s_15a3d10bc0d369::t_a6a56d8fee326a 1
+apps/web/src/features/objects/objects.module.css
+  s_15a3d10bc0d369::t_365cd594f77df1 1-9
+apps/web/src/features/settings/settings-view.tsx
+  s_15a3d10bc0d369::t_fcffced314b178 1,45,50,74,89,98
+apps/web/src/features/tasks/TaskAttachments.tsx
+  s_15a3d10bc0d369::t_6ba4c9994f081a 1-16
+apps/web/src/features/tasks/TaskInspectorAssetsPanel.tsx
+  s_15a3d10bc0d369::t_de42c707f12326 31,699,717
+apps/web/src/features/tasks/task-detail.tsx
+  s_15a3d10bc0d369::t_56ebe53cae8605 1,35,41,46
+apps/web/src/features/tasks/task-work-content.tsx
+  s_15a3d10bc0d369::t_efc908b2a52167 28
+apps/web/src/lib/rpc/client.ts
+  s_15a3d10bc0d369::t_4268120f56b495 1,16-17
+apps/web/src/lib/rpc/query-codec.ts
+  s_15a3d10bc0d369::t_383f5145ef9c86 5,12-18,26,73-74
+apps/web/src/lib/rpc/query-test-support.ts
+  s_15a3d10bc0d369::t_f632ff90dc542d 1,4-6,12-13
+apps/web/src/platform/localization/bootstrap.ts
+  s_15a3d10bc0d369::t_03c1f9ef719de4 1-8
+apps/web/src/platform/localization/context.json
+  s_15a3d10bc0d369::t_8bb5e87141f4e7 1-515
+apps/web/src/platform/localization/contracts.generated.ts
+  s_15a3d10bc0d369::t_5c5e33bc7ed13d 1-506
+apps/web/src/platform/localization/i18next-options.d.ts
+  s_15a3d10bc0d369::t_6c2b30a9e9ff1a 1-5
+apps/web/src/platform/localization/locale.ts
+  s_15a3d10bc0d369::t_6426249281470d 1-17
+apps/web/src/platform/localization/locales/en/attachments.json
+  s_15a3d10bc0d369::t_fabd9403e13ec9 1-41
+apps/web/src/platform/localization/locales/en/common.json
+  s_15a3d10bc0d369::t_e5a0f738adc302 1-16
+apps/web/src/platform/localization/locales/en/legacy.json
+  s_15a3d10bc0d369::t_ad6daf66767ad5 1-275
+apps/web/src/platform/localization/locales/en/objects.json
+  s_15a3d10bc0d369::t_fdd7497d54ff84 1-66
+apps/web/src/platform/localization/locales/en/settings-view.json
+  s_15a3d10bc0d369::t_17dd0f7e202248 1-46
+apps/web/src/platform/localization/locales/en/settings.json
+  s_15a3d10bc0d369::t_abdd330bab94ee 1-14
+apps/web/src/platform/localization/locales/en/shell.json
+  s_15a3d10bc0d369::t_4e67dcea1bbfa1 1-59
+apps/web/src/platform/localization/locales/en/tasks.json
+  s_15a3d10bc0d369::t_e76634c2a728c8 1-13
+apps/web/src/platform/localization/locales/zh/attachments.json
+  s_15a3d10bc0d369::t_9e38acccc1cbdd 1-41
+apps/web/src/platform/localization/locales/zh/common.json
+  s_15a3d10bc0d369::t_8fac2dfce34f5f 1-16
+apps/web/src/platform/localization/locales/zh/legacy.json
+  s_15a3d10bc0d369::t_d18cfb9190d625 1-275
+apps/web/src/platform/localization/locales/zh/objects.json
+  s_15a3d10bc0d369::t_2fbf1ff87e5ba4 1-66
+apps/web/src/platform/localization/locales/zh/settings-view.json
+  s_15a3d10bc0d369::t_22a8b076d71a89 1-46
+apps/web/src/platform/localization/locales/zh/settings.json
+  s_15a3d10bc0d369::t_c35494ea163325 1-14
+apps/web/src/platform/localization/locales/zh/shell.json
+  s_15a3d10bc0d369::t_414dd8638fb7cd 1-59
+apps/web/src/platform/localization/locales/zh/tasks.json
+  s_15a3d10bc0d369::t_5c7ef570959fb3 1-12
+apps/web/src/platform/localization/metadata/en.json
+  s_15a3d10bc0d369::t_517805d09c283c 1-3593
+apps/web/src/platform/localization/presentation.ts
+  s_15a3d10bc0d369::t_063aa332c551cb 1-20
+apps/web/src/platform/localization/resources.generated.ts
+  s_15a3d10bc0d369::t_a2fe98ed3105db 1-22
+apps/web/src/platform/localization/runtime.test.ts
+  s_15a3d10bc0d369::t_b93f8818a2cf0a 1-41
+apps/web/src/platform/localization/settings-view-copy.ts
+  s_15a3d10bc0d369::t_be622eecc821c9 1-52
+apps/web/src/platform/localization/use-i18n.ts
+  s_15a3d10bc0d369::t_4930263b36df29 1-11
+apps/web/src/platform/preferences/preferences.ts
+  s_15a3d10bc0d369::t_7ac51ae11f6867 1-2,4,48,129,135-136
+apps/web/tests/i18n/language.spec.ts
+  s_15a3d10bc0d369::t_a131b42d9bbdb4 1-46
+pnpm-lock.yaml
+  s_15a3d10bc0d369::t_452e8437d5db69 34-36,1365-1372,3041-3044
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ad0f515987ed16c3620d4c04de802b306de0fbe3",
+  "prompts": {},
+  "sessions": {
+    "s_15a3d10bc0d369": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a9f3-ee29-73f0-af2f-22e7ab90579a",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

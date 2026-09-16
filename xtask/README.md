@@ -8,6 +8,9 @@ package 和 provenance 证据，读取 workspace metadata、protocol catalog 和
 `scripts/cargo-build-lock.sh` 共用一把构建锁。默认目录为
 `/media/zebra/T7_Linux_Work/projects/Personal/labs/.cache/kanban-tool/cargo-target`；其他主机或隔离工具测试可用
 `KANBAN_CARGO_TARGET_ROOT` 指定同一主机的共享目录。显式 `CARGO_TARGET_DIR` 必须与该目录一致。
+锁内的 Cargo 构建、nextest 和 libtest 默认均使用 8 个并发执行单元；不同命令仍串行持有共享锁。
+可用 `KANBAN_CARGO_BUILD_JOBS`、`KANBAN_TEST_THREADS` 调整本机默认值，工具自身的显式环境变量
+优先；设为 `auto` 则不注入对应的工具环境变量，采用工具或仓库配置。
 
 当前命令组如下：
 

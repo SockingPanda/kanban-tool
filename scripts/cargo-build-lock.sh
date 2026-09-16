@@ -32,11 +32,11 @@ Environment:
   CARGO_TARGET_DIR            If set, it must equal the configured shared
                               target root.
   CARGO_BUILD_JOBS            Cargo build jobs passed through when set.
-                              Default: ${KANBAN_CARGO_BUILD_JOBS:-2}
+                              Default: ${KANBAN_CARGO_BUILD_JOBS:-8}
   NEXTEST_TEST_THREADS        cargo-nextest test threads passed through when set.
-                              Default: ${KANBAN_TEST_THREADS:-2}
+                              Default: ${KANBAN_TEST_THREADS:-8}
   RUST_TEST_THREADS           libtest threads passed through when set.
-                              Default: ${KANBAN_TEST_THREADS:-2}
+                              Default: ${KANBAN_TEST_THREADS:-8}
   KANBAN_CARGO_TARGET_ROOT    Override target root for local tests. The wrapper
                               uses this exact directory for every worktree while
                               keeping one shared build lock.
@@ -240,9 +240,9 @@ validate_inherited_target_dir() {
 }
 
 configure_resource_limits() {
-  configure_resource_limit CARGO_BUILD_JOBS "${KANBAN_CARGO_BUILD_JOBS:-2}"
-  configure_resource_limit NEXTEST_TEST_THREADS "${KANBAN_TEST_THREADS:-2}"
-  configure_resource_limit RUST_TEST_THREADS "${KANBAN_TEST_THREADS:-2}"
+  configure_resource_limit CARGO_BUILD_JOBS "${KANBAN_CARGO_BUILD_JOBS:-8}"
+  configure_resource_limit NEXTEST_TEST_THREADS "${KANBAN_TEST_THREADS:-8}"
+  configure_resource_limit RUST_TEST_THREADS "${KANBAN_TEST_THREADS:-8}"
 }
 
 configure_resource_limit() {

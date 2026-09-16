@@ -67,7 +67,7 @@ function integerSchema(value: unknown): unknown {
   delete schema.format
   delete schema.minimum
   delete schema.maximum
-  return { ...schema, anyOf: [integer, ...types.filter(type => type !== 'integer').map(type => ({ type }))] }
+  return { ...schema, anyOf: [integer, ...types.flatMap(type => type === 'integer' ? [] : [{ type }])] }
 }
 
 function schemaPathForSlug(slug: string, schemaDirectory: string): string {

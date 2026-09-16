@@ -97,6 +97,14 @@ async function unusedPort() {
 async function hash(file) { return createHash('sha256').update(await readFile(file)).digest('hex'); }
 async function alive(pid) { try { await access(`/proc/${pid}`); return true; } catch { return false; } }
 
+function rpcRequests(events) {
+  return events.flatMap(event => {
+    if (event.method !== 'Network.requestWillBeSent') return [];
+    const request = event.params.request;
+    return new URL(request.url).pathname.startsWith('/kanban.v1.') ? [request] : [];
+  });
+}
+
 // 只观察浏览器自行派发的事件，不构造 PageTransitionEvent，也不代理 fetch。
 function recordLifecycle() {
   globalThis.__kanbanBfCacheProof = { documentId: globalThis.crypto.randomUUID(), events: [] };
@@ -156,7 +164,9 @@ async function proof(binary, webDirectory, output) {
     const debuggingPort = await eventually(async () => (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0], '隔离 Chromium 启动');
     const debuggingBase = `http://127.0.0.1:${debuggingPort}`;
     const targets = await (await fetch(debuggingBase + '/json/list')).json();
-    devtools = await DevTools.connect(targets.find(target => target.type === 'page').webSocketDebuggerUrl);
+    const target = targets.find(target => target.type === 'page');
+    if (!target) throw new Error('隔离 Chromium 未提供页面调试目标');
+    devtools = await DevTools.connect(target.webSocketDebuggerUrl);
     report.browserVersion = await devtools.send('Browser.getVersion');
     await devtools.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     await devtools.send('Page.enable');
@@ -192,7 +202,7 @@ async function proof(binary, webDirectory, output) {
     assert.equal(after.draft, before.draft);
     assert.equal(after.focus, before.focus);
     assert(!(await cli('comment', 'list', task.id)).data.some(comment => comment.body === before.draft), '草稿不得被隐式发布');
-    report.requests = devtools.events.filter(event => event.method === 'Network.requestWillBeSent').map(event => event.params.request).filter(request => new URL(request.url).pathname.startsWith('/kanban.v1.')).map(request => ({ url: request.url, method: request.method, headers: request.headers }));
+    report.requests = rpcRequests(devtools.events).map(request => ({ url: request.url, method: request.method, headers: request.headers }));
     assert(report.requests.length > 1);
     assert(report.requests.every(request => request.method === 'POST' && request.url.endsWith('/WatchQueries') && Object.entries(request.headers).some(([key, value]) => key.toLowerCase() === 'content-type' && value === 'application/grpc-web+proto')));
     report.assertions.push('实际缓存恢复且 Document 身份一致', 'pagehide/pageshow 均为浏览器 trusted persisted 事件', '冻结期间原生写入在恢复后可见', '未保存草稿和输入焦点保持', '草稿未隐式写入', '恢复只使用 binary gRPC-Web 查询流', 'Host/runtime/Web artifact 身份一致');
@@ -214,7 +224,7 @@ async function proof(binary, webDirectory, output) {
     report.error = error.stack;
     if (devtools) {
       report.notRestoredReasons = devtools.events.filter(event => event.method === 'Page.backForwardCacheNotUsed');
-      report.failureRequests = devtools.events.filter(event => event.method === 'Network.requestWillBeSent').map(event => event.params.request).filter(request => new URL(request.url).pathname.startsWith('/kanban.v1.'));
+      report.failureRequests = rpcRequests(devtools.events);
       try { report.lastPage = await devtools.evaluate('({url: location.href, proof: globalThis.__kanbanBfCacheProof, text: document.body.innerText})'); } catch { /* 失败时保留已取得证据。 */ }
       try { await writeFile(path.join(output, 'failed.png'), Buffer.from((await devtools.send('Page.captureScreenshot')).data, 'base64')); } catch { /* 页面已退出时继续回收。 */ }
     }

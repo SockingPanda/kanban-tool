@@ -1,0 +1,2497 @@
+.agents/skills/docs/SKILL.md
+  s_5b054b517a26b6::t_7a6e49678f1afd 32
+.agents/skills/style/SKILL.md
+  s_5b054b517a26b6::t_276810e04c00e8 15,43
+.gitattributes
+  s_5b054b517a26b6::t_96ab30ae83326c 5-7
+AGENTS.md
+  s_5b054b517a26b6::t_0a748c6d542737 9,28,30-31,72
+Cargo.lock
+  s_5b054b517a26b6::t_d9c7f6f99c1a04 336-357,1594-1599,2137-2155,2304,2316-2343,2847-2848,2851-2852,2854-2855,2885-2893,2901,2905,2913-2914,2919-2921,2928,2931,2933-2934,2938-2940,2943,2947-2948,3180,3182,3184,3334-3339,3841-3851,3905-3924,4142-4162,4176-4204,4450-4486,4517,4521-4534,4661-4693,5561,5916-5936,6070-6154,6163,6165,6168,6622-6627,6669-6670,6672,6922-6934,7278-7286,7740-7741,7745,7874-7879
+Cargo.toml
+  s_5b054b517a26b6::t_d4356b69e54147 12,15,46-47,55-57,73-80,92-96
+README.md
+  s_5b054b517a26b6::t_f799144d067263 10-12,87
+apps/desktop/src-tauri/src/host_lifecycle.rs
+  s_5b054b517a26b6::t_5c64a735a84e53 2117-2128,2141,2150,2160,2170,2178-2179,2189,2199,2218,2256-2263,2633,2736
+apps/web/AGENTS.md
+  s_5b054b517a26b6::t_3f1bc152295e69 7,16-17,24-26
+apps/web/README.md
+  s_5b054b517a26b6::t_0f30aa3aacfe04 4,38-52,67-76,83,85,90-105,108-111
+apps/web/build/artifact-manifest.test.ts
+  s_5b054b517a26b6::t_b620b927cc719e 39-44,57,68,88
+apps/web/build/artifact-manifest.ts
+  s_5b054b517a26b6::t_f6c2904f5d3de5 6,12
+apps/web/build/bfcache-proof.mjs
+  s_5b054b517a26b6::t_a6a5b55b2973d4 1-269
+apps/web/build/boundaries.test.ts
+  s_5b054b517a26b6::t_744ee74cfb9585 35-47
+apps/web/build/boundaries.ts
+  s_5b054b517a26b6::t_5d695114821e64 28-29,55-57
+apps/web/build/contract-validator.ts
+  s_5b054b517a26b6::t_f4a26f7a300dfd 6-8,34,36-45,52-72
+apps/web/build/host-proxy.test.ts
+  s_5b054b517a26b6::t_12a3b88f149617 1-246
+apps/web/build/host-proxy.ts
+  s_5b054b517a26b6::t_aae569f9844a69 1-2,4-5,7-15,17-23,25-38,40-66
+apps/web/build/rpc-fetch-smoke.mjs
+  s_5b054b517a26b6::t_a7bf44b0d6eee7 1-74
+apps/web/docs/numeric-values.md
+  s_5b054b517a26b6::t_c72db7a436af37 1-41
+apps/web/docs/query-subscriptions.md
+  s_5b054b517a26b6::t_37a0134f13faaa 1-57
+apps/web/eslint.config.js
+  s_5b054b517a26b6::t_ff309944ac08b6 7
+apps/web/package.json
+  s_5b054b517a26b6::t_f961e4cb961f05 22-25,42-43
+apps/web/playwright.config.ts
+  s_5b054b517a26b6::t_7af35248f17350 15
+apps/web/src/adapters/host/attachment-download.test.ts
+  s_5b054b517a26b6::t_6ec007339a0727 1-23,26-30,32-44
+apps/web/src/adapters/host/attachment-download.ts
+  s_5b054b517a26b6::t_f98fa2e6514c4e 1-6,8-9,13-22,24
+apps/web/src/adapters/host/board-directory.ts
+  s_5b054b517a26b6::t_28501bab5c5a50 3,6-7
+apps/web/src/adapters/host/board-query.ts
+  s_5b054b517a26b6::t_ebe6ace031be9e 1-5,7-10,12-27
+apps/web/src/adapters/host/board-read-model.test.ts
+  s_5b054b517a26b6::t_464194adf8ce42 5-6,14,20-21,103-105,107-108,116-120,122,127,129,145-147,151-155,158,170-174,180,187-190,198,205-206,209,216-220,224,227,231,235-239,243,246,263,265,268,277-278,286,288,291,295-296,319-320,334,345-348,370-374,377-378,382,384,392,394,400
+apps/web/src/adapters/host/board-read-model.ts
+  s_5b054b517a26b6::t_9c099820f54cb4 1-3,6,12-13,15,22,36,41-43,52,99-100,166,213
+apps/web/src/adapters/host/data-source.test.ts
+  s_5b054b517a26b6::t_f55aec82a8a835 1-7,9-10,12-14,16-23,25-34,37-70,72-83,85-100
+apps/web/src/adapters/host/data-source.ts
+  s_5b054b517a26b6::t_c5aceff34bde1d 4-12,16,19-49
+apps/web/src/adapters/host/explorer-read-model.test.ts
+  s_5b054b517a26b6::t_892386c74c6a70 1-2,4,9-11,20,120,129-130,142-151,156,160-168,181,186-193,207,213,215-216,231,236-237,245,257,259-261,269,272,281-283,301,312,320,323,331-332,340,356,358-359,374,378,391,422-428,430,432-435,437-438,441-443,445-449,452-454,456,458-463,466-468,472-479,481-484,506-507,511,513-517,526,530,532-533,539,544
+apps/web/src/adapters/host/explorer-read-model.ts
+  s_5b054b517a26b6::t_d57c3149f2e1a6 1-2,33-34,36,39-40,45-47,71,73,90-101,110,112,118-120,134,136,159,161,196,199,233,250,252,259,283,331,334,347,367-368,389,404
+apps/web/src/adapters/host/generated-contracts.test.ts
+  s_5b054b517a26b6::t_926ef7e5c89976 18,66-68,129-135,138-145
+apps/web/src/adapters/host/health-read-model.test.ts
+  s_5b054b517a26b6::t_9347bcc5021540 3-4,7,13-14,26,36,45-46
+apps/web/src/adapters/host/health-read-model.ts
+  s_5b054b517a26b6::t_654badc8a9244c 5,10-14,19,24
+apps/web/src/adapters/host/integer-contracts.test.ts
+  s_5b054b517a26b6::t_0b2458d870d323 1-52
+apps/web/src/adapters/host/maintenance-api.ts
+  s_5b054b517a26b6::t_f4122ca0d0e601 43,45,47-54,56-67
+apps/web/src/adapters/host/maintenance-read-model.test.ts
+  s_5b054b517a26b6::t_63e436e09feb95 1-4,6-15,18-27,29-43,45-65
+apps/web/src/adapters/host/query-registry.test.ts
+  s_5b054b517a26b6::t_5c3c90a8c59098 1-9,11-16,18,20-23,25-27,29-39,44-57,59-64,67-78,80-100,103-115,118-148,151-171,174-200,203-222,225-234,237-253,256-264,267-294
+apps/web/src/adapters/host/query-registry.ts
+  s_5b054b517a26b6::t_045bce439a3376 1-8,10-13,15-25,28-50,52,54,56-59,62-64,67-103,106-109,112-125,128-130,132-136,138-144,147-152,154-166,169-246,248-257,259-263
+apps/web/src/adapters/host/rpc-transport.ts
+  s_5b054b517a26b6::t_f3c5265826ad17 1-29
+apps/web/src/adapters/host/task-mutations.test.ts
+  s_5b054b517a26b6::t_4294c03ba4f280 1-12,15-16,18-23,25-28,31-48,51-54,56-59,61-65,67-72,74-90,92-93,95,97-110,112-119,121-130,132-137,139-140,142-145,147-163
+apps/web/src/adapters/host/task-mutations.ts
+  s_5b054b517a26b6::t_bd16604c32c816 1,5-6,10-15,22-27,46,51,56,61,97,129,144,149,157,164,167-169,171,174,183,185-213,215,217-225,229-234,236-240,243-250,253,256-263
+apps/web/src/app/app.tsx
+  s_5b054b517a26b6::t_e26dc80bc3a1a0 12,41,50-52,144,167
+apps/web/src/app/shell/app-shell.test.tsx
+  s_5b054b517a26b6::t_66b56a6e68ba68 17
+apps/web/src/app/shell/route-content.tsx
+  s_5b054b517a26b6::t_f260679417f751 46,51
+apps/web/src/application/data/attachment-download.ts
+  s_5b054b517a26b6::t_55093b70ebdc41 1,14-15
+apps/web/src/application/data/board-read-model.ts
+  s_5b054b517a26b6::t_e35a1b02422035 1-3,27,130,132,147-149,151,167,176-177,223,234,236,239,241,244,246,283-284,351
+apps/web/src/application/data/explorer-read-model.ts
+  s_5b054b517a26b6::t_6f2475493f76ed 1-2,7,64,68,197,224-226,229,235-236,245,272,288,307,317,319,370-371,378-379,383,389,418,420,435,501,504,513,587,590-591,601,604-605,651-658,661,665,668-675
+apps/web/src/application/data/health-read-model.ts
+  s_5b054b517a26b6::t_aa4b3ca7bc74cb 5,44-45,55
+apps/web/src/application/data/maintenance-api.ts
+  s_5b054b517a26b6::t_668c30d3272939 23,77,79,90,101
+apps/web/src/application/data/rpc-transport.ts
+  s_5b054b517a26b6::t_c12cae609ea87f 1-14,16-21,23-27,29-32,34,45-47,52,61,68-69
+apps/web/src/application/data/task-mutations.ts
+  s_5b054b517a26b6::t_20bd32548387c5 1-2,8,74,113-114,149-150
+apps/web/src/application/errors/safe-error.test.ts
+  s_5b054b517a26b6::t_3bac4250ea0478 3,12
+apps/web/src/application/errors/safe-error.ts
+  s_5b054b517a26b6::t_6dbbaa3032d8c2 2,35,39,59
+apps/web/src/application/query/observe-read.test.ts
+  s_5b054b517a26b6::t_d4e3c86448b5cf 1-89
+apps/web/src/application/query/observe-read.ts
+  s_5b054b517a26b6::t_b40146c104d35d 1-109
+apps/web/src/application/query/read-state.test.ts
+  s_5b054b517a26b6::t_7ce141b49cc603 1-11
+apps/web/src/application/query/read-state.ts
+  s_5b054b517a26b6::t_500534c78940ee 24,30
+apps/web/src/application/query/use-async-read.ts
+  s_5b054b517a26b6::t_71998d609d1d68 4,10,17,60,65,83,88,90,101,104-105
+apps/web/src/application/query/use-deferred-read.ts
+  s_5b054b517a26b6::t_ae419c0c70409c 2,5,7,9,14,17,23,27-29,32,34-36
+apps/web/src/application/tasks/attachment-intents.ts
+  s_5b054b517a26b6::t_808443ffa8cc5a 1,28-29,31,36,48,64-65,76
+apps/web/src/application/tasks/board-model.test.ts
+  s_5b054b517a26b6::t_3790171ba3ec30 4
+apps/web/src/application/tasks/task-mutation-controller.ts
+  s_5b054b517a26b6::t_0631b9f35847e3 1,132
+apps/web/src/application/tasks/task-mutation-state.test.ts
+  s_5b054b517a26b6::t_8bf64d269136f9 55-67
+apps/web/src/application/tasks/task-mutation-state.ts
+  s_5b054b517a26b6::t_0f2a597f0820a2 1-2,273-276,347,358
+apps/web/src/application/workspace/board-live-state.test.ts
+  s_5b054b517a26b6::t_56a8608e7b0b0c 3,5
+apps/web/src/application/workspace/board-session-registry.test.ts
+  s_5b054b517a26b6::t_8c9c412d35e1b7 1-24,26-28,30-34,36,38-43,45-48,50-62,66-77,80-94,97-108,111-121,124-133,136-146,149-155,159-166,168-170,172-173,175-176,179-187
+apps/web/src/application/workspace/board-session-registry.ts
+  s_5b054b517a26b6::t_4946bc1abad466 2,4,22-25,68-88,114,144-145,157-159,175,200-204,218,220-237,245,250,252-253,261,264,268
+apps/web/src/application/workspace/use-board-directory.ts
+  s_5b054b517a26b6::t_4005e8ea14fcef 3-4,7-8
+apps/web/src/application/workspace/use-board-session.tsx
+  s_5b054b517a26b6::t_17c587f4e33edf 11,20,49,56,121,256,318,391,401-402,418
+apps/web/src/bootstrap.test.tsx
+  s_5b054b517a26b6::t_a68187032b7a4c 12
+apps/web/src/domain/board-id.ts
+  s_5b054b517a26b6::t_d7e6cac8eccbf7 1,5
+apps/web/src/domain/integer.ts
+  s_5b054b517a26b6::t_77cb760501cf04 1-31
+apps/web/src/domain/tasks/board.ts
+  s_5b054b517a26b6::t_9e3c540ffdd1e5 1,34,40,42-44,55,60-63,66,111,120-121,163-164,167-169
+apps/web/src/features/health/HealthPage.test.tsx
+  s_5b054b517a26b6::t_3e8adac5c9f0ef 16
+apps/web/src/features/health/HealthPage.tsx
+  s_5b054b517a26b6::t_66ffe87fa217a2 1,33-39
+apps/web/src/features/maintenance/MaintenancePage.test.tsx
+  s_5b054b517a26b6::t_d9e607c10f5d47 15
+apps/web/src/features/maintenance/MaintenancePage.tsx
+  s_5b054b517a26b6::t_4ceeff12d77aa2 1-2,66,99,113,115-116,120,126,161-172,174-180,183-200,227-228,290,557
+apps/web/src/features/settings/SettingsPage.test.tsx
+  s_5b054b517a26b6::t_7c4bd6cda29ffb 9
+apps/web/src/features/tasks/EventsView.test.tsx
+  s_5b054b517a26b6::t_b4fb36763927d4 4
+apps/web/src/features/tasks/EventsView.tsx
+  s_5b054b517a26b6::t_84f31d234a1730 1-2,10,12,39,140-143,251,255-258,262,274-277
+apps/web/src/features/tasks/ExplorerPage.tsx
+  s_5b054b517a26b6::t_b9ef83e5f498d9 16,18
+apps/web/src/features/tasks/TaskInspector.edit-actions.ts
+  s_5b054b517a26b6::t_5e1331b36c7933 1-2,45,62,154-160,163,166-168,170-171,187-190,196-197
+apps/web/src/features/tasks/TaskInspectorAssetsPanel.test.tsx
+  s_5b054b517a26b6::t_be4623c63bfd8a 219,222,225
+apps/web/src/features/tasks/TaskInspectorAssetsPanel.tsx
+  s_5b054b517a26b6::t_1d0eddd35256b3 1,235-238
+apps/web/src/features/tasks/TaskInspectorEditActions.tsx
+  s_5b054b517a26b6::t_9d11984529db72 9,74,78,81
+apps/web/src/features/tasks/TaskInspectorRelationsPanel.logic.ts
+  s_5b054b517a26b6::t_263e5881a689f4 1,12,103,124-126
+apps/web/src/features/tasks/TaskMapView.logic.ts
+  s_5b054b517a26b6::t_fe840debcf3cd6 69-70,80
+apps/web/src/features/tasks/TaskMapView.test.tsx
+  s_5b054b517a26b6::t_3fac3880d6f837 7,95
+apps/web/src/features/tasks/TaskMapView.tsx
+  s_5b054b517a26b6::t_d2dbfaed7ddff0 1,3,69,250-251,254-258,488
+apps/web/src/features/tasks/TaskRunsView.tsx
+  s_5b054b517a26b6::t_24a66827780fdd 1-2,103,105-106,108,191,193-195,198,200
+apps/web/src/features/tasks/inspector-model.ts
+  s_5b054b517a26b6::t_3f19e595d90cac 1,13-15,22-25,28-29,31-34,50,58-60,65,68
+apps/web/src/features/tasks/inspector-relations-model.ts
+  s_5b054b517a26b6::t_e1cf6d9a709787 1,20
+apps/web/src/features/tasks/integer-values.test.tsx
+  s_5b054b517a26b6::t_42181704c2aa80 1-64
+apps/web/src/features/tasks/task-detail.tsx
+  s_5b054b517a26b6::t_21f3d90926a837 36
+apps/web/src/features/tasks/task-discussion.tsx
+  s_5b054b517a26b6::t_12e29016e5d5bb 1,15
+apps/web/src/features/tasks/task-list-model.ts
+  s_5b054b517a26b6::t_2031ccf2378c5a 1,13-16,21
+apps/web/src/features/tasks/task-page.tsx
+  s_5b054b517a26b6::t_bab26eebf5b76f 1,27,29,31,74
+apps/web/src/features/tasks/task-runs-page.tsx
+  s_5b054b517a26b6::t_c443a1d6536932 10
+apps/web/src/features/tasks/task-select.tsx
+  s_5b054b517a26b6::t_8c02097c4079fa 15,18
+apps/web/src/features/tasks/use-task-detail-state.ts
+  s_5b054b517a26b6::t_6f0670bc0347ac 217,245-247,342,345,362,368
+apps/web/src/features/tasks/use-task-workspace.ts
+  s_5b054b517a26b6::t_f3b2efd996c957 265,281,284,287,290,432,441-442,444,495
+apps/web/src/generated/rpc/kanban/v1/common_pb.ts
+  s_5b054b517a26b6::t_0ff01143a0eae3 1-127
+apps/web/src/generated/rpc/kanban/v1/dto_pb.ts
+  s_5b054b517a26b6::t_411474c99455b2 1-10692
+apps/web/src/generated/rpc/kanban/v1/kanban_pb.ts
+  s_5b054b517a26b6::t_213297f3cdce0c 1-5156
+apps/web/src/generated/rpc/kanban/v1/query_pb.ts
+  s_5b054b517a26b6::t_920a1ccf44270a 1-697
+apps/web/src/lib/api/generated/contracts.json
+  s_5b054b517a26b6::t_9bbb4d409e33a4 1334-1337,1339-1340
+apps/web/src/lib/api/generated/contracts/api-add-dependency-headers.ts
+  s_5b054b517a26b6::t_c7129962b0a979 2,6
+apps/web/src/lib/api/generated/contracts/api-add-dependency-path.ts
+  s_5b054b517a26b6::t_8212ecd76718ac 2,6
+apps/web/src/lib/api/generated/contracts/api-add-dependency-request.ts
+  s_5b054b517a26b6::t_b3d762e074d2ad 2,6
+apps/web/src/lib/api/generated/contracts/api-add-dependency-response.ts
+  s_5b054b517a26b6::t_9104cd6052fed8 2,6
+apps/web/src/lib/api/generated/contracts/api-add-task-label-headers.ts
+  s_5b054b517a26b6::t_5a3dacadec2855 2,6
+apps/web/src/lib/api/generated/contracts/api-add-task-label-path.ts
+  s_5b054b517a26b6::t_51c2b26dbea027 2,6
+apps/web/src/lib/api/generated/contracts/api-add-task-label-request.ts
+  s_5b054b517a26b6::t_b670cdf03adc8b 2,6
+apps/web/src/lib/api/generated/contracts/api-add-task-label-response.ts
+  s_5b054b517a26b6::t_92f5f298572a37 2,6
+apps/web/src/lib/api/generated/contracts/api-archive-task-headers.ts
+  s_5b054b517a26b6::t_cce24659479068 2,6
+apps/web/src/lib/api/generated/contracts/api-archive-task-path.ts
+  s_5b054b517a26b6::t_7e661d07c24913 2,6
+apps/web/src/lib/api/generated/contracts/api-archive-task-request.ts
+  s_5b054b517a26b6::t_36d67aa96670f1 2,6
+apps/web/src/lib/api/generated/contracts/api-archive-task-response.ts
+  s_5b054b517a26b6::t_1a55130504d022 2,6
+apps/web/src/lib/api/generated/contracts/api-block-task-headers.ts
+  s_5b054b517a26b6::t_c58650b6251506 2,6
+apps/web/src/lib/api/generated/contracts/api-block-task-path.ts
+  s_5b054b517a26b6::t_ab8ee66fba0aab 2,6
+apps/web/src/lib/api/generated/contracts/api-block-task-request.ts
+  s_5b054b517a26b6::t_6814a57ebbec3a 2,6
+apps/web/src/lib/api/generated/contracts/api-block-task-response.ts
+  s_5b054b517a26b6::t_1b32686c1a4324 2,6
+apps/web/src/lib/api/generated/contracts/api-board-task-map-headers.ts
+  s_5b054b517a26b6::t_d5e281b7c721a7 2,6
+apps/web/src/lib/api/generated/contracts/api-board-task-map-path.ts
+  s_5b054b517a26b6::t_ea617909198855 2,6
+apps/web/src/lib/api/generated/contracts/api-board-task-map-query.ts
+  s_5b054b517a26b6::t_76f9d836a2dbf7 2,6
+apps/web/src/lib/api/generated/contracts/api-board-task-map-response.ts
+  s_5b054b517a26b6::t_5483861bfc903f 2,6
+apps/web/src/lib/api/generated/contracts/api-checkpoint-headers.ts
+  s_5b054b517a26b6::t_970138b2cb8b1f 2,6
+apps/web/src/lib/api/generated/contracts/api-checkpoint-response.ts
+  s_5b054b517a26b6::t_5b547336869bfd 2,6
+apps/web/src/lib/api/generated/contracts/api-claim-task-headers.ts
+  s_5b054b517a26b6::t_81331b61754ebd 2,6
+apps/web/src/lib/api/generated/contracts/api-claim-task-path.ts
+  s_5b054b517a26b6::t_26dd02be75e0fa 2,6
+apps/web/src/lib/api/generated/contracts/api-claim-task-request.ts
+  s_5b054b517a26b6::t_cf416fcb8ba2a0 2,6
+apps/web/src/lib/api/generated/contracts/api-claim-task-response.ts
+  s_5b054b517a26b6::t_62c856f31809ec 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-step-headers.ts
+  s_5b054b517a26b6::t_91cdea404eb3ff 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-step-path.ts
+  s_5b054b517a26b6::t_9bfb6a2982141b 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-step-request.ts
+  s_5b054b517a26b6::t_51365bc1c4ed7e 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-step-response.ts
+  s_5b054b517a26b6::t_2e0410c6b4dce1 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-task-headers.ts
+  s_5b054b517a26b6::t_6ca228d2478653 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-task-path.ts
+  s_5b054b517a26b6::t_9046ce3c877acf 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-task-request.ts
+  s_5b054b517a26b6::t_38399a1985e313 2,6
+apps/web/src/lib/api/generated/contracts/api-complete-task-response.ts
+  s_5b054b517a26b6::t_41eb96c9900a43 2,6
+apps/web/src/lib/api/generated/contracts/api-create-attachment-headers.ts
+  s_5b054b517a26b6::t_4f1143f50c2055 2,6
+apps/web/src/lib/api/generated/contracts/api-create-attachment-path.ts
+  s_5b054b517a26b6::t_d45447fdc816fb 2,6
+apps/web/src/lib/api/generated/contracts/api-create-attachment-request.ts
+  s_5b054b517a26b6::t_e1bde305d57990 2,6
+apps/web/src/lib/api/generated/contracts/api-create-attachment-response.ts
+  s_5b054b517a26b6::t_54a204d7d48427 2,6
+apps/web/src/lib/api/generated/contracts/api-create-comment-headers.ts
+  s_5b054b517a26b6::t_6c3b68ece37dce 2,6
+apps/web/src/lib/api/generated/contracts/api-create-comment-path.ts
+  s_5b054b517a26b6::t_238737596cc81f 2,6
+apps/web/src/lib/api/generated/contracts/api-create-comment-request.ts
+  s_5b054b517a26b6::t_cb624018494065 2,6
+apps/web/src/lib/api/generated/contracts/api-create-comment-response.ts
+  s_5b054b517a26b6::t_c1953dab0dfb8d 2,6
+apps/web/src/lib/api/generated/contracts/api-create-label-ontology-action-headers.ts
+  s_5b054b517a26b6::t_25430b99e5a382 2,6
+apps/web/src/lib/api/generated/contracts/api-create-label-ontology-action-path.ts
+  s_5b054b517a26b6::t_3aa4cd6e8723bb 2,6
+apps/web/src/lib/api/generated/contracts/api-create-label-ontology-action-request.ts
+  s_5b054b517a26b6::t_5fcaa886dbc865 2,6
+apps/web/src/lib/api/generated/contracts/api-create-label-ontology-action-response.ts
+  s_5b054b517a26b6::t_c85368b46d5bcb 2,6
+apps/web/src/lib/api/generated/contracts/api-create-step-headers.ts
+  s_5b054b517a26b6::t_7a5150d20a255a 2,6
+apps/web/src/lib/api/generated/contracts/api-create-step-path.ts
+  s_5b054b517a26b6::t_52e0f0d664bdbe 2,6
+apps/web/src/lib/api/generated/contracts/api-create-step-request.ts
+  s_5b054b517a26b6::t_2fcab0b972bfcb 2,6
+apps/web/src/lib/api/generated/contracts/api-create-step-response.ts
+  s_5b054b517a26b6::t_eb86e01755deaf 2,6
+apps/web/src/lib/api/generated/contracts/api-create-task-headers.ts
+  s_5b054b517a26b6::t_cc3ca4d0a640e8 2,6
+apps/web/src/lib/api/generated/contracts/api-create-task-path.ts
+  s_5b054b517a26b6::t_13c1ddce7a18e2 2,6
+apps/web/src/lib/api/generated/contracts/api-create-task-request.ts
+  s_5b054b517a26b6::t_1b8696d9121575 2,6
+apps/web/src/lib/api/generated/contracts/api-create-task-response.ts
+  s_5b054b517a26b6::t_f7554149dc6fdf 2,6
+apps/web/src/lib/api/generated/contracts/api-delete-attachment-headers.ts
+  s_5b054b517a26b6::t_1f098400b93b1e 2,6
+apps/web/src/lib/api/generated/contracts/api-delete-attachment-path.ts
+  s_5b054b517a26b6::t_2a765a2a904c3c 2,6
+apps/web/src/lib/api/generated/contracts/api-delete-attachment-response.ts
+  s_5b054b517a26b6::t_f12b478ca1f9bb 2,6
+apps/web/src/lib/api/generated/contracts/api-doctor-headers.ts
+  s_5b054b517a26b6::t_9cf4feeeda19e9 2,6
+apps/web/src/lib/api/generated/contracts/api-doctor-response.ts
+  s_5b054b517a26b6::t_bd2e5fca176fd5 2,6
+apps/web/src/lib/api/generated/contracts/api-download-attachment-headers.ts
+  s_5b054b517a26b6::t_7ca5536681e097 2,6
+apps/web/src/lib/api/generated/contracts/api-download-attachment-path.ts
+  s_5b054b517a26b6::t_5344f65c3282c0 2,6
+apps/web/src/lib/api/generated/contracts/api-download-attachment-response.ts
+  s_5b054b517a26b6::t_1f64c20cd833b7 2,6
+apps/web/src/lib/api/generated/contracts/api-error-response.ts
+  s_5b054b517a26b6::t_1609892d306937 2,6
+apps/web/src/lib/api/generated/contracts/api-event-data.ts
+  s_5b054b517a26b6::t_e7a4a1c7602546 2-3,5-6,8-9,13-14
+apps/web/src/lib/api/generated/contracts/api-explain-label-atom-headers.ts
+  s_5b054b517a26b6::t_e37c1d5241457c 2,6
+apps/web/src/lib/api/generated/contracts/api-explain-label-atom-response.ts
+  s_5b054b517a26b6::t_140c84b802251d 2,6
+apps/web/src/lib/api/generated/contracts/api-get-label-ontology-signal-headers.ts
+  s_5b054b517a26b6::t_5e8ad28cc516b8 2,6
+apps/web/src/lib/api/generated/contracts/api-get-label-ontology-signal-path.ts
+  s_5b054b517a26b6::t_d737db69c362f0 2,6
+apps/web/src/lib/api/generated/contracts/api-get-label-ontology-signal-response.ts
+  s_5b054b517a26b6::t_62588d22f99c66 2,6
+apps/web/src/lib/api/generated/contracts/api-get-run-log-headers.ts
+  s_5b054b517a26b6::t_9a518d4a9021ed 2,6
+apps/web/src/lib/api/generated/contracts/api-get-run-log-path.ts
+  s_5b054b517a26b6::t_75ba420b061b2b 2,6
+apps/web/src/lib/api/generated/contracts/api-get-run-log-response.ts
+  s_5b054b517a26b6::t_4d80c3116fe0ac 2,6
+apps/web/src/lib/api/generated/contracts/api-get-signal-headers.ts
+  s_5b054b517a26b6::t_ad5a8539b2edf3 2,6
+apps/web/src/lib/api/generated/contracts/api-get-signal-path.ts
+  s_5b054b517a26b6::t_dd2b79e51bfa8b 2,6
+apps/web/src/lib/api/generated/contracts/api-get-signal-response.ts
+  s_5b054b517a26b6::t_7a810fbbc67c72 2,6
+apps/web/src/lib/api/generated/contracts/api-get-stats-headers.ts
+  s_5b054b517a26b6::t_e5de6ac08b62c2 2,6
+apps/web/src/lib/api/generated/contracts/api-get-stats-query.ts
+  s_5b054b517a26b6::t_36978491762000 2,6
+apps/web/src/lib/api/generated/contracts/api-get-stats-response.ts
+  s_5b054b517a26b6::t_5d6cba20bf2e4c 2,6
+apps/web/src/lib/api/generated/contracts/api-get-task-headers.ts
+  s_5b054b517a26b6::t_4beb4e7186dbea 2,6
+apps/web/src/lib/api/generated/contracts/api-get-task-path.ts
+  s_5b054b517a26b6::t_29acd7f9ab73d2 2,6
+apps/web/src/lib/api/generated/contracts/api-get-task-query.ts
+  s_5b054b517a26b6::t_db85a0adbc8d0c 2,6
+apps/web/src/lib/api/generated/contracts/api-get-task-response.ts
+  s_5b054b517a26b6::t_9c5ef5c1e0667e 2,6
+apps/web/src/lib/api/generated/contracts/api-health-headers.ts
+  s_5b054b517a26b6::t_05414c55fdfbe0 2,6
+apps/web/src/lib/api/generated/contracts/api-health-response.ts
+  s_5b054b517a26b6::t_4a9fc4fc17a7db 2,6
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-headers.ts
+  s_5b054b517a26b6::t_75730d334e5830 2,6
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-path.ts
+  s_5b054b517a26b6::t_0bef9ec265d827 2,6
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-request.ts
+  s_5b054b517a26b6::t_881324b29ba5df 2,6
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-response.ts
+  s_5b054b517a26b6::t_c79900583ac920 2,6
+apps/web/src/lib/api/generated/contracts/api-label-atom-path.ts
+  s_5b054b517a26b6::t_c02cf144e7ba76 2,6
+apps/web/src/lib/api/generated/contracts/api-label-ontology-review-query.ts
+  s_5b054b517a26b6::t_399228d387995c 2,6
+apps/web/src/lib/api/generated/contracts/api-label-ontology-signal-query.ts
+  s_5b054b517a26b6::t_a1f464aa2ed6ec 2,6
+apps/web/src/lib/api/generated/contracts/api-label-suggestion-query.ts
+  s_5b054b517a26b6::t_58ae3774083c1e 2,6
+apps/web/src/lib/api/generated/contracts/api-list-attachments-headers.ts
+  s_5b054b517a26b6::t_f75a1ca665f319 2,6
+apps/web/src/lib/api/generated/contracts/api-list-attachments-path.ts
+  s_5b054b517a26b6::t_9e6ec66e02fd1a 2,6
+apps/web/src/lib/api/generated/contracts/api-list-attachments-response.ts
+  s_5b054b517a26b6::t_48de60c0fa71aa 2,6
+apps/web/src/lib/api/generated/contracts/api-list-board-columns-headers.ts
+  s_5b054b517a26b6::t_e04513dc178918 2,6
+apps/web/src/lib/api/generated/contracts/api-list-board-columns-path.ts
+  s_5b054b517a26b6::t_c31d09e09fb4f8 2,6
+apps/web/src/lib/api/generated/contracts/api-list-board-columns-response.ts
+  s_5b054b517a26b6::t_347e6dbcc4d577 2,6
+apps/web/src/lib/api/generated/contracts/api-list-boards-headers.ts
+  s_5b054b517a26b6::t_e795030fb016a8 2,6
+apps/web/src/lib/api/generated/contracts/api-list-boards-query.ts
+  s_5b054b517a26b6::t_7237fe8b1abb9a 2,6
+apps/web/src/lib/api/generated/contracts/api-list-boards-response.ts
+  s_5b054b517a26b6::t_95947f0d1cdd45 2,6
+apps/web/src/lib/api/generated/contracts/api-list-comments-headers.ts
+  s_5b054b517a26b6::t_21a7b374999d68 2,6
+apps/web/src/lib/api/generated/contracts/api-list-comments-path.ts
+  s_5b054b517a26b6::t_8a8abe3c9addf5 2,6
+apps/web/src/lib/api/generated/contracts/api-list-comments-response.ts
+  s_5b054b517a26b6::t_81f4afd8faa06c 2,6
+apps/web/src/lib/api/generated/contracts/api-list-dependencies-headers.ts
+  s_5b054b517a26b6::t_b531a4175ea001 2,6
+apps/web/src/lib/api/generated/contracts/api-list-dependencies-path.ts
+  s_5b054b517a26b6::t_4698e646de08f2 2,6
+apps/web/src/lib/api/generated/contracts/api-list-dependencies-response.ts
+  s_5b054b517a26b6::t_6f440febd586c4 2,6
+apps/web/src/lib/api/generated/contracts/api-list-events-headers.ts
+  s_5b054b517a26b6::t_262a470b3053f4 2,6
+apps/web/src/lib/api/generated/contracts/api-list-events-query.ts
+  s_5b054b517a26b6::t_23ed43a9ed2e7b 2,6
+apps/web/src/lib/api/generated/contracts/api-list-events-response.ts
+  s_5b054b517a26b6::t_b0eeb7b82b5783 2,6
+apps/web/src/lib/api/generated/contracts/api-list-label-ontology-signals-headers.ts
+  s_5b054b517a26b6::t_0848d670c3df14 2,6
+apps/web/src/lib/api/generated/contracts/api-list-label-ontology-signals-path.ts
+  s_5b054b517a26b6::t_108efdeea07326 2,6
+apps/web/src/lib/api/generated/contracts/api-list-label-ontology-signals-response.ts
+  s_5b054b517a26b6::t_958dac4ba4934f 2,6
+apps/web/src/lib/api/generated/contracts/api-list-runs-headers.ts
+  s_5b054b517a26b6::t_53bed1ca70f42b 2,6
+apps/web/src/lib/api/generated/contracts/api-list-runs-path.ts
+  s_5b054b517a26b6::t_6ee79ec2ae34a2 2,6
+apps/web/src/lib/api/generated/contracts/api-list-runs-response.ts
+  s_5b054b517a26b6::t_e30d22d85e43f5 2,6
+apps/web/src/lib/api/generated/contracts/api-list-steps-headers.ts
+  s_5b054b517a26b6::t_69acddeb70d6c3 2,6
+apps/web/src/lib/api/generated/contracts/api-list-steps-path.ts
+  s_5b054b517a26b6::t_abcc943229980f 2,6
+apps/web/src/lib/api/generated/contracts/api-list-steps-response.ts
+  s_5b054b517a26b6::t_da578c988b9751 2,6
+apps/web/src/lib/api/generated/contracts/api-list-task-labels-headers.ts
+  s_5b054b517a26b6::t_ee1cf0e9233de0 2,6
+apps/web/src/lib/api/generated/contracts/api-list-task-labels-path.ts
+  s_5b054b517a26b6::t_910d3ceab23750 2,6
+apps/web/src/lib/api/generated/contracts/api-list-task-labels-response.ts
+  s_5b054b517a26b6::t_eab4f2a3c35732 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-headers.ts
+  s_5b054b517a26b6::t_3a0706922d6ca8 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-path.ts
+  s_5b054b517a26b6::t_e9738a4641b70d 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-query.ts
+  s_5b054b517a26b6::t_45bfbd4d01b65e 3,7
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-response.ts
+  s_5b054b517a26b6::t_894c5a50de0d72 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-headers.ts
+  s_5b054b517a26b6::t_d7486a3a4d6e13 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-path.ts
+  s_5b054b517a26b6::t_25cae38584e1d3 2,6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-query.ts
+  s_5b054b517a26b6::t_83f56fd3a65c89 3,7
+apps/web/src/lib/api/generated/contracts/api-list-tasks-response.ts
+  s_5b054b517a26b6::t_42f7c8c2c60671 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-backup-headers.ts
+  s_5b054b517a26b6::t_60ab9a36b234b3 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-backup-request.ts
+  s_5b054b517a26b6::t_8011304c8c5e9a 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-backup-response.ts
+  s_5b054b517a26b6::t_0d637c8104fe3d 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-cleanup-headers.ts
+  s_5b054b517a26b6::t_b9a132822f0d1f 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-cleanup-request.ts
+  s_5b054b517a26b6::t_ab2293cf8d9e54 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-cleanup-response.ts
+  s_5b054b517a26b6::t_db7ec50894c29a 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-export-headers.ts
+  s_5b054b517a26b6::t_d618beb562a6c6 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-export-request.ts
+  s_5b054b517a26b6::t_22ca3ab8c1ca54 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-export-response.ts
+  s_5b054b517a26b6::t_667ced4b04fb78 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-headers.ts
+  s_5b054b517a26b6::t_54bac5345e0bc5 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-request.ts
+  s_5b054b517a26b6::t_dfa399e6680993 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-response.ts
+  s_5b054b517a26b6::t_b1b58580acd4e5 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-v30-headers.ts
+  s_5b054b517a26b6::t_69648dcc9c525e 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-v30-request.ts
+  s_5b054b517a26b6::t_57862e4017e1d1 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-import-v30-response.ts
+  s_5b054b517a26b6::t_351b255a1f577d 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-rebuild-headers.ts
+  s_5b054b517a26b6::t_67ae7bf2b5d51c 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-rebuild-request.ts
+  s_5b054b517a26b6::t_99b7fd02f99498 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-rebuild-response.ts
+  s_5b054b517a26b6::t_9a4934d29ccf42 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-run-headers.ts
+  s_5b054b517a26b6::t_3bbffbc72dff01 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-run-request.ts
+  s_5b054b517a26b6::t_2e502722a1ad3e 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-run-response.ts
+  s_5b054b517a26b6::t_5a78db743f3ac4 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-status-headers.ts
+  s_5b054b517a26b6::t_56d0829a249e54 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-status-response.ts
+  s_5b054b517a26b6::t_82abd8c5ef7ecb 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-vacuum-headers.ts
+  s_5b054b517a26b6::t_7609a9826826fc 2,6
+apps/web/src/lib/api/generated/contracts/api-maintenance-vacuum-response.ts
+  s_5b054b517a26b6::t_fadbfb3107d875 2,6
+apps/web/src/lib/api/generated/contracts/api-mark-execution-plan-not-required-headers.ts
+  s_5b054b517a26b6::t_670566244796cf 2,6
+apps/web/src/lib/api/generated/contracts/api-mark-execution-plan-not-required-path.ts
+  s_5b054b517a26b6::t_dcc2734fe9d9bc 2,6
+apps/web/src/lib/api/generated/contracts/api-mark-execution-plan-not-required-request.ts
+  s_5b054b517a26b6::t_be94e010009930 2,6
+apps/web/src/lib/api/generated/contracts/api-mark-execution-plan-not-required-response.ts
+  s_5b054b517a26b6::t_e6c4f9b565b434 2,6
+apps/web/src/lib/api/generated/contracts/api-promote-task-headers.ts
+  s_5b054b517a26b6::t_9d5f9c0101fc7e 2,6
+apps/web/src/lib/api/generated/contracts/api-promote-task-path.ts
+  s_5b054b517a26b6::t_0a5c9f5bfd25a5 2,6
+apps/web/src/lib/api/generated/contracts/api-promote-task-request.ts
+  s_5b054b517a26b6::t_bb05fed16dfa47 2,6
+apps/web/src/lib/api/generated/contracts/api-promote-task-response.ts
+  s_5b054b517a26b6::t_76922c2c1c3dc6 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-dependency-headers.ts
+  s_5b054b517a26b6::t_29504ddc6a50dc 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-dependency-path.ts
+  s_5b054b517a26b6::t_5dcb2572ef41b8 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-dependency-response.ts
+  s_5b054b517a26b6::t_832cf31f4ac712 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-step-headers.ts
+  s_5b054b517a26b6::t_4fcc8862e4bbba 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-step-path.ts
+  s_5b054b517a26b6::t_4371ae8dd213c1 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-step-response.ts
+  s_5b054b517a26b6::t_747247780ae7c0 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-task-label-headers.ts
+  s_5b054b517a26b6::t_c36fbfac0000d7 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-task-label-path.ts
+  s_5b054b517a26b6::t_73bc86d90f5ec0 2,6
+apps/web/src/lib/api/generated/contracts/api-remove-task-label-response.ts
+  s_5b054b517a26b6::t_15827ef7073087 2,6
+apps/web/src/lib/api/generated/contracts/api-reopen-step-headers.ts
+  s_5b054b517a26b6::t_f1422292cb2c8c 2,6
+apps/web/src/lib/api/generated/contracts/api-reopen-step-path.ts
+  s_5b054b517a26b6::t_0de1f519e0dc17 2,6
+apps/web/src/lib/api/generated/contracts/api-reopen-step-request.ts
+  s_5b054b517a26b6::t_c6bf36b8f6f7af 2,6
+apps/web/src/lib/api/generated/contracts/api-reopen-step-response.ts
+  s_5b054b517a26b6::t_405a324ca89e56 2,6
+apps/web/src/lib/api/generated/contracts/api-review-label-ontology-headers.ts
+  s_5b054b517a26b6::t_21a9c6c13a8ee7 2,6
+apps/web/src/lib/api/generated/contracts/api-review-label-ontology-path.ts
+  s_5b054b517a26b6::t_0f378d58658b20 2,6
+apps/web/src/lib/api/generated/contracts/api-review-label-ontology-response.ts
+  s_5b054b517a26b6::t_a2d4940fc23edc 2,6
+apps/web/src/lib/api/generated/contracts/api-review-signals-headers.ts
+  s_5b054b517a26b6::t_c3c2e77295f253 2,6
+apps/web/src/lib/api/generated/contracts/api-review-signals-path.ts
+  s_5b054b517a26b6::t_819ef022a31028 2,6
+apps/web/src/lib/api/generated/contracts/api-review-signals-query.ts
+  s_5b054b517a26b6::t_3c8d0729f97ac6 2,6
+apps/web/src/lib/api/generated/contracts/api-review-signals-response.ts
+  s_5b054b517a26b6::t_08f3a74ecddd69 2,6
+apps/web/src/lib/api/generated/contracts/api-search-status-headers.ts
+  s_5b054b517a26b6::t_fa0e9f00737070 2,6
+apps/web/src/lib/api/generated/contracts/api-search-status-query.ts
+  s_5b054b517a26b6::t_fcadc9bee71004 2,6
+apps/web/src/lib/api/generated/contracts/api-search-status-response.ts
+  s_5b054b517a26b6::t_155112d2f656a9 2,6
+apps/web/src/lib/api/generated/contracts/api-skip-step-headers.ts
+  s_5b054b517a26b6::t_76a3e3d8bd53b9 2,6
+apps/web/src/lib/api/generated/contracts/api-skip-step-path.ts
+  s_5b054b517a26b6::t_4517b0c923024e 2,6
+apps/web/src/lib/api/generated/contracts/api-skip-step-request.ts
+  s_5b054b517a26b6::t_6af8c463653714 2,6
+apps/web/src/lib/api/generated/contracts/api-skip-step-response.ts
+  s_5b054b517a26b6::t_40612bd1e2c9c8 2,6
+apps/web/src/lib/api/generated/contracts/api-specify-task-headers.ts
+  s_5b054b517a26b6::t_e1dc977d120b46 2,6
+apps/web/src/lib/api/generated/contracts/api-specify-task-path.ts
+  s_5b054b517a26b6::t_8ae95d1046161d 2,6
+apps/web/src/lib/api/generated/contracts/api-specify-task-request.ts
+  s_5b054b517a26b6::t_101cd786074631 2,6
+apps/web/src/lib/api/generated/contracts/api-specify-task-response.ts
+  s_5b054b517a26b6::t_ca88f59bc1f3ad 2,6
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-headers.ts
+  s_5b054b517a26b6::t_484a410524fe2f 2,6
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-path.ts
+  s_5b054b517a26b6::t_2a837b2232ae0e 2,6
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-request.ts
+  s_5b054b517a26b6::t_7cb97fd53ed416 2,6
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-response.ts
+  s_5b054b517a26b6::t_62e88441c2991f 2,6
+apps/web/src/lib/api/generated/contracts/api-suggest-task-labels-headers.ts
+  s_5b054b517a26b6::t_4705ae7a363e59 2,6
+apps/web/src/lib/api/generated/contracts/api-suggest-task-labels-path.ts
+  s_5b054b517a26b6::t_1fcaea2651bfb1 2,6
+apps/web/src/lib/api/generated/contracts/api-suggest-task-labels-response.ts
+  s_5b054b517a26b6::t_4241833f16e43f 2,6
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-headers.ts
+  s_5b054b517a26b6::t_3e3de88f346f13 2,6
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-path.ts
+  s_5b054b517a26b6::t_0e333571235eef 2,6
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-query.ts
+  s_5b054b517a26b6::t_bce27789d095ae 2,6
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-response.ts
+  s_5b054b517a26b6::t_ac0e012ec10f73 2,6
+apps/web/src/lib/api/generated/contracts/api-unblock-task-headers.ts
+  s_5b054b517a26b6::t_1d89149846d49e 2,6
+apps/web/src/lib/api/generated/contracts/api-unblock-task-path.ts
+  s_5b054b517a26b6::t_9b7a825a010aa2 2,6
+apps/web/src/lib/api/generated/contracts/api-unblock-task-request.ts
+  s_5b054b517a26b6::t_cd83bcf94262ec 2,6
+apps/web/src/lib/api/generated/contracts/api-unblock-task-response.ts
+  s_5b054b517a26b6::t_1045142775aad0 2,6
+apps/web/src/lib/api/generated/contracts/api-update-step-headers.ts
+  s_5b054b517a26b6::t_d94f1e2dd1daad 2,6
+apps/web/src/lib/api/generated/contracts/api-update-step-path.ts
+  s_5b054b517a26b6::t_e3b155d8977539 2,6
+apps/web/src/lib/api/generated/contracts/api-update-step-request.ts
+  s_5b054b517a26b6::t_40b2f4ba26a485 2,6
+apps/web/src/lib/api/generated/contracts/api-update-step-response.ts
+  s_5b054b517a26b6::t_882d7da0bb79c0 2,6
+apps/web/src/lib/api/generated/contracts/api-update-task-headers.ts
+  s_5b054b517a26b6::t_6df11c517b1e13 2,6
+apps/web/src/lib/api/generated/contracts/api-update-task-path.ts
+  s_5b054b517a26b6::t_0302ca23a63bd1 2,6
+apps/web/src/lib/api/generated/contracts/api-update-task-request.ts
+  s_5b054b517a26b6::t_28fd0d457bd41d 2,6
+apps/web/src/lib/api/generated/contracts/api-update-task-response.ts
+  s_5b054b517a26b6::t_1821e281975697 2,6
+apps/web/src/lib/api/generated/contracts/runtime-web-config-output.ts
+  s_5b054b517a26b6::t_ff8e06fb8641bf 2,6
+apps/web/src/lib/api/generated/fixtures/runtime-web-config-output.invalid.json
+  s_5b054b517a26b6::t_17fe818db34ee1 7
+apps/web/src/lib/api/generated/fixtures/runtime-web-config-output.valid.json
+  s_5b054b517a26b6::t_88992b8500fd0c 7
+apps/web/src/lib/api/generated/generated.sha256
+  s_5b054b517a26b6::t_98361a75621d87 1-219,346-347,654-660,724,879
+apps/web/src/lib/api/generated/index.ts
+  s_5b054b517a26b6::t_d664daf843a56c 2
+apps/web/src/lib/api/generated/manifest.json
+  s_5b054b517a26b6::t_a4133a3b0289df 1335-1338,1340-1341,2249,2530-2531,2909,3067,3071,3091-3095,3100,3121-3125,3130,3151-3155,3160,3181-3185,3190,3212-3216,3223,3245-3249,3256,3278-3282,3287,3309-3313,3318,3339-3343,3348,3370-3374,3379,3401-3405,3410,3432-3436,3441,3463-3467,3472,3493-3497,3504,3526-3530,3537,3559-3563,3568,3590-3594,3599,3621-3625,3630,3652-3656,3661,3682-3686,3691,3712-3716,3723,3745-3749,3754,3776-3780,3785,3807-3811,3816,3838-3842,3847,3869-3873,3878,3900-3904,3909,3931-3935,3940,3962-3966,3971,3993-3997,4002,4023-4027,4032,4054-4058,4063,4084-4088,4093,4114-4118,4123,4145-4149,4154,4176-4180,4185,4206-4210,4215,4237-4241,4246,4268-4272,4277,4299-4303,4308,4330-4334,4339,4360-4364,4371,4392-4396,4401,4422-4426,4433,4455-4459,4466,4487-4491,4496,4518-4522,4527,4548-4552,4557,4578-4582,4587,4608-4612,4617,4638-4642,4647,4668-4672,4674,4679,4699-4703,4708,4728-4732,4737,4758-4762,4767,4788-4792,4797,4818-4822,4827,4847-4851,4856,4876-4880,4885,4906-4910,4915,4936-4940,4945,4966-4970,4975,4996-5000,5007-5010
+apps/web/src/lib/api/generated/operations.json
+  s_5b054b517a26b6::t_e781caea7835ef 4,24-28,33,54-58,63,84-88,93,114-118,123,145-149,156,178-182,189,211-215,220,242-246,251,272-276,281,303-307,312,334-338,343,365-369,374,396-400,405,426-430,437,459-463,470,492-496,501,523-527,532,554-558,563,585-589,594,615-619,624,645-649,656,678-682,687,709-713,718,740-744,749,771-775,780,802-806,811,833-837,842,864-868,873,895-899,904,926-930,935,956-960,965,987-991,996,1017-1021,1026,1047-1051,1056,1078-1082,1087,1109-1113,1118,1139-1143,1148,1170-1174,1179,1201-1205,1210,1232-1236,1241,1263-1267,1272,1293-1297,1304,1325-1329,1334,1355-1359,1366,1388-1392,1399,1420-1424,1429,1451-1455,1460,1481-1485,1490,1511-1515,1520,1541-1545,1550,1571-1575,1580,1601-1605,1607,1612,1632-1636,1641,1661-1665,1670,1691-1695,1700,1721-1725,1730,1751-1755,1760,1780-1784,1789,1809-1813,1818,1839-1843,1848,1869-1873,1878,1899-1903,1908,1929-1933
+apps/web/src/lib/api/generated/operations.ts
+  s_5b054b517a26b6::t_e942b0125a62c2 5-10,34-39,64-69,94-99,124-129,157-162,190-195,221-226,252-257,282-287,313-318,344-349,375-380,406-411,438-443,471-476,502-507,533-538,564-569,595-600,625-630,657-662,688-693,719-724,750-755,781-786,812-817,843-848,874-879,905-910,936-941,966-971,997-1002,1027-1032,1057-1062,1088-1093,1119-1124,1149-1154,1180-1185,1211-1216,1242-1247,1273-1278,1305-1310,1335-1340,1367-1372,1400-1405,1430-1435,1461-1466,1491-1496,1521-1526,1551-1556,1581-1586,1608,1613-1618,1642-1647,1671-1676,1701-1706,1731-1736,1761-1766,1790-1795,1819-1824,1849-1854,1879-1884,1909-1914,1995-2005
+apps/web/src/lib/api/generated/runtime.ts
+  s_5b054b517a26b6::t_8609701626e6e1 2-6,46,64
+apps/web/src/lib/api/generated/schemas/api-event-data.schema.json
+  s_5b054b517a26b6::t_35ea947a485eea 592,3162
+apps/web/src/lib/api/generated/test-only.ts
+  s_5b054b517a26b6::t_1a23b452ba46a2 137,359,580,811
+apps/web/src/lib/lossless-json.test.ts
+  s_5b054b517a26b6::t_3602585c67c2b6 1-29
+apps/web/src/lib/lossless-json.ts
+  s_5b054b517a26b6::t_c6d0a673f2c345 1-99
+apps/web/src/lib/rpc/client.ts
+  s_5b054b517a26b6::t_4aa0b63ad8456e 1-5,7-12,14-18
+apps/web/src/lib/rpc/codec.generated.ts
+  s_5b054b517a26b6::t_60b476e4fc8b8f 1-6840
+apps/web/src/lib/rpc/codec.test.ts
+  s_5b054b517a26b6::t_251d5c953fffe8 1-2,4-8,10-19,22-28,31-39,41-51,54-65,68-76,78-90,93-100,103-115,118-128,131-134
+apps/web/src/lib/rpc/endpoint.ts
+  s_5b054b517a26b6::t_a79bf57b911357 1-2,4-5,8-15,19-20,22,28-30,32-34,37-38,40,42-43,45-46,49-62,64-76,78-87,89-99,101-102,104-116,118-121,123-129,131-135
+apps/web/src/lib/rpc/errors.ts
+  s_5b054b517a26b6::t_2b03dba78f8a04 1-64
+apps/web/src/lib/rpc/event-shape.ts
+  s_5b054b517a26b6::t_b93b138797e508 1-61
+apps/web/src/lib/rpc/fixtures.generated.test.ts
+  s_5b054b517a26b6::t_444c128a443079 1-238
+apps/web/src/lib/rpc/methods.generated.ts
+  s_5b054b517a26b6::t_734ba106506d65 1-121
+apps/web/src/lib/rpc/query-codec.test.ts
+  s_5b054b517a26b6::t_659b12ec5dede6 1,3-61
+apps/web/src/lib/rpc/query-codec.ts
+  s_5b054b517a26b6::t_d830fa23b0589a 1-95
+apps/web/src/lib/rpc/query-projection.test.ts
+  s_5b054b517a26b6::t_2523df2f893074 1-6,8-12,15-28,31-44,47-59,62-81
+apps/web/src/lib/rpc/query-projection.ts
+  s_5b054b517a26b6::t_2eee4c56524f23 1-116
+apps/web/src/lib/rpc/query-test-support.ts
+  s_5b054b517a26b6::t_208895c8ff5f18 1-3,5-28,31-32,35-40,42-59,62-76,78,81-87
+apps/web/src/lib/rpc/transport.test.ts
+  s_5b054b517a26b6::t_19b85f8c2aa971 1-139
+apps/web/src/lib/rpc/value-codec.ts
+  s_5b054b517a26b6::t_a22868d4ee1222 1-129
+apps/web/src/lib/runtime.test.ts
+  s_5b054b517a26b6::t_ef7e2c654116a6 17-22
+apps/web/src/lib/runtime.ts
+  s_5b054b517a26b6::t_40f89c16cd2809 1,103-107,109
+apps/web/src/lib/web-protocol.ts
+  s_5b054b517a26b6::t_5113fe68753228 1-2
+apps/web/src/platform/browser/page-focus-recovery.ts
+  s_5b054b517a26b6::t_cbde2f5a0914d3 1-46
+apps/web/tests/board-live.spec.ts
+  s_5b054b517a26b6::t_356ce6e69e77db 11,19,24,26,29-36
+apps/web/tests/board-task-mutations.spec.ts
+  s_5b054b517a26b6::t_9521b786f1931b 8,19-22,36,41,46,48,61,63-64
+apps/web/tests/explorer-fixture.ts
+  s_5b054b517a26b6::t_4ed1ecc3c7598d 1,3-4,30,35-36,116,119-120,123,126,128,130-145,147-151,153-157,159-162,164-168,170-174,176-181,183-201,203-208,213-218
+apps/web/tests/explorer-inspector.spec.ts
+  s_5b054b517a26b6::t_fde1e47708e379 22,24-25
+apps/web/tests/health.spec.ts
+  s_5b054b517a26b6::t_f90100a0c70333 5-6,27-29,40,45,49,52,63,68-69,81,84,86,101-103,112,119,122,124-125
+apps/web/tests/inspector-integration.spec.ts
+  s_5b054b517a26b6::t_343c0ae1176b5f 3-6,16-17,19-20,35,38,44-46,53,57,73-76,81-82,86,102-103,111,133,154,156
+apps/web/tests/integer-values.spec.ts
+  s_5b054b517a26b6::t_2d476865b0182b 1-58
+apps/web/tests/maintenance.spec.ts
+  s_5b054b517a26b6::t_ae6f66c21b4feb 5-8,34,36,38-39,41,43-44,46,48-49,64-70,88,90-93,99-102,120,129-130,133,138-139,142,147-149,151-152,154,156,185,190,196,217,220,238,241,243,252-253,260-263
+apps/web/tests/release-09d-performance.spec.ts
+  s_5b054b517a26b6::t_63c9168c783782 1-4,30,37-41,44,52-68,79-83,87,89-99,102-109,141,144,162-165,170-173,179-180,286-287,301,319-329,331-332,336-337,340-350,353-397,401-405,409-413,415-417,420-476,486,497,701,749,752,755-759,774,778-779,784,786,796,799-800,812-815,817-818,827-831,836,838-839,884,915,924-925,927-930,932,935,938,950,953,956-957,959-960,966,971-972,974,979-986,991-994,998,1001,1007-1008,1012,1024,1033-1045,1060,1095-1096
+apps/web/tests/release-consistency.spec.ts
+  s_5b054b517a26b6::t_7196f18f76c49d 1-5,15,29-35,43,84-88,95,101,104,113,118,140,151,164,166,168,177,180-181,196,205-206,219-220,228,231,233,236
+apps/web/tests/release-grpc-migration.spec.ts
+  s_5b054b517a26b6::t_717e8dd5d8926e 1-153
+apps/web/tests/release-integer-values.spec.ts
+  s_5b054b517a26b6::t_a4221fecd41ce8 1-160
+apps/web/tests/release-native-clients.spec.ts
+  s_5b054b517a26b6::t_14ff5d087af7f4 1-84
+apps/web/tests/release-paper.spec.ts
+  s_5b054b517a26b6::t_d15fe86a690c44 1,17-20,29,36,38,40,128,162-163,183
+apps/web/tests/release-proof.spec.ts
+  s_5b054b517a26b6::t_16bc512bd94f44 1-3,107-108,126,160,222,246,259,270,280,292,303,313
+apps/web/tests/release-query-faults.spec.ts
+  s_5b054b517a26b6::t_3a9c1ca39452dd 1-116
+apps/web/tests/release-query-probe.ts
+  s_5b054b517a26b6::t_c9711eb311347f 1-119
+apps/web/tests/release-query-subscriptions.spec.ts
+  s_5b054b517a26b6::t_a268c87b6ba4c5 1-293
+apps/web/tests/release-refresh-cost.spec.ts
+  s_5b054b517a26b6::t_b8e42556c50642 1-5,7-8,10-30,33-40,43-46,49-51,54-63,65-90,92-114,116-127,129-151,153-168
+apps/web/tests/release-rpc.ts
+  s_5b054b517a26b6::t_b2e7301298b2ef 1-25
+apps/web/tests/rpc-fixture.ts
+  s_5b054b517a26b6::t_3ff6f99397fb56 1-238
+apps/web/tests/runtime-bootstrap.spec.ts
+  s_5b054b517a26b6::t_70aee9b046030d 85-100
+apps/web/tests/runtime-fixture.ts
+  s_5b054b517a26b6::t_3ace5e1e0d3b98 3-5,29,32-35,88,91,94-109,113-120
+apps/web/tests/settings.spec.ts
+  s_5b054b517a26b6::t_b59b67d80496f3 4,20,24,50,107,124,132,136
+apps/web/vite.config.ts
+  s_5b054b517a26b6::t_4c4f185a514654 5,9,17,22-36,38-55,57-58,60
+crates/kanban-cli/README.md
+  s_5b054b517a26b6::t_c22821e1d86220 4-5
+crates/kanban-cli/src/commands/attachment.rs
+  s_5b054b517a26b6::t_379dae49872e06 22,24-27
+crates/kanban-cli/src/commands/attachment/add.rs
+  s_5b054b517a26b6::t_35de069fe405fb 20,40-53
+crates/kanban-cli/src/commands/attachment/download.rs
+  s_5b054b517a26b6::t_73b9a4ebe63a82 14,16-19
+crates/kanban-cli/src/commands/attachment/list.rs
+  s_5b054b517a26b6::t_10f23cf56dd403 11,13-14
+crates/kanban-cli/src/commands/attachment/remove.rs
+  s_5b054b517a26b6::t_012bbb9c04a124 12,14-17
+crates/kanban-cli/src/commands/board.rs
+  s_5b054b517a26b6::t_645d28840488a1 32,34-38
+crates/kanban-cli/src/commands/board/archive.rs
+  s_5b054b517a26b6::t_53bb602b862c42 11,13-18
+crates/kanban-cli/src/commands/board/columns.rs
+  s_5b054b517a26b6::t_39bedfc6f1c704 11,14
+crates/kanban-cli/src/commands/board/create.rs
+  s_5b054b517a26b6::t_7cb66b2f3435b1 15,17-24
+crates/kanban-cli/src/commands/board/list.rs
+  s_5b054b517a26b6::t_a4d27dd0776d8e 12,14
+crates/kanban-cli/src/commands/board/show.rs
+  s_5b054b517a26b6::t_ab6cb3e904ca00 11,13-15
+crates/kanban-cli/src/commands/comment.rs
+  s_5b054b517a26b6::t_d6f3619d383332 16,18-19
+crates/kanban-cli/src/commands/comment/add.rs
+  s_5b054b517a26b6::t_701a9d759b0742 40,43-58
+crates/kanban-cli/src/commands/comment/list.rs
+  s_5b054b517a26b6::t_ff783bac9b8b30 9,11-13
+crates/kanban-cli/src/commands/context.rs
+  s_5b054b517a26b6::t_a0b2848313ec2c 36,57-73
+crates/kanban-cli/src/commands/dependency.rs
+  s_5b054b517a26b6::t_7a590d3e50eef6 20,22-24
+crates/kanban-cli/src/commands/dependency/add.rs
+  s_5b054b517a26b6::t_ee604e3aaeff0e 12,15-16,18-20
+crates/kanban-cli/src/commands/dependency/list.rs
+  s_5b054b517a26b6::t_eefa8854f489cd 11,13-15
+crates/kanban-cli/src/commands/dependency/remove.rs
+  s_5b054b517a26b6::t_da6339621ba306 14,16-23
+crates/kanban-cli/src/commands/entities.rs
+  s_5b054b517a26b6::t_7d8d01facab654 19,21-23
+crates/kanban-cli/src/commands/entities/list.rs
+  s_5b054b517a26b6::t_c76ec61cdd9320 13-17
+crates/kanban-cli/src/commands/entities/show.rs
+  s_5b054b517a26b6::t_038c8e92e2ee71 10-11
+crates/kanban-cli/src/commands/entities/upsert.rs
+  s_5b054b517a26b6::t_37b9c0a3eb74c0 25-40
+crates/kanban-cli/src/commands/event.rs
+  s_5b054b517a26b6::t_1660b6bbeac0ec 7,9
+crates/kanban-cli/src/commands/event/list.rs
+  s_5b054b517a26b6::t_40105ffc11429b 16,21-32
+crates/kanban-cli/src/commands/graph.rs
+  s_5b054b517a26b6::t_4adec79f8674b8 31,33-39
+crates/kanban-cli/src/commands/graph/map.rs
+  s_5b054b517a26b6::t_7046b4d3c4645f 22-36
+crates/kanban-cli/src/commands/graph/neighborhood.rs
+  s_5b054b517a26b6::t_e2e9d2cc805755 17-28
+crates/kanban-cli/src/commands/graph/neighbors.rs
+  s_5b054b517a26b6::t_87cfdb0e471d4b 16-25
+crates/kanban-cli/src/commands/graph/query.rs
+  s_5b054b517a26b6::t_82338d11bf12e6 12,15-16
+crates/kanban-cli/src/commands/graph/rebuild.rs
+  s_5b054b517a26b6::t_ee21a1b6efb267 3-4
+crates/kanban-cli/src/commands/graph/status.rs
+  s_5b054b517a26b6::t_d79af9fa9f74f1 3-4
+crates/kanban-cli/src/commands/graph/sync.rs
+  s_5b054b517a26b6::t_6527fce604d9c2 3-4
+crates/kanban-cli/src/commands/index.rs
+  s_5b054b517a26b6::t_20a9b6454327f5 19,22-27
+crates/kanban-cli/src/commands/label.rs
+  s_5b054b517a26b6::t_d091f1cf9f47b8 61,63-75
+crates/kanban-cli/src/commands/label/add.rs
+  s_5b054b517a26b6::t_8134c996a11ff8 15,17-28
+crates/kanban-cli/src/commands/label/bootstrap.rs
+  s_5b054b517a26b6::t_890451895da431 32,47-64
+crates/kanban-cli/src/commands/label/create.rs
+  s_5b054b517a26b6::t_cef3bc2731bce7 13,15-23
+crates/kanban-cli/src/commands/label/delete.rs
+  s_5b054b517a26b6::t_f9ae05be13aa61 15,17-19
+crates/kanban-cli/src/commands/label/list.rs
+  s_5b054b517a26b6::t_8c9118eabc5154 8,10
+crates/kanban-cli/src/commands/label/ontology.rs
+  s_5b054b517a26b6::t_9bf749f42993d4 172,178-202,208,211-216,222,228-239,245,247-259,264,270-272,277-280,283-306,320-323,326-351,353-355,358-360,363-373,376-378,382-384,388-390,393-404
+crates/kanban-cli/src/commands/label/remove.rs
+  s_5b054b517a26b6::t_1c33db879ff583 11,13-15
+crates/kanban-cli/src/commands/maintenance.rs
+  s_5b054b517a26b6::t_a518c8d039d59f 60-61,63-64,66-67,69-70,72,75,79-82,86-87,91-92,94,98-99,104-107,111,116-118,123-125,130-132
+crates/kanban-cli/src/commands/run.rs
+  s_5b054b517a26b6::t_5ea0789d776efa 19,21,24,27-28
+crates/kanban-cli/src/commands/run/list.rs
+  s_5b054b517a26b6::t_e7cbd3d47f5491 13,18-20
+crates/kanban-cli/src/commands/run/log.rs
+  s_5b054b517a26b6::t_9cb931ab2e6b2f 13,18
+crates/kanban-cli/src/commands/run/show.rs
+  s_5b054b517a26b6::t_256bb3bc6eb6ba 12,17
+crates/kanban-cli/src/commands/search.rs
+  s_5b054b517a26b6::t_932814ba4f5b86 38,50
+crates/kanban-cli/src/commands/signal.rs
+  s_5b054b517a26b6::t_18e060827c19c5 93,96-110,112-134,139-143,145,158-170,184,190,204-205,215,231-234
+crates/kanban-cli/src/commands/task.rs
+  s_5b054b517a26b6::t_b0ff29ad36276b 66,69-85
+crates/kanban-cli/src/commands/task/archive.rs
+  s_5b054b517a26b6::t_ec4f69298b5cd8 13,18-27
+crates/kanban-cli/src/commands/task/block.rs
+  s_5b054b517a26b6::t_f4b1741757d5ab 32,38-49
+crates/kanban-cli/src/commands/task/claim.rs
+  s_5b054b517a26b6::t_d6b90b86bda1f2 14,19-30
+crates/kanban-cli/src/commands/task/create.rs
+  s_5b054b517a26b6::t_9530c472eb6ab0 51,57-77
+crates/kanban-cli/src/commands/task/done.rs
+  s_5b054b517a26b6::t_9c933c58b8653d 16,21-33
+crates/kanban-cli/src/commands/task/heartbeat.rs
+  s_5b054b517a26b6::t_56eae69265d981 18,23-34
+crates/kanban-cli/src/commands/task/list.rs
+  s_5b054b517a26b6::t_59437826b2c070 48,54
+crates/kanban-cli/src/commands/task/plan_not_required.rs
+  s_5b054b517a26b6::t_38bec5a89164b5 14,19-28
+crates/kanban-cli/src/commands/task/promote.rs
+  s_5b054b517a26b6::t_28868090437d60 12,17-23
+crates/kanban-cli/src/commands/task/reclaim.rs
+  s_5b054b517a26b6::t_cd63e24a9b0285 22,31-42
+crates/kanban-cli/src/commands/task/release.rs
+  s_5b054b517a26b6::t_1915f32a46e5e3 14,19-28
+crates/kanban-cli/src/commands/task/reopen.rs
+  s_5b054b517a26b6::t_7e8beb2af0284b 13,18-27
+crates/kanban-cli/src/commands/task/review.rs
+  s_5b054b517a26b6::t_8c78ab1ce92b82 16,21-32
+crates/kanban-cli/src/commands/task/show.rs
+  s_5b054b517a26b6::t_e793f3ed9c7583 15,21-23,42-44
+crates/kanban-cli/src/commands/task/specify.rs
+  s_5b054b517a26b6::t_01040ad631346c 15,20-30
+crates/kanban-cli/src/commands/task/step.rs
+  s_5b054b517a26b6::t_523c7e545fc4d1 36,42-49
+crates/kanban-cli/src/commands/task/step/add.rs
+  s_5b054b517a26b6::t_f33051e23c16c9 25,30-44
+crates/kanban-cli/src/commands/task/step/done.rs
+  s_5b054b517a26b6::t_932bc897d2b20f 15,20-30
+crates/kanban-cli/src/commands/task/step/list.rs
+  s_5b054b517a26b6::t_94cdded56fe6ff 12,17-19
+crates/kanban-cli/src/commands/task/step/remove.rs
+  s_5b054b517a26b6::t_87f2400773c24b 13,18-20,32-34
+crates/kanban-cli/src/commands/task/step/reopen.rs
+  s_5b054b517a26b6::t_3a1091428bd7da 15,20-30
+crates/kanban-cli/src/commands/task/step/skip.rs
+  s_5b054b517a26b6::t_96380c0703def7 15,20-30
+crates/kanban-cli/src/commands/task/step/update.rs
+  s_5b054b517a26b6::t_ee363bea97c4a6 27,32-50,52-53
+crates/kanban-cli/src/commands/task/unblock.rs
+  s_5b054b517a26b6::t_a41f924b0fa22b 11,16-22
+crates/kanban-cli/src/commands/task/update.rs
+  s_5b054b517a26b6::t_cb2b57e028feef 30,45-62
+crates/kanban-cli/src/commands/vector.rs
+  s_5b054b517a26b6::t_8fb5b56c2a322c 28,31-36
+crates/kanban-cli/src/commands/vector/configure.rs
+  s_5b054b517a26b6::t_19497d66a2bc2e 21-33
+crates/kanban-cli/src/commands/vector/query_chunks.rs
+  s_5b054b517a26b6::t_411ae22f7ee600 16-30
+crates/kanban-cli/src/commands/vector/query_label_atoms.rs
+  s_5b054b517a26b6::t_f4fa02fbd825e3 23-37
+crates/kanban-cli/src/commands/vector/rebuild.rs
+  s_5b054b517a26b6::t_d7d3d8c1aae89d 9-14
+crates/kanban-cli/src/commands/vector/status.rs
+  s_5b054b517a26b6::t_d5262340b1b8a0 9-14
+crates/kanban-cli/src/commands/vector/sync.rs
+  s_5b054b517a26b6::t_1df3b0f2b54592 9-14
+crates/kanban-cli/src/main.rs
+  s_5b054b517a26b6::t_ad19c2b32ff76b 216-240
+crates/kanban-cli/src/server.rs
+  s_5b054b517a26b6::t_a9757c9da3c32a 19
+crates/kanban-cli/tests/cli_history_adoption.rs
+  s_5b054b517a26b6::t_7ea15b839c7de8 93-95,105,120-121,141
+crates/kanban-cli/tests/cli_queue_adoption.rs
+  s_5b054b517a26b6::t_c425c377791684 12-59,126-129,137-143
+crates/kanban-cli/tests/support.rs
+  s_5b054b517a26b6::t_91eb6019853922 120-123
+crates/kanban-client/Cargo.toml
+  s_5b054b517a26b6::t_feea6d5de7aa9c 9-10,16-17,21-23
+crates/kanban-client/README.md
+  s_5b054b517a26b6::t_b289794196f449 3-4,6-27,30-45
+crates/kanban-client/src/client.rs
+  s_5b054b517a26b6::t_f52916a78d89ae 1,3-10,25-33,36-38,73-78
+crates/kanban-client/src/error.rs
+  s_5b054b517a26b6::t_7f2ef49c335184 20,22,27-54,67-85,111-112,121-162
+crates/kanban-client/src/lib.rs
+  s_5b054b517a26b6::t_1415ddbab1a626 3-8,28-29
+crates/kanban-client/src/operations/attachment.rs
+  s_5b054b517a26b6::t_ea0b615ee9a309 1,3,14,16-25,29,35-43,48,55-64,67-75,79,86-96,130-131,134-138,142-146,152
+crates/kanban-client/src/operations/board/archive.rs
+  s_5b054b517a26b6::t_b1fa13f4cc5f26 1,3,6,11-20
+crates/kanban-client/src/operations/board/columns.rs
+  s_5b054b517a26b6::t_71b3d93cd719fc 1,3,6-19
+crates/kanban-client/src/operations/board/create.rs
+  s_5b054b517a26b6::t_4decdc3e001caa 1-3,8-16
+crates/kanban-client/src/operations/board/get.rs
+  s_5b054b517a26b6::t_4aca51aa00f421 1,3,6-16
+crates/kanban-client/src/operations/board/health.rs
+  s_5b054b517a26b6::t_44b09fce694dcf 1-3,8-10
+crates/kanban-client/src/operations/board/list.rs
+  s_5b054b517a26b6::t_fa180bba3172c0 1-3,8-16
+crates/kanban-client/src/operations/comment/create.rs
+  s_5b054b517a26b6::t_65f7e94fbbb94a 1,4,8,20-28,33,39-40
+crates/kanban-client/src/operations/comment/list.rs
+  s_5b054b517a26b6::t_194676382da51a 1,3,6,13-22,26,31-32,40-41,45
+crates/kanban-client/src/operations/context.rs
+  s_5b054b517a26b6::t_fc0f61aeea5cde 1,3,7,15-25
+crates/kanban-client/src/operations/dependency/create.rs
+  s_5b054b517a26b6::t_5c77257af6b27a 1,3,6,23-28,30-34,39,45-47,55-56,60
+crates/kanban-client/src/operations/dependency/list.rs
+  s_5b054b517a26b6::t_8a0ebe27e58440 1,3,6,13-22,26,31-32,40-41,45
+crates/kanban-client/src/operations/dependency/remove.rs
+  s_5b054b517a26b6::t_d527273c781e43 1,3,6,23-33,37,43-44,46,54-55,59
+crates/kanban-client/src/operations/entities.rs
+  s_5b054b517a26b6::t_53d337e9ad0bce 1,3,5,8,14-25,29-39,43-54
+crates/kanban-client/src/operations/event/list.rs
+  s_5b054b517a26b6::t_e8f300a1b1ebb0 3,6-9,25-38,48-49,58,63-64,73,78-79,88
+crates/kanban-client/src/operations/event/stream.rs
+  s_5b054b517a26b6::t_e55b180614e307 1,4-8,10,12-16,18,20,25,28-29,31-37,42-43,45-47,52-62,67-80,82-111,113-115,118-121,125,127,131-139,143-156,158-166,168-208,211-214,216-232,234-235
+crates/kanban-client/src/operations/event/stream/projection.rs
+  s_5b054b517a26b6::t_c50b7682e7d48d 1-195
+crates/kanban-client/src/operations/event/stream/projection/tests.rs
+  s_5b054b517a26b6::t_582b89ed080bb9 1-241
+crates/kanban-client/src/operations/event/stream/validation.rs
+  s_5b054b517a26b6::t_884674b20b3b6a 1-112
+crates/kanban-client/src/operations/graph.rs
+  s_5b054b517a26b6::t_30bf6df8feea19 3-4,7,10-20,24-33,38-47,52,56-64,67,73-85,88,93-102,106,111-120
+crates/kanban-client/src/operations/labels.rs
+  s_5b054b517a26b6::t_ca508e24130b0b 3,6,9-19,23,28-36,41,49-59,63,65-74,78,83-84,87,96-106,109,114,117,123-124,127,134,137-141,147-157,161,167-168,171,177-187,190,196-197,233-234,239,246-247,252,260
+crates/kanban-client/src/operations/maintenance.rs
+  s_5b054b517a26b6::t_1a61f5d28b4907 2-4,7-8,12-15,17-20,22-33,35-44,46-55,57,62-73,75,80-91,93-102,104-113,115,120-128,130,134-145,147,151-162
+crates/kanban-client/src/operations/ontology.rs
+  s_5b054b517a26b6::t_33828390642d3b 4,6-13,27-41,46-80,87-165,172-192,198-211,218-220,224,230,236-252,257-274,278,280-307,313-339,343,345-360,365-410,415-428,433-482,487-497,508-509
+crates/kanban-client/src/operations/ontology/compat.rs
+  s_5b054b517a26b6::t_4a82bf8c2c2fd3 1-305
+crates/kanban-client/src/operations/run/list.rs
+  s_5b054b517a26b6::t_bc53617572d19c 1,3,6,13-22,26,31-32,40-41,46
+crates/kanban-client/src/operations/run/log.rs
+  s_5b054b517a26b6::t_cb8abfead6dd91 1,3,6-17,22,29,40-41,44
+crates/kanban-client/src/operations/run/show.rs
+  s_5b054b517a26b6::t_a745cbb9a33970 1,3,6-17,22,29,40-41,44
+crates/kanban-client/src/operations/search.rs
+  s_5b054b517a26b6::t_dfb4129df5130f 5,8,12-20,23,27-35,38-49,52-66,69-83
+crates/kanban-client/src/operations/signal.rs
+  s_5b054b517a26b6::t_fcf2775b983baa 4,7,11,19-29,32,38-48,51,57-67,70,72-82,85,90-103,106,111-124,127,132-145,148,156-166,192-193,196,211
+crates/kanban-client/src/operations/step/create.rs
+  s_5b054b517a26b6::t_898f18f9c9faa5 1,4,8,20-28,33,39,42,45
+crates/kanban-client/src/operations/step/list.rs
+  s_5b054b517a26b6::t_94cd62527ee81d 1,3,6,13-22,26,31-32
+crates/kanban-client/src/operations/step/remove.rs
+  s_5b054b517a26b6::t_2ec0afc717c148 1,3,6-10,23-33,37,43-45
+crates/kanban-client/src/operations/step/resolve.rs
+  s_5b054b517a26b6::t_617c3d80d48e81 2,5,8,19-28,33,40-42,46,57-66,71,78-80,84,95-104,109,116-118
+crates/kanban-client/src/operations/step/update.rs
+  s_5b054b517a26b6::t_79e3feeb57d1be 1,3,6,26-35,40,47-48,51,54
+crates/kanban-client/src/operations/task/archive.rs
+  s_5b054b517a26b6::t_c20aa9503d517f 1-2,5,10-18,22,28-29
+crates/kanban-client/src/operations/task/block.rs
+  s_5b054b517a26b6::t_1052083a2e0450 1,3,6,11-19,24,30-31
+crates/kanban-client/src/operations/task/claim.rs
+  s_5b054b517a26b6::t_c0aaaa6ae68dc5 1,3,6,11-19,24,30-31
+crates/kanban-client/src/operations/task/complete.rs
+  s_5b054b517a26b6::t_46eba6797cd59a 1,3,6,11-19,24,30-31
+crates/kanban-client/src/operations/task/create.rs
+  s_5b054b517a26b6::t_930c977516d1c0 1,3,6,12-21
+crates/kanban-client/src/operations/task/heartbeat.rs
+  s_5b054b517a26b6::t_82d65dd01c3173 1,3,6,11-19,24,30-31
+crates/kanban-client/src/operations/task/list.rs
+  s_5b054b517a26b6::t_ec515383ebb64b 5,8,13-23,26,31-41
+crates/kanban-client/src/operations/task/plan_not_required.rs
+  s_5b054b517a26b6::t_7696df98f79433 1,3,6,11-19,24,30,32
+crates/kanban-client/src/operations/task/promote.rs
+  s_5b054b517a26b6::t_7fe9456d746a9a 1,3,6,11-19,24,30-31
+crates/kanban-client/src/operations/task/reclaim.rs
+  s_5b054b517a26b6::t_d5ed78c25347fe 1-2,5,10-18,22,28-29
+crates/kanban-client/src/operations/task/release.rs
+  s_5b054b517a26b6::t_e9808fe8f2aba9 1,3,6,11-19,24,30-31
+crates/kanban-client/src/operations/task/reopen.rs
+  s_5b054b517a26b6::t_390b323e09663e 1-2,5,10-18,22,28-29
+crates/kanban-client/src/operations/task/review.rs
+  s_5b054b517a26b6::t_1938e0fd1d1f2e 1,3,6,11-19,24,30-31
+crates/kanban-client/src/operations/task/show.rs
+  s_5b054b517a26b6::t_be39f8155ae1a3 1,3,6-16,20,25-26,29-42,46,51-52
+crates/kanban-client/src/operations/task/specify.rs
+  s_5b054b517a26b6::t_14b6c304d192b3 1-2,5,10-18,22,28-29
+crates/kanban-client/src/operations/task/unblock.rs
+  s_5b054b517a26b6::t_50055a056f9b17 1-2,5,10-18,22,28-29
+crates/kanban-client/src/operations/task/update.rs
+  s_5b054b517a26b6::t_e564d68a98cf66 1-2,5,10-18,22,28-29
+crates/kanban-client/src/operations/vector.rs
+  s_5b054b517a26b6::t_f3080e639f0656 2,5,8,13-22,26,30-37,41-50,55-64,69,73-80,84,88-95,209-210,213
+crates/kanban-client/src/selectors.rs
+  s_5b054b517a26b6::t_351c83d52ee41b 6-10,20-30,44,61
+crates/kanban-client/src/shared.rs
+  s_5b054b517a26b6::t_032d0eb8db63e3 1
+crates/kanban-client/src/transport.rs
+  s_5b054b517a26b6::t_34c936805e13d0 2-32,34,37-45,48-51,54-60,63-66
+crates/kanban-client/tests/native.rs
+  s_5b054b517a26b6::t_5b1379dfef69db 1-2,4-9
+crates/kanban-client/tests/native/business.rs
+  s_5b054b517a26b6::t_f723153c222e5b 1-250
+crates/kanban-client/tests/native/common.rs
+  s_5b054b517a26b6::t_cacfd6ee9db6d6 1-225
+crates/kanban-client/tests/native/coverage.rs
+  s_5b054b517a26b6::t_ebaf32f30db2d5 1-36
+crates/kanban-client/tests/native/ontology.rs
+  s_5b054b517a26b6::t_df0f1f448d869a 1-3,6-10,13-14,17-24,27-30,33-41,44-65,68,70-107,109,112-127
+crates/kanban-client/tests/native/streams.rs
+  s_5b054b517a26b6::t_c3310a8ae374dc 1-157
+crates/kanban-client/tests/native/transport.rs
+  s_5b054b517a26b6::t_f1515fb07fa604 1-59
+crates/kanban-live-core/Cargo.toml
+  s_5b054b517a26b6::t_666604368e6cfd 1-11
+crates/kanban-live-core/README.md
+  s_5b054b517a26b6::t_c8c54e49f43521 1-11
+crates/kanban-live-core/src/lib.rs
+  s_5b054b517a26b6::t_1b6ac43ff64dfb 1-5
+crates/kanban-live-core/src/model.rs
+  s_5b054b517a26b6::t_3feec2b6295a65 1-23
+crates/kanban-live-core/src/query.rs
+  s_5b054b517a26b6::t_dbc5b0ca8995b4 1-318
+crates/kanban-live-core/src/query/tests.rs
+  s_5b054b517a26b6::t_8a49d44383c34b 1-156
+crates/kanban-mcp/Cargo.toml
+  s_5b054b517a26b6::t_52376bac4e73a0 23-27
+crates/kanban-mcp/README.md
+  s_5b054b517a26b6::t_77b98ac58004b8 3-8
+crates/kanban-mcp/src/main.rs
+  s_5b054b517a26b6::t_769d8acdde88c8 7-11,17-35
+crates/kanban-mcp/src/shared.rs
+  s_5b054b517a26b6::t_69df0e594066bd 1,8,20,32-33,35,42-43,45
+crates/kanban-mcp/src/tools/attachments/create.rs
+  s_5b054b517a26b6::t_07dd0506bba3a2 35-48
+crates/kanban-mcp/src/tools/attachments/download.rs
+  s_5b054b517a26b6::t_e693ed153353d0 40-42
+crates/kanban-mcp/src/tools/attachments/list.rs
+  s_5b054b517a26b6::t_c25a7a01feb226 30-32
+crates/kanban-mcp/src/tools/attachments/remove.rs
+  s_5b054b517a26b6::t_2f9fd6381a56a5 32-34
+crates/kanban-mcp/src/tools/boards/archive.rs
+  s_5b054b517a26b6::t_08347c66cf1a81 28,31
+crates/kanban-mcp/src/tools/boards/columns.rs
+  s_5b054b517a26b6::t_2d2747b0b9ad1d 29-30
+crates/kanban-mcp/src/tools/boards/create.rs
+  s_5b054b517a26b6::t_a355a9bdd43672 32-38
+crates/kanban-mcp/src/tools/boards/list.rs
+  s_5b054b517a26b6::t_30932119f13c2d 28-29
+crates/kanban-mcp/src/tools/boards/show.rs
+  s_5b054b517a26b6::t_264b6f3cd26e51 25,27
+crates/kanban-mcp/src/tools/comments/create.rs
+  s_5b054b517a26b6::t_28ccef054d5d2c 43,56
+crates/kanban-mcp/src/tools/comments/list.rs
+  s_5b054b517a26b6::t_30f960dd0390b0 32-33
+crates/kanban-mcp/src/tools/context.rs
+  s_5b054b517a26b6::t_31bb015000f852 81-82
+crates/kanban-mcp/src/tools/dependencies/create.rs
+  s_5b054b517a26b6::t_d3c650be2018f5 35-40
+crates/kanban-mcp/src/tools/dependencies/list.rs
+  s_5b054b517a26b6::t_540f1447b7dab6 32,34
+crates/kanban-mcp/src/tools/dependencies/remove.rs
+  s_5b054b517a26b6::t_bc8428b78c004b 35-40
+crates/kanban-mcp/src/tools/entities.rs
+  s_5b054b517a26b6::t_edca76ebc1af01 73,75,84-85,97,99
+crates/kanban-mcp/src/tools/events/list.rs
+  s_5b054b517a26b6::t_c4cabd12888d5a 46-56
+crates/kanban-mcp/src/tools/graph/maintenance.rs
+  s_5b054b517a26b6::t_457f0e97173f58 29-30,43-44
+crates/kanban-mcp/src/tools/graph/map.rs
+  s_5b054b517a26b6::t_b607ddd389ac5c 61-62
+crates/kanban-mcp/src/tools/graph/neighborhood.rs
+  s_5b054b517a26b6::t_fe2f4851ae35f2 47,49
+crates/kanban-mcp/src/tools/graph/neighbors.rs
+  s_5b054b517a26b6::t_8e436450ad5313 41-42
+crates/kanban-mcp/src/tools/graph/query.rs
+  s_5b054b517a26b6::t_14b1f58b9aeb5a 37,39
+crates/kanban-mcp/src/tools/graph/status.rs
+  s_5b054b517a26b6::t_4a6d76e6abd335 28-29
+crates/kanban-mcp/src/tools/labels.rs
+  s_5b054b517a26b6::t_aba692421ac615 116-117,130-137,153-154,168-169,183,191,206,208,222,235-237
+crates/kanban-mcp/src/tools/lifecycle/archive.rs
+  s_5b054b517a26b6::t_46fc862b6f5bf2 25-33
+crates/kanban-mcp/src/tools/lifecycle/block.rs
+  s_5b054b517a26b6::t_690733336edf33 38-48
+crates/kanban-mcp/src/tools/lifecycle/claim.rs
+  s_5b054b517a26b6::t_3f3eb39bd47285 42-52
+crates/kanban-mcp/src/tools/lifecycle/done.rs
+  s_5b054b517a26b6::t_c6bdc16e8d7710 40-51
+crates/kanban-mcp/src/tools/lifecycle/heartbeat.rs
+  s_5b054b517a26b6::t_ae1804042252b0 42-52
+crates/kanban-mcp/src/tools/lifecycle/reclaim.rs
+  s_5b054b517a26b6::t_9ce2ceb491724b 30-40
+crates/kanban-mcp/src/tools/lifecycle/release.rs
+  s_5b054b517a26b6::t_3c8a27920a228a 33-41
+crates/kanban-mcp/src/tools/lifecycle/reopen.rs
+  s_5b054b517a26b6::t_721ee06622d819 24-32
+crates/kanban-mcp/src/tools/lifecycle/review.rs
+  s_5b054b517a26b6::t_5f2823ca1c7580 38-48
+crates/kanban-mcp/src/tools/lifecycle/specify.rs
+  s_5b054b517a26b6::t_38e86fa180206a 25-34
+crates/kanban-mcp/src/tools/lifecycle/unblock.rs
+  s_5b054b517a26b6::t_b164e369bb8d9d 23-28
+crates/kanban-mcp/src/tools/ontology.rs
+  s_5b054b517a26b6::t_32caf3ff7bc06b 3-4,31,46,48,59,62,73,77,88,102,110,112,120,123,134,136,147,149,160,162-167,176,180,188,192,203,205,213,215,223,226,234,237,245,248,259,261,272,275,286,289,297,300,311,314,322,325,336,338,349,353
+crates/kanban-mcp/src/tools/runs/list.rs
+  s_5b054b517a26b6::t_53e1d46d59702a 32-33
+crates/kanban-mcp/src/tools/runs/log.rs
+  s_5b054b517a26b6::t_e79784ddcccb57 28-29
+crates/kanban-mcp/src/tools/runs/show.rs
+  s_5b054b517a26b6::t_31c93d20959ab2 27-28
+crates/kanban-mcp/src/tools/search.rs
+  s_5b054b517a26b6::t_585dc8aaf4270c 60-61,74-75,97-98,111-112,125-126
+crates/kanban-mcp/src/tools/signals.rs
+  s_5b054b517a26b6::t_41152997b69bac 102,123,136,144,156-157,170,178,191,193,203,205,218,220,233,241
+crates/kanban-mcp/src/tools/stats.rs
+  s_5b054b517a26b6::t_5dc8afecfe1b3a 26-27
+crates/kanban-mcp/src/tools/steps/create.rs
+  s_5b054b517a26b6::t_b58a95bb5c6ef3 43,54
+crates/kanban-mcp/src/tools/steps/done.rs
+  s_5b054b517a26b6::t_f41a7a4bb7b4a6 33-34,39-41
+crates/kanban-mcp/src/tools/steps/list.rs
+  s_5b054b517a26b6::t_efd9b28f0d557d 32-33
+crates/kanban-mcp/src/tools/steps/remove.rs
+  s_5b054b517a26b6::t_7527b870c9c1d7 32,34
+crates/kanban-mcp/src/tools/steps/reopen.rs
+  s_5b054b517a26b6::t_6c96f79cf3e69c 33-34,39-41
+crates/kanban-mcp/src/tools/steps/skip.rs
+  s_5b054b517a26b6::t_47237632359e6a 33-34,39-41
+crates/kanban-mcp/src/tools/steps/update.rs
+  s_5b054b517a26b6::t_7bbbf8c31ed70a 43,53-55
+crates/kanban-mcp/src/tools/tasks/create.rs
+  s_5b054b517a26b6::t_6a55f2378415f0 50,52-70
+crates/kanban-mcp/src/tools/tasks/list.rs
+  s_5b054b517a26b6::t_6f13f5d35600b9 97-98,143-144
+crates/kanban-mcp/src/tools/tasks/plan_not_required.rs
+  s_5b054b517a26b6::t_39345e6895a363 32-40
+crates/kanban-mcp/src/tools/tasks/promote.rs
+  s_5b054b517a26b6::t_8d0e4acb3014ff 31-36
+crates/kanban-mcp/src/tools/tasks/show.rs
+  s_5b054b517a26b6::t_b53e15ddbd2a87 34,37,43
+crates/kanban-mcp/src/tools/tasks/update.rs
+  s_5b054b517a26b6::t_e36e79932809fc 97-113
+crates/kanban-mcp/src/tools/vector/maintenance.rs
+  s_5b054b517a26b6::t_27e3104dd8d134 28-29,42-43,56-57
+crates/kanban-mcp/src/tools/vector/query_chunks.rs
+  s_5b054b517a26b6::t_15ba4de0bea856 36-37
+crates/kanban-mcp/src/tools/vector/query_label_atoms.rs
+  s_5b054b517a26b6::t_3cb85be4814da1 37-38
+crates/kanban-mcp/src/tools/vector/status.rs
+  s_5b054b517a26b6::t_e898f684b2f857 27-28
+crates/kanban-mcp/tests/stdio_native.rs
+  s_5b054b517a26b6::t_72d22a4819ba98 1-345
+crates/kanban-mcp/tests/stdio_native/support.rs
+  s_5b054b517a26b6::t_96f8f3e7981a0e 1-11,14-15,17-22,24-25,27,30-51,53-55,57-58,60-61,63-67,69-108,110-126,129-195,197,199
+crates/kanban-protocol/Cargo.toml
+  s_5b054b517a26b6::t_19c115e40e5961 12,39-51
+crates/kanban-protocol/README.md
+  s_5b054b517a26b6::t_c4a5a940a53927 4-13,19-22
+crates/kanban-protocol/build.rs
+  s_5b054b517a26b6::t_d6e887d87167ea 1-26
+crates/kanban-protocol/docs/schema.md
+  s_5b054b517a26b6::t_ce5ff839d43e71 3,12,16-26,31-33,39-58
+crates/kanban-protocol/proto/kanban/v1/common.proto
+  s_5b054b517a26b6::t_35a6b1c604f64b 1-20
+crates/kanban-protocol/proto/kanban/v1/dto.proto
+  s_5b054b517a26b6::t_c5d018a0523c88 1-2484
+crates/kanban-protocol/proto/kanban/v1/kanban.proto
+  s_5b054b517a26b6::t_2a8e4bc24f491e 1-992
+crates/kanban-protocol/proto/kanban/v1/query.proto
+  s_5b054b517a26b6::t_5ceadeae2f4054 1-137
+crates/kanban-protocol/proto/rpc-field-numbers.json
+  s_5b054b517a26b6::t_8d76f7b82f8edb 1-2632
+crates/kanban-protocol/proto/rpc-methods.json
+  s_5b054b517a26b6::t_fdbac6d831da27 1-5611
+crates/kanban-protocol/proto/rpc-operations.json
+  s_5b054b517a26b6::t_cdd979417aaf1f 1-954
+crates/kanban-protocol/src/admin_catalog.rs
+  s_5b054b517a26b6::t_8ce07fd4df1939 25-27
+crates/kanban-protocol/src/board_catalog.rs
+  s_5b054b517a26b6::t_4b94e72a1ca159 608
+crates/kanban-protocol/src/contract_catalog.rs
+  s_5b054b517a26b6::t_4dd4e232a0818f 159,240,244,247,249-250
+crates/kanban-protocol/src/endpoint.rs
+  s_5b054b517a26b6::t_fc6d5e5dbbd28e 1-5,254,256,321,334,374-376,755
+crates/kanban-protocol/src/event_stream.rs
+  s_5b054b517a26b6::t_78d6681bafca5b 5,8,64,385,391
+crates/kanban-protocol/src/history_catalog.rs
+  s_5b054b517a26b6::t_e9904db1ffd933 1,573-574,576,582-586,589,707
+crates/kanban-protocol/src/inventory.rs
+  s_5b054b517a26b6::t_f37d8af5286704 1-2
+crates/kanban-protocol/src/lib.rs
+  s_5b054b517a26b6::t_519399d3c0c316 36,56,152-155
+crates/kanban-protocol/src/operation_catalog.rs
+  s_5b054b517a26b6::t_e56609de9d3b2a 3-5,22,26,261
+crates/kanban-protocol/src/rpc.rs
+  s_5b054b517a26b6::t_1d42c46a6b163e 1-23
+crates/kanban-protocol/src/rpc/catalog.rs
+  s_5b054b517a26b6::t_7369dda6702df2 1-66
+crates/kanban-protocol/src/rpc/codec.rs
+  s_5b054b517a26b6::t_aaf40e68772b9f 1-311
+crates/kanban-protocol/src/rpc/dto.rs
+  s_5b054b517a26b6::t_ebb3d9f89b695a 1-124
+crates/kanban-protocol/src/rpc/generated.rs
+  s_5b054b517a26b6::t_15eacf5637345f 1-13505
+crates/kanban-protocol/src/rpc/query.rs
+  s_5b054b517a26b6::t_36ba68832a01e9 1-8
+crates/kanban-protocol/src/runtime.rs
+  s_5b054b517a26b6::t_affc15d11c47a1 3
+crates/kanban-protocol/src/runtime_catalog.rs
+  s_5b054b517a26b6::t_0243704a1728c0 5
+crates/kanban-protocol/src/surface.rs
+  s_5b054b517a26b6::t_ce09502e94e12f 18
+crates/kanban-protocol/src/web_artifact.rs
+  s_5b054b517a26b6::t_9960e58e96540e 35
+crates/kanban-protocol/tests/foundation.rs
+  s_5b054b517a26b6::t_375f595a3b7b76 291,336-340,342-345,600,911,1081-1082,1087,1223,1278,1813,1994
+crates/kanban-protocol/tests/g0_metadata.rs
+  s_5b054b517a26b6::t_6f32274a17a07b 208,220,235,247
+crates/kanban-protocol/tests/rpc.rs
+  s_5b054b517a26b6::t_1653d3ca2e104e 1-525
+crates/kanban-protocol/tests/rpc/fixtures.rs
+  s_5b054b517a26b6::t_48e4fda52f748b 1-3555
+crates/kanban-protocol/tests/rpc/query.rs
+  s_5b054b517a26b6::t_b4a4b535f97b18 1-103
+crates/kanban-protocol/tests/web_artifact.rs
+  s_5b054b517a26b6::t_2a8ffe64857621 56,68,148,159,168-171
+crates/kanban-server/Cargo.toml
+  s_5b054b517a26b6::t_9a9652389fe34d 14-23,25,46-47
+crates/kanban-server/README.md
+  s_5b054b517a26b6::t_a87ab2c8d2c17e 4-6,13-46
+crates/kanban-server/src/application.rs
+  s_5b054b517a26b6::t_13a474984ea2f1 1-21
+crates/kanban-server/src/application/attachments.rs
+  s_5b054b517a26b6::t_29c58bef6e2f25 2,11-13,21,24-28,43-45,48-49,52-53,58,61-62,65-67,77,79
+crates/kanban-server/src/application/boards.rs
+  s_5b054b517a26b6::t_d00288cff1f9b8 1-5
+crates/kanban-server/src/application/boards/archive.rs
+  s_5b054b517a26b6::t_22ee7570d5a2a3 3,8-12,18,20
+crates/kanban-server/src/application/boards/columns.rs
+  s_5b054b517a26b6::t_7ca0f11fe4cd38 2,4-6,34
+crates/kanban-server/src/application/boards/create.rs
+  s_5b054b517a26b6::t_0255e79501f48a 3,8-11,22-24
+crates/kanban-server/src/application/boards/get.rs
+  s_5b054b517a26b6::t_8a12db505017db 5-7,9,11
+crates/kanban-server/src/application/boards/list.rs
+  s_5b054b517a26b6::t_c1e7d56f7c9643 5-7,15
+crates/kanban-server/src/application/comments.rs
+  s_5b054b517a26b6::t_c031cea16965a8 1-2
+crates/kanban-server/src/application/comments/create.rs
+  s_5b054b517a26b6::t_c2c19a8e743869 3,12-16,52-54
+crates/kanban-server/src/application/comments/list.rs
+  s_5b054b517a26b6::t_0c5097b9d7f48c 5-7,15
+crates/kanban-server/src/application/context.rs
+  s_5b054b517a26b6::t_88cef850d295e0 1,8-11,31
+crates/kanban-server/src/application/dependencies.rs
+  s_5b054b517a26b6::t_499750a8c951cb 1-3
+crates/kanban-server/src/application/dependencies/create.rs
+  s_5b054b517a26b6::t_9b2c9905e87167 1-25
+crates/kanban-server/src/application/dependencies/list.rs
+  s_5b054b517a26b6::t_87e535838dc7df 5-7,9,11
+crates/kanban-server/src/application/dependencies/remove.rs
+  s_5b054b517a26b6::t_f46d9ace7afef1 3,8-9,12-14,24,26
+crates/kanban-server/src/application/dependencies/support.rs
+  s_5b054b517a26b6::t_78cf535c6a7ecf 1
+crates/kanban-server/src/application/entities.rs
+  s_5b054b517a26b6::t_c5855a2180f96d 9-11,23,26-28,30,33-35,51
+crates/kanban-server/src/application/events/list.rs
+  s_5b054b517a26b6::t_b8f21a980dfed0 10-12,29,34
+crates/kanban-server/src/application/graph.rs
+  s_5b054b517a26b6::t_1594f43bfb3662 2,24-26,28,32,35-37,51,54-56,77,80-82,84,87-89,91,94-97,109,112-115,130
+crates/kanban-server/src/application/health.rs
+  s_5b054b517a26b6::t_83e782ffb3954d 1-2,5-9,20,26
+crates/kanban-server/src/application/labels.rs
+  s_5b054b517a26b6::t_aef04000321403 2,4,22-24,26,28,31-34,43-45,48-52,63,71,74-76,78,80,83-87,104-107,110-113,123,125,128-132,157-163
+crates/kanban-server/src/application/maintenance.rs
+  s_5b054b517a26b6::t_8f8c24c9e52402 13,15,76,78,80,84,87-89,91-96,99-101,103-109,112-114,119-132,136-138,146-163,167-169,184,186,191,194-195,197,210,213-215,221,224-226,234,237-239,247
+crates/kanban-server/src/application/ontology.rs
+  s_5b054b517a26b6::t_139aa15d5e2422 1,3-4,6-7,10,13-16,20-24,28-77,79,82-86,88,90-92,96-103,107-136,140-157,161-167,171-180,184-193,197-206,210-227,231-252,256-270,274-291,295-341,345-374,378-415,419-427,429-460,464-473,477-486,490-493,495-514,518-523,527-532,536-570,574-599,603-621,625-641,643-646,650
+crates/kanban-server/src/application/ontology/convert.rs
+  s_5b054b517a26b6::t_346a80276808f3 1-515
+crates/kanban-server/src/application/ontology/enums.rs
+  s_5b054b517a26b6::t_ec955ebf80c4d9 1-182
+crates/kanban-server/src/application/ontology/tests.rs
+  s_5b054b517a26b6::t_427877ec1269b8 1-702
+crates/kanban-server/src/application/runs.rs
+  s_5b054b517a26b6::t_4ff9d5c6577e2f 1-3
+crates/kanban-server/src/application/runs/list.rs
+  s_5b054b517a26b6::t_eb8a0319fb40c4 5-7,13
+crates/kanban-server/src/application/runs/log.rs
+  s_5b054b517a26b6::t_c5f4f7bc293063 4-6,8,14
+crates/kanban-server/src/application/runs/show.rs
+  s_5b054b517a26b6::t_059fe26c745490 1-12
+crates/kanban-server/src/application/search.rs
+  s_5b054b517a26b6::t_63a5527c151deb 1,8,11-13,29,38,41-43,65,71,74-76,81,83-87,92,94-98,100,102
+crates/kanban-server/src/application/signals.rs
+  s_5b054b517a26b6::t_020960779b92f1 1-5
+crates/kanban-server/src/application/signals/list.rs
+  s_5b054b517a26b6::t_f3baf0b500ce7a 7-10,19,25,28-31,43,49
+crates/kanban-server/src/application/signals/record.rs
+  s_5b054b517a26b6::t_a068e6840d2562 3,9-13,40
+crates/kanban-server/src/application/signals/review.rs
+  s_5b054b517a26b6::t_a403011e14b129 1,3,8-12,16-20,24-28,32-36,40-43,45,61
+crates/kanban-server/src/application/signals/show.rs
+  s_5b054b517a26b6::t_0745994f1e89cf 5-7,9,11
+crates/kanban-server/src/application/stats.rs
+  s_5b054b517a26b6::t_4452600468d87b 6-7,9,46
+crates/kanban-server/src/application/steps.rs
+  s_5b054b517a26b6::t_2084bad5085e66 1-6
+crates/kanban-server/src/application/steps/create.rs
+  s_5b054b517a26b6::t_76ffcfce3e552a 1-30
+crates/kanban-server/src/application/steps/list.rs
+  s_5b054b517a26b6::t_b07fc48a14c90b 5-7,9,11
+crates/kanban-server/src/application/steps/remove.rs
+  s_5b054b517a26b6::t_1f368a28453ecf 3,8-11,21-23
+crates/kanban-server/src/application/steps/resolve.rs
+  s_5b054b517a26b6::t_d7e59383b959ae 3,11-15,26,28,31-35,46,48,51-55,66,68
+crates/kanban-server/src/application/steps/support.rs
+  s_5b054b517a26b6::t_05f1c258ecafd9 1
+crates/kanban-server/src/application/steps/update.rs
+  s_5b054b517a26b6::t_852d65327197c6 3,8-12,28,30
+crates/kanban-server/src/application/support.rs
+  s_5b054b517a26b6::t_94acfcdada3b0b 31-35,39,42-45
+crates/kanban-server/src/application/tasks.rs
+  s_5b054b517a26b6::t_42858ad019be44 1-16,18-19
+crates/kanban-server/src/application/tasks/archive.rs
+  s_5b054b517a26b6::t_6da701a46cdc12 3,8-12,22
+crates/kanban-server/src/application/tasks/block.rs
+  s_5b054b517a26b6::t_6824f65731b826 1-25
+crates/kanban-server/src/application/tasks/claim.rs
+  s_5b054b517a26b6::t_0fc9e667449619 3,8-12,24,29
+crates/kanban-server/src/application/tasks/create.rs
+  s_5b054b517a26b6::t_6eb95c9e37e9f4 1-46
+crates/kanban-server/src/application/tasks/done.rs
+  s_5b054b517a26b6::t_fc6dd2840a2e63 1-26
+crates/kanban-server/src/application/tasks/heartbeat.rs
+  s_5b054b517a26b6::t_0e2d4f696c55fd 3,8-12,24
+crates/kanban-server/src/application/tasks/list.rs
+  s_5b054b517a26b6::t_26d079a101bb9e 5-7,11-15,46,53,56-60,113,119
+crates/kanban-server/src/application/tasks/list_support.rs
+  s_5b054b517a26b6::t_6b31dc9d423043 3-6,9-10,59-60,62-64,66-71,73,75-82,87-119,121-122
+crates/kanban-server/src/application/tasks/plan_not_required.rs
+  s_5b054b517a26b6::t_6c6202cf140c02 3,11-15,25,27
+crates/kanban-server/src/application/tasks/promote.rs
+  s_5b054b517a26b6::t_6c786815594c95 3,8-12,18
+crates/kanban-server/src/application/tasks/reclaim.rs
+  s_5b054b517a26b6::t_96cb5088880a28 3,9,11-15,31
+crates/kanban-server/src/application/tasks/release.rs
+  s_5b054b517a26b6::t_67cffca393d39c 1-23
+crates/kanban-server/src/application/tasks/reopen.rs
+  s_5b054b517a26b6::t_01cee71f292ed3 3,8-12,22
+crates/kanban-server/src/application/tasks/review.rs
+  s_5b054b517a26b6::t_fea644e1a4d678 1-25
+crates/kanban-server/src/application/tasks/show.rs
+  s_5b054b517a26b6::t_4f55cc48fd525d 2-4,6,13-25,28,31-39
+crates/kanban-server/src/application/tasks/specify.rs
+  s_5b054b517a26b6::t_872daeb3198d6d 3,8-12,23
+crates/kanban-server/src/application/tasks/unblock.rs
+  s_5b054b517a26b6::t_1694371e4e4fb6 3,8-12,18
+crates/kanban-server/src/application/tasks/update.rs
+  s_5b054b517a26b6::t_79f8d128838619 3,8-12,30
+crates/kanban-server/src/application/vector.rs
+  s_5b054b517a26b6::t_04ce3738b11610 5,13,16-19,21,23-26,34,36-39,41,43-46,48,50-53,63,76,78-81,93,110
+crates/kanban-server/src/connections.rs
+  s_5b054b517a26b6::t_c2dc374490ae8a 1-84
+crates/kanban-server/src/error.rs
+  s_5b054b517a26b6::t_f5c6314ba63e59 20-21,66-77
+crates/kanban-server/src/grpc.rs
+  s_5b054b517a26b6::t_16736bfc3f65bb 1-5,7,9-10,12,14-17,19-22,25-27,30-33,35-37,41-67,70-76,79-82,86
+crates/kanban-server/src/grpc/business.rs
+  s_5b054b517a26b6::t_9c1a0dfcbd3f98 1-272
+crates/kanban-server/src/grpc/context.rs
+  s_5b054b517a26b6::t_2a116fc81195e0 1-102
+crates/kanban-server/src/grpc/deadline.rs
+  s_5b054b517a26b6::t_e7ad68c22b3866 1-290
+crates/kanban-server/src/grpc/probe.rs
+  s_5b054b517a26b6::t_1354598bb5427d 1-49
+crates/kanban-server/src/grpc/query.rs
+  s_5b054b517a26b6::t_ea1a1ef94cb7d2 1-366
+crates/kanban-server/src/grpc/query/frames.rs
+  s_5b054b517a26b6::t_3cbd0021be3f76 1-126
+crates/kanban-server/src/grpc/query/runtime.rs
+  s_5b054b517a26b6::t_111b0b57793339 1-314
+crates/kanban-server/src/grpc/query/source.rs
+  s_5b054b517a26b6::t_19c6bc62836842 1-272
+crates/kanban-server/src/grpc/query/tests.rs
+  s_5b054b517a26b6::t_1b2c572a7d8065 1-28,30,32,35-46,48-49,52-58,62-66,69-78,80,83-87,90-144,147,149-167,171-204,208-216,218-229,232-251,253-266,271-288,290-291,293-301,305-321,324-325,327-331,333-346,350-374,378-388,390-423,427-438,440-458,460-471,473-486,490-496,499-583,587-598,600-601,603-619,621-638,642-644,646-648,652-653,656-662,665,668,670,677,679-681,684,688-704,707-751
+crates/kanban-server/src/grpc/tests.rs
+  s_5b054b517a26b6::t_29e13d7bd4e207 1-126
+crates/kanban-server/src/grpc/tests/boundaries.rs
+  s_5b054b517a26b6::t_ba70302f060e82 1-277
+crates/kanban-server/src/grpc/tests/business.rs
+  s_5b054b517a26b6::t_e0ed3df1b0a83f 1-462
+crates/kanban-server/src/grpc/tests/business/invariants.rs
+  s_5b054b517a26b6::t_5150a4fd22b282 1-2,4-31,34-53,55-57,60-62,64-93,95-139,141-143,145-151,153,156-180,182-184,186-282,284-286,288-292,294-305,307-309,311-342,344-409
+crates/kanban-server/src/grpc/tests/mutations.rs
+  s_5b054b517a26b6::t_a3c48425b2ae38 1-486
+crates/kanban-server/src/grpc/tests/mutations/lifecycle.rs
+  s_5b054b517a26b6::t_9c22d0151e639f 1-133
+crates/kanban-server/src/grpc/tests/queries.rs
+  s_5b054b517a26b6::t_ed987213385cdf 1-189
+crates/kanban-server/src/grpc/tests/queries/common.rs
+  s_5b054b517a26b6::t_833d18e343896d 1-314
+crates/kanban-server/src/grpc/tests/queries/disconnect.rs
+  s_5b054b517a26b6::t_62c2218251223a 1-92
+crates/kanban-server/src/grpc/tests/queries/lifecycle.rs
+  s_5b054b517a26b6::t_0678489ce581ae 1-102
+crates/kanban-server/src/grpc/tests/queries/recovery.rs
+  s_5b054b517a26b6::t_6a69a2db074751 1-234
+crates/kanban-server/src/http.rs
+  s_5b054b517a26b6::t_dd9bf81e6b58eb 1-16
+crates/kanban-server/src/knowledge_adoption.rs
+  s_5b054b517a26b6::t_354ec2d2954a25 1,5,9-11,23-33,35,116-120,124-125,148-152,156-157,179-183,187-188,200-204,207-208,218-226,230-231,248-251,256-257,269-272,277-278,296-304,309-310,323-326,331-332,337-340,345-346,366-368,373-375,423-430,435-437,447-449,455,468-475,480-482,507-515,519-521,525-532,538-539,547,553-560,566,585-593,598-599,610-614,619-620,642-650,655-656,661-678,688-691,696-697,713-721,726-727,738-746,751-752,768-772,777-778,816-824,829-830,849-857,862-863,878-886,891-892,907-910,915-916,930-938,943-944,962-966,971-972,996-1004,1009,1019-1022,1027-1029,1051-1054,1059,1072-1075,1081-1082,1101-1105,1109,1120-1123,1128,1136-1139,1144,1180-1188,1192-1194,1200-1204,1208,1223-1227,1231-1232,1250-1253,1258-1259,1274-1277,1282-1283,1296-1299,1304-1305,1318-1321,1326-1327,1340-1343,1348-1349,1362-1365,1369-1370,1380-1383,1387-1388,1430-1433,1438,1448-1451,1456-1457,1468-1471,1476-1477,1487-1490,1495-1496,1506-1509,1514-1515,1536-1540,1545-1546,1565-1573,1578-1579,1597-1600,1605
+crates/kanban-server/src/lib.rs
+  s_5b054b517a26b6::t_95ecabf72f0951 3-4,7,25-27
+crates/kanban-server/src/router.rs
+  s_5b054b517a26b6::t_672a1026f6aa32 1,3,5,9,15-18,22-45,51,73-75,77-84,104-106,108-115,153-154,156-162,176-177,182,186,190,199,232
+crates/kanban-server/src/router/contract_catalog_tests.rs
+  s_5b054b517a26b6::t_4d287a9438e4a0 1-2,4-5,7-10,12,14-60,65-69,74-76,78-80,83-88,93-96,102-111,114-260
+crates/kanban-server/src/state.rs
+  s_5b054b517a26b6::t_a8365cbd91212f 16-18,51-53,73-75,78-83,167,173-174
+crates/kanban-server/src/suite.rs
+  s_5b054b517a26b6::t_503effa4501bf5 154-156,161,165-174,176-178,180-189,191-193,322-324,333,337,340,342-343,345,350,352,360-364,368,373-376,381-382,386,389-397,401-403,406,409-417,421-423,428-432,436-437,442-450,455-456,461-469,474-475,480-488,493-494,499-507,512-513,518-521,526-527,530,537-545,550-551,555,561-569,574-575,596,602,614-615,621-622,735,745,756,767
+crates/kanban-server/src/suite/legacy_adoption.rs
+  s_5b054b517a26b6::t_556bb7d1cf899a 4-6,8,14,16-17,19,21,26,40-51,55-61,80-88,92-98
+crates/kanban-server/src/test_support.rs
+  s_5b054b517a26b6::t_d0bb7a679950e8 1-4,6,8-10,12-23,25-33,36-75,78-91
+crates/kanban-server/src/web.rs
+  s_5b054b517a26b6::t_25015a12b8f51d 101-111,113-115,123-125,163-164,166-167,430,435-459,466-467,473-477,492-501,528,530,620-704,744-747,865,868-869,881
+crates/kanban-service/docs/persistence.md
+  s_5b054b517a26b6::t_11ddd45765002b 30-33
+crates/kanban-service/src/db.rs
+  s_5b054b517a26b6::t_5aa663c9b578aa 11,54,73,79
+crates/kanban-service/src/domain.rs
+  s_5b054b517a26b6::t_5cc58402a461cf 417-438
+crates/kanban-service/src/lib.rs
+  s_5b054b517a26b6::t_393ba2e1d3d21c 13-14,74-89,104-107
+crates/kanban-service/src/maintenance.rs
+  s_5b054b517a26b6::t_429d1e5eead4e3 1702-1703,1705,3434-3477
+crates/kanban-service/src/mutation_gate.rs
+  s_5b054b517a26b6::t_aaf0ae46af130b 1-193
+crates/kanban-service/src/operations.rs
+  s_5b054b517a26b6::t_e5efdb6f94f5ab 49-64
+crates/kanban-service/src/operations/event/list.rs
+  s_5b054b517a26b6::t_794ac11db9e3dd 75-92
+crates/kanban-service/src/operations/ontology.rs
+  s_5b054b517a26b6::t_d1b32849682634 3-12,20-22,43,45,201-202,387-389
+crates/kanban-service/src/operations/ontology/commands.rs
+  s_5b054b517a26b6::t_87f9b362c86f43 1-400
+crates/kanban-service/src/operations/ontology/convert.rs
+  s_5b054b517a26b6::t_ab67977051df0b 1-463
+crates/kanban-service/src/operations/ontology/records.rs
+  s_5b054b517a26b6::t_67302868dc5e2b 1-347
+crates/kanban-service/src/operations/ontology/tests.rs
+  s_5b054b517a26b6::t_8b98aa83070517 1-741
+crates/kanban-service/src/operations/ontology/typed.rs
+  s_5b054b517a26b6::t_9b8e5abd2ed35a 1-359
+crates/kanban-service/src/realtime.rs
+  s_5b054b517a26b6::t_efdba19a43b8fb 1-21
+crates/kanban-service/src/realtime/tests.rs
+  s_5b054b517a26b6::t_02c23fb1bac83a 1-753
+crates/kanban-service/src/realtime/tests/measurement.rs
+  s_5b054b517a26b6::t_1ec87d92b6697d 1-177
+crates/kanban-service/src/service.rs
+  s_5b054b517a26b6::t_99f9f2babcb608 6,21
+crates/kanban-service/src/store_operations/events/list.rs
+  s_5b054b517a26b6::t_dec0a03ee5c4fb 13-34,105-109,127-129,229-242
+crates/kanban-service/src/store_operations/ontology.rs
+  s_5b054b517a26b6::t_504be0a91cb399 17-22,987,1011-1023,1025-1029
+crates/kanban-service/src/store_operations/tasks/show.rs
+  s_5b054b517a26b6::t_215a0b66a377af 10-13,15,27-35
+crates/kanban-web-artifact/tests/verifier.rs
+  s_5b054b517a26b6::t_a4c2d8a7083cc9 85
+docs/adr/0001_single_host_turso.md
+  s_5b054b517a26b6::t_37306230c0a199 15-16
+docs/adr/0006_browser_first_web_ui.md
+  s_5b054b517a26b6::t_6a6fa98da83b18 5,23-27,29,34-38,43,80-83
+docs/adr/0007_local_grpc.md
+  s_5b054b517a26b6::t_10d155acdb69b3 1-44
+docs/adr/README.md
+  s_5b054b517a26b6::t_d93d08f4d8f293 13
+docs/architecture.md
+  s_5b054b517a26b6::t_095e280f3e6a1d 6-8,11,24-25,29-33,55
+justfile
+  s_5b054b517a26b6::t_94e3818cac5663 21-28,131-136,164-167,173-176,180,295
+migration/README.md
+  s_5b054b517a26b6::t_63a51dd3d029b7 1-13
+migration/grpc-framework/.github/workflows/framework.yml
+  s_5b054b517a26b6::t_ad308a1a52fc18 1-27
+migration/grpc-framework/.gitignore
+  s_5b054b517a26b6::t_367e8b2d87ee44 1-4
+migration/grpc-framework/AGENTS.md
+  s_5b054b517a26b6::t_d031475046cf98 1-20
+migration/grpc-framework/CHECKSUMS.sha256
+  s_5b054b517a26b6::t_9e6bd4c1c110c8 1-81
+migration/grpc-framework/Cargo.toml
+  s_5b054b517a26b6::t_4a57f21d76c06d 1-27
+migration/grpc-framework/LICENSE
+  s_5b054b517a26b6::t_6eaaa3c6130b36 1-202
+migration/grpc-framework/README.md
+  s_5b054b517a26b6::t_985ee0a44e0ae6 1-64
+migration/grpc-framework/crates/kanban-live-core/Cargo.toml
+  s_5b054b517a26b6::t_3e3bcf0816f0da 1-11
+migration/grpc-framework/crates/kanban-live-core/src/hub.rs
+  s_5b054b517a26b6::t_2e5740d88ebf7a 1-122
+migration/grpc-framework/crates/kanban-live-core/src/lib.rs
+  s_5b054b517a26b6::t_bbe431aa1b284d 1-11
+migration/grpc-framework/crates/kanban-live-core/src/model.rs
+  s_5b054b517a26b6::t_d086547c07d8a6 1-93
+migration/grpc-framework/crates/kanban-live-core/src/refresh.rs
+  s_5b054b517a26b6::t_4b6210d961d518 1-9
+migration/grpc-framework/crates/kanban-live-core/src/source.rs
+  s_5b054b517a26b6::t_f5c419eed45b8b 1-52
+migration/grpc-framework/crates/kanban-live-core/src/tests.rs
+  s_5b054b517a26b6::t_3f33a0e8b9bf81 1-118
+migration/grpc-framework/crates/kanban-rpc-host/Cargo.toml
+  s_5b054b517a26b6::t_2ae3efe8091309 1-21
+migration/grpc-framework/crates/kanban-rpc-host/examples/demo.rs
+  s_5b054b517a26b6::t_6aa21fb4983c39 1-57
+migration/grpc-framework/crates/kanban-rpc-host/examples/native_client.rs
+  s_5b054b517a26b6::t_a383538414030a 1-18
+migration/grpc-framework/crates/kanban-rpc-host/src/frames.rs
+  s_5b054b517a26b6::t_d558c3aa4ad1c8 1-38
+migration/grpc-framework/crates/kanban-rpc-host/src/lib.rs
+  s_5b054b517a26b6::t_7f19d5528b7b60 1-67
+migration/grpc-framework/crates/kanban-rpc-host/src/refresh.rs
+  s_5b054b517a26b6::t_173de4ed5793d8 1-70
+migration/grpc-framework/crates/kanban-rpc-host/src/service.rs
+  s_5b054b517a26b6::t_3eb18dbc3031fd 1-146
+migration/grpc-framework/crates/kanban-rpc-host/tests/interop.rs
+  s_5b054b517a26b6::t_65494e2ceff4c6 1-76
+migration/grpc-framework/crates/kanban-rpc-host/tests/refresh.rs
+  s_5b054b517a26b6::t_9846b95e351614 1-94
+migration/grpc-framework/crates/kanban-rpc-proto/Cargo.toml
+  s_5b054b517a26b6::t_235519eb895a2c 1-11
+migration/grpc-framework/crates/kanban-rpc-proto/build.rs
+  s_5b054b517a26b6::t_b455bab342aa81 1-9
+migration/grpc-framework/crates/kanban-rpc-proto/src/lib.rs
+  s_5b054b517a26b6::t_8f8410ba50044a 1-6
+migration/grpc-framework/delivery-manifest.json
+  s_5b054b517a26b6::t_292dc0081e855f 1-446
+migration/grpc-framework/docs/00-atlas-branch-audit.md
+  s_5b054b517a26b6::t_e53d864c7df963 1-29
+migration/grpc-framework/docs/01-scope.md
+  s_5b054b517a26b6::t_e440e4200641cc 1-11
+migration/grpc-framework/docs/02-architecture.md
+  s_5b054b517a26b6::t_dfc4416974ef4e 1-33
+migration/grpc-framework/docs/03-stream-protocol.md
+  s_5b054b517a26b6::t_391fad2c096be4 1-76
+migration/grpc-framework/docs/04-decisions.md
+  s_5b054b517a26b6::t_5555b76517fb89 1-33
+migration/grpc-framework/docs/05-integration.md
+  s_5b054b517a26b6::t_ece988e1391ac9 1-48
+migration/grpc-framework/docs/06-tasks.md
+  s_5b054b517a26b6::t_e26da63ddf6b2e 1-228
+migration/grpc-framework/docs/07-validation.md
+  s_5b054b517a26b6::t_879339edf7c562 1-31
+migration/grpc-framework/docs/08-references.md
+  s_5b054b517a26b6::t_ae2c6ff3c054ae 1-27
+migration/grpc-framework/docs/09-migration-map.md
+  s_5b054b517a26b6::t_658bea4964be20 1,3-15,17,19
+migration/grpc-framework/docs/10-debugging.md
+  s_5b054b517a26b6::t_d1f214a56af62a 1-33
+migration/grpc-framework/docs/11-atlas-refresh-protocol.md
+  s_5b054b517a26b6::t_d916475632d3f1 1-37
+migration/grpc-framework/integration/apply-atlas.mjs
+  s_5b054b517a26b6::t_0f035a79838a69 1-77
+migration/grpc-framework/integration/atlas-server/grpc.rs
+  s_5b054b517a26b6::t_3217eea16479a7 1-27
+migration/grpc-framework/integration/atlas-web/bind.ts
+  s_5b054b517a26b6::t_3e72b7a2d3fda6 1-40
+migration/grpc-framework/integration/atlas-web/source.ts
+  s_5b054b517a26b6::t_abe90b7cbab4f4 1-20
+migration/grpc-framework/integration/kanban-adapter/Cargo.toml
+  s_5b054b517a26b6::t_c9489b7b57a714 1-12
+migration/grpc-framework/integration/kanban-adapter/src/lib.rs
+  s_5b054b517a26b6::t_883f87bf1dc2f3 1-65
+migration/grpc-framework/integration/patch-plan.json
+  s_5b054b517a26b6::t_0d792b44d61d2b 1-195
+migration/grpc-framework/integration/service-src/mutation_gate.rs
+  s_5b054b517a26b6::t_5463cb74b43ce2 1-156
+migration/grpc-framework/integration/service-src/realtime.rs
+  s_5b054b517a26b6::t_669c679ca2d38c 1-69
+migration/grpc-framework/proto/kanban/framework/v1/board.proto
+  s_5b054b517a26b6::t_ae97e6108a7060 1-114
+migration/grpc-framework/scripts/check-offline.mjs
+  s_5b054b517a26b6::t_ab089503dbe70d 1-29
+migration/grpc-framework/scripts/check-package.mjs
+  s_5b054b517a26b6::t_619b40c331e0a3 1-120
+migration/grpc-framework/scripts/seal-package.mjs
+  s_5b054b517a26b6::t_82d37a6f1a31a3 1-80
+migration/grpc-framework/scripts/write-task-docs.mjs
+  s_5b054b517a26b6::t_106803470ee65c 1-12
+migration/grpc-framework/tasks/tasks.json
+  s_5b054b517a26b6::t_07f27481bee84b 1-341
+migration/grpc-framework/tests/apply.test.mjs
+  s_5b054b517a26b6::t_9da5bfdd59651c 1-30
+migration/grpc-framework/tests/atlas.test.mjs
+  s_5b054b517a26b6::t_e7aa3e79cb2607 1-43
+migration/grpc-framework/tests/proto.test.mjs
+  s_5b054b517a26b6::t_8a9d09b76233c9 1-31
+migration/grpc-framework/validation/atlas-tests.tap
+  s_5b054b517a26b6::t_7e2950916261d0 1-94
+migration/grpc-framework/validation/branch-provenance.json
+  s_5b054b517a26b6::t_be4fcdee5db21d 1-63
+migration/grpc-framework/validation/installer-tests.tap
+  s_5b054b517a26b6::t_d821b3702da05a 1-88
+migration/grpc-framework/validation/offline-results.json
+  s_5b054b517a26b6::t_615b9841bf3bd0 1-69
+migration/grpc-framework/validation/package-check.json
+  s_5b054b517a26b6::t_5a9da2d82aa00e 1-52
+migration/grpc-framework/validation/protobuf-tests.tap
+  s_5b054b517a26b6::t_dbd6ab51c3f6ec 1-70
+migration/grpc-framework/validation/toolchain.json
+  s_5b054b517a26b6::t_88853d075cd5b8 2-5,7-27
+migration/grpc-framework/validation/web-tests.tap
+  s_5b054b517a26b6::t_10253aed2ccd9c 1-418
+migration/grpc-framework/web/generate.mjs
+  s_5b054b517a26b6::t_91d230f3767791 1-22
+migration/grpc-framework/web/package.json
+  s_5b054b517a26b6::t_01a772d6f9b1e5 1-26
+migration/grpc-framework/web/src/atlas-client.ts
+  s_5b054b517a26b6::t_9b186108308118 1-31
+migration/grpc-framework/web/src/changes.ts
+  s_5b054b517a26b6::t_7e32f666aff92c 1-150
+migration/grpc-framework/web/src/client.ts
+  s_5b054b517a26b6::t_af2e4eb6166c33 1-43
+migration/grpc-framework/web/src/endpoint.ts
+  s_5b054b517a26b6::t_6ef0322171b34e 1-13
+migration/grpc-framework/web/src/gen/kanban/framework/v1/board_pb.ts
+  s_5b054b517a26b6::t_2868e17446628b 1-707
+migration/grpc-framework/web/src/model.ts
+  s_5b054b517a26b6::t_cb3464b24f6643 1-41
+migration/grpc-framework/web/src/realtime-port.ts
+  s_5b054b517a26b6::t_64e9187e8410c5 1-20
+migration/grpc-framework/web/src/reducer.ts
+  s_5b054b517a26b6::t_92df519b9112fc 1-118
+migration/grpc-framework/web/src/watch.ts
+  s_5b054b517a26b6::t_02609cf2268618 1-82
+migration/grpc-framework/web/tests/changes.test.mjs
+  s_5b054b517a26b6::t_b7b0bd8a748906 1-57
+migration/grpc-framework/web/tests/generated/client.test.mjs
+  s_5b054b517a26b6::t_188d4b0a45896b 1-215
+migration/grpc-framework/web/tests/reducer.test.mjs
+  s_5b054b517a26b6::t_b0c6f57a4280c3 1-68
+migration/grpc-framework/web/tests/watch.test.mjs
+  s_5b054b517a26b6::t_a45f7d8889b7c6 1-51
+migration/grpc-framework/web/tsconfig.core.json
+  s_5b054b517a26b6::t_9e41159401d8d8 2-14
+migration/grpc-framework/web/tsconfig.json
+  s_5b054b517a26b6::t_966decdb8971cd 1
+patches/@bufbuild__protobuf@2.15.0.patch
+  s_5b054b517a26b6::t_e92179ee0f4101 1-84
+patches/README.md
+  s_5b054b517a26b6::t_378f0fae663464 1-10
+pnpm-lock.yaml
+  s_5b054b517a26b6::t_541f0a2d76999a 7-9,22-30,47-49,174-200,1003-1007,1789-1793,2051-2077,2673-2679,3464-3465
+pnpm-workspace.yaml
+  s_5b054b517a26b6::t_dce84b5cfe59fd 6-8
+schemas/fixtures/runtime/web-config.v1.invalid.json
+  s_5b054b517a26b6::t_ff9a35dc558af8 7
+schemas/fixtures/runtime/web-config.v1.valid.json
+  s_5b054b517a26b6::t_cef817f3afd144 7
+schemas/json-schema/draft-2020-12/api/event-data.v1.schema.json
+  s_5b054b517a26b6::t_add25258fd2312 592,3162
+schemas/json-schema/draft-2020-12/dto-bindings.json
+  s_5b054b517a26b6::t_f29391321998d2 1123-1124
+schemas/json-schema/draft-2020-12/dto-contracts.json
+  s_5b054b517a26b6::t_4d83fad3916dcc 3888,3890-3893,3895,3898
+schemas/json-schema/draft-2020-12/manifest.json
+  s_5b054b517a26b6::t_203b6070da59f8 2-8,1662,1664-1668,5812-5816
+schemas/json-schema/draft-2020-12/rpc-catalog.json
+  s_5b054b517a26b6::t_4014e741480cef 1-962
+scripts/cargo-build-lock.sh
+  s_5b054b517a26b6::t_56a0806431f1b1 4,43
+scripts/prepare-desktop-sidecar.sh
+  s_5b054b517a26b6::t_b4f719c799735f 34-35
+scripts/release-proof-09a.sh
+  s_5b054b517a26b6::t_880b6358316a65 236
+scripts/release-proof-09d.mjs
+  s_5b054b517a26b6::t_37e3700cc3923e 4,10-392,430-431,550-573
+scripts/release-proof-09d.sh
+  s_5b054b517a26b6::t_a11a23bf020c9c 113-114,219,221,232,260,262-263,275-276,295-296,316,320,338,357,360-361,363,384-388,391-392,410-411,477,481,484-485,487,491,493-494,500-501
+scripts/test-cargo-target-tools.sh
+  s_5b054b517a26b6::t_3666a72912694d 378
+vendor/README.md
+  s_5b054b517a26b6::t_7388ae439ef953 1-37
+vendor/tantivy-0.26.1/.cargo_vcs_info.json
+  s_5b054b517a26b6::t_b3ce2d02d0c5e0 2-6
+vendor/tantivy-0.26.1/.claude/skills/rationalize-deps/SKILL.md
+  s_5b054b517a26b6::t_7ab01603adf736 1-125
+vendor/tantivy-0.26.1/.claude/skills/simple-pr/SKILL.md
+  s_5b054b517a26b6::t_8939f97adbb614 1-60
+vendor/tantivy-0.26.1/.claude/skills/update-changelog/SKILL.md
+  s_5b054b517a26b6::t_1f9207b4d165ef 1-87
+vendor/tantivy-0.26.1/.github/FUNDING.yml
+  s_5b054b517a26b6::t_297ada342cd054 1-12
+vendor/tantivy-0.26.1/.github/ISSUE_TEMPLATE/actions.md
+  s_5b054b517a26b6::t_45cd74f9a25b35 1-13
+vendor/tantivy-0.26.1/.github/ISSUE_TEMPLATE/bug_report.md
+  s_5b054b517a26b6::t_4942de1ef79c0c 1-19
+vendor/tantivy-0.26.1/.github/ISSUE_TEMPLATE/feature_request.md
+  s_5b054b517a26b6::t_d95b6d127a83ee 1-14
+vendor/tantivy-0.26.1/.github/ISSUE_TEMPLATE/question.md
+  s_5b054b517a26b6::t_6b977b1d85a039 1-7
+vendor/tantivy-0.26.1/.github/dependabot.yml
+  s_5b054b517a26b6::t_76d97aa643f7cd 1-15
+vendor/tantivy-0.26.1/.github/workflows/coverage.yml
+  s_5b054b517a26b6::t_430950c9282b77 1-29
+vendor/tantivy-0.26.1/.github/workflows/long_running.yml
+  s_5b054b517a26b6::t_442c6f5ad0944c 1-33
+vendor/tantivy-0.26.1/.github/workflows/test.yml
+  s_5b054b517a26b6::t_f604009cebc8fd 1-100
+vendor/tantivy-0.26.1/.gitignore
+  s_5b054b517a26b6::t_22c3f9c2dea884 1-17
+vendor/tantivy-0.26.1/ARCHITECTURE.md
+  s_5b054b517a26b6::t_38528022a724d7 1-295
+vendor/tantivy-0.26.1/AUTHORS
+  s_5b054b517a26b6::t_8e3aeea0efa7fe 1-11
+vendor/tantivy-0.26.1/CHANGELOG.md
+  s_5b054b517a26b6::t_781fee05deab5c 1-889
+vendor/tantivy-0.26.1/CITATION.cff
+  s_5b054b517a26b6::t_288c96bd64ac12 1-10
+vendor/tantivy-0.26.1/Cargo.lock
+  s_5b054b517a26b6::t_01a18a52918661 1-2377
+vendor/tantivy-0.26.1/Cargo.toml
+  s_5b054b517a26b6::t_dfa38b8cf0cdaf 1-469
+vendor/tantivy-0.26.1/Cargo.toml.orig
+  s_5b054b517a26b6::t_0de0bb0388b213 1-203
+vendor/tantivy-0.26.1/LICENSE
+  s_5b054b517a26b6::t_ef34c1bc31ef0c 1-7
+vendor/tantivy-0.26.1/Makefile
+  s_5b054b517a26b6::t_72fa930b86d0c7 1-6
+vendor/tantivy-0.26.1/README.md
+  s_5b054b517a26b6::t_a524e3456307ed 1-143
+vendor/tantivy-0.26.1/RELEASE.md
+  s_5b054b517a26b6::t_0ccebed411b5f0 1-38
+vendor/tantivy-0.26.1/TODO.txt
+  s_5b054b517a26b6::t_39e78ac57c1db4 1-18
+vendor/tantivy-0.26.1/benches/agg_bench.rs
+  s_5b054b517a26b6::t_710e9a2fcf61bb 1-748
+vendor/tantivy-0.26.1/benches/analyzer.rs
+  s_5b054b517a26b6::t_e9fae9e32933fd 1-43
+vendor/tantivy-0.26.1/benches/and_or_queries.rs
+  s_5b054b517a26b6::t_663b5783c33b80 1-249
+vendor/tantivy-0.26.1/benches/bool_queries_with_range.rs
+  s_5b054b517a26b6::t_9ad2c883939783 1-288
+vendor/tantivy-0.26.1/benches/exists_json.rs
+  s_5b054b517a26b6::t_bdc4db69a5e929 1-69
+vendor/tantivy-0.26.1/benches/index-bench.rs
+  s_5b054b517a26b6::t_c95943dd92688c 1-218
+vendor/tantivy-0.26.1/benches/merge_segments.rs
+  s_5b054b517a26b6::t_607b0e01368d6a 1-224
+vendor/tantivy-0.26.1/benches/range_queries.rs
+  s_5b054b517a26b6::t_d75bf9edcc3eab 1-365
+vendor/tantivy-0.26.1/benches/range_query.rs
+  s_5b054b517a26b6::t_e65b29ef842d64 1-260
+vendor/tantivy-0.26.1/benches/regex_all_terms.rs
+  s_5b054b517a26b6::t_575b23b35de42e 1-113
+vendor/tantivy-0.26.1/benches/str_search_and_get.rs
+  s_5b054b517a26b6::t_b05ad9cdf26c8d 1-421
+vendor/tantivy-0.26.1/cliff.toml
+  s_5b054b517a26b6::t_4757de252edb57 1-93
+vendor/tantivy-0.26.1/doc/.gitignore
+  s_5b054b517a26b6::t_71afce442397c4 1
+vendor/tantivy-0.26.1/doc/assets/images/element.io.svg
+  s_5b054b517a26b6::t_03dfee64dc73fc 1-8
+vendor/tantivy-0.26.1/doc/book.toml
+  s_5b054b517a26b6::t_bab24d2176157c 1-5
+vendor/tantivy-0.26.1/doc/src/SUMMARY.md
+  s_5b054b517a26b6::t_6c5d0262438a66 1-14
+vendor/tantivy-0.26.1/doc/src/avant-propos.md
+  s_5b054b517a26b6::t_a5a11c473ddf9e 1-34
+vendor/tantivy-0.26.1/doc/src/basis.md
+  s_5b054b517a26b6::t_3dfe898c977cfb 1-68
+vendor/tantivy-0.26.1/doc/src/examples.md
+  s_5b054b517a26b6::t_5ac3fd5b895e97 1-3
+vendor/tantivy-0.26.1/doc/src/facetting.md
+  s_5b054b517a26b6::t_82106749d76c83 1-5
+vendor/tantivy-0.26.1/doc/src/index_sorting.md
+  s_5b054b517a26b6::t_a5d148161b951c 1-67
+vendor/tantivy-0.26.1/doc/src/innerworkings.md
+  s_5b054b517a26b6::t_0a5f03a12cdd5e 1
+vendor/tantivy-0.26.1/doc/src/inverted_index.md
+  s_5b054b517a26b6::t_b51180a30136a6 1
+vendor/tantivy-0.26.1/doc/src/json.md
+  s_5b054b517a26b6::t_e32bb4dac9a034 1-130
+vendor/tantivy-0.26.1/doc/src/schema.md
+  s_5b054b517a26b6::t_52775d3a896d17 1
+vendor/tantivy-0.26.1/examples/aggregation.rs
+  s_5b054b517a26b6::t_0e38ad7b5cc67b 1-7,9-144,146-265
+vendor/tantivy-0.26.1/examples/basic_search.rs
+  s_5b054b517a26b6::t_b36d27f01bac97 1-239
+vendor/tantivy-0.26.1/examples/custom_collector.rs
+  s_5b054b517a26b6::t_f1a5ebba7a825f 1-186
+vendor/tantivy-0.26.1/examples/custom_tokenizer.rs
+  s_5b054b517a26b6::t_198fdf0a725763 1-111
+vendor/tantivy-0.26.1/examples/date_time_field.rs
+  s_5b054b517a26b6::t_baddb1642ec004 1-77
+vendor/tantivy-0.26.1/examples/deleting_updating_documents.rs
+  s_5b054b517a26b6::t_51e33234138bd0 1-144
+vendor/tantivy-0.26.1/examples/faceted_search.rs
+  s_5b054b517a26b6::t_c1a187123c69e9 1-114
+vendor/tantivy-0.26.1/examples/faceted_search_with_tweaked_score.rs
+  s_5b054b517a26b6::t_b08591d5fd078c 1-104
+vendor/tantivy-0.26.1/examples/filter_aggregation.rs
+  s_5b054b517a26b6::t_12ebed509604ed 1-212
+vendor/tantivy-0.26.1/examples/fuzzy_search.rs
+  s_5b054b517a26b6::t_269230732020f5 1-166
+vendor/tantivy-0.26.1/examples/index_from_multiple_threads.rs
+  s_5b054b517a26b6::t_517bb940ffc519 1-104
+vendor/tantivy-0.26.1/examples/index_with_json.rs
+  s_5b054b517a26b6::t_e274b4155e7058 1-40
+vendor/tantivy-0.26.1/examples/integer_range_search.rs
+  s_5b054b517a26b6::t_50b87a8542f3f6 1-40
+vendor/tantivy-0.26.1/examples/ip_field.rs
+  s_5b054b517a26b6::t_159ee3480da8ec 1-110
+vendor/tantivy-0.26.1/examples/iterating_docs_and_positions.rs
+  s_5b054b517a26b6::t_c31dcce5f4c353 1-135
+vendor/tantivy-0.26.1/examples/json_field.rs
+  s_5b054b517a26b6::t_34c819c8fa3406 1-107
+vendor/tantivy-0.26.1/examples/phrase_prefix_search.rs
+  s_5b054b517a26b6::t_c46aa6321c9274 1-83
+vendor/tantivy-0.26.1/examples/pre_tokenized_text.rs
+  s_5b054b517a26b6::t_49daa53d38c177 1-138
+vendor/tantivy-0.26.1/examples/snippet.rs
+  s_5b054b517a26b6::t_23163fd91a2a38 1-83
+vendor/tantivy-0.26.1/examples/stop_words.rs
+  s_5b054b517a26b6::t_1b6b631eb2b0d2 1-114
+vendor/tantivy-0.26.1/examples/warmer.rs
+  s_5b054b517a26b6::t_811697bd4b811f 1-225
+vendor/tantivy-0.26.1/rustfmt.toml
+  s_5b054b517a26b6::t_dd189ecf5eddf5 1-7
+vendor/tantivy-0.26.1/src/aggregation/README.md
+  s_5b054b517a26b6::t_6e4257a8973908 1-35
+vendor/tantivy-0.26.1/src/aggregation/accessor_helpers.rs
+  s_5b054b517a26b6::t_e14fb74d0cbee8 1-105
+vendor/tantivy-0.26.1/src/aggregation/agg_data.rs
+  s_5b054b517a26b6::t_c0e65c90beb649 1-1158
+vendor/tantivy-0.26.1/src/aggregation/agg_limits.rs
+  s_5b054b517a26b6::t_1b2efcf1011fcf 1-257
+vendor/tantivy-0.26.1/src/aggregation/agg_req.rs
+  s_5b054b517a26b6::t_91507e01a62c29 1-408
+vendor/tantivy-0.26.1/src/aggregation/agg_result.rs
+  s_5b054b517a26b6::t_1bbb3876318090 1-436
+vendor/tantivy-0.26.1/src/aggregation/agg_tests.rs
+  s_5b054b517a26b6::t_4772d3e3ff0dd7 1-1438
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/accessors.rs
+  s_5b054b517a26b6::t_a0cf81be2ed56c 1-518
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/calendar_interval.rs
+  s_5b054b517a26b6::t_2606103a212bfe 1-136
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/collector.rs
+  s_5b054b517a26b6::t_5a7e4f57eeffdb 1-649
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/map.rs
+  s_5b054b517a26b6::t_acfe7059fb70dd 1-329
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/mod.rs
+  s_5b054b517a26b6::t_6415b88795c995 1-1848
+vendor/tantivy-0.26.1/src/aggregation/bucket/composite/numeric_types.rs
+  s_5b054b517a26b6::t_a46c492769e453 1-460
+vendor/tantivy-0.26.1/src/aggregation/bucket/filter.rs
+  s_5b054b517a26b6::t_f82e10c75de1f0 1-1802
+vendor/tantivy-0.26.1/src/aggregation/bucket/histogram/date_histogram.rs
+  s_5b054b517a26b6::t_19d5077b80fbdc 1-675
+vendor/tantivy-0.26.1/src/aggregation/bucket/histogram/histogram.rs
+  s_5b054b517a26b6::t_7d58bb2cdc63b8 1-1422
+vendor/tantivy-0.26.1/src/aggregation/bucket/histogram/mod.rs
+  s_5b054b517a26b6::t_5b8078676bfcb5 1-4
+vendor/tantivy-0.26.1/src/aggregation/bucket/mod.rs
+  s_5b054b517a26b6::t_0b8d2df1171118 1-210
+vendor/tantivy-0.26.1/src/aggregation/bucket/range.rs
+  s_5b054b517a26b6::t_bd6ca33c84fe13 1-963
+vendor/tantivy-0.26.1/src/aggregation/bucket/term_agg.rs
+  s_5b054b517a26b6::t_b73232d19df29b 1-2897
+vendor/tantivy-0.26.1/src/aggregation/bucket/term_missing_agg.rs
+  s_5b054b517a26b6::t_c2684bd639b7ec 1-11,13-36,40-76,78,81-179,181,184-187,189-199,201-205,207-208,210-214,216-232,234,236-238,240-241,243-244,246-284,286-287,289-331,333-334,336-376,378-379,381-396,398-405,407-409,411-434,436-458,460-464,466-500,502-505,507-514,516-517,519-541
+vendor/tantivy-0.26.1/src/aggregation/cached_sub_aggs.rs
+  s_5b054b517a26b6::t_0772b032682dd5 1-245
+vendor/tantivy-0.26.1/src/aggregation/collector.rs
+  s_5b054b517a26b6::t_cb18e171fec382 1-221
+vendor/tantivy-0.26.1/src/aggregation/date.rs
+  s_5b054b517a26b6::t_827e783411ba9c 1-16
+vendor/tantivy-0.26.1/src/aggregation/error.rs
+  s_5b054b517a26b6::t_46a0e84b95c1e5 1-26,28-37
+vendor/tantivy-0.26.1/src/aggregation/intermediate_agg_result.rs
+  s_5b054b517a26b6::t_8951c94a07ac9e 1-1247
+vendor/tantivy-0.26.1/src/aggregation/metric/average.rs
+  s_5b054b517a26b6::t_29b798f2af4032 1-140
+vendor/tantivy-0.26.1/src/aggregation/metric/cardinality.rs
+  s_5b054b517a26b6::t_2bd348c0f52864 1-613
+vendor/tantivy-0.26.1/src/aggregation/metric/count.rs
+  s_5b054b517a26b6::t_b6eef2ae62cb1c 1-66
+vendor/tantivy-0.26.1/src/aggregation/metric/extended_stats.rs
+  s_5b054b517a26b6::t_ca5f4857937934 1-1156
+vendor/tantivy-0.26.1/src/aggregation/metric/max.rs
+  s_5b054b517a26b6::t_40e9bb8bbf421e 1-118
+vendor/tantivy-0.26.1/src/aggregation/metric/min.rs
+  s_5b054b517a26b6::t_1d28868f139b6e 1-66
+vendor/tantivy-0.26.1/src/aggregation/metric/mod.rs
+  s_5b054b517a26b6::t_1429eae35145a5 1-204
+vendor/tantivy-0.26.1/src/aggregation/metric/percentiles.rs
+  s_5b054b517a26b6::t_60d301fc490954 1-683
+vendor/tantivy-0.26.1/src/aggregation/metric/stats.rs
+  s_5b054b517a26b6::t_ee3ec6444e11de 1-737
+vendor/tantivy-0.26.1/src/aggregation/metric/sum.rs
+  s_5b054b517a26b6::t_d5cf3602c8b598 1-66
+vendor/tantivy-0.26.1/src/aggregation/metric/top_hits.rs
+  s_5b054b517a26b6::t_c6d5240d67b0ba 1-942
+vendor/tantivy-0.26.1/src/aggregation/mod.rs
+  s_5b054b517a26b6::t_ec8c0140458571 1-673
+vendor/tantivy-0.26.1/src/aggregation/segment_agg_result.rs
+  s_5b054b517a26b6::t_b5d0f309608bb8 1-140
+vendor/tantivy-0.26.1/src/collector/count_collector.rs
+  s_5b054b517a26b6::t_9544421cdaba63 1-110
+vendor/tantivy-0.26.1/src/collector/docset_collector.rs
+  s_5b054b517a26b6::t_160f46ea530640 1-60
+vendor/tantivy-0.26.1/src/collector/facet_collector.rs
+  s_5b054b517a26b6::t_c34a1ce8c63134 1-860
+vendor/tantivy-0.26.1/src/collector/filter_collector_wrapper.rs
+  s_5b054b517a26b6::t_fd46de31c9b4e2 1-382
+vendor/tantivy-0.26.1/src/collector/histogram_collector.rs
+  s_5b054b517a26b6::t_7fd4ac860d948b 1-305
+vendor/tantivy-0.26.1/src/collector/mod.rs
+  s_5b054b517a26b6::t_9b4c83c69567dd 1-565
+vendor/tantivy-0.26.1/src/collector/multi_collector.rs
+  s_5b054b517a26b6::t_40cdf177eeb4cc 1-2,4-7,9-11,14,16-18,20-22,24-31,33-35,37-54,57-58,60-68,70-72,75-82,85-101,104-107,110-121,124-174,177-180,182-194,196-200,202-206,208-219,221-226,229-249,252-261,263-267,269-277,279,282-322
+vendor/tantivy-0.26.1/src/collector/sort_key/mod.rs
+  s_5b054b517a26b6::t_3f87b54767b669 1-456
+vendor/tantivy-0.26.1/src/collector/sort_key/order.rs
+  s_5b054b517a26b6::t_2868481d7f19dd 1-567
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_bytes.rs
+  s_5b054b517a26b6::t_16afaed8c2fd07 1-168
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_erased_type.rs
+  s_5b054b517a26b6::t_1535957f805f6e 1-430
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_score.rs
+  s_5b054b517a26b6::t_65d0560f3f9353 1-77
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_static_fast_value.rs
+  s_5b054b517a26b6::t_5aee3f5ed6b6c2 1-96
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_by_string.rs
+  s_5b054b517a26b6::t_e8be8703aa36e9 1-72
+vendor/tantivy-0.26.1/src/collector/sort_key/sort_key_computer.rs
+  s_5b054b517a26b6::t_ec088588a2938d 1-643
+vendor/tantivy-0.26.1/src/collector/sort_key_top_collector.rs
+  s_5b054b517a26b6::t_758a74134e7bf5 1-193
+vendor/tantivy-0.26.1/src/collector/tests.rs
+  s_5b054b517a26b6::t_1dfae81f647a6b 1-309
+vendor/tantivy-0.26.1/src/collector/top_collector.rs
+  s_5b054b517a26b6::t_8197415ee13495 1-22
+vendor/tantivy-0.26.1/src/collector/top_score_collector.rs
+  s_5b054b517a26b6::t_97fcdc274e0ec4 1-1836
+vendor/tantivy-0.26.1/src/compat_tests.rs
+  s_5b054b517a26b6::t_acb152545e6cfb 1-91
+vendor/tantivy-0.26.1/src/core/executor.rs
+  s_5b054b517a26b6::t_769f88b6d7f866 1-15,18-22,25-100,102,104-143,146-151,153-157,160-165,167-177,179-240
+vendor/tantivy-0.26.1/src/core/json_utils.rs
+  s_5b054b517a26b6::t_6424dfd816afdd 1-501
+vendor/tantivy-0.26.1/src/core/mod.rs
+  s_5b054b517a26b6::t_1a080f585b62d6 1-25
+vendor/tantivy-0.26.1/src/core/searcher.rs
+  s_5b054b517a26b6::t_dc9f0ef3ddd255 1-308
+vendor/tantivy-0.26.1/src/core/tests.rs
+  s_5b054b517a26b6::t_287bfbe6e4e3ca 1-468
+vendor/tantivy-0.26.1/src/directory/composite_file.rs
+  s_5b054b517a26b6::t_74099e65c6acc0 1-288
+vendor/tantivy-0.26.1/src/directory/directory.rs
+  s_5b054b517a26b6::t_232cd103618fa5 1-252
+vendor/tantivy-0.26.1/src/directory/directory_lock.rs
+  s_5b054b517a26b6::t_42a0b99731b694 1-60
+vendor/tantivy-0.26.1/src/directory/error.rs
+  s_5b054b517a26b6::t_7372f6c029bd93 1-202
+vendor/tantivy-0.26.1/src/directory/footer.rs
+  s_5b054b517a26b6::t_a8e62706640c43 1-241
+vendor/tantivy-0.26.1/src/directory/managed_directory.rs
+  s_5b054b517a26b6::t_030387dd54ab58 1-413
+vendor/tantivy-0.26.1/src/directory/mmap_directory/file_watcher.rs
+  s_5b054b517a26b6::t_2a81db7950f460 1-185
+vendor/tantivy-0.26.1/src/directory/mmap_directory/mod.rs
+  s_5b054b517a26b6::t_46cb2439f5b6af 1-703
+vendor/tantivy-0.26.1/src/directory/mod.rs
+  s_5b054b517a26b6::t_ce86386dd06dcc 1-58
+vendor/tantivy-0.26.1/src/directory/ram_directory.rs
+  s_5b054b517a26b6::t_2af3d5a2cef46b 1-285
+vendor/tantivy-0.26.1/src/directory/tests.rs
+  s_5b054b517a26b6::t_85ce70b1f93a19 1-276
+vendor/tantivy-0.26.1/src/directory/watch_event_router.rs
+  s_5b054b517a26b6::t_faae12724d0b5c 1-173
+vendor/tantivy-0.26.1/src/docset.rs
+  s_5b054b517a26b6::t_d10a2f9e201af3 1-283
+vendor/tantivy-0.26.1/src/error.rs
+  s_5b054b517a26b6::t_1959dcaaac563d 1-188
+vendor/tantivy-0.26.1/src/fastfield/alive_bitset.rs
+  s_5b054b517a26b6::t_a4f9ad03e434ae 1-218
+vendor/tantivy-0.26.1/src/fastfield/error.rs
+  s_5b054b517a26b6::t_f0da6b29026f71 1-26
+vendor/tantivy-0.26.1/src/fastfield/facet_reader.rs
+  s_5b054b517a26b6::t_5880606a73b52e 1-194
+vendor/tantivy-0.26.1/src/fastfield/mod.rs
+  s_5b054b517a26b6::t_8fd0467b0e6821 1-1306
+vendor/tantivy-0.26.1/src/fastfield/readers.rs
+  s_5b054b517a26b6::t_a329aa0d868a5b 1-517
+vendor/tantivy-0.26.1/src/fastfield/writer.rs
+  s_5b054b517a26b6::t_a44b7fac209158 1-484
+vendor/tantivy-0.26.1/src/fieldnorm/code.rs
+  s_5b054b517a26b6::t_a178dcd08b9568 1-329
+vendor/tantivy-0.26.1/src/fieldnorm/mod.rs
+  s_5b054b517a26b6::t_b196c5d7bb5780 1-154
+vendor/tantivy-0.26.1/src/fieldnorm/reader.rs
+  s_5b054b517a26b6::t_a57e69cc94dd69 1-194
+vendor/tantivy-0.26.1/src/fieldnorm/serializer.rs
+  s_5b054b517a26b6::t_5e231bfa346c22 1-34
+vendor/tantivy-0.26.1/src/fieldnorm/writer.rs
+  s_5b054b517a26b6::t_b1edb2c9fba29a 1-107
+vendor/tantivy-0.26.1/src/functional_test.rs
+  s_5b054b517a26b6::t_7948da6ead60ea 1-140
+vendor/tantivy-0.26.1/src/future_result.rs
+  s_5b054b517a26b6::t_eee7758a878905 1-130
+vendor/tantivy-0.26.1/src/index/index.rs
+  s_5b054b517a26b6::t_3b7c71ed810e50 1-714
+vendor/tantivy-0.26.1/src/index/index_meta.rs
+  s_5b054b517a26b6::t_fe0df119458ce1 1-506
+vendor/tantivy-0.26.1/src/index/inverted_index_reader.rs
+  s_5b054b517a26b6::t_576bf31697e116 1-494
+vendor/tantivy-0.26.1/src/index/mod.rs
+  s_5b054b517a26b6::t_9128c0de0972cd 1-20
+vendor/tantivy-0.26.1/src/index/segment.rs
+  s_5b054b517a26b6::t_0f647d5e53b82d 1-90
+vendor/tantivy-0.26.1/src/index/segment_component.rs
+  s_5b054b517a26b6::t_fa850216b72cc0 1-45
+vendor/tantivy-0.26.1/src/index/segment_id.rs
+  s_5b054b517a26b6::t_bedf5f8aebd9ff 1-142
+vendor/tantivy-0.26.1/src/index/segment_reader.rs
+  s_5b054b517a26b6::t_0040ff308a610e 1-813
+vendor/tantivy-0.26.1/src/indexer/delete_queue.rs
+  s_5b054b517a26b6::t_b0e7e925d143e1 1-305
+vendor/tantivy-0.26.1/src/indexer/doc_id_mapping.rs
+  s_5b054b517a26b6::t_d4dd15a923c8e2 1-46
+vendor/tantivy-0.26.1/src/indexer/doc_opstamp_mapping.rs
+  s_5b054b517a26b6::t_0983fc5e22a09d 1-62
+vendor/tantivy-0.26.1/src/indexer/flat_map_with_buffer.rs
+  s_5b054b517a26b6::t_5512c472ee7596 1-70
+vendor/tantivy-0.26.1/src/indexer/index_writer.rs
+  s_5b054b517a26b6::t_6cc18db7a46973 1-2588
+vendor/tantivy-0.26.1/src/indexer/index_writer_status.rs
+  s_5b054b517a26b6::t_8f719d479fb3d2 1-122
+vendor/tantivy-0.26.1/src/indexer/indexing_term.rs
+  s_5b054b517a26b6::t_8c156dea1c382e 1-214
+vendor/tantivy-0.26.1/src/indexer/log_merge_policy.rs
+  s_5b054b517a26b6::t_9b26982920801c 1-392
+vendor/tantivy-0.26.1/src/indexer/merge_index_test.rs
+  s_5b054b517a26b6::t_93eaae28695467 1-148
+vendor/tantivy-0.26.1/src/indexer/merge_operation.rs
+  s_5b054b517a26b6::t_a982aa2613f5a7 1-77
+vendor/tantivy-0.26.1/src/indexer/merge_policy.rs
+  s_5b054b517a26b6::t_4c209d4361a278 1-63
+vendor/tantivy-0.26.1/src/indexer/merger.rs
+  s_5b054b517a26b6::t_3fd414445d5e0f 1-38,40-57,59-68,71-76,79-82,85-86,89-94,96-106,109-131,134-144,147-151,153-177,179-192,195-217,220-239,242-283,286-311,313-329,331-465,467-486,488-518,520,522-552,554-735,737-1043,1045-1048,1050-1060,1062-1168,1170-1189,1192-1215,1218-1250,1252-1258,1260-1267,1269-1275,1277-1279,1281-1353,1355-1356,1358-1394,1396-1412,1415-1423,1425-1492,1495-1546,1548-1570,1572-1573,1576-1581
+vendor/tantivy-0.26.1/src/indexer/mod.rs
+  s_5b054b517a26b6::t_0fa4f49c1cef67 1-696
+vendor/tantivy-0.26.1/src/indexer/operation.rs
+  s_5b054b517a26b6::t_c28a8f341e6929 1-32
+vendor/tantivy-0.26.1/src/indexer/path_to_unordered_id.rs
+  s_5b054b517a26b6::t_5895a9e8db15b9 1-93
+vendor/tantivy-0.26.1/src/indexer/prepared_commit.rs
+  s_5b054b517a26b6::t_480aade8e6241a 1-53
+vendor/tantivy-0.26.1/src/indexer/segment_entry.rs
+  s_5b054b517a26b6::t_c348dad7fe7296 1-69
+vendor/tantivy-0.26.1/src/indexer/segment_manager.rs
+  s_5b054b517a26b6::t_17fd9bec38981b 1-222
+vendor/tantivy-0.26.1/src/indexer/segment_register.rs
+  s_5b054b517a26b6::t_77142679471e4c 1-147
+vendor/tantivy-0.26.1/src/indexer/segment_serializer.rs
+  s_5b054b517a26b6::t_a3e4f1238ecbaf 1-89
+vendor/tantivy-0.26.1/src/indexer/segment_updater.rs
+  s_5b054b517a26b6::t_2d36592dc49fcf 1-1143
+vendor/tantivy-0.26.1/src/indexer/segment_writer.rs
+  s_5b054b517a26b6::t_c7c11106c6cf78 1-15,17-118,120-135,138-144,147-148,150-168,170-192,194-220,223-231,233-234,236-240,242-307,309-324,327-339,343,346-360,363-371,373-381,384-399,401-416,418,423-424,426-443,446-454,457-472,474-475,477-496,498-514,516-522,524,526-531,533,536-553,555-572,575-606,608-633,635-636,638-643,646-647,649-657,659-664,666-667,670-672,674-675,678-679,681-682,685-690,692-694,696-703,706-708,710-711,714-722,724-725,727-728,731-761,763-768,771-789,791-796,798-806,809-877,879-903,905-909,911,914-949,951-963,965-969,973-987,989-1008,1010-1035,1037-1056,1058-1080
+vendor/tantivy-0.26.1/src/indexer/single_segment_index_writer.rs
+  s_5b054b517a26b6::t_4d7c6367972306 1-56
+vendor/tantivy-0.26.1/src/indexer/stamper.rs
+  s_5b054b517a26b6::t_7a623eb9a03e27 1-73
+vendor/tantivy-0.26.1/src/lib.rs
+  s_5b054b517a26b6::t_8b5938a5ad389a 1-1277
+vendor/tantivy-0.26.1/src/macros.rs
+  s_5b054b517a26b6::t_dc004d4216458c 1-97
+vendor/tantivy-0.26.1/src/positions/mod.rs
+  s_5b054b517a26b6::t_8544a12f3002de 1-236
+vendor/tantivy-0.26.1/src/positions/reader.rs
+  s_5b054b517a26b6::t_3a89cb453850b3 1-149
+vendor/tantivy-0.26.1/src/positions/serializer.rs
+  s_5b054b517a26b6::t_bb8d8325995c02 1-93
+vendor/tantivy-0.26.1/src/postings/block_search.rs
+  s_5b054b517a26b6::t_68d8600628ae36 1-100
+vendor/tantivy-0.26.1/src/postings/block_segment_postings.rs
+  s_5b054b517a26b6::t_d2066e5cad81b1 1-560
+vendor/tantivy-0.26.1/src/postings/compression/mod.rs
+  s_5b054b517a26b6::t_4b7a4e9add8144 1-463
+vendor/tantivy-0.26.1/src/postings/compression/vint.rs
+  s_5b054b517a26b6::t_2e2e347ef7feb7 1-21,23-42,44-62,64-82,84-108
+vendor/tantivy-0.26.1/src/postings/indexing_context.rs
+  s_5b054b517a26b6::t_c9d97d43feebca 1-31
+vendor/tantivy-0.26.1/src/postings/json_postings_writer.rs
+  s_5b054b517a26b6::t_4ff0edb6c1cc87 1-154
+vendor/tantivy-0.26.1/src/postings/loaded_postings.rs
+  s_5b054b517a26b6::t_965adc4c60ef51 1-155
+vendor/tantivy-0.26.1/src/postings/mod.rs
+  s_5b054b517a26b6::t_f3808d115417cb 1-764
+vendor/tantivy-0.26.1/src/postings/per_field_postings_writer.rs
+  s_5b054b517a26b6::t_1faafee65a48eb 1-5,7-18,20-24,26-29,31-70,72
+vendor/tantivy-0.26.1/src/postings/postings.rs
+  s_5b054b517a26b6::t_b78577398e0789 1-44
+vendor/tantivy-0.26.1/src/postings/postings_writer.rs
+  s_5b054b517a26b6::t_dec748d4be26ee 1-247
+vendor/tantivy-0.26.1/src/postings/recorder.rs
+  s_5b054b517a26b6::t_3d60c44586b429 1-317
+vendor/tantivy-0.26.1/src/postings/segment_postings.rs
+  s_5b054b517a26b6::t_e6a0a63ba65ef9 1-298
+vendor/tantivy-0.26.1/src/postings/serializer.rs
+  s_5b054b517a26b6::t_33e077f0195eb0 1-487
+vendor/tantivy-0.26.1/src/postings/skip.rs
+  s_5b054b517a26b6::t_48cb72376f5176 1-452
+vendor/tantivy-0.26.1/src/postings/term_info.rs
+  s_5b054b517a26b6::t_7ddba8d79bc0f7 1-78
+vendor/tantivy-0.26.1/src/query/all_query.rs
+  s_5b054b517a26b6::t_f5c4a702ac3027 1-196
+vendor/tantivy-0.26.1/src/query/automaton_weight.rs
+  s_5b054b517a26b6::t_a45bbd2dbb89c4 1-211
+vendor/tantivy-0.26.1/src/query/bitset/mod.rs
+  s_5b054b517a26b6::t_9d2edaedaee9ee 1-275
+vendor/tantivy-0.26.1/src/query/bm25.rs
+  s_5b054b517a26b6::t_4a63267adfcce2 1-240
+vendor/tantivy-0.26.1/src/query/boolean_query/block_wand.rs
+  s_5b054b517a26b6::t_bd97d9a34a8310 1-628
+vendor/tantivy-0.26.1/src/query/boolean_query/boolean_query.rs
+  s_5b054b517a26b6::t_2f324c979f7251 1-450
+vendor/tantivy-0.26.1/src/query/boolean_query/boolean_weight.rs
+  s_5b054b517a26b6::t_96d7199e1dad18 1-540
+vendor/tantivy-0.26.1/src/query/boolean_query/mod.rs
+  s_5b054b517a26b6::t_ba5fbf96e1b055 1-841
+vendor/tantivy-0.26.1/src/query/boost_query.rs
+  s_5b054b517a26b6::t_944a469c70f7fd 1-167
+vendor/tantivy-0.26.1/src/query/const_score_query.rs
+  s_5b054b517a26b6::t_890f9e2b294e38 1-14,17-86,89-97,100-104,107-110,113-136,139-143,146-178
+vendor/tantivy-0.26.1/src/query/disjunction.rs
+  s_5b054b517a26b6::t_e2e86111aa21f3 1-354
+vendor/tantivy-0.26.1/src/query/disjunction_max_query.rs
+  s_5b054b517a26b6::t_ac3e4cd2d174fb 1-130
+vendor/tantivy-0.26.1/src/query/empty_query.rs
+  s_5b054b517a26b6::t_218c9afd6ad67c 1-77
+vendor/tantivy-0.26.1/src/query/exclude.rs
+  s_5b054b517a26b6::t_b2451d9b9ca82f 1-166
+vendor/tantivy-0.26.1/src/query/exist_query.rs
+  s_5b054b517a26b6::t_1cc60e4e2b1f81 1-470
+vendor/tantivy-0.26.1/src/query/explanation.rs
+  s_5b054b517a26b6::t_f2cbc9084fb621 1-82
+vendor/tantivy-0.26.1/src/query/fuzzy_query.rs
+  s_5b054b517a26b6::t_fc3c0ad6725c45 1-352
+vendor/tantivy-0.26.1/src/query/intersection.rs
+  s_5b054b517a26b6::t_1b0e951d20342d 1-448
+vendor/tantivy-0.26.1/src/query/mod.rs
+  s_5b054b517a26b6::t_b01a565d0a0d7d 1-191
+vendor/tantivy-0.26.1/src/query/more_like_this/mod.rs
+  s_5b054b517a26b6::t_7a1469bc9ecb99 1-7
+vendor/tantivy-0.26.1/src/query/more_like_this/more_like_this.rs
+  s_5b054b517a26b6::t_156c9b672f86a2 1-371
+vendor/tantivy-0.26.1/src/query/more_like_this/query.rs
+  s_5b054b517a26b6::t_37a132b91db9a5 1-294
+vendor/tantivy-0.26.1/src/query/phrase_prefix_query/mod.rs
+  s_5b054b517a26b6::t_82c46d686662f7 1-34
+vendor/tantivy-0.26.1/src/query/phrase_prefix_query/phrase_prefix_query.rs
+  s_5b054b517a26b6::t_c2c5fd17c236d0 1-165
+vendor/tantivy-0.26.1/src/query/phrase_prefix_query/phrase_prefix_scorer.rs
+  s_5b054b517a26b6::t_b8fccbdfdee20f 1-229
+vendor/tantivy-0.26.1/src/query/phrase_prefix_query/phrase_prefix_weight.rs
+  s_5b054b517a26b6::t_573fa83c843086 1-266
+vendor/tantivy-0.26.1/src/query/phrase_query/mod.rs
+  s_5b054b517a26b6::t_2c84cdf8ae0ba7 1-399
+vendor/tantivy-0.26.1/src/query/phrase_query/phrase_query.rs
+  s_5b054b517a26b6::t_2133467f1b3f2d 1-149
+vendor/tantivy-0.26.1/src/query/phrase_query/phrase_scorer.rs
+  s_5b054b517a26b6::t_16ca7c23ed447a 1-812
+vendor/tantivy-0.26.1/src/query/phrase_query/phrase_weight.rs
+  s_5b054b517a26b6::t_9a3047c72999b8 1-135
+vendor/tantivy-0.26.1/src/query/phrase_query/regex_phrase_query.rs
+  s_5b054b517a26b6::t_19da6b26431666 1-171
+vendor/tantivy-0.26.1/src/query/phrase_query/regex_phrase_weight.rs
+  s_5b054b517a26b6::t_63395c55f631a1 1-474
+vendor/tantivy-0.26.1/src/query/query.rs
+  s_5b054b517a26b6::t_30d0fbf6537010 1-199
+vendor/tantivy-0.26.1/src/query/query_parser/logical_ast.rs
+  s_5b054b517a26b6::t_a65c0513f05d12 1-164
+vendor/tantivy-0.26.1/src/query/query_parser/mod.rs
+  s_5b054b517a26b6::t_1c2bba2f314cca 1-4
+vendor/tantivy-0.26.1/src/query/query_parser/query_parser.rs
+  s_5b054b517a26b6::t_7e6424b1b7c7f1 1-2124
+vendor/tantivy-0.26.1/src/query/range_query/fast_field_range_doc_set.rs
+  s_5b054b517a26b6::t_85cc72d1e716c1 1-308
+vendor/tantivy-0.26.1/src/query/range_query/mod.rs
+  s_5b054b517a26b6::t_55fe857f11d8a7 1-26
+vendor/tantivy-0.26.1/src/query/range_query/range_query.rs
+  s_5b054b517a26b6::t_a0f6166c172a3a 1-706
+vendor/tantivy-0.26.1/src/query/range_query/range_query_fastfield.rs
+  s_5b054b517a26b6::t_1e1432e86d6e6f 1-1679
+vendor/tantivy-0.26.1/src/query/regex_query.rs
+  s_5b054b517a26b6::t_256f94b5d4f7ba 1-197
+vendor/tantivy-0.26.1/src/query/reqopt_scorer.rs
+  s_5b054b517a26b6::t_ff707f4022f779 1-209
+vendor/tantivy-0.26.1/src/query/score_combiner.rs
+  s_5b054b517a26b6::t_c8ce8e131bd372 1-95
+vendor/tantivy-0.26.1/src/query/scorer.rs
+  s_5b054b517a26b6::t_e7edeb7e025f74 1-25
+vendor/tantivy-0.26.1/src/query/set_query.rs
+  s_5b054b517a26b6::t_6a04317ada79ef 1-263
+vendor/tantivy-0.26.1/src/query/size_hint.rs
+  s_5b054b517a26b6::t_5957c07431ed62 1-141
+vendor/tantivy-0.26.1/src/query/term_query/mod.rs
+  s_5b054b517a26b6::t_56a317bd16b8e4 1-525
+vendor/tantivy-0.26.1/src/query/term_query/term_query.rs
+  s_5b054b517a26b6::t_3cdf60930f8a3d 1-217
+vendor/tantivy-0.26.1/src/query/term_query/term_scorer.rs
+  s_5b054b517a26b6::t_0caea214f60f95 1-341
+vendor/tantivy-0.26.1/src/query/term_query/term_weight.rs
+  s_5b054b517a26b6::t_1c7327a10ee440 1-220
+vendor/tantivy-0.26.1/src/query/union/bitset_union.rs
+  s_5b054b517a26b6::t_1d1ca49a7024f5 1-89
+vendor/tantivy-0.26.1/src/query/union/buffered_union.rs
+  s_5b054b517a26b6::t_71ef65116639c8 1-358
+vendor/tantivy-0.26.1/src/query/union/mod.rs
+  s_5b054b517a26b6::t_4284b56681233e 1-332
+vendor/tantivy-0.26.1/src/query/union/simple_union.rs
+  s_5b054b517a26b6::t_7b75f83021ce9a 1-117
+vendor/tantivy-0.26.1/src/query/vec_docset.rs
+  s_5b054b517a26b6::t_19e1af752b0f3c 1-90
+vendor/tantivy-0.26.1/src/query/weight.rs
+  s_5b054b517a26b6::t_eeda35a7f72320 1-133
+vendor/tantivy-0.26.1/src/reader/mod.rs
+  s_5b054b517a26b6::t_b6de11b7aadb27 1-301
+vendor/tantivy-0.26.1/src/reader/warming.rs
+  s_5b054b517a26b6::t_cae2d9c5ff19e2 1-345
+vendor/tantivy-0.26.1/src/schema/bytes_options.rs
+  s_5b054b517a26b6::t_dfc1b4988f08ec 1-295
+vendor/tantivy-0.26.1/src/schema/date_time_options.rs
+  s_5b054b517a26b6::t_a81eb06be60017 1-157,160-168,173,175-201,203-210,213-238
+vendor/tantivy-0.26.1/src/schema/document/de.rs
+  s_5b054b517a26b6::t_00922b6e6d88ce 1-1158
+vendor/tantivy-0.26.1/src/schema/document/default_document.rs
+  s_5b054b517a26b6::t_14a3db9e4acffe 1-784
+vendor/tantivy-0.26.1/src/schema/document/existing_type_impls.rs
+  s_5b054b517a26b6::t_be104b569adcb2 1-343
+vendor/tantivy-0.26.1/src/schema/document/mod.rs
+  s_5b054b517a26b6::t_32a44e5033882c 1-276
+vendor/tantivy-0.26.1/src/schema/document/owned_value.rs
+  s_5b054b517a26b6::t_d94140218339c3 1-528
+vendor/tantivy-0.26.1/src/schema/document/se.rs
+  s_5b054b517a26b6::t_5cd5bee759ae2c 1-743
+vendor/tantivy-0.26.1/src/schema/document/value.rs
+  s_5b054b517a26b6::t_775d120d136c48 1-28,30-34,36-40,42-46,48-52,54-58,60-64,66-110,113-138,141-145,148-152,155-159,162-166,169-173,176-180,183-187,190-194,197-201,204-222,224,227-232,234-242,244-250,252,254-262,264-272,274-313,315-333,336-346,349-374,376-450
+vendor/tantivy-0.26.1/src/schema/facet.rs
+  s_5b054b517a26b6::t_49edac6bc4838a 1-348
+vendor/tantivy-0.26.1/src/schema/facet_options.rs
+  s_5b054b517a26b6::t_77066d0f90ac80 1-82
+vendor/tantivy-0.26.1/src/schema/field.rs
+  s_5b054b517a26b6::t_af77df06c74368 1-33
+vendor/tantivy-0.26.1/src/schema/field_entry.rs
+  s_5b054b517a26b6::t_68488dd35968a2 1-217
+vendor/tantivy-0.26.1/src/schema/field_type.rs
+  s_5b054b517a26b6::t_2f2919b14d4cc1 1-806
+vendor/tantivy-0.26.1/src/schema/flags.rs
+  s_5b054b517a26b6::t_f5c45cf8cac63d 1-102
+vendor/tantivy-0.26.1/src/schema/index_record_option.rs
+  s_5b054b517a26b6::t_b622f762a5a871 1-62
+vendor/tantivy-0.26.1/src/schema/ip_options.rs
+  s_5b054b517a26b6::t_97043d4f334510 1-159
+vendor/tantivy-0.26.1/src/schema/json_object_options.rs
+  s_5b054b517a26b6::t_1ee7299e782122 1-261
+vendor/tantivy-0.26.1/src/schema/mod.rs
+  s_5b054b517a26b6::t_d1eab114dfd127 1-189
+vendor/tantivy-0.26.1/src/schema/named_field_document.rs
+  s_5b054b517a26b6::t_f2ea9361cb9698 1-13
+vendor/tantivy-0.26.1/src/schema/numeric_options.rs
+  s_5b054b517a26b6::t_2a5a24c5bbe4ab 1-318
+vendor/tantivy-0.26.1/src/schema/schema.rs
+  s_5b054b517a26b6::t_61df251615fa7e 1-1023
+vendor/tantivy-0.26.1/src/schema/term.rs
+  s_5b054b517a26b6::t_742cb47f9f9308 1-577
+vendor/tantivy-0.26.1/src/schema/text_options.rs
+  s_5b054b517a26b6::t_ea792c2d339e73 1-436
+vendor/tantivy-0.26.1/src/snippet/mod.rs
+  s_5b054b517a26b6::t_7933aed8aa07df 1-907
+vendor/tantivy-0.26.1/src/space_usage/mod.rs
+  s_5b054b517a26b6::t_58f762f0d341fd 1-558
+vendor/tantivy-0.26.1/src/store/compression_lz4_block.rs
+  s_5b054b517a26b6::t_4f92fe5c44af41 1-49
+vendor/tantivy-0.26.1/src/store/compression_zstd_block.rs
+  s_5b054b517a26b6::t_d1197bf8e926a7 1-54
+vendor/tantivy-0.26.1/src/store/compressors.rs
+  s_5b054b517a26b6::t_930c39496d4cd5 1-143,146-168,171,173-180,182-183,187-213,216-218
+vendor/tantivy-0.26.1/src/store/decompressors.rs
+  s_5b054b517a26b6::t_3c2124542ab0f7 1-95
+vendor/tantivy-0.26.1/src/store/footer.rs
+  s_5b054b517a26b6::t_5c6ce8e2b06216 1-87
+vendor/tantivy-0.26.1/src/store/index/block.rs
+  s_5b054b517a26b6::t_4329b798b2a5dd 1-174
+vendor/tantivy-0.26.1/src/store/index/mod.rs
+  s_5b054b517a26b6::t_156fa6987128bc 1-246
+vendor/tantivy-0.26.1/src/store/index/skip_index.rs
+  s_5b054b517a26b6::t_1519d9aac17296 1-107
+vendor/tantivy-0.26.1/src/store/index/skip_index_builder.rs
+  s_5b054b517a26b6::t_4e43ff41f721a4 1-117
+vendor/tantivy-0.26.1/src/store/mod.rs
+  s_5b054b517a26b6::t_3fe050d77c37d6 1-406
+vendor/tantivy-0.26.1/src/store/reader.rs
+  s_5b054b517a26b6::t_a27a47ca2ad2cd 1-506
+vendor/tantivy-0.26.1/src/store/store_compressor.rs
+  s_5b054b517a26b6::t_40d158c83eb07a 1-272
+vendor/tantivy-0.26.1/src/store/writer.rs
+  s_5b054b517a26b6::t_d7ef74def2c6d8 1-142
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/merger.rs
+  s_5b054b517a26b6::t_801e8ea3f0ac9d 1-155
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/mod.rs
+  s_5b054b517a26b6::t_9e950fc9e1a3ef 1-28
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/streamer.rs
+  s_5b054b517a26b6::t_8390405ffe360f 1-147
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/term_info_store.rs
+  s_5b054b517a26b6::t_c2ef7f92a267a2 1-366
+vendor/tantivy-0.26.1/src/termdict/fst_termdict/termdict.rs
+  s_5b054b517a26b6::t_59b4e66ed993c4 1-221
+vendor/tantivy-0.26.1/src/termdict/mod.rs
+  s_5b054b517a26b6::t_3705357cf5f1fb 1-224
+vendor/tantivy-0.26.1/src/termdict/sstable_termdict/merger.rs
+  s_5b054b517a26b6::t_bb04454eb75a96 1-110
+vendor/tantivy-0.26.1/src/termdict/sstable_termdict/mod.rs
+  s_5b054b517a26b6::t_00f2a8d0b676be 1-52,55-87,89-91,93-104,106-108,110-114,116-151
+vendor/tantivy-0.26.1/src/termdict/tests.rs
+  s_5b054b517a26b6::t_2e972e536e4eb0 1-431
+vendor/tantivy-0.26.1/src/tokenizer/alphanum_only.rs
+  s_5b054b517a26b6::t_518da1e5f57fc5 1-109
+vendor/tantivy-0.26.1/src/tokenizer/ascii_folding_filter.rs
+  s_5b054b517a26b6::t_98b0559ff3b8d6 1-4066
+vendor/tantivy-0.26.1/src/tokenizer/empty_tokenizer.rs
+  s_5b054b517a26b6::t_f7aa6b8bcb4f02 1-42
+vendor/tantivy-0.26.1/src/tokenizer/facet_tokenizer.rs
+  s_5b054b517a26b6::t_f1664be7fd018f 1-2,4-14,17-21,24-27,30-40,43-74,76-78,80-82,85-109,112-127
+vendor/tantivy-0.26.1/src/tokenizer/lower_caser.rs
+  s_5b054b517a26b6::t_5ad60d5df3dfd8 1-108
+vendor/tantivy-0.26.1/src/tokenizer/mod.rs
+  s_5b054b517a26b6::t_ad11fd68473dce 1-258
+vendor/tantivy-0.26.1/src/tokenizer/ngram_tokenizer.rs
+  s_5b054b517a26b6::t_598b3c12856289 1-491
+vendor/tantivy-0.26.1/src/tokenizer/raw_tokenizer.rs
+  s_5b054b517a26b6::t_c1be46b234c5fd 1-69
+vendor/tantivy-0.26.1/src/tokenizer/regex_tokenizer.rs
+  s_5b054b517a26b6::t_371c06ad8766a8 1-165
+vendor/tantivy-0.26.1/src/tokenizer/remove_long.rs
+  s_5b054b517a26b6::t_e7948f67e22154 1-117
+vendor/tantivy-0.26.1/src/tokenizer/simple_tokenizer.rs
+  s_5b054b517a26b6::t_15a4bfa5c67d77 1-91
+vendor/tantivy-0.26.1/src/tokenizer/split_compound_words.rs
+  s_5b054b517a26b6::t_7372b926f191c9 1-282
+vendor/tantivy-0.26.1/src/tokenizer/stemmer.rs
+  s_5b054b517a26b6::t_ef7f994d4d9bef 1-201
+vendor/tantivy-0.26.1/src/tokenizer/stop_word_filter/gen_stopwords.py
+  s_5b054b517a26b6::t_6de825384956b9 1-43
+vendor/tantivy-0.26.1/src/tokenizer/stop_word_filter/mod.rs
+  s_5b054b517a26b6::t_20ea1e57b113d1 1-166
+vendor/tantivy-0.26.1/src/tokenizer/stop_word_filter/stopwords.rs
+  s_5b054b517a26b6::t_fb3170bda1c468 1-2319
+vendor/tantivy-0.26.1/src/tokenizer/tokenized_string.rs
+  s_5b054b517a26b6::t_d8c5fdce2f30ff 1-127
+vendor/tantivy-0.26.1/src/tokenizer/tokenizer.rs
+  s_5b054b517a26b6::t_ca4b6af3933f72 1-175
+vendor/tantivy-0.26.1/src/tokenizer/tokenizer_manager.rs
+  s_5b054b517a26b6::t_06989a9bd75554 1-81
+vendor/tantivy-0.26.1/src/tokenizer/whitespace_tokenizer.rs
+  s_5b054b517a26b6::t_63bfc184912b28 1-90
+vendor/tantivy-0.26.1/tests/compat_tests_data/index_v6/.managed.json
+  s_5b054b517a26b6::t_b0ba9026e5b546 1
+vendor/tantivy-0.26.1/tests/compat_tests_data/index_v6/meta.json
+  s_5b054b517a26b6::t_a6ac5f04ad2f2a 2-25,27-36,38-39
+vendor/tantivy-0.26.1/tests/compat_tests_data/index_v7/.managed.json
+  s_5b054b517a26b6::t_8da44d3aadcedd 1
+vendor/tantivy-0.26.1/tests/compat_tests_data/index_v7/meta.json
+  s_5b054b517a26b6::t_eae00c4bf9193c 2-25,27-36,38-39
+vendor/tantivy-0.26.1/tests/failpoints/mod.rs
+  s_5b054b517a26b6::t_72b6825a946e7a 1-124
+xtask/Cargo.toml
+  s_5b054b517a26b6::t_062f633ae6e7e5 27-29
+xtask/README.md
+  s_5b054b517a26b6::t_0dcb02b99479b9 7-12
+xtask/src/check/dependencies.rs
+  s_5b054b517a26b6::t_4b232158fdc55e 29-34,61,97-99,102-112,508-509,534-555,842-895,1227-1237,1255-1267,1270-1282,1315-1332,1649,1686-1690,1833-1838,1857,1925,1986,2005-2082,2144-2225,2228-2238
+xtask/src/check/tooling.rs
+  s_5b054b517a26b6::t_e5dd2ed8a60950 5-6,103-105,542-575
+xtask/src/cli.rs
+  s_5b054b517a26b6::t_c21a74f2624233 55,62,164
+xtask/src/lib.rs
+  s_5b054b517a26b6::t_059a91f4c3b5a7 24,33-35,520,524-528,551-552,555-556,559-562,835,883-884
+xtask/src/release.rs
+  s_5b054b517a26b6::t_42c5a0b0c65f46 1103-1110,1113,1115,1610-1625,1643,1651,1765-1786,2480-2594
+xtask/src/repository.rs
+  s_5b054b517a26b6::t_082b66dc2ddd5c 76,81-95,117,124-126,129,132-141,147-218,261-292,362-364,376-384,387-394
+xtask/src/rpc_codegen.rs
+  s_5b054b517a26b6::t_e204e2363a4526 1-238
+xtask/src/rpc_codegen/artifacts.rs
+  s_5b054b517a26b6::t_fced613967908c 1-177
+xtask/src/rpc_codegen/emit.rs
+  s_5b054b517a26b6::t_9ee5e33f8caf62 1-604
+xtask/src/rpc_codegen/model.rs
+  s_5b054b517a26b6::t_d12f3d14521bc8 1-635
+xtask/src/rpc_codegen/web.rs
+  s_5b054b517a26b6::t_87a4e59cbd8c08 1-496
+xtask/src/rpc_contracts.rs
+  s_5b054b517a26b6::t_4d92e960ffc7b3 1-148
+xtask/src/web_contracts.rs
+  s_5b054b517a26b6::t_5a3196ec73cece 18-19,52,55-57,266-287,289,302,599,602,615-619,659,677,753,1420,1453-1454,1479-1485,1487,1489-1490,1517
+xtask/tests/tooling.rs
+  s_5b054b517a26b6::t_b7b22c07ef2662 126-130,200,210,423-424,426,439-440
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be93d4920d73a418072e7fdd98a2d0b2e2463247",
+  "prompts": {},
+  "sessions": {
+    "s_5b054b517a26b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a4c6-eacb-7e12-bd47-d9e30e6c1ae1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

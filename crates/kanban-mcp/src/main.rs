@@ -20,6 +20,7 @@ use shared::KanbanMcp;
 impl KanbanMcp {
     fn tool_router() -> ToolRouter<Self> {
         Self::board_tools()
+            + Self::planning_tools()
             + Self::task_tools()
             + Self::comment_tools()
             + Self::context_tools()
@@ -41,6 +42,7 @@ impl KanbanMcp {
 
     fn work_tool_router() -> ToolRouter<Self> {
         Self::board_tools()
+            + Self::planning_tools()
             + Self::task_tools()
             + Self::comment_tools()
             + Self::context_tools()

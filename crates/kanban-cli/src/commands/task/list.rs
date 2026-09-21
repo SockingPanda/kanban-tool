@@ -10,6 +10,11 @@ use crate::{context::CliContext, error::CliFailure, output};
 
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {
+    #[arg(long = "module")]
+    pub(crate) module_ids: Vec<String>,
+    #[arg(long = "cycle")]
+    pub(crate) cycle_id: Option<String>,
+
     #[arg(long, value_enum)]
     pub(crate) status: Vec<ListStatus>,
     #[arg(long)]
@@ -92,6 +97,8 @@ fn list_tasks_query(args: &ListArgs) -> Result<ListTasksQuery, CliFailure> {
         exit_code: 2,
     })?;
     Ok(ListTasksQuery {
+        module_ids: args.module_ids.clone(),
+        cycle_id: args.cycle_id.clone(),
         status: args.status.iter().copied().map(api_list_status).collect(),
         priority: priorities,
         label: args

@@ -1235,6 +1235,264 @@
   },
   {
     "contracts": [
+      "api.get-planning-capabilities.headers",
+      "api.get-planning-capabilities.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/planning/capabilities",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.list-modules.path",
+      "api.list-modules.query",
+      "api.list-modules.headers",
+      "api.list-modules.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/modules/list-modules",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.get-module.path",
+      "api.get-module.headers",
+      "api.get-module.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/modules/:id/get-module",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.create-module.path",
+      "api.create-module.headers",
+      "api.create-module.request",
+      "api.create-module.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/modules/create-module",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.update-module.path",
+      "api.update-module.headers",
+      "api.update-module.request",
+      "api.update-module.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/modules/:id/update-module",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.archive-module.path",
+      "api.archive-module.headers",
+      "api.archive-module.request",
+      "api.archive-module.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/modules/:id/archive-module",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.restore-module.path",
+      "api.restore-module.headers",
+      "api.restore-module.request",
+      "api.restore-module.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/modules/:id/restore-module",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.get-module-overview.path",
+      "api.get-module-overview.headers",
+      "api.get-module-overview.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/modules/:id/get-module-overview",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.list-module-tasks.path",
+      "api.list-module-tasks.query",
+      "api.list-module-tasks.headers",
+      "api.list-module-tasks.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.add-module-task.path",
+      "api.add-module-task.headers",
+      "api.add-module-task.request",
+      "api.add-module-task.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.remove-module-task.path",
+      "api.remove-module-task.headers",
+      "api.remove-module-task.request",
+      "api.remove-module-task.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.list-cycles.path",
+      "api.list-cycles.query",
+      "api.list-cycles.headers",
+      "api.list-cycles.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/cycles/list-cycles",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.get-cycle.path",
+      "api.get-cycle.headers",
+      "api.get-cycle.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/cycles/:id/get-cycle",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.create-cycle.path",
+      "api.create-cycle.headers",
+      "api.create-cycle.request",
+      "api.create-cycle.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/create-cycle",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.update-cycle.path",
+      "api.update-cycle.headers",
+      "api.update-cycle.request",
+      "api.update-cycle.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.archive-cycle.path",
+      "api.archive-cycle.headers",
+      "api.archive-cycle.request",
+      "api.archive-cycle.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.restore-cycle.path",
+      "api.restore-cycle.headers",
+      "api.restore-cycle.request",
+      "api.restore-cycle.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.get-cycle-overview.path",
+      "api.get-cycle-overview.headers",
+      "api.get-cycle-overview.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.list-cycle-tasks.path",
+      "api.list-cycle-tasks.query",
+      "api.list-cycle-tasks.headers",
+      "api.list-cycle-tasks.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.add-cycle-task.path",
+      "api.add-cycle-task.headers",
+      "api.add-cycle-task.request",
+      "api.add-cycle-task.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.remove-cycle-task.path",
+      "api.remove-cycle-task.headers",
+      "api.remove-cycle-task.request",
+      "api.remove-cycle-task.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.start-cycle.path",
+      "api.start-cycle.headers",
+      "api.start-cycle.request",
+      "api.start-cycle.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.close-cycle.path",
+      "api.close-cycle.headers",
+      "api.close-cycle.request",
+      "api.close-cycle.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.cancel-cycle.path",
+      "api.cancel-cycle.headers",
+      "api.cancel-cycle.request",
+      "api.cancel-cycle.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "cli.board-list.output"
     ],
     "exclusion": null,
@@ -2512,6 +2770,190 @@
     ],
     "exclusion": null,
     "key": "import-v30",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-list.output"
+    ],
+    "exclusion": null,
+    "key": "module list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-show.output"
+    ],
+    "exclusion": null,
+    "key": "module show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-create.output"
+    ],
+    "exclusion": null,
+    "key": "module create",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-update.output"
+    ],
+    "exclusion": null,
+    "key": "module update",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-archive.output"
+    ],
+    "exclusion": null,
+    "key": "module archive",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-restore.output"
+    ],
+    "exclusion": null,
+    "key": "module restore",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-overview.output"
+    ],
+    "exclusion": null,
+    "key": "module overview",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-task-list.output"
+    ],
+    "exclusion": null,
+    "key": "module task list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-task-add.output"
+    ],
+    "exclusion": null,
+    "key": "module task add",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.module-task-remove.output"
+    ],
+    "exclusion": null,
+    "key": "module task remove",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-list.output"
+    ],
+    "exclusion": null,
+    "key": "cycle list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-show.output"
+    ],
+    "exclusion": null,
+    "key": "cycle show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-create.output"
+    ],
+    "exclusion": null,
+    "key": "cycle create",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-update.output"
+    ],
+    "exclusion": null,
+    "key": "cycle update",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-archive.output"
+    ],
+    "exclusion": null,
+    "key": "cycle archive",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-restore.output"
+    ],
+    "exclusion": null,
+    "key": "cycle restore",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-overview.output"
+    ],
+    "exclusion": null,
+    "key": "cycle overview",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-task-list.output"
+    ],
+    "exclusion": null,
+    "key": "cycle task list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-task-add.output"
+    ],
+    "exclusion": null,
+    "key": "cycle task add",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-task-remove.output"
+    ],
+    "exclusion": null,
+    "key": "cycle task remove",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-start.output"
+    ],
+    "exclusion": null,
+    "key": "cycle start",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-close.output"
+    ],
+    "exclusion": null,
+    "key": "cycle close",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.cycle-cancel.output"
+    ],
+    "exclusion": null,
+    "key": "cycle cancel",
     "surface": "cli"
   },
   {

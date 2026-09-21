@@ -154,6 +154,21 @@ pub struct ApiLabel {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct ApiTask {
+    // 旧 Host 可缺少新增字段；当前 Host 的输出契约仍要求这些 key。
+    #[serde(default)]
+    #[cfg_attr(feature = "schema", schemars(!default, required))]
+    pub module_ids: Vec<String>,
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub cycle_id: Option<String>,
+    #[serde(default)]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(!default, required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub object_version: Option<i64>,
     pub id: String,
     pub board_id: String,
     pub board_slug: String,

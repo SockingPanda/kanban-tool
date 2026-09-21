@@ -96,6 +96,10 @@ fn header_fixture(path: &str) -> BTreeMap<String, String> {
 
 async fn create_task(router: &Router, board: &str, task_id: &str, title: &str) -> ApiTask {
     let request = CreateTaskRequest {
+        module_ids: Vec::new(),
+        cycle_id: None,
+        expected_versions: Default::default(),
+        expected_catalog_version: None,
         task_id: Some(task_id.to_owned()),
         idempotency_key: None,
         title: title.to_owned(),
@@ -128,6 +132,10 @@ async fn create_task(router: &Router, board: &str, task_id: &str, title: &str) -
 
 async fn create_assigned_task(router: &Router, board: &str, task_id: &str, title: &str) {
     let request = CreateTaskRequest {
+        module_ids: Vec::new(),
+        cycle_id: None,
+        expected_versions: Default::default(),
+        expected_catalog_version: None,
         task_id: Some(task_id.to_owned()),
         idempotency_key: None,
         title: title.to_owned(),
@@ -159,6 +167,10 @@ async fn create_assigned_task(router: &Router, board: &str, task_id: &str, title
 
 async fn create_dependent_task(router: &Router, board: &str, task_id: &str, parent_id: &str) {
     let request = CreateTaskRequest {
+        module_ids: Vec::new(),
+        cycle_id: None,
+        expected_versions: Default::default(),
+        expected_catalog_version: None,
         task_id: Some(task_id.to_owned()),
         idempotency_key: None,
         title: "fixture graph child".to_owned(),

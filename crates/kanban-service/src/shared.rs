@@ -19,6 +19,9 @@ pub(crate) fn task_from_row(row: Row) -> Result<TaskRecord, StoreError> {
     let board_slug = text_value(row.get_value(30)?, "boards.slug")?;
     let seq = integer_value(row.get_value(2)?, "tasks.seq")?;
     Ok(TaskRecord {
+        module_ids: Vec::new(),
+        cycle_id: None,
+        object_version: 0,
         id: text_value(row.get_value(0)?, "tasks.id")?,
         board_id: text_value(row.get_value(1)?, "tasks.board_id")?,
         board_slug: board_slug.clone(),
@@ -108,7 +111,10 @@ pub(crate) async fn step_from_row(
             turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(linked_task_id.clone()),
             other => StoreError::Turso(other),
         })?;
-        Some(task_from_row(linked_row)?)
+        let mut task = task_from_row(linked_row)?;
+        crate::object_model::task_planning::hydrate(connection, std::slice::from_mut(&mut task))
+            .await?;
+        Some(task)
     } else {
         None
     };

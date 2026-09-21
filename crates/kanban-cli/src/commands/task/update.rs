@@ -5,6 +5,18 @@ use kanban_protocol::{UpdateTaskRequest, UpdateTaskResponse};
 
 #[derive(Debug, Args)]
 pub(crate) struct UpdateArgs {
+    #[arg(long = "module", conflicts_with = "clear_modules")]
+    pub(crate) module_ids: Vec<String>,
+    #[arg(long = "cycle", conflicts_with = "clear_cycle")]
+    pub(crate) cycle_id: Option<String>,
+    #[arg(long)]
+    pub(crate) clear_modules: bool,
+    #[arg(long)]
+    pub(crate) clear_cycle: bool,
+    #[arg(long)]
+    pub(crate) request_id: Option<String>,
+    #[arg(long)]
+    pub(crate) expected_object_version: Option<i64>,
     #[arg(help = "全局任务 ID 或看板内引用")]
     pub(crate) task_ref: String,
     #[arg(long, help = "更新任务标题")]
@@ -47,6 +59,20 @@ pub(crate) async fn run(
             &ctx.board,
             &args.task_ref,
             &UpdateTaskRequest {
+                module_ids: if args.clear_modules || !args.module_ids.is_empty() {
+                    Some(args.module_ids.clone())
+                } else {
+                    None
+                },
+                cycle_id: if args.clear_cycle {
+                    Some(None)
+                } else {
+                    args.cycle_id.clone().map(Some)
+                },
+                expected_object_version: args.expected_object_version,
+                expected_versions: Default::default(),
+                expected_catalog_version: None,
+                request_id: args.request_id.clone(),
                 title: args.title.clone(),
                 description: args.description.clone().map(Some),
                 assignee: args.assignee.clone().map(Some),

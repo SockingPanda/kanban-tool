@@ -45,7 +45,10 @@
         "created_at": 1,
         "updated_at": 2
       }
-    ]
+    ],
+    "module_ids": [],
+    "cycle_id": null,
+    "object_version": 1
   },
   "meta": {
     "created_labels": [

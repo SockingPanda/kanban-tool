@@ -26,6 +26,15 @@ where
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskUpdateArgs {
+    #[serde(default, deserialize_with = "deserialize_patch_present")]
+    module_ids: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_patch_nullable")]
+    cycle_id: Option<Option<String>>,
+    expected_object_version: Option<i64>,
+    #[serde(default)]
+    expected_versions: std::collections::BTreeMap<String, kanban_protocol::ApiObjectVersion>,
+    expected_catalog_version: Option<i64>,
+    request_id: Option<String>,
     board: Option<String>,
     task_ref: String,
     #[serde(
@@ -99,6 +108,12 @@ impl KanbanMcp {
             &board,
             &args.task_ref,
             &UpdateTaskRequest {
+                module_ids: args.module_ids,
+                cycle_id: args.cycle_id,
+                expected_object_version: args.expected_object_version,
+                expected_versions: args.expected_versions,
+                expected_catalog_version: args.expected_catalog_version,
+                request_id: args.request_id,
                 title: args.title,
                 description: args.description,
                 assignee: args.assignee,

@@ -17,3 +17,5 @@ pub(crate) mod search;
 pub(crate) mod signal;
 pub(crate) mod task;
 pub(crate) mod vector;
+
+pub(crate) mod planning;

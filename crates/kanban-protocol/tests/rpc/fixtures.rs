@@ -3553,3 +3553,761 @@ fn maintenance_import_v30_response_fixture_roundtrip() {
     let actual: kanban_protocol::LegacyImportResponse = wire.try_into().unwrap();
     assert_eq!(serde_json::to_value(actual).unwrap(), expected);
 }
+#[test]
+fn get_planning_capabilities_request_fixture_roundtrip() {
+    let path = ();
+    let query = ();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::GetPlanningCapabilitiesRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::GetPlanningCapabilitiesRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_planning_capabilities_response_fixture_roundtrip() {
+    let dto: kanban_protocol::PlanningCapabilitiesResponse =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/get-planning-capabilities-response.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::GetPlanningCapabilitiesResponse::try_from(dto).unwrap();
+    let wire =
+        v1::GetPlanningCapabilitiesResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::PlanningCapabilitiesResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn list_modules_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningBoardPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-modules-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query: kanban_protocol::ListModulesQuery = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-modules-query.v1.valid.json"
+    )))
+    .unwrap();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::ListModulesRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::ListModulesRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn list_modules_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ListModulesResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-modules-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::ListModulesResponse::try_from(dto).unwrap();
+    let wire = v1::ListModulesResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ListModulesResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_module_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/get-module-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::GetModuleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::GetModuleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_module_response_fixture_roundtrip() {
+    let dto: kanban_protocol::GetModuleResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/get-module-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::GetModuleResponse::try_from(dto).unwrap();
+    let wire = v1::GetModuleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::GetModuleResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn create_module_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningBoardPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/create-module-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::CreateModuleRequest = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/create-module-request.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::CreateModuleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::CreateModuleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn create_module_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ModuleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/create-module-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::CreateModuleResponse::try_from(dto).unwrap();
+    let wire = v1::CreateModuleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ModuleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn update_module_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/update-module-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::UpdateModuleRequest = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/update-module-request.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::UpdateModuleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::UpdateModuleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn update_module_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ModuleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/update-module-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::UpdateModuleResponse::try_from(dto).unwrap();
+    let wire = v1::UpdateModuleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ModuleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn archive_module_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/archive-module-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/archive-module-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::ArchiveModuleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::ArchiveModuleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn archive_module_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ModuleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/archive-module-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::ArchiveModuleResponse::try_from(dto).unwrap();
+    let wire = v1::ArchiveModuleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ModuleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn restore_module_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/restore-module-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/restore-module-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::RestoreModuleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::RestoreModuleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn restore_module_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ModuleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/restore-module-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::RestoreModuleResponse::try_from(dto).unwrap();
+    let wire = v1::RestoreModuleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ModuleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_module_overview_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/get-module-overview-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::GetModuleOverviewRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::GetModuleOverviewRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_module_overview_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ModuleOverviewResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/get-module-overview-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::GetModuleOverviewResponse::try_from(dto).unwrap();
+    let wire = v1::GetModuleOverviewResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ModuleOverviewResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn list_module_tasks_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-module-tasks-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query: kanban_protocol::PlanningMembersQuery = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-module-tasks-query.v1.valid.json"
+    )))
+    .unwrap();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::ListModuleTasksRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::ListModuleTasksRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn list_module_tasks_response_fixture_roundtrip() {
+    let dto: kanban_protocol::PlanningMembersResponse =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/list-module-tasks-response.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::ListModuleTasksResponse::try_from(dto).unwrap();
+    let wire = v1::ListModuleTasksResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::PlanningMembersResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn add_module_task_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningMemberPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/add-module-task-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/add-module-task-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::AddModuleTaskRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::AddModuleTaskRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn add_module_task_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ModuleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/add-module-task-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::AddModuleTaskResponse::try_from(dto).unwrap();
+    let wire = v1::AddModuleTaskResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ModuleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn remove_module_task_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningMemberPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/remove-module-task-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/remove-module-task-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::RemoveModuleTaskRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::RemoveModuleTaskRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn remove_module_task_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ModuleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/remove-module-task-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::RemoveModuleTaskResponse::try_from(dto).unwrap();
+    let wire = v1::RemoveModuleTaskResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ModuleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn list_cycles_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningBoardPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-cycles-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query: kanban_protocol::ListCyclesQuery = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-cycles-query.v1.valid.json"
+    )))
+    .unwrap();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::ListCyclesRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::ListCyclesRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn list_cycles_response_fixture_roundtrip() {
+    let dto: kanban_protocol::ListCyclesResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-cycles-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::ListCyclesResponse::try_from(dto).unwrap();
+    let wire = v1::ListCyclesResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::ListCyclesResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_cycle_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/get-cycle-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::GetCycleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::GetCycleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_cycle_response_fixture_roundtrip() {
+    let dto: kanban_protocol::GetCycleResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/get-cycle-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::GetCycleResponse::try_from(dto).unwrap();
+    let wire = v1::GetCycleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::GetCycleResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn create_cycle_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningBoardPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/create-cycle-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::CreateCycleRequest = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/create-cycle-request.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::CreateCycleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::CreateCycleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn create_cycle_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/create-cycle-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::CreateCycleResponse::try_from(dto).unwrap();
+    let wire = v1::CreateCycleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn update_cycle_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/update-cycle-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::UpdateCycleRequest = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/update-cycle-request.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::UpdateCycleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::UpdateCycleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn update_cycle_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/update-cycle-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::UpdateCycleResponse::try_from(dto).unwrap();
+    let wire = v1::UpdateCycleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn archive_cycle_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/archive-cycle-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/archive-cycle-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::ArchiveCycleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::ArchiveCycleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn archive_cycle_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/archive-cycle-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::ArchiveCycleResponse::try_from(dto).unwrap();
+    let wire = v1::ArchiveCycleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn restore_cycle_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/restore-cycle-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/restore-cycle-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::RestoreCycleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::RestoreCycleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn restore_cycle_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/restore-cycle-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::RestoreCycleResponse::try_from(dto).unwrap();
+    let wire = v1::RestoreCycleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_cycle_overview_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/get-cycle-overview-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::GetCycleOverviewRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::GetCycleOverviewRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn get_cycle_overview_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleOverviewResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/get-cycle-overview-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::GetCycleOverviewResponse::try_from(dto).unwrap();
+    let wire = v1::GetCycleOverviewResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleOverviewResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn list_cycle_tasks_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-cycle-tasks-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query: kanban_protocol::PlanningMembersQuery = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/list-cycle-tasks-query.v1.valid.json"
+    )))
+    .unwrap();
+    let input = ();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::ListCycleTasksRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::ListCycleTasksRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn list_cycle_tasks_response_fixture_roundtrip() {
+    let dto: kanban_protocol::PlanningMembersResponse =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/list-cycle-tasks-response.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::ListCycleTasksResponse::try_from(dto).unwrap();
+    let wire = v1::ListCycleTasksResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::PlanningMembersResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn add_cycle_task_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningMemberPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/add-cycle-task-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/add-cycle-task-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::AddCycleTaskRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::AddCycleTaskRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn add_cycle_task_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/add-cycle-task-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::AddCycleTaskResponse::try_from(dto).unwrap();
+    let wire = v1::AddCycleTaskResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn remove_cycle_task_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningMemberPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/remove-cycle-task-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/remove-cycle-task-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::RemoveCycleTaskRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::RemoveCycleTaskRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn remove_cycle_task_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/remove-cycle-task-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::RemoveCycleTaskResponse::try_from(dto).unwrap();
+    let wire = v1::RemoveCycleTaskResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn start_cycle_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/start-cycle-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/start-cycle-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::StartCycleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::StartCycleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn start_cycle_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/start-cycle-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::StartCycleResponse::try_from(dto).unwrap();
+    let wire = v1::StartCycleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn close_cycle_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/close-cycle-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::CloseCycleRequest = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/close-cycle-request.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::CloseCycleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::CloseCycleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn close_cycle_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/close-cycle-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::CloseCycleResponse::try_from(dto).unwrap();
+    let wire = v1::CloseCycleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn cancel_cycle_request_fixture_roundtrip() {
+    let path: kanban_protocol::PlanningObjectPath = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/cancel-cycle-path.v1.valid.json"
+    )))
+    .unwrap();
+    let query = ();
+    let input: kanban_protocol::PlanningActionRequest =
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/api/cancel-cycle-request.v1.valid.json"
+        )))
+        .unwrap();
+    let expected = serde_json::to_value((&path, &query, &input)).unwrap();
+    let wire = v1::CancelCycleRequest::from_parts(path, query, input).unwrap();
+    let wire = v1::CancelCycleRequest::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual = wire.decode_parts().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+#[test]
+fn cancel_cycle_response_fixture_roundtrip() {
+    let dto: kanban_protocol::CycleMutationResponse = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/api/cancel-cycle-response.v1.valid.json"
+    )))
+    .unwrap();
+    let expected = serde_json::to_value(&dto).unwrap();
+    let wire = v1::CancelCycleResponse::try_from(dto).unwrap();
+    let wire = v1::CancelCycleResponse::decode(wire.encode_to_vec().as_slice()).unwrap();
+    let actual: kanban_protocol::CycleMutationResponse = wire.try_into().unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}

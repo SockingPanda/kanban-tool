@@ -54,6 +54,17 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// 管理模块及其成员和层级。
+    Module {
+        #[command(subcommand)]
+        command: commands::planning::ModuleCommand,
+    },
+    /// 管理迭代及其生命周期。
+    #[command(visible_alias = "iteration")]
+    Cycle {
+        #[command(subcommand)]
+        command: commands::planning::CycleCommand,
+    },
     /// 启动唯一允许打开 Turso 数据库的进程。
     Serve(server::ServeArgs),
     /// 通过 localhost 应用 host 查询看板。
@@ -213,6 +224,8 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
     let ctx = CliContext::from_cli(cli)?;
     match &cli.command {
         Command::Serve(args) => server::run(&ctx, args).await,
+        Command::Module { command } => commands::planning::run_module(&ctx, command).await,
+        Command::Cycle { command } => commands::planning::run_cycle(&ctx, command).await,
         Command::Board { command } => commands::board::run(&ctx, command).await,
         Command::Comment { command } => commands::comment::run(&ctx, command).await,
         Command::Context { command } => commands::context::run(&ctx, command).await,

@@ -14,6 +14,8 @@ pub(crate) async fn list_tasks(
 ) -> Result<ListTasksResponse, ApiError> {
     validate_list_query(&mut query)?;
     let options = ApplicationTaskListOptions {
+        module_ids: query.module_ids.clone(),
+        cycle_id: query.cycle_id.clone(),
         statuses: query.status.into_iter().map(task_status).collect(),
         priorities: query
             .priority
@@ -82,6 +84,8 @@ pub(crate) async fn list_tasks_by_status(
             .list_tasks(
                 &board,
                 ApplicationTaskListOptions {
+                    module_ids: query.module_ids.clone(),
+                    cycle_id: query.cycle_id.clone(),
                     statuses: vec![task_status(status)],
                     priorities: priorities.clone(),
                     labels: labels.clone(),

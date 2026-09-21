@@ -25,7 +25,7 @@ stdio JSON-RPC、tool 输入和输出保持 MCP 契约。每个 tool 从 selecto
 和 `KANBAN_MCP_PROFILE` 分别覆盖 Host 地址、actor、默认看板和 profile。
 配置中的未知字段、无效边界或不存在的禁用工具会阻止启动。
 
-默认 `work` 包含 boards、tasks、comments、context、attachments、dependencies、events、runs、
+默认 `work` 包含 boards、tasks、modules、cycles、comments、context、attachments、dependencies、events、runs、
 search、steps、lifecycle 和 stats。`all` 包含 canonical catalog 的全部领域工具；`read_only`
 只包含 catalog 可证明为读取的工具。`disabled_tools` 在三种 profile 上继续缩小范围；工具目录、
 执行、资源和 prompt 共享同一过滤策略。默认看板不是访问控制机制。
@@ -51,7 +51,20 @@ search、steps、lifecycle 和 stats。`all` 包含 canonical catalog 的全部�
 原请求标识，不能自动重试结果未知的写入。取消会丢弃原生 gRPC Future，并取消对应 HTTP/2 stream。
 
 本入口不提供 MCP HTTP transport、订阅、MRTR、completion 或 MCP tasks extension。
-对象、模块和周期的通用 CLI/MCP 工具不在此入口中；Web 与原生 client 可使用正式扩展 RPC。
+模块、迭代通过专用 `module_*`、`cycle_*` 工具管理，普通调用直接提供标题、正文、父模块或时间，
+无需拼装通用对象命令。MCP 使用 `cycle_*`，不注册 `iteration_*` 别名。通用对象编辑仍由 Web 与
+原生 client 的扩展 RPC 提供。
+
+任务创建接受 `module_ids`、`cycle_id`；更新省略字段时保留原值，`module_ids: []` 清空模块，
+`cycle_id: null` 清空迭代。多个模块筛选取交集。成员工具接受任务 ID 或看板内 `task_ref`，模块
+和迭代使用明确的 `obj_...` ID。成员及容器列表分页返回，关闭成员以 `source: frozen_snapshot`
+标明来源；正文通过 `module_show` / `cycle_show` 读取。
+
+新增写工具接受稳定 `request_id`；任务创建沿用 `idempotency_key`。`expected_version` 校验容器，
+`expected_versions` 可提供旧、新端点的 `{object, source}` 双版本，任务更新还支持
+`expected_object_version`。重试必须保持原字段及 actor，不要把回读的新版本塞进同一个请求。
+服务端先核对原请求，再补齐缺省版本；重放返回原回执和当前对象读取，不重新执行归属操作。
+共享 client 在发送任务归属或筛选前检查 Host capability，旧 Host 返回 `feature_not_available`。
 
 MCP 的 domain tool 覆盖任务、labels/ontology/proposals、signals、search、graph、vector、context、
 附件、steps、dependencies、runs/events 和 boards。契约完整性由 protocol catalog、MCP integration

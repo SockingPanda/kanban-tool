@@ -8,8 +8,10 @@ use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
 
 use super::create_support::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct CreateTaskInput {
+    pub planning: crate::TaskPlanningInput,
+    pub request_fingerprint: Option<String>,
     pub id: String,
     pub idempotency_key: Option<String>,
     pub title: String,
@@ -67,6 +69,34 @@ impl TursoStore {
             ));
         }
 
+        let request_hash = input
+            .request_fingerprint
+            .clone()
+            .unwrap_or(crate::object_model::task_planning::digest(&input)?);
+        let request_key = input
+            .idempotency_key
+            .as_ref()
+            .filter(|_| input.request_fingerprint.is_some() || input.planning.requested())
+            .map(|key| format!("task.create:{key}"))
+            .or_else(|| {
+                input
+                    .planning
+                    .requested()
+                    .then(|| format!("task.create:{}", input.id))
+            });
+        if let Some(key) = &request_key
+            && let Some(task_id) = crate::object_model::task_planning::replay_task(
+                &transaction,
+                &board_id,
+                key,
+                &request_hash,
+            )
+            .await?
+        {
+            let task = super::show::read_task(&transaction, &task_id).await?;
+            transaction.commit().await?;
+            return Ok(task);
+        }
         if let Some(idempotency_key) = input.idempotency_key.as_deref() {
             let existing = first_row(
                 transaction
@@ -85,10 +115,16 @@ impl TursoStore {
                     existing.labels =
                         list_task_labels_in_transaction(&transaction, &board_id, &existing.id)
                             .await?;
-                    if canonical_payload_matches(&existing, &input, &title)
+                    if !input.planning.requested()
+                        && canonical_payload_matches(&existing, &input, &title)
                         && task_relations_match(&transaction, &existing, &labels, &depends_on)
                             .await?
                     {
+                        crate::object_model::task_planning::hydrate(
+                            &transaction,
+                            std::slice::from_mut(&mut existing),
+                        )
+                        .await?;
                         transaction.commit().await?;
                         return Ok(existing);
                     }
@@ -256,6 +292,30 @@ impl TursoStore {
                 )
                 .await?;
         }
+        let touched = crate::object_model::task_planning::apply(
+            &transaction,
+            &board_id,
+            &input.id,
+            &input.planning,
+            now,
+        )
+        .await?;
+        if let Some(key) = &request_key {
+            crate::object_model::task_planning::record_task(
+                &transaction,
+                &board_id,
+                crate::object_model::task_planning::TaskRequestEvent {
+                    task_id: &input.id,
+                    event_id: &event_id,
+                    request_id: key,
+                    hash: &request_hash,
+                    actor: &input.created_by,
+                    touched,
+                    now,
+                },
+            )
+            .await?;
+        }
         let mut task = task_from_row(
             first_row(
                 transaction
@@ -269,6 +329,8 @@ impl TursoStore {
         )?;
         task.labels = list_task_labels_in_transaction(&transaction, &board_id, &input.id).await?;
 
+        crate::object_model::task_planning::hydrate(&transaction, std::slice::from_mut(&mut task))
+            .await?;
         transaction.commit().await?;
         debug_assert_eq!(task.board_id, board_id);
         debug_assert_eq!(task.board_slug, board_slug);

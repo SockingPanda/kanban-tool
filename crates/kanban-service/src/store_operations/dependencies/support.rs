@@ -25,7 +25,10 @@ pub(crate) async fn dependency_task_in_transaction(
         turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
         other => StoreError::Turso(other),
     })?;
-    task_from_row(row)
+    let mut task = task_from_row(row)?;
+    crate::object_model::task_planning::hydrate(transaction, std::slice::from_mut(&mut task))
+        .await?;
+    Ok(task)
 }
 
 pub(crate) async fn dependency_task_in_connection(
@@ -45,7 +48,10 @@ pub(crate) async fn dependency_task_in_connection(
         turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
         other => StoreError::Turso(other),
     })?;
-    task_from_row(row)
+    let mut task = task_from_row(row)?;
+    crate::object_model::task_planning::hydrate(connection, std::slice::from_mut(&mut task))
+        .await?;
+    Ok(task)
 }
 
 pub(crate) async fn dependency_path_exists(

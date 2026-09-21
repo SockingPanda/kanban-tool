@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "ApiObjectVersion": {
+      "additionalProperties": false,
+      "properties": {
+        "object": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "source": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "object",
+        "source"
+      ],
+      "type": "object"
+    },
+    "ApiPlanningMember": {
+      "additionalProperties": false,
+      "properties": {
+        "carried_to": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ApiTaskStatus"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/$defs/ApiObjectVersion"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "status",
+        "version",
+        "carried_to"
+      ],
+      "type": "object"
+    },
+    "ApiTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    },
+    "PlanningReadSource": {
+      "enum": [
+        "current",
+        "frozen_snapshot"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:list-module-tasks-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "captured_at": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "data": {
+      "items": {
+        "$ref": "#/$defs/ApiPlanningMember"
+      },
+      "type": "array"
+    },
+    "limit": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "object_version": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "offset": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source": {
+      "$ref": "#/$defs/PlanningReadSource"
+    },
+    "total": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "data",
+    "total",
+    "limit",
+    "offset",
+    "source",
+    "captured_at",
+    "object_version"
+  ],
+  "title": "api.list-module-tasks.response",
+  "type": "object"
+}

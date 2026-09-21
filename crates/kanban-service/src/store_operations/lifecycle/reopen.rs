@@ -168,7 +168,7 @@ impl TursoStore {
                 ),
             )
             .await?;
-        let reopened = task_from_row(
+        let mut reopened = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -181,6 +181,11 @@ impl TursoStore {
             )
             .await?,
         )?;
+        crate::object_model::task_planning::hydrate(
+            &transaction,
+            std::slice::from_mut(&mut reopened),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(reopened)
     }

@@ -8,9 +8,19 @@ message AcceptLabelProposalResponse {
   DtoLabelSemanticProposalWire data = 1;
 }
 
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message AddCycleTaskResponse {
+  DtoCycleMutationData data = 1;
+}
+
 // crate::dependencies::AddDependencyResponse
 message AddDependencyResponse {
   DtoApiDependencies data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+message AddModuleTaskResponse {
+  DtoModuleMutationData data = 1;
 }
 
 // crate::wire::OptionalMetadataEnvelope<crate::api_components::ApiTask,crate::wire::CreatedLabelsMeta<crate::api_components::ApiLabel>>
@@ -27,6 +37,16 @@ message ApplyLabelOntologyAtomResponse {
 // crate::boards::ArchiveBoardResponse
 message ArchiveBoardResponse {
   DtoApiBoard data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message ArchiveCycleResponse {
+  DtoCycleMutationData data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+message ArchiveModuleResponse {
+  DtoModuleMutationData data = 1;
 }
 
 // crate::wire::DataEnvelope<crate::api_components::ApiTask>
@@ -54,6 +74,11 @@ message BuildContextResponse {
   DtoContextPack data = 1;
 }
 
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message CancelCycleResponse {
+  DtoCycleMutationData data = 1;
+}
+
 // crate::wire::DataEnvelope<crate::maintenance::CheckpointReport>
 message CheckpointResponse {
   DtoCheckpointReport data = 1;
@@ -62,6 +87,11 @@ message CheckpointResponse {
 // crate::wire::DataEnvelope<crate::runs::ApiClaim>
 message ClaimTaskResponse {
   DtoApiClaim data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message CloseCycleResponse {
+  DtoCycleMutationData data = 1;
 }
 
 // crate::steps::CompleteStepResponse
@@ -99,9 +129,19 @@ message CreateCommentResponse {
   DtoApiComment data = 1;
 }
 
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message CreateCycleResponse {
+  DtoCycleMutationData data = 1;
+}
+
 // crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>
 message CreateLabelOntologyActionResponse {
   DtoLabelOntologyActionWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+message CreateModuleResponse {
+  DtoModuleMutationData data = 1;
 }
 
 // crate::steps::CreateStepResponse
@@ -208,6 +248,47 @@ enum DtoApiCreateTaskStatus {
   DTO_API_CREATE_TASK_STATUS_READY = 4;
 }
 
+// crate::planning::ApiCycle
+message DtoApiCycle {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string title = 3;
+  optional int64 version = 4;
+  optional int64 created_at = 5;
+  optional int64 updated_at = 6;
+  optional int64 archived_at = 7;
+  optional string body = 8;
+  optional DtoApiCycleStatus status = 9;
+  optional int64 starts_at = 10;
+  optional int64 ends_at = 11;
+  optional int64 started_at = 12;
+  optional int64 closed_at = 13;
+}
+
+enum DtoApiCycleStatus {
+  DTO_API_CYCLE_STATUS_UNSPECIFIED = 0;
+  DTO_API_CYCLE_STATUS_PLANNED = 1;
+  DTO_API_CYCLE_STATUS_ACTIVE = 2;
+  DTO_API_CYCLE_STATUS_COMPLETED = 3;
+  DTO_API_CYCLE_STATUS_CANCELLED = 4;
+}
+
+// crate::planning::ApiCycleSummary
+message DtoApiCycleSummary {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string title = 3;
+  optional int64 version = 4;
+  optional int64 created_at = 5;
+  optional int64 updated_at = 6;
+  optional int64 archived_at = 7;
+  optional DtoApiCycleStatus status = 8;
+  optional int64 starts_at = 9;
+  optional int64 ends_at = 10;
+  optional int64 started_at = 11;
+  optional int64 closed_at = 12;
+}
+
 // crate::dependencies::ApiDependencies
 message DtoApiDependencies {
   DtoApiDependencyTask task = 1;
@@ -277,6 +358,65 @@ message DtoApiLabel {
   optional int64 updated_at = 6;
 }
 
+// crate::planning::ApiModule
+message DtoApiModule {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string title = 3;
+  optional int64 version = 4;
+  optional int64 created_at = 5;
+  optional int64 updated_at = 6;
+  optional int64 archived_at = 7;
+  optional string body = 8;
+  optional string parent_id = 9;
+}
+
+// crate::planning::ApiModuleSummary
+message DtoApiModuleSummary {
+  optional string id = 1;
+  optional string board_id = 2;
+  optional string title = 3;
+  optional int64 version = 4;
+  optional int64 created_at = 5;
+  optional int64 updated_at = 6;
+  optional int64 archived_at = 7;
+  optional string parent_id = 8;
+}
+
+// crate::planning::ApiObjectVersion
+message DtoApiObjectVersion {
+  optional int64 object = 1;
+  optional int64 source = 2;
+}
+
+// crate::planning::ApiPlanningMember
+message DtoApiPlanningMember {
+  optional string id = 1;
+  optional string title = 2;
+  optional DtoApiTaskStatus status = 3;
+  DtoApiObjectVersion version = 4;
+  optional string carried_to = 5;
+}
+
+// crate::planning::ApiPlanningProgress
+message DtoApiPlanningProgress {
+  optional int64 total = 1;
+  optional int64 done = 2;
+  optional int64 archived = 3;
+  optional int64 blocked = 4;
+  optional double completion_ratio = 5;
+}
+
+// crate::planning::ApiPlanningReceipt
+message DtoApiPlanningReceipt {
+  optional string request_id = 1;
+  repeated string ids = 2;
+  optional int64 event_sequence = 3;
+  optional int64 catalog_version = 4;
+  optional bool replayed = 5;
+  map<string, DtoApiObjectVersion> versions = 6;
+}
+
 // crate::derived::ApiRelation
 message DtoApiRelation {
   optional string subject_uri = 1;
@@ -339,6 +479,9 @@ enum DtoApiStepStatus {
 
 // crate::api_components::ApiTask
 message DtoApiTask {
+  repeated string module_ids = 38;
+  optional string cycle_id = 39;
+  optional int64 object_version = 40;
   optional string id = 1;
   optional string board_id = 2;
   optional string board_slug = 3;
@@ -636,6 +779,20 @@ message DtoContextProviderStatus {
 // crate::wire::CreatedLabelsMeta<crate::api_components::ApiLabel>
 message DtoCreatedLabelsMetaOfDtoApiLabel {
   repeated DtoApiLabel created_labels = 1;
+}
+
+// crate::planning::CycleMutationData
+message DtoCycleMutationData {
+  DtoApiCycle object = 1;
+  DtoApiPlanningReceipt receipt = 2;
+}
+
+// crate::planning::CycleOverview
+message DtoCycleOverview {
+  DtoApiCycle object = 1;
+  DtoApiPlanningProgress progress = 2;
+  optional DtoPlanningReadSource source = 3;
+  optional int64 captured_at = 4;
 }
 
 // crate::label_surfaces::DeleteBoardLabelResult
@@ -1409,6 +1566,20 @@ message DtoMaintenanceStatusReport {
   repeated DtoProjectionStoreStatus stores = 4;
 }
 
+// crate::planning::ModuleMutationData
+message DtoModuleMutationData {
+  DtoApiModule object = 1;
+  DtoApiPlanningReceipt receipt = 2;
+}
+
+// crate::planning::ModuleOverview
+message DtoModuleOverview {
+  DtoApiModule object = 1;
+  DtoApiPlanningProgress progress = 2;
+  optional DtoPlanningReadSource source = 3;
+  optional int64 captured_at = 4;
+}
+
 // crate::wire::NextAfterMeta
 message DtoNextAfterMeta {
   optional int64 next_after = 1;
@@ -1418,6 +1589,19 @@ message DtoNextAfterMeta {
 message DtoOffsetPaginationMeta {
   optional uint64 limit = 1;
   optional uint64 offset = 2;
+}
+
+// crate::planning::PlanningCapabilities
+message DtoPlanningCapabilities {
+  optional uint32 version = 1;
+  optional bool task_membership = 2;
+  optional bool task_membership_filters = 3;
+}
+
+enum DtoPlanningReadSource {
+  DTO_PLANNING_READ_SOURCE_UNSPECIFIED = 0;
+  DTO_PLANNING_READ_SOURCE_CURRENT = 1;
+  DTO_PLANNING_READ_SOURCE_FROZEN_SNAPSHOT = 2;
 }
 
 // crate::maintenance::ProjectionStoreStatus
@@ -1986,6 +2170,16 @@ message GetBoardResponse {
   DtoApiBoard data = 1;
 }
 
+// crate::wire::DataEnvelope<crate::planning::CycleOverview>
+message GetCycleOverviewResponse {
+  DtoCycleOverview data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ApiCycle>
+message GetCycleResponse {
+  DtoApiCycle data = 1;
+}
+
 // crate::wire::DataEnvelope<crate::cli::CliEntity>
 message GetEntityResponse {
   DtoCliEntity data = 1;
@@ -2014,6 +2208,21 @@ message GetLabelProposalResponse {
 // crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticsWire>
 message GetLabelSemanticsResponse {
   DtoLabelSemanticsWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ModuleOverview>
+message GetModuleOverviewResponse {
+  DtoModuleOverview data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ApiModule>
+message GetModuleResponse {
+  DtoApiModule data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::PlanningCapabilities>
+message GetPlanningCapabilitiesResponse {
+  DtoPlanningCapabilities data = 1;
 }
 
 // crate::runs::GetRunLogResponse
@@ -2113,6 +2322,25 @@ message ListCommentsResponse {
   repeated DtoApiComment data = 1;
 }
 
+// crate::planning::PlanningMembersResponse
+message ListCycleTasksResponse {
+  repeated DtoApiPlanningMember data = 1;
+  optional uint64 total = 2;
+  optional uint64 limit = 3;
+  optional uint64 offset = 4;
+  optional DtoPlanningReadSource source = 5;
+  optional int64 captured_at = 6;
+  optional int64 object_version = 7;
+}
+
+// crate::planning::ListCyclesResponse
+message ListCyclesResponse {
+  repeated DtoApiCycleSummary data = 1;
+  optional uint64 total = 2;
+  optional uint64 limit = 3;
+  optional uint64 offset = 4;
+}
+
 // crate::dependencies::ListDependenciesResponse
 message ListDependenciesResponse {
   DtoApiDependencies data = 1;
@@ -2143,6 +2371,25 @@ message ListLabelOntologySignalsResponse {
 // crate::wire::DataEnvelope<Vec<crate::label_surfaces::LabelSemanticsWire>>
 message ListLabelSemanticsResponse {
   repeated DtoLabelSemanticsWire data = 1;
+}
+
+// crate::planning::PlanningMembersResponse
+message ListModuleTasksResponse {
+  repeated DtoApiPlanningMember data = 1;
+  optional uint64 total = 2;
+  optional uint64 limit = 3;
+  optional uint64 offset = 4;
+  optional DtoPlanningReadSource source = 5;
+  optional int64 captured_at = 6;
+  optional int64 object_version = 7;
+}
+
+// crate::planning::ListModulesResponse
+message ListModulesResponse {
+  repeated DtoApiModuleSummary data = 1;
+  optional uint64 total = 2;
+  optional uint64 limit = 3;
+  optional uint64 offset = 4;
 }
 
 message ListOfF32 {
@@ -2324,9 +2571,19 @@ message ReleaseTaskResponse {
   DtoApiTask data = 1;
 }
 
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message RemoveCycleTaskResponse {
+  DtoCycleMutationData data = 1;
+}
+
 // crate::dependencies::RemoveDependencyResponse
 message RemoveDependencyResponse {
   DtoApiDependencies data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+message RemoveModuleTaskResponse {
+  DtoModuleMutationData data = 1;
 }
 
 // crate::steps::RemoveStepResponse
@@ -2352,6 +2609,16 @@ message ReopenTaskResponse {
 // crate::wire::DataEnvelope<Vec<crate::label_surfaces::SignalWire>>
 message ResolveSignalsResponse {
   repeated DtoSignalWire data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message RestoreCycleResponse {
+  DtoCycleMutationData data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+message RestoreModuleResponse {
+  DtoModuleMutationData data = 1;
 }
 
 // crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>
@@ -2398,6 +2665,11 @@ message SpecifyTaskResponse {
   DtoApiTask data = 1;
 }
 
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message StartCycleResponse {
+  DtoCycleMutationData data = 1;
+}
+
 // crate::wire::DataEnvelope<crate::api_components::ApiTask>
 message SubmitReviewTaskResponse {
   DtoApiTask data = 1;
@@ -2426,6 +2698,16 @@ message TaskNeighborhoodResponse {
 // crate::wire::DataEnvelope<crate::api_components::ApiTask>
 message UnblockTaskResponse {
   DtoApiTask data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+message UpdateCycleResponse {
+  DtoCycleMutationData data = 1;
+}
+
+// crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+message UpdateModuleResponse {
+  DtoModuleMutationData data = 1;
 }
 
 // crate::steps::UpdateStepResponse

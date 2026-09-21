@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "ApiObjectVersion": {
+      "additionalProperties": false,
+      "properties": {
+        "object": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "source": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "object"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:create-cycle-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "body": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ends_at": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "expected_catalog_version": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "expected_versions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ApiObjectVersion"
+      },
+      "type": "object"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "starts_at": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "starts_at",
+    "ends_at"
+  ],
+  "title": "api.create-cycle.request",
+  "type": "object"
+}

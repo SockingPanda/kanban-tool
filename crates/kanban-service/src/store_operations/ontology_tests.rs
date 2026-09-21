@@ -35,6 +35,8 @@ mod tests {
 
     fn task_input(id: &str, title: &str, description: Option<&str>) -> CreateTaskInput {
         CreateTaskInput {
+            planning: Default::default(),
+            request_fingerprint: None,
             id: id.to_owned(),
             idempotency_key: None,
             title: title.to_owned(),

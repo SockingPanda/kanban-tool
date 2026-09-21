@@ -187,6 +187,20 @@
       },
       {
         "dto": "crate::ListTasksQuery",
+        "field": "module_ids",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
+        "field": "cycle_id",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListTasksQuery",
         "field": "priority",
         "nested": false,
         "part": "query",
@@ -282,6 +296,20 @@
       },
       {
         "dto": "crate::ListTasksByStatusQuery",
+        "field": "module_ids",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
+        "field": "cycle_id",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListTasksByStatusQuery",
         "field": "priority",
         "nested": false,
         "part": "query",
@@ -367,6 +395,34 @@
         "nested": false,
         "part": "path",
         "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "module_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Vec<String>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "cycle_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::CreateTaskRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
       },
       {
         "dto": "crate::CreateTaskRequest",
@@ -522,6 +578,48 @@
         "nested": false,
         "part": "path",
         "rust_type": "String"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "module_ids",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Vec<String>>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "cycle_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<String>>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "expected_object_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::UpdateTaskRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
       },
       {
         "dto": "crate::UpdateTaskRequest",
@@ -5607,5 +5705,1472 @@
     "resolved_response": "crate::wire::DataEnvelope<crate::cli_labels::CliLabelOntologyQuality>",
     "response": "GetLabelOntologyQualityResponse",
     "response_dto": "crate::cli_labels::CliLabelOntologyQualityOutput"
+  },
+  {
+    "fields": [],
+    "input_dto": null,
+    "method": "GetPlanningCapabilities",
+    "operation_id": "api.get-planning-capabilities",
+    "path_dto": null,
+    "query_dto": null,
+    "request": "GetPlanningCapabilitiesRequest",
+    "resolved_parts": [
+      "()",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::PlanningCapabilities>",
+    "response": "GetPlanningCapabilitiesResponse",
+    "response_dto": "crate::PlanningCapabilitiesResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningBoardPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ListModulesQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListModulesQuery",
+        "field": "include_archived",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::ListModulesQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::ListModulesQuery",
+        "field": "offset",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::ListModulesQuery",
+        "field": "parent_id",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListModules",
+    "operation_id": "api.list-modules",
+    "path_dto": "crate::PlanningBoardPath",
+    "query_dto": "crate::ListModulesQuery",
+    "request": "ListModulesRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningBoardPath",
+      "crate::planning::ListModulesQuery",
+      "()"
+    ],
+    "resolved_response": "crate::planning::ListModulesResponse",
+    "response": "ListModulesResponse",
+    "response_dto": "crate::ListModulesResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetModule",
+    "operation_id": "api.get-module",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "GetModuleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ApiModule>",
+    "response": "GetModuleResponse",
+    "response_dto": "crate::GetModuleResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningBoardPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateModuleRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateModuleRequest",
+        "field": "body",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateModuleRequest",
+        "field": "parent_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateModuleRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateModuleRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateModuleRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::CreateModuleRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::CreateModuleRequest",
+    "method": "CreateModule",
+    "operation_id": "api.create-module",
+    "path_dto": "crate::PlanningBoardPath",
+    "query_dto": null,
+    "request": "CreateModuleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningBoardPath",
+      "()",
+      "crate::planning::CreateModuleRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ModuleMutationData>",
+    "response": "CreateModuleResponse",
+    "response_dto": "crate::ModuleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::UpdateModuleRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateModuleRequest",
+        "field": "body",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<String>>"
+      },
+      {
+        "dto": "crate::UpdateModuleRequest",
+        "field": "parent_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<String>>"
+      },
+      {
+        "dto": "crate::UpdateModuleRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateModuleRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateModuleRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::UpdateModuleRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::UpdateModuleRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::UpdateModuleRequest",
+    "method": "UpdateModule",
+    "operation_id": "api.update-module",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "UpdateModuleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::UpdateModuleRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ModuleMutationData>",
+    "response": "UpdateModuleResponse",
+    "response_dto": "crate::ModuleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "ArchiveModule",
+    "operation_id": "api.archive-module",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "ArchiveModuleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ModuleMutationData>",
+    "response": "ArchiveModuleResponse",
+    "response_dto": "crate::ModuleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "RestoreModule",
+    "operation_id": "api.restore-module",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "RestoreModuleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ModuleMutationData>",
+    "response": "RestoreModuleResponse",
+    "response_dto": "crate::ModuleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetModuleOverview",
+    "operation_id": "api.get-module-overview",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "GetModuleOverviewRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ModuleOverview>",
+    "response": "GetModuleOverviewResponse",
+    "response_dto": "crate::ModuleOverviewResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMembersQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::PlanningMembersQuery",
+        "field": "offset",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListModuleTasks",
+    "operation_id": "api.list-module-tasks",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": "crate::PlanningMembersQuery",
+    "request": "ListModuleTasksRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "crate::planning::PlanningMembersQuery",
+      "()"
+    ],
+    "resolved_response": "crate::planning::PlanningMembersResponse",
+    "response": "ListModuleTasksResponse",
+    "response_dto": "crate::PlanningMembersResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "AddModuleTask",
+    "operation_id": "api.add-module-task",
+    "path_dto": "crate::PlanningMemberPath",
+    "query_dto": null,
+    "request": "AddModuleTaskRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningMemberPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ModuleMutationData>",
+    "response": "AddModuleTaskResponse",
+    "response_dto": "crate::ModuleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "RemoveModuleTask",
+    "operation_id": "api.remove-module-task",
+    "path_dto": "crate::PlanningMemberPath",
+    "query_dto": null,
+    "request": "RemoveModuleTaskRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningMemberPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ModuleMutationData>",
+    "response": "RemoveModuleTaskResponse",
+    "response_dto": "crate::ModuleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningBoardPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::ListCyclesQuery",
+        "field": "q",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::ListCyclesQuery",
+        "field": "include_archived",
+        "nested": false,
+        "part": "query",
+        "rust_type": "bool"
+      },
+      {
+        "dto": "crate::ListCyclesQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::ListCyclesQuery",
+        "field": "offset",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::ListCyclesQuery",
+        "field": "status",
+        "nested": false,
+        "part": "query",
+        "rust_type": "Option<crate::planning::ApiCycleStatus>"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListCycles",
+    "operation_id": "api.list-cycles",
+    "path_dto": "crate::PlanningBoardPath",
+    "query_dto": "crate::ListCyclesQuery",
+    "request": "ListCyclesRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningBoardPath",
+      "crate::planning::ListCyclesQuery",
+      "()"
+    ],
+    "resolved_response": "crate::planning::ListCyclesResponse",
+    "response": "ListCyclesResponse",
+    "response_dto": "crate::ListCyclesResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetCycle",
+    "operation_id": "api.get-cycle",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "GetCycleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::ApiCycle>",
+    "response": "GetCycleResponse",
+    "response_dto": "crate::GetCycleResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningBoardPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateCycleRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CreateCycleRequest",
+        "field": "body",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateCycleRequest",
+        "field": "starts_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "i64"
+      },
+      {
+        "dto": "crate::CreateCycleRequest",
+        "field": "ends_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "i64"
+      },
+      {
+        "dto": "crate::CreateCycleRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateCycleRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CreateCycleRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::CreateCycleRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::CreateCycleRequest",
+    "method": "CreateCycle",
+    "operation_id": "api.create-cycle",
+    "path_dto": "crate::PlanningBoardPath",
+    "query_dto": null,
+    "request": "CreateCycleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningBoardPath",
+      "()",
+      "crate::planning::CreateCycleRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "CreateCycleResponse",
+    "response_dto": "crate::CycleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "title",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "body",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<Option<String>>"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "starts_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "ends_at",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::UpdateCycleRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::UpdateCycleRequest",
+    "method": "UpdateCycle",
+    "operation_id": "api.update-cycle",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "UpdateCycleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::UpdateCycleRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "UpdateCycleResponse",
+    "response_dto": "crate::CycleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "ArchiveCycle",
+    "operation_id": "api.archive-cycle",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "ArchiveCycleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "ArchiveCycleResponse",
+    "response_dto": "crate::CycleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "RestoreCycle",
+    "operation_id": "api.restore-cycle",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "RestoreCycleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "RestoreCycleResponse",
+    "response_dto": "crate::CycleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      }
+    ],
+    "input_dto": null,
+    "method": "GetCycleOverview",
+    "operation_id": "api.get-cycle-overview",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "GetCycleOverviewRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "()"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleOverview>",
+    "response": "GetCycleOverviewResponse",
+    "response_dto": "crate::CycleOverviewResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMembersQuery",
+        "field": "limit",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      },
+      {
+        "dto": "crate::PlanningMembersQuery",
+        "field": "offset",
+        "nested": false,
+        "part": "query",
+        "rust_type": "usize"
+      }
+    ],
+    "input_dto": null,
+    "method": "ListCycleTasks",
+    "operation_id": "api.list-cycle-tasks",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": "crate::PlanningMembersQuery",
+    "request": "ListCycleTasksRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "crate::planning::PlanningMembersQuery",
+      "()"
+    ],
+    "resolved_response": "crate::planning::PlanningMembersResponse",
+    "response": "ListCycleTasksResponse",
+    "response_dto": "crate::PlanningMembersResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "AddCycleTask",
+    "operation_id": "api.add-cycle-task",
+    "path_dto": "crate::PlanningMemberPath",
+    "query_dto": null,
+    "request": "AddCycleTaskRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningMemberPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "AddCycleTaskResponse",
+    "response_dto": "crate::CycleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningMemberPath",
+        "field": "task_id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "RemoveCycleTask",
+    "operation_id": "api.remove-cycle-task",
+    "path_dto": "crate::PlanningMemberPath",
+    "query_dto": null,
+    "request": "RemoveCycleTaskRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningMemberPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "RemoveCycleTaskResponse",
+    "response_dto": "crate::CycleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "StartCycle",
+    "operation_id": "api.start-cycle",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "StartCycleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "StartCycleResponse",
+    "response_dto": "crate::CycleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::CloseCycleRequest",
+        "field": "carry_to",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CloseCycleRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CloseCycleRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::CloseCycleRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::CloseCycleRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::CloseCycleRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::CloseCycleRequest",
+    "method": "CloseCycle",
+    "operation_id": "api.close-cycle",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "CloseCycleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::CloseCycleRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "CloseCycleResponse",
+    "response_dto": "crate::CycleMutationResponse"
+  },
+  {
+    "fields": [
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "board",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningObjectPath",
+        "field": "id",
+        "nested": false,
+        "part": "path",
+        "rust_type": "String"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "request_id",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "actor",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<String>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_versions",
+        "nested": false,
+        "part": "input",
+        "rust_type": "std::collections::BTreeMap<String,crate::planning::ApiObjectVersion>"
+      },
+      {
+        "dto": "crate::PlanningActionRequest",
+        "field": "expected_catalog_version",
+        "nested": false,
+        "part": "input",
+        "rust_type": "Option<i64>"
+      }
+    ],
+    "input_dto": "crate::PlanningActionRequest",
+    "method": "CancelCycle",
+    "operation_id": "api.cancel-cycle",
+    "path_dto": "crate::PlanningObjectPath",
+    "query_dto": null,
+    "request": "CancelCycleRequest",
+    "resolved_parts": [
+      "crate::planning::PlanningObjectPath",
+      "()",
+      "crate::planning::PlanningActionRequest"
+    ],
+    "resolved_response": "crate::wire::DataEnvelope<crate::planning::CycleMutationData>",
+    "response": "CancelCycleResponse",
+    "response_dto": "crate::CycleMutationResponse"
   }
 ]

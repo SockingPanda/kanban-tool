@@ -7,6 +7,15 @@ impl KanbanClient {
         task_id: &str,
         request: &UpdateTaskRequest,
     ) -> Result<ApiTask, ClientError> {
+        if request.module_ids.is_some()
+            || request.cycle_id.is_some()
+            || request.request_id.is_some()
+            || request.expected_object_version.is_some()
+            || !request.expected_versions.is_empty()
+            || request.expected_catalog_version.is_some()
+        {
+            self.require_planning(false).await?;
+        }
         let response: kanban_protocol::UpdateTaskResponse = rpc!(
             self,
             update_task,

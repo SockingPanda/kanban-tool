@@ -60,7 +60,10 @@
       "seq": 1,
       "status": "todo",
       "title": "ontology fixture record",
-      "updated_at": 100
+      "updated_at": 100,
+      "module_ids": [],
+      "cycle_id": null,
+      "object_version": 1
     },
     "agent_candidates": [
       {
@@ -71,15 +74,15 @@
     "suggestion_snapshot": {
       "board_id": "fixture-board-snapshot",
       "candidates": [],
-      "coverage": 0.0,
-      "coverage_cosine": 0.0,
+      "coverage": 0,
+      "coverage_cosine": 0,
       "degraded": false,
       "diagnostics": [],
       "needs_new_label": false,
       "reason_codes": [
         "no_selected_labels"
       ],
-      "residual_norm": 1.0,
+      "residual_norm": 1,
       "selected_labels": [],
       "task_id": "t_FIXTURE_1"
     },

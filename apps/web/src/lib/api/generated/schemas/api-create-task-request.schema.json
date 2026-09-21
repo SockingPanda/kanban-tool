@@ -8,6 +8,26 @@
         "ready"
       ],
       "type": "string"
+    },
+    "ApiObjectVersion": {
+      "additionalProperties": false,
+      "properties": {
+        "object": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "source": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "object"
+      ],
+      "type": "object"
     }
   },
   "$id": "urn:kanban-tool:schema:api:create-task-request:v1",
@@ -21,6 +41,12 @@
       ]
     },
     "assignee": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cycle_id": {
       "type": [
         "string",
         "null"
@@ -45,6 +71,19 @@
         "integer",
         "null"
       ]
+    },
+    "expected_catalog_version": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "expected_versions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ApiObjectVersion"
+      },
+      "type": "object"
     },
     "idempotency_key": {
       "description": "作用域限定在所选看板上的 entity-local 重试 key。",
@@ -73,6 +112,13 @@
         "object",
         "null"
       ]
+    },
+    "module_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 100,
+      "type": "array"
     },
     "priority": {
       "default": 3,

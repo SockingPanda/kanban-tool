@@ -193,7 +193,7 @@ impl TursoStore {
                 )
                 .await?;
 
-        let heartbeated = task_from_row(
+        let mut heartbeated = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -207,6 +207,11 @@ impl TursoStore {
             .await?,
         )?;
 
+        crate::object_model::task_planning::hydrate(
+            &transaction,
+            std::slice::from_mut(&mut heartbeated),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(heartbeated)
     }

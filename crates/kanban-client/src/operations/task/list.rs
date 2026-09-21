@@ -10,6 +10,9 @@ impl KanbanClient {
         board: &str,
         query: &ListTasksQuery,
     ) -> Result<ListTasksResponse, ClientError> {
+        if !query.module_ids.is_empty() || query.cycle_id.is_some() {
+            self.require_planning(true).await?;
+        }
         let response: kanban_protocol::ListTasksResponse = rpc!(
             self,
             list_tasks,
@@ -28,6 +31,9 @@ impl KanbanClient {
         board: &str,
         query: &ListTasksByStatusQuery,
     ) -> Result<ListTasksByStatusResponse, ClientError> {
+        if !query.module_ids.is_empty() || query.cycle_id.is_some() {
+            self.require_planning(true).await?;
+        }
         let response: kanban_protocol::ListTasksByStatusResponse = rpc!(
             self,
             list_tasks_by_status,

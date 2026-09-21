@@ -148,6 +148,12 @@
             "null"
           ]
         },
+        "cycle_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "dependency_blocked": {
           "type": "boolean"
         },
@@ -195,6 +201,19 @@
           ]
         },
         "metadata": true,
+        "module_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "object_version": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "optional_step_count": {
           "format": "int64",
           "type": "integer"
@@ -264,6 +283,9 @@
         }
       },
       "required": [
+        "module_ids",
+        "cycle_id",
+        "object_version",
         "id",
         "board_id",
         "board_slug",

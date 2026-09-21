@@ -1,6 +1,9 @@
 use kanban_protocol::{CreateCommentRequest, CreateStepRequest, CreateTaskRequest};
 
 pub(crate) fn prepare_create_request(mut request: CreateTaskRequest) -> CreateTaskRequest {
+    if request.idempotency_key.is_some() {
+        return request;
+    }
     let task_id = request.task_id.get_or_insert_with(kanban_core::new_task_id);
     request
         .idempotency_key
@@ -32,6 +35,10 @@ mod tests {
     #[test]
     fn create_request_gets_stable_entity_local_identifiers() {
         let request = prepare_create_request(CreateTaskRequest {
+            module_ids: Vec::new(),
+            cycle_id: None,
+            expected_versions: Default::default(),
+            expected_catalog_version: None,
             task_id: None,
             idempotency_key: None,
             title: "Create".into(),

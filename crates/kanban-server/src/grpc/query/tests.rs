@@ -546,6 +546,9 @@ async fn volatile_sample_time_is_silent_but_business_change_preserves_actual_tim
     state
         .application()
         .update_task(kanban_service::UpdateTaskCommand {
+            planning: Default::default(),
+            request_fingerprint: None,
+            request_id: None,
             task_id: task.id,
             actor: "query-test".into(),
             expected_lock_version: Some(task.lock_version),
@@ -853,6 +856,113 @@ async fn object_and_file_queries_share_ready_refresh_and_resume_semantics() {
     let mut stream = watch(&runtime, resumed).await;
     let cursor = rebuilt.ready(&mut stream, "files").await;
     assert_eq!(cursor, rebuilt.cursors["files"]);
+    drop(stream);
+    runtime.stop().await;
+}
+
+#[tokio::test]
+async fn planning_membership_invalidates_existing_web_task_and_object_queries() {
+    use kanban_protocol::rpc::{self, extensions as w};
+    let (_directory, state, runtime) = fixture().await;
+    let module = crate::application::planning::create_module(
+        state.clone(),
+        dto::PlanningBoardPath {
+            board: "default".into(),
+        },
+        Default::default(),
+        serde_json::from_value(serde_json::json!({"title":"查询模块"})).unwrap(),
+    )
+    .await
+    .unwrap()
+    .data
+    .object;
+    let task = create(&state, "实时归属").await;
+    let mut stream = watch(
+        &runtime,
+        vec![
+            definition(
+                "tasks",
+                Query::ListTasks(
+                    pb::ListTasksRequest::from_parts(
+                        dto::ListTasksPath {
+                            board: "default".into(),
+                        },
+                        dto::ListTasksQuery {
+                            module_ids: vec![module.id.clone()],
+                            ..Default::default()
+                        },
+                        (),
+                    )
+                    .unwrap(),
+                ),
+            ),
+            definition(
+                "module",
+                Query::GetObject(w::ObjectIdentityInput {
+                    board_id: module.board_id.clone(),
+                    object_id: module.id.clone(),
+                }),
+            ),
+        ],
+    )
+    .await;
+    let mut rebuilt = Rebuild::default();
+    rebuilt.receive(&mut stream, 2).await;
+    let original = rebuilt.bytes.clone();
+    crate::application::tasks::update::update_task(
+        state.clone(),
+        dto::UpdateTaskPath {
+            task_id: task.id.clone(),
+        },
+        Default::default(),
+        serde_json::from_value(serde_json::json!({"module_ids":[module.id]})).unwrap(),
+    )
+    .await
+    .unwrap();
+    rebuilt.receive(&mut stream, 2).await;
+    for id in ["tasks", "module"] {
+        assert_ne!(rebuilt.bytes[id], original[id], "归属修改必须更新已有查询");
+    }
+    let pb::query_result::Result::ListTasks(tasks) =
+        pb::QueryResult::decode(rebuilt.bytes["tasks"].as_slice())
+            .unwrap()
+            .result
+            .unwrap()
+    else {
+        panic!("任务查询类型错误")
+    };
+    let tasks: dto::ListTasksResponse = tasks.try_into().unwrap();
+    assert_eq!(tasks.meta.total, 1);
+    assert_eq!(tasks.data[0].module_ids, vec![module.id.clone()]);
+    let pb::query_result::Result::GetObject(object) =
+        pb::QueryResult::decode(rebuilt.bytes["module"].as_slice())
+            .unwrap()
+            .result
+            .unwrap()
+    else {
+        panic!("对象查询类型错误")
+    };
+    let object = rpc::decode_json(object.data.unwrap()).unwrap();
+    assert_eq!(object["properties"]["module.tasks"][0]["value"], task.id);
+    crate::application::tasks::update::update_task(
+        state.clone(),
+        dto::UpdateTaskPath { task_id: task.id },
+        Default::default(),
+        serde_json::from_value(serde_json::json!({"module_ids":[]})).unwrap(),
+    )
+    .await
+    .unwrap();
+    rebuilt.receive(&mut stream, 2).await;
+    let pb::query_result::Result::ListTasks(tasks) =
+        pb::QueryResult::decode(rebuilt.bytes["tasks"].as_slice())
+            .unwrap()
+            .result
+            .unwrap()
+    else {
+        panic!("任务查询类型错误")
+    };
+    let tasks: dto::ListTasksResponse = tasks.try_into().unwrap();
+    assert_eq!(tasks.meta.total, 0);
     drop(stream);
     runtime.stop().await;
 }

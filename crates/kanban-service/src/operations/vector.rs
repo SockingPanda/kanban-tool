@@ -366,6 +366,8 @@ mod tests {
         let (_directory, service) = service().await;
         service
             .create_task(CreateTaskCommand {
+                planning: Default::default(),
+                request_fingerprint: None,
                 task_id: "t_vector_service_worker".to_owned(),
                 board: "default".to_owned(),
                 idempotency_key: None,

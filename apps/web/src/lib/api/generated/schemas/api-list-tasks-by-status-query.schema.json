@@ -72,6 +72,12 @@
         "null"
       ]
     },
+    "cycle_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "include_archived": {
       "default": false,
       "type": "boolean"
@@ -91,6 +97,13 @@
       "maximum": 1000,
       "minimum": 0,
       "type": "integer"
+    },
+    "module_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 100,
+      "type": "array"
     },
     "offset": {
       "default": 0,

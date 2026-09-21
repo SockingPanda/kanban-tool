@@ -246,6 +246,8 @@ async fn claim_next_ready(
         .list_tasks(
             &config.board,
             TaskListOptions {
+                module_ids: Vec::new(),
+                cycle_id: None,
                 statuses: vec![TaskStatus::Ready],
                 priorities: Vec::new(),
                 labels: Vec::new(),
@@ -885,6 +887,8 @@ on_success = "blocked"
     async fn create_ready_task(application: &KanbanService, task_id: &str, priority: i64) {
         application
             .create_task(CreateTaskCommand {
+                planning: Default::default(),
+                request_fingerprint: None,
                 task_id: task_id.to_owned(),
                 board: "default".to_owned(),
                 idempotency_key: None,

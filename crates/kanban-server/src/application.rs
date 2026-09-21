@@ -19,3 +19,5 @@ pub(crate) mod steps;
 pub(crate) mod support;
 pub(crate) mod tasks;
 pub(crate) mod vector;
+
+pub(crate) mod planning;

@@ -260,3 +260,8 @@ pub use maintenance::{
     MaintenanceRunRequest, MaintenanceRunResponse, MaintenanceStatusReport,
     MaintenanceStatusResponse, ProjectionStoreStatus, VacuumReport, VacuumResponse,
 };
+
+mod planning;
+pub use planning::*;
+
+mod planning_catalog;

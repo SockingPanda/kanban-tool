@@ -61,7 +61,10 @@
       "labels": [],
       "created_at": 1,
       "updated_at": 1,
-      "content_hash": "fixture"
+      "content_hash": "fixture",
+      "module_ids": [],
+      "cycle_id": null,
+      "object_version": 1
     },
     "agent_candidates": [],
     "suggestion_snapshot": {},

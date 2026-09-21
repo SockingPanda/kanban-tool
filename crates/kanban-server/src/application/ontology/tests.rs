@@ -52,6 +52,8 @@ async fn fixture() -> (tempfile::TempDir, AppState) {
     state
         .application()
         .create_task(service::operations::CreateTaskCommand {
+            planning: Default::default(),
+            request_fingerprint: None,
             task_id: TASK.to_owned(),
             board: "default".to_owned(),
             idempotency_key: None,

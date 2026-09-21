@@ -11,7 +11,18 @@ pub(crate) const UNARY_TIMEOUT: Duration = Duration::from_secs(30);
 
 // 每个调用点固定 request 类型与生成 client 方法；没有动态方法名或 JSON dispatcher。
 macro_rules! rpc {
-    ($client:expr, $method:ident, $request:ident, $path:expr, $query:expr, $input:expr) => {{
+    ($client:expr, $method:ident, $request:ident, $path:expr, $query:expr, $input:expr) => {
+        $crate::transport::rpc!(
+            $client,
+            $method,
+            $request,
+            $path,
+            $query,
+            $input,
+            $crate::ClientError::status
+        )
+    };
+    ($client:expr, $method:ident, $request:ident, $path:expr, $query:expr, $input:expr, $error:path) => {{
         let message = kanban_protocol::rpc::v1::$request::from_parts($path, $query, $input)
             .map_err($crate::ClientError::request_codec)?;
         let client = $client;
@@ -20,7 +31,7 @@ macro_rules! rpc {
             let response = rpc_client
                 .$method(client.unary_request(message))
                 .await
-                .map_err($crate::ClientError::status)?
+                .map_err($error)?
                 .into_inner();
             response
                 .try_into()

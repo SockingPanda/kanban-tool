@@ -56,7 +56,10 @@
       "status_reason": null,
       "title": "add fixture",
       "unfinished_parent_count": 0,
-      "updated_at": 100
+      "updated_at": 100,
+      "module_ids": [],
+      "cycle_id": null,
+      "object_version": 1
     }
   }
 }

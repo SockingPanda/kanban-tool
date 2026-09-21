@@ -20,9 +20,18 @@ pub(crate) async fn create_task(
     body: CreateTaskRequest,
 ) -> Result<CreateTaskResponse, ApiError> {
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let request_fingerprint = Some(request_fingerprint(&body, &actor)?);
     let task = state
         .application()
         .create_task(CreateTaskCommand {
+            planning: kanban_service::TaskPlanningInput {
+                module_ids: (!body.module_ids.is_empty()).then_some(body.module_ids),
+                cycle_id: body.cycle_id.map(Some),
+                expected_object_version: None,
+                expected_versions: crate::application::planning::versions(body.expected_versions),
+                expected_catalog_version: body.expected_catalog_version,
+            },
+            request_fingerprint,
             task_id: body.task_id.unwrap_or_else(new_task_id),
             board,
             idempotency_key: body.idempotency_key,

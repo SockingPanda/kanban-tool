@@ -950,5 +950,197 @@
     "query": "crate::rpc::dto::LabelOntologyQualityQuery",
     "input": null,
     "response": "crate::cli_labels::CliLabelOntologyQualityOutput"
+  },
+  {
+    "id": "api.get-planning-capabilities",
+    "method": "GetPlanningCapabilities",
+    "path": null,
+    "query": null,
+    "input": null,
+    "response": "crate::PlanningCapabilitiesResponse"
+  },
+  {
+    "id": "api.list-modules",
+    "method": "ListModules",
+    "path": "crate::PlanningBoardPath",
+    "query": "crate::ListModulesQuery",
+    "input": null,
+    "response": "crate::ListModulesResponse"
+  },
+  {
+    "id": "api.get-module",
+    "method": "GetModule",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetModuleResponse"
+  },
+  {
+    "id": "api.create-module",
+    "method": "CreateModule",
+    "path": "crate::PlanningBoardPath",
+    "query": null,
+    "input": "crate::CreateModuleRequest",
+    "response": "crate::ModuleMutationResponse"
+  },
+  {
+    "id": "api.update-module",
+    "method": "UpdateModule",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::UpdateModuleRequest",
+    "response": "crate::ModuleMutationResponse"
+  },
+  {
+    "id": "api.archive-module",
+    "method": "ArchiveModule",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::ModuleMutationResponse"
+  },
+  {
+    "id": "api.restore-module",
+    "method": "RestoreModule",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::ModuleMutationResponse"
+  },
+  {
+    "id": "api.get-module-overview",
+    "method": "GetModuleOverview",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": null,
+    "response": "crate::ModuleOverviewResponse"
+  },
+  {
+    "id": "api.list-module-tasks",
+    "method": "ListModuleTasks",
+    "path": "crate::PlanningObjectPath",
+    "query": "crate::PlanningMembersQuery",
+    "input": null,
+    "response": "crate::PlanningMembersResponse"
+  },
+  {
+    "id": "api.add-module-task",
+    "method": "AddModuleTask",
+    "path": "crate::PlanningMemberPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::ModuleMutationResponse"
+  },
+  {
+    "id": "api.remove-module-task",
+    "method": "RemoveModuleTask",
+    "path": "crate::PlanningMemberPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::ModuleMutationResponse"
+  },
+  {
+    "id": "api.list-cycles",
+    "method": "ListCycles",
+    "path": "crate::PlanningBoardPath",
+    "query": "crate::ListCyclesQuery",
+    "input": null,
+    "response": "crate::ListCyclesResponse"
+  },
+  {
+    "id": "api.get-cycle",
+    "method": "GetCycle",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": null,
+    "response": "crate::GetCycleResponse"
+  },
+  {
+    "id": "api.create-cycle",
+    "method": "CreateCycle",
+    "path": "crate::PlanningBoardPath",
+    "query": null,
+    "input": "crate::CreateCycleRequest",
+    "response": "crate::CycleMutationResponse"
+  },
+  {
+    "id": "api.update-cycle",
+    "method": "UpdateCycle",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::UpdateCycleRequest",
+    "response": "crate::CycleMutationResponse"
+  },
+  {
+    "id": "api.archive-cycle",
+    "method": "ArchiveCycle",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::CycleMutationResponse"
+  },
+  {
+    "id": "api.restore-cycle",
+    "method": "RestoreCycle",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::CycleMutationResponse"
+  },
+  {
+    "id": "api.get-cycle-overview",
+    "method": "GetCycleOverview",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": null,
+    "response": "crate::CycleOverviewResponse"
+  },
+  {
+    "id": "api.list-cycle-tasks",
+    "method": "ListCycleTasks",
+    "path": "crate::PlanningObjectPath",
+    "query": "crate::PlanningMembersQuery",
+    "input": null,
+    "response": "crate::PlanningMembersResponse"
+  },
+  {
+    "id": "api.add-cycle-task",
+    "method": "AddCycleTask",
+    "path": "crate::PlanningMemberPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::CycleMutationResponse"
+  },
+  {
+    "id": "api.remove-cycle-task",
+    "method": "RemoveCycleTask",
+    "path": "crate::PlanningMemberPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::CycleMutationResponse"
+  },
+  {
+    "id": "api.start-cycle",
+    "method": "StartCycle",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::CycleMutationResponse"
+  },
+  {
+    "id": "api.close-cycle",
+    "method": "CloseCycle",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::CloseCycleRequest",
+    "response": "crate::CycleMutationResponse"
+  },
+  {
+    "id": "api.cancel-cycle",
+    "method": "CancelCycle",
+    "path": "crate::PlanningObjectPath",
+    "query": null,
+    "input": "crate::PlanningActionRequest",
+    "response": "crate::CycleMutationResponse"
   }
 ]

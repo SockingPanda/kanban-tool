@@ -254,7 +254,7 @@ impl TursoStore {
                     .await?;
         }
 
-        let blocked = task_from_row(
+        let mut blocked = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -268,6 +268,11 @@ impl TursoStore {
             .await?,
         )?;
 
+        crate::object_model::task_planning::hydrate(
+            &transaction,
+            std::slice::from_mut(&mut blocked),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(blocked)
     }

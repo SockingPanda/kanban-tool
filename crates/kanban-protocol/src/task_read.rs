@@ -155,6 +155,11 @@ pub struct ListTasksQuery {
     #[cfg_attr(feature = "schema", schemars(length(max = 9)))]
     #[cfg_attr(feature = "schema", schemars(extend("uniqueItems" = true)))]
     pub status: Vec<ApiTaskStatus>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "schema", schemars(length(max = 100)))]
+    pub module_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycle_id: Option<String>,
     #[cfg_attr(feature = "schema", schemars(length(max = 4)))]
     #[cfg_attr(feature = "schema", schemars(extend("uniqueItems" = true)))]
     pub priority: Vec<ApiTaskPriority>,
@@ -183,6 +188,8 @@ impl Default for ListTasksQuery {
     fn default() -> Self {
         Self {
             status: Vec::new(),
+            module_ids: Vec::new(),
+            cycle_id: None,
             priority: Vec::new(),
             label: Vec::new(),
             plan_filter: Vec::new(),
@@ -211,6 +218,11 @@ pub struct ListTasksByStatusQuery {
     #[cfg_attr(feature = "schema", schemars(length(max = 9)))]
     #[cfg_attr(feature = "schema", schemars(extend("uniqueItems" = true)))]
     pub status: Vec<ApiTaskStatus>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "schema", schemars(length(max = 100)))]
+    pub module_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycle_id: Option<String>,
     #[cfg_attr(feature = "schema", schemars(length(max = 4)))]
     #[cfg_attr(feature = "schema", schemars(extend("uniqueItems" = true)))]
     pub priority: Vec<ApiTaskPriority>,
@@ -239,6 +251,8 @@ impl Default for ListTasksByStatusQuery {
     fn default() -> Self {
         Self {
             status: Vec::new(),
+            module_ids: Vec::new(),
+            cycle_id: None,
             priority: Vec::new(),
             label: Vec::new(),
             plan_filter: Vec::new(),

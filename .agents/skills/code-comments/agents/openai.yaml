@@ -1,0 +1,4 @@
+interface:
+  display_name: "源码注释"
+  short_description: "按真实契约编写 TypeScript、React 与 Rust 源码注释"
+  default_prompt: "使用 $code-comments 为当前改动补充或修正必要的源码注释，核对真实契约，并执行适用范围的检查。"

@@ -1,0 +1,26 @@
+AGENTS.md
+  s_19f847abae4574::t_fb303cd70af0e4 54
+xtask/src/check/agents.rs
+  s_19f847abae4574::t_fb303cd70af0e4 39-47,91-99,331-339,390-393,395-407,409-417,419-421
+.agents/skills/code-comments/SKILL.md
+  s_19f847abae4574::t_14c9e57b2e85d6 1-2,4-7,9-20,22-37,39-44,46-47,50,54-65,67,69-70,72-73,76-82,84-98,100,104,106-107
+  s_19f847abae4574::t_fb303cd70af0e4 3,8,21,38,45,48-49,51-53,66,68,71,74-75,83,99,101-103,105
+.agents/skills/code-comments/agents/openai.yaml
+  s_19f847abae4574::t_14c9e57b2e85d6 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5d7fa945dd9a14c7e4068456e848805bce9637d8",
+  "prompts": {},
+  "sessions": {
+    "s_19f847abae4574": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c352-df1e-7963-ad88-f95cf5f8a5d2",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

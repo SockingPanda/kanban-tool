@@ -1,0 +1,1387 @@
+schemas/fixtures/api/archive-cycle-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/get-module-overview-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-24
+crates/kanban-protocol/tests/foundation.rs
+  s_338fce53cba5a1::t_5bbfba9e96e2f8 293,367-381,615,673,676-741,1162,1684-1685,2346-2348
+schemas/fixtures/api/get-cycle-overview-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/api/get-cycle-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-17
+schemas/fixtures/api/add-module-task-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+schemas/fixtures/api/restore-cycle-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+apps/web/src/lib/api/generated/generated.sha256
+  s_338fce53cba5a1::t_47c69bea0510c3 54-55,67,83,89,108,120,126-127,130,227,235,243,251,259,271,287,327,357,383,395,433,471,479,545,563,607,615,629,637,653,713-714,726,742,748,767,779,785-786,789
+  s_338fce53cba5a1::t_01a9e9815a4f5a 5,9,13,17,21,27,31,35,51,131,164,167,170,173,177,191,195,199,206,210,214,217-218,657,664,668,672,676,680,686,690,694,710,790,823,826,829,832,836,850,854,858,865,869,873,876-877
+schemas/json-schema/draft-2020-12/api/archive-cycle-path.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1,3-19
+  s_338fce53cba5a1::t_a88b52afdc1832 2
+schemas/fixtures/api/remove-task-label-response.v1.valid.json
+  s_338fce53cba5a1::t_c16643368793c3 39-42
+crates/kanban-service/src/store_operations/tasks/show.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 20-23,44-45
+  s_338fce53cba5a1::t_afee1d2a46e555 14,19,24-43,46
+  s_338fce53cba5a1::t_f1e9e701eba49d 47
+crates/kanban-service/src/store_operations/lifecycle/review.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 202,216-217,219-220
+  s_338fce53cba5a1::t_ecb8fb67f9fd98 218
+schemas/fixtures/api/list-module-tasks-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-10
+schemas/fixtures/api/create-module-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-3
+crates/kanban-cli/src/commands/planning.rs
+  s_338fce53cba5a1::t_8130ec7e88c9fa 1,4-6,8-9,14,156,453
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 2-3,7,10-13,15-135,137-155,157-432,434-452,454-785
+  s_338fce53cba5a1::t_9adcd48d5d1aef 136,433
+crates/kanban-server/src/grpc/business.rs
+  s_338fce53cba5a1::t_6e2976656e1cc9 34-81
+schemas/fixtures/api/get-planning-capabilities-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/api/archive-cycle-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+crates/kanban-service/src/store_operations/lifecycle/promote.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 159,173-174,176-177
+  s_338fce53cba5a1::t_a856655a11f214 175
+crates/kanban-service/src/store_operations/lifecycle/reclaim_expired.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 279,293-294,296-297
+  s_338fce53cba5a1::t_5635fffcf7a01a 295
+crates/kanban-service/src/store_operations/lifecycle/unblock.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 121,134-135
+schemas/fixtures/api/list-cycles-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/add-cycle-task-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/get-module-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-14
+schemas/fixtures/api/list-cycle-tasks-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/restore-module-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/api/archive-module-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/api/restore-module-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/api/update-cycle-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-9
+crates/kanban-client/src/operations/task/list.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 13-15,34-36
+crates/kanban-service/src/object_model/planning/writes.rs
+  s_338fce53cba5a1::t_1496f2b452a30b 5-8,10-16,20-21,30-31,46-49,56,75-77,81,88-91,99-103,114-116,129,161-162,177,191,200,222-224,231-233,247-250,258,272-273,282,297,304,311,333-338,352-356,362-366,385-388,397-399
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 1-4,9,17-19,22-29,32-45,50-55,61-66,69,71-74,78-80,82-87,92-98,104-113,117-128,130-160,163-176,178-190,192-199,201-221,225-230,234-246,251-257,259-271,274-281,283-296,298-303,305-310,312-332,339-351,357-361,367-384,389-396
+  s_338fce53cba5a1::t_afee1d2a46e555 57-60,67-68,70
+schemas/fixtures/api/restore-cycle-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+crates/kanban-service/src/store_operations/graph.rs
+  s_338fce53cba5a1::t_706ec0c631557a 977,980,993,995,997
+  s_338fce53cba5a1::t_883d9d07c8e997 978-979,998-1001
+schemas/fixtures/cli/cycle-update-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/api/get-module-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-13
+crates/kanban-client/src/operations/task/create.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 11-17
+crates/kanban-protocol/src/planning.rs
+  s_338fce53cba5a1::t_1526d3b9fcebf5 152,182,279,315,327,340
+  s_338fce53cba5a1::t_6f5e5a3c251e77 1,3-28,35-39,44-151,153-160,166,172,178-181,183-278,280-287,293,299,305,311-314,316-326,328-339,341-400
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 2,29-34,40-43,161-165,167-171,173-177,288-292,294-298,300-304,306-310,401-403
+schemas/fixtures/api/update-module-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+crates/kanban-service/src/object_model.rs
+  s_338fce53cba5a1::t_f887d090c5888d 12,202-213,228-231,236,240,251,253-263,270,311,333
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 18,214-227,232-235,264-269,292-310
+  s_338fce53cba5a1::t_cd062668fedbcd 275,282,313,317,328,340
+schemas/fixtures/api/restore-cycle-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+crates/kanban-service/src/store_operations/lifecycle/block.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 257,271-272,274-275
+  s_338fce53cba5a1::t_96c3bb67b0a9ea 273
+crates/kanban-protocol/src/lib.rs
+  s_338fce53cba5a1::t_00bab733dcf019 266-267
+  s_338fce53cba5a1::t_6f5e5a3c251e77 263-265
+schemas/fixtures/api/create-module-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-10
+schemas/fixtures/api/list-modules-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+crates/kanban-client/src/transport.rs
+  s_338fce53cba5a1::t_7b277863fef9ed 14,24-25,34
+  s_338fce53cba5a1::t_5bbfba9e96e2f8 15-23
+crates/kanban-service/src/store_operations/tasks/update.rs
+  s_338fce53cba5a1::t_f883d95f420319 270
+  s_338fce53cba5a1::t_cd062668fedbcd 49,51-54,113,268-269,271-276
+  s_338fce53cba5a1::t_afee1d2a46e555 56-57,67-69,264,279-280
+  s_338fce53cba5a1::t_1793f7e1e48622 8,10-12
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 42-48,58-66,114-120,265-267,277-278,293-303
+  s_338fce53cba5a1::t_debb5acaf991d4 50,55
+schemas/fixtures/api/remove-cycle-task-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+crates/kanban-service/src/store_operations/tasks/create.rs
+  s_338fce53cba5a1::t_1793f7e1e48622 11,13-14
+  s_338fce53cba5a1::t_cd062668fedbcd 80,82-85,295,307-308,310-315
+  s_338fce53cba5a1::t_afee1d2a46e555 87,96-99,303
+  s_338fce53cba5a1::t_f883d95f420319 79,309
+  s_338fce53cba5a1::t_5569cd67c2d059 123-127
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 72-78,88-95,118-119,296-302,304-306,316-318,332-333
+  s_338fce53cba5a1::t_f0addd481afe17 81,86
+crates/kanban-server/src/application/tasks/list.rs
+  s_338fce53cba5a1::t_ee9db95ba8ede0 17-18,87-88
+schemas/fixtures/api/close-cycle-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/api/list-tasks-response.v1.valid.json
+  s_338fce53cba5a1::t_c16643368793c3 40-43
+schemas/fixtures/cli/cycle-task-list-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-10
+crates/kanban-server/src/application/tasks/update.rs
+  s_338fce53cba5a1::t_ee9db95ba8ede0 18-26
+  s_338fce53cba5a1::t_1526d3b9fcebf5 14
+schemas/fixtures/cli/module-list-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+crates/kanban-mcp/README.md
+  s_338fce53cba5a1::t_48860bce1751c8 28,54-67
+schemas/fixtures/api/list-module-tasks-query.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/cli/module-overview-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-24
+crates/kanban-service/src/store_operations/tasks/list.rs
+  s_338fce53cba5a1::t_1793f7e1e48622 41-42,81-82,144-145
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 58-59
+crates/kanban-service/src/lib.rs
+  s_338fce53cba5a1::t_1793f7e1e48622 119-120
+schemas/fixtures/api/get-cycle-overview-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/api/list-cycles-query.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/api/restore-cycle-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/api/update-module-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-9
+crates/kanban-client/README.md
+  s_338fce53cba5a1::t_48860bce1751c8 38-42,44-46
+  s_338fce53cba5a1::t_d753d0428bfaa0 43
+schemas/fixtures/api/list-cycle-tasks-query.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/api/create-cycle-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/cli/cycle-start-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/json-schema/draft-2020-12/api/cancel-cycle-request.v1.schema.json
+  s_338fce53cba5a1::t_a84de875b65a93 24
+  s_338fce53cba5a1::t_4b1702d73e667d 1-23,25-63
+schemas/fixtures/cli/module-archive-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+schemas/fixtures/api/get-module-overview-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/close-cycle-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/json-schema/draft-2020-12/api/add-task-label-response.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 107-112,160-172,242-244
+crates/kanban-service/docs/objects.md
+  s_338fce53cba5a1::t_48860bce1751c8 19-36
+crates/kanban-service/src/store_operations/lifecycle/archive.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 202,215-216,218-219
+  s_338fce53cba5a1::t_63717295d13e8d 217
+schemas/fixtures/api/list-module-tasks-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-9
+schemas/fixtures/api/create-cycle-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-10
+apps/web/src/lib/api/generated/contracts/api-create-task-request.ts
+  s_338fce53cba5a1::t_47c69bea0510c3 5
+schemas/fixtures/api/add-module-task-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/api/cancel-cycle-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/api/create-module-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/remove-cycle-task-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/cli/cycle-start-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/cli/module-update-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+crates/kanban-mcp/src/tools/tasks/list.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 83-84,131-132
+  s_338fce53cba5a1::t_ccb090d12e63af 19-21,40-42
+schemas/fixtures/api/restore-module-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/archive-module-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+crates/kanban-service/src/operations/task/list.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 60-61,90-91,230-231,255-256,275-276
+  s_338fce53cba5a1::t_1793f7e1e48622 43-44
+schemas/fixtures/api/update-cycle-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+crates/kanban-client/src/shared.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 4-6,38-41
+schemas/fixtures/api/list-module-tasks-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/cli/module-archive-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+apps/web/src/lib/api/generated/fixtures/api-task-neighborhood-response.valid.json
+  s_338fce53cba5a1::t_47c69bea0510c3 43-46
+schemas/fixtures/api/start-cycle-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+crates/kanban-client/src/operations/task/update.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 10-18
+schemas/fixtures/cli/cycle-task-list-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-9
+schemas/fixtures/api/add-cycle-task-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/cli/module-create-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+crates/kanban-mcp/src/tools/tasks/create.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 20-21,61-64
+  s_338fce53cba5a1::t_1912e699301b8e 16-19
+apps/web/src/features/tasks/TaskMapView.test.tsx
+  s_338fce53cba5a1::t_e97762e38e900e 46-48
+schemas/json-schema/draft-2020-12/api/add-module-task-response.v1.schema.json
+  s_338fce53cba5a1::t_a84de875b65a93 138
+  s_338fce53cba5a1::t_78dbfd49c6a4d6 1-137,139-151
+schemas/fixtures/cli/cycle-restore-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/api/create-module-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+crates/kanban-protocol/src/create_task.rs
+  s_338fce53cba5a1::t_be78f6fb6a7af3 32-33,35,39
+  s_338fce53cba5a1::t_1526d3b9fcebf5 37
+  s_338fce53cba5a1::t_6f5e5a3c251e77 34,36,38,40
+schemas/fixtures/cli/module-task-list-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-10
+schemas/json-schema/draft-2020-12/api/create-module-request.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1-23,25-74
+  s_338fce53cba5a1::t_67d9eb7ceaedc4 24
+crates/kanban-service/src/store_operations/dependencies/support.rs
+  s_338fce53cba5a1::t_706ec0c631557a 28,31,51,54
+  s_338fce53cba5a1::t_883d9d07c8e997 29-30,52-53
+crates/kanban-service/src/store_operations/tasks/list_support.rs
+  s_338fce53cba5a1::t_1793f7e1e48622 98-106
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 10-20
+schemas/fixtures/cli/module-task-list-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-9
+schemas/fixtures/api/archive-cycle-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/cli/module-task-add-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+schemas/fixtures/api/get-cycle-overview-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-28
+crates/kanban-server/src/application/tasks/support.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 53
+  s_338fce53cba5a1::t_1526d3b9fcebf5 134-137,139-147
+  s_338fce53cba5a1::t_ee9db95ba8ede0 51-52
+  s_338fce53cba5a1::t_639dc3ba91c89d 138
+schemas/fixtures/api/add-cycle-task-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/cli/cycle-update-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/api/list-modules-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-6
+schemas/fixtures/cli/cycle-restore-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/api/update-module-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/cli/module-task-remove-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/api/get-cycle-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/api/remove-module-task-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-6
+schemas/fixtures/cli/cycle-show-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-18
+schemas/fixtures/api/get-cycle-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-18
+schemas/fixtures/api/list-modules-query.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+crates/kanban-protocol/src/task_read.rs
+  s_338fce53cba5a1::t_6f5e5a3c251e77 160,162,223,225
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 191-192,254-255
+  s_338fce53cba5a1::t_be78f6fb6a7af3 158-159,161,221-222,224
+schemas/fixtures/api/get-cycle-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/remove-cycle-task-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-6
+schemas/fixtures/api/remove-cycle-task-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/cli/cycle-list-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/list-module-tasks-query.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+crates/kanban-server/src/application.rs
+  s_338fce53cba5a1::t_6e2976656e1cc9 22-23
+crates/kanban-service/src/operations/vector.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 369-370
+schemas/fixtures/api/cancel-cycle-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+crates/kanban-cli/tests/task_contract_adoption.rs
+  s_338fce53cba5a1::t_8ff84315440653 34-43,45-56,58-72,74-80,93,95-102,104-119,121-140,142-153,155-161
+  s_338fce53cba5a1::t_706ec0c631557a 5
+  s_338fce53cba5a1::t_1862c1741b80d4 6-8
+  s_338fce53cba5a1::t_f5507712cf106d 81-92
+  s_338fce53cba5a1::t_75a341b044ab5a 44
+  s_338fce53cba5a1::t_7ea26bd2d8d299 57
+  s_338fce53cba5a1::t_43ea205b8277e6 73
+  s_338fce53cba5a1::t_afb51e2539c896 94
+  s_338fce53cba5a1::t_27ba746a0022c1 103
+  s_338fce53cba5a1::t_b2faf614df47c8 120
+  s_338fce53cba5a1::t_16c170dcacb923 141
+  s_338fce53cba5a1::t_7993bab0ab987b 154
+crates/kanban-service/src/object_model/planning.rs
+  s_338fce53cba5a1::t_153e543c4adc19 3-4
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 5,13-16,19-30,54-92,123-132,136-139,168-171
+  s_338fce53cba5a1::t_1496f2b452a30b 1-2,6-12,17-18,31-53,93-122,133-135,140-167
+schemas/fixtures/api/remove-cycle-task-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/api/add-cycle-task-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-6
+schemas/fixtures/cli/module-show-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-14
+crates/kanban-service/src/store_operations/lifecycle/done.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 288,302-303,305-306
+  s_338fce53cba5a1::t_a20ae7c3062b0b 304
+schemas/fixtures/api/add-module-task-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-6
+crates/kanban-mcp/tests/stdio_native.rs
+  s_338fce53cba5a1::t_8ff84315440653 569-576,578-587,589-599,601-611,613-616,618-626,628-643,645-651,653-657,659-667
+  s_338fce53cba5a1::t_a7d14fffa072af 577,588,600,612,617,627,644,652,658
+crates/kanban-service/src/store_operations/lifecycle/reopen.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 171,184-185,187-188
+  s_338fce53cba5a1::t_b1b7d8798c765d 186
+schemas/fixtures/api/add-cycle-task-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/api/add-cycle-task-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/cli/cycle-close-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+crates/kanban-cli/src/commands/task/list.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 13-16
+  s_338fce53cba5a1::t_8130ec7e88c9fa 17,100-101
+schemas/fixtures/api/create-cycle-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-3
+schemas/fixtures/cli/cycle-show-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-17
+crates/kanban-cli/src/commands/task/create.rs
+  s_338fce53cba5a1::t_8130ec7e88c9fa 15
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 11-14,66-69
+crates/kanban-service/src/operations/task/update.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 31-34,49-51,169-171,222-223,269-270,324-326,349-351
+  s_338fce53cba5a1::t_eae188d269d711 77-82,84-85
+  s_338fce53cba5a1::t_1793f7e1e48622 6,9-11,111
+  s_338fce53cba5a1::t_fbf63e630347b0 8
+  s_338fce53cba5a1::t_08feb4b4fd54fe 83
+schemas/fixtures/api/update-module-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+apps/web/src/lib/api/generated/fixtures/api-get-task-response.valid.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1-57
+schemas/json-schema/draft-2020-12/api/archive-module-request.v1.schema.json
+  s_338fce53cba5a1::t_a84de875b65a93 24
+  s_338fce53cba5a1::t_d1901e01b9a2db 1-23,25-63
+crates/kanban-protocol/src/planning_catalog.rs
+  s_338fce53cba5a1::t_00bab733dcf019 1-4,27-28,34,67-68,156,219,286,359,432,505,568,650,727,804,892,955,1022,1095,1168,1241,1304,1386,1463,1540,1613,1686,1759
+  s_338fce53cba5a1::t_5bbfba9e96e2f8 5,17,42,79,110,120,173,183,230,240,250,303,313,323,376,386,396,449,459,469,522,532,585,604,614,671,681,691,748,758,768,815,846,856,909,919,966,976,986,1039,1049,1059,1112,1122,1132,1185,1195,1205,1258,1268,1321,1340,1350,1407,1417,1427,1484,1494,1504,1557,1567,1577,1630,1640,1650,1703,1713,1723
+  s_338fce53cba5a1::t_f883d95f420319 153,216,283,356,429,502,565,647,724,801,889,952,1019,1092,1165,1238,1301,1383,1460,1537,1610,1683,1756
+  s_338fce53cba5a1::t_8224045843f844 1769-1774
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 6-16,18-26,29-33,35-41,43-66,69-78,80-109,111-119,121-152,154-155,157-172,174-182,184-215,217-218,220-229,231-239,241-249,251-282,284-285,287-302,304-312,314-322,324-355,357-358,360-375,377-385,387-395,397-428,430-431,433-448,450-458,460-468,470-501,503-504,506-521,523-531,533-564,566-567,569-584,586-603,605-613,615-646,648-649,651-670,672-680,682-690,692-723,725-726,728-747,749-757,759-767,769-800,802-803,805-814,816-845,847-855,857-888,890-891,893-908,910-918,920-951,953-954,956-965,967-975,977-985,987-1018,1020-1021,1023-1038,1040-1048,1050-1058,1060-1091,1093-1094,1096-1111,1113-1121,1123-1131,1133-1164,1166-1167,1169-1184,1186-1194,1196-1204,1206-1237,1239-1240,1242-1257,1259-1267,1269-1300,1302-1303,1305-1320,1322-1339,1341-1349,1351-1382,1384-1385,1387-1406,1408-1416,1418-1426,1428-1459,1461-1462,1464-1483,1485-1493,1495-1503,1505-1536,1538-1539,1541-1556,1558-1566,1568-1576,1578-1609,1611-1612,1614-1629,1631-1639,1641-1649,1651-1682,1684-1685,1687-1702,1704-1712,1714-1722,1724-1755,1757-1758,1760-1768,1775-1788,1790-1815,1817-1842,1844-1869,1871-1896,1898-1923,1925-1950,1952-1977,1979-2004,2006-2031,2033-2058,2060-2085,2087-2112,2114-2139,2141-2166,2168-2193,2195-2220,2222-2247,2249-2274,2276-2301,2303-2328,2330-2355,2357-2382,2384-2399
+  s_338fce53cba5a1::t_b4ac9c4f2588f3 1789,1816,1843,1870,1897,1924,1951,1978,2005,2032,2059,2086,2113,2140,2167,2194,2221,2248,2275,2302,2329,2356,2383
+crates/kanban-protocol/src/api_components.rs
+  s_338fce53cba5a1::t_48a8669e51fc3d 157,159,169
+  s_338fce53cba5a1::t_5bbfba9e96e2f8 161-164,167-168,170
+  s_338fce53cba5a1::t_1793f7e1e48622 158,160,165-166,171
+schemas/fixtures/api/update-module-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/start-cycle-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+crates/kanban-cli/src/commands/task/update.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 8-19,62-75
+schemas/fixtures/cli/cycle-archive-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/api/list-cycle-tasks-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json
+  s_338fce53cba5a1::t_c16643368793c3 44-47
+schemas/fixtures/api/add-module-task-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/api/create-module-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-9
+xtask/src/rpc_codegen/web.rs
+  s_338fce53cba5a1::t_77c4b1adcedf86 349-361
+schemas/fixtures/api/close-cycle-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/cli/cycle-task-remove-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/api/get-cycle-overview-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/archive-module-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/start-cycle-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/json-schema/draft-2020-12/api/create-module-path.v1.schema.json
+  s_338fce53cba5a1::t_a84de875b65a93 2
+  s_338fce53cba5a1::t_47c69bea0510c3 1,3-15
+schemas/fixtures/cli/cycle-archive-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+crates/kanban-service/src/store_operations/labels.rs
+  s_338fce53cba5a1::t_4247d4e27ab833 1121
+  s_338fce53cba5a1::t_706ec0c631557a 1151,1154
+  s_338fce53cba5a1::t_883d9d07c8e997 1152-1153
+crates/kanban-service/src/domain.rs
+  s_338fce53cba5a1::t_1793f7e1e48622 239-241
+schemas/fixtures/cli/module-list-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-6
+crates/kanban-client/src/operations.rs
+  s_338fce53cba5a1::t_8f5492fc2b5cc9 22-23
+schemas/fixtures/cli/cycle-create-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/api/remove-module-task-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/json-schema/draft-2020-12/api/close-cycle-path.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1,3-19
+  s_338fce53cba5a1::t_85235c625df73b 2
+schemas/fixtures/api/get-planning-capabilities-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/list-cycles-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/cli/module-overview-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/cli/cycle-cancel-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/cli/cycle-task-add-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/json-schema/draft-2020-12/api/add-module-task-path.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1,3-23
+  s_338fce53cba5a1::t_f9bff268a56b08 2
+crates/kanban-server/src/application/tasks/create.rs
+  s_338fce53cba5a1::t_1526d3b9fcebf5 23
+  s_338fce53cba5a1::t_ee9db95ba8ede0 27-34
+schemas/fixtures/api/list-cycles-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-3
+crates/kanban-service/src/store_operations/lifecycle/specify.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 133,146-147,149-150
+  s_338fce53cba5a1::t_af5cd057a844ae 148
+schemas/fixtures/api/cancel-cycle-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/api/restore-cycle-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/close-cycle-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/api/remove-module-task-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+crates/kanban-protocol/src/operation_catalog.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 336-340
+  s_338fce53cba5a1::t_00bab733dcf019 104,262
+schemas/fixtures/cli/cycle-create-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+crates/kanban-service/src/object_model/planning/tests.rs
+  s_338fce53cba5a1::t_139a1b557c23d1 158-161
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 2-5,10-16,20-27,30-43,46-68,71-86,89-104,111-113,126-157,162,165-173,175-176,195-221,223-226,228-229,234-258,260-279,312-324,329-386,395-401,429-439,441-455,458-462,467-537,544-609
+  s_338fce53cba5a1::t_de268147fb841b 177-190,280,282-311,404-406,410,412-413,416,418-422,425-428,463-466,539
+  s_338fce53cba5a1::t_153e543c4adc19 1,6-9,17-19,28-29,44-45,69-70,87-88,105-110,163-164,174,191-194,230-233,259,281,325-328,387-390,440,456-457,538,540-543,610
+  s_338fce53cba5a1::t_43f56ab1dbdd1e 391-394
+  s_338fce53cba5a1::t_48a8669e51fc3d 222,227
+  s_338fce53cba5a1::t_4c740deb1dc8fb 402-403,408-409,411,414-415,417,423-424
+  s_338fce53cba5a1::t_d753d0428bfaa0 114-125
+  s_338fce53cba5a1::t_ff8d49d08b1ccd 407
+crates/kanban-protocol/proto/rpc-operations.json
+  s_338fce53cba5a1::t_6f5e5a3c251e77 953-959,961-964,967,969-972,974-975,977-980,982,985-988,990,993-996,998,1001-1004,1006,1009-1012,1014-1015,1017-1020,1023,1025-1028,1030,1033-1036,1038,1041-1044,1047,1049-1052,1054-1055,1057-1060,1062,1065-1068,1070,1073-1076,1078,1081-1084,1086,1089-1092,1094-1095,1097-1100,1103,1105-1108,1110,1113-1116,1118,1121-1124,1126,1129-1132,1134,1137-1140,1142
+  s_338fce53cba5a1::t_53ac6092cc3832 960,965-966,968,973,976,981,983-984,989,991-992,997,999-1000,1005,1007-1008,1013,1016,1021-1022,1024,1029,1031-1032,1037,1039-1040,1045-1046,1048,1053,1056,1061,1063-1064,1069,1071-1072,1077,1079-1080,1085,1087-1088,1093,1096,1101-1102,1104,1109,1111-1112,1117,1119-1120,1125,1127-1128,1133,1135-1136,1141,1143-1144
+crates/kanban-service/src/store_operations/lifecycle/heartbeat.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 196,210-211,213-214
+  s_338fce53cba5a1::t_89cbf4794ecd83 212
+schemas/json-schema/draft-2020-12/api/archive-cycle-headers.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1-27
+schemas/fixtures/api/cancel-cycle-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/list-module-tasks-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/json-schema/draft-2020-12/api/create-cycle-response.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1-169,171-183
+  s_338fce53cba5a1::t_22d78025e008b6 170
+apps/web/src/adapters/host/board-read-model.test.ts
+  s_338fce53cba5a1::t_706ec0c631557a 93-95
+schemas/fixtures/api/restore-cycle-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/cli/module-task-add-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/cli/cycle-overview-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-28
+crates/kanban-server/src/application/planning.rs
+  s_338fce53cba5a1::t_ee9db95ba8ede0 2-6,9,13-237,239-272,274-311,313-343,345-434,436-469,471-550,552-585,587-624,626-656,658-747,749-782,784-817,819-849,851-884,886-901
+  s_338fce53cba5a1::t_6e2976656e1cc9 1,7-8,10-12,902
+  s_338fce53cba5a1::t_caa0d5f7c5619c 238,273,312,344,435,470,551,586,625,657,748,783,818,850,885
+schemas/fixtures/api/get-module-overview-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+apps/web/src/lib/api/generated/fixtures/api-list-tasks-by-status-response.valid.json
+  s_338fce53cba5a1::t_47c69bea0510c3 44-47
+schemas/fixtures/api/archive-cycle-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+crates/kanban-server/src/dispatcher.rs
+  s_338fce53cba5a1::t_ee9db95ba8ede0 249-250,890-891
+apps/web/src/lib/api/generated/fixtures/api-unblock-task-response.valid.json
+  s_338fce53cba5a1::t_47c69bea0510c3 42-45
+crates/kanban-mcp/src/tools/planning.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 2-866
+  s_338fce53cba5a1::t_9bd4d4bd5647b0 1
+schemas/json-schema/draft-2020-12/api/add-cycle-task-path.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1,3-23
+  s_338fce53cba5a1::t_7a83d2cb12ed03 2
+schemas/fixtures/api/list-modules-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/cli/module-restore-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/cli/module-restore-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+crates/kanban-service/src/shared.rs
+  s_338fce53cba5a1::t_883d9d07c8e997 115-116
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 22-24
+  s_338fce53cba5a1::t_706ec0c631557a 114,117
+schemas/fixtures/api/update-cycle-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+schemas/fixtures/api/restore-module-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/json-schema/draft-2020-12/api/archive-module-response.v1.schema.json
+  s_338fce53cba5a1::t_a84de875b65a93 138
+  s_338fce53cba5a1::t_c303d331accce4 1-137,139-151
+schemas/fixtures/api/create-cycle-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+crates/kanban-server/src/grpc/query/tests.rs
+  s_338fce53cba5a1::t_c16643368793c3 935,965
+  s_338fce53cba5a1::t_ee9db95ba8ede0 549-551
+  s_338fce53cba5a1::t_4db887403fa2d9 862-869,871-887,889-895,898-903,905,907-914,916-934,936-945,947-964,966-968
+  s_338fce53cba5a1::t_4c740deb1dc8fb 946
+  s_338fce53cba5a1::t_3976006bf2d76b 870,888,896-897,904,906,915
+schemas/fixtures/cli/cycle-overview-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+crates/kanban-service/src/store_operations/ontology_tests.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 38-39
+schemas/json-schema/draft-2020-12/api/archive-task-response.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 107-112,160-172,242-244
+schemas/fixtures/api/update-cycle-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/cli/cycle-task-add-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/json-schema/draft-2020-12/api/create-module-response.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1-137,139-151
+  s_338fce53cba5a1::t_c32fc52524f8fa 138
+schemas/fixtures/api/remove-module-task-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+crates/kanban-service/src/store_operations/lifecycle/release.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 250,264-265,267-268
+  s_338fce53cba5a1::t_b5c5e6ebf801a2 266
+schemas/fixtures/cli/module-show-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-13
+schemas/fixtures/api/update-module-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/cli/module-update-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+crates/kanban-protocol/src/task_core.rs
+  s_338fce53cba5a1::t_6f5e5a3c251e77 131,151,158,160,162,164,166
+  s_338fce53cba5a1::t_ab60edcbd235e5 120,139,144,152
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 121-123,145-149,153-157
+  s_338fce53cba5a1::t_be78f6fb6a7af3 150,159,163,165
+  s_338fce53cba5a1::t_e97762e38e900e 161
+schemas/fixtures/api/remove-module-task-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+crates/kanban-mcp/src/tools/tasks/update.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 29-37,111-116
+schemas/json-schema/draft-2020-12/api/archive-cycle-request.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1-23,25-63
+  s_338fce53cba5a1::t_1885a7b5cfb2b2 24
+schemas/fixtures/cli/module-task-remove-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+schemas/fixtures/api/restore-module-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+crates/kanban-client/src/operations/planning.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 2,6,19-33,36-49,51-55,57-68,70-87,89-94,96-111,113-118,120-135,137-142,144-159,161-165,167-178,180-185,187-198,200-206,208-225,227-233,235-252,254-267,269,271-282,284-301,303-308,310-325,327-332,334-349,351-356,358-373,375-379,381-392,394-399,401-412,414-420,422-439,441-447,449-466,468-473,475-490,492-497,499-514,516-521,523-538,541-547,560
+  s_338fce53cba5a1::t_5bbfba9e96e2f8 7-16,548-559
+  s_338fce53cba5a1::t_8f5492fc2b5cc9 1,3-5,17-18,34-35,50,56,69,88,95,112,119,136,143,160,166,179,186,199,207,226,234,253,268,270,283,302,309,326,333,350,357,374,380,393,400,413,421,440,448,467,474,491,498,515,522,539-540
+crates/kanban-cli/src/commands.rs
+  s_338fce53cba5a1::t_8130ec7e88c9fa 20-21
+schemas/fixtures/api/cancel-cycle-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+crates/kanban-client/tests/native/transport.rs
+  s_338fce53cba5a1::t_a5e1965328fb87 68-75,77-89,92-107
+  s_338fce53cba5a1::t_27a587c8a45f06 60-67,76,90-91,108-110
+crates/kanban-protocol/docs/schema.md
+  s_338fce53cba5a1::t_48860bce1751c8 33-37
+schemas/fixtures/api/archive-cycle-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+apps/web/src/lib/api/generated/fixtures/api-list-dependencies-response.valid.json
+  s_338fce53cba5a1::t_47c69bea0510c3 1-77
+crates/kanban-server/src/application/ontology/tests.rs
+  s_338fce53cba5a1::t_ee9db95ba8ede0 55-56
+crates/kanban-service/src/operations/task.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 59-61
+schemas/fixtures/api/close-cycle-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-9
+schemas/fixtures/api/update-cycle-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/list-cycle-tasks-query.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/add-module-task-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/api/remove-cycle-task-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/api/start-cycle-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-8
+crates/kanban-service/src/operations/task/create.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 9
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 37-40,50-51,167-168
+  s_338fce53cba5a1::t_1793f7e1e48622 7,10-11
+schemas/fixtures/api/list-cycle-tasks-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-9
+schemas/fixtures/api/restore-module-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+schemas/fixtures/api/add-module-task-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/create-cycle-request.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-11
+crates/kanban-client/tests/native/common.rs
+  s_338fce53cba5a1::t_b8593a69374d05 94,101-104,113-114,127,136,144-145,158
+crates/kanban-service/src/store_operations/lifecycle/list_expired.rs
+  s_338fce53cba5a1::t_5569cd67c2d059 55
+crates/kanban-service/src/object_model/task_planning.rs
+  s_338fce53cba5a1::t_b6d57e5a784ea1 1,6-19,23-27,31-32,36-39,43,50,52,70-73,133-135,144,184-185,194,199,203,207,211-213,234-235,259-260,266-267,271-279
+  s_338fce53cba5a1::t_4720a426fc54b7 143,166,168,171-172,181,183,243,251-253
+  s_338fce53cba5a1::t_a03aa91df75d09 84,97-99,106-116
+  s_338fce53cba5a1::t_f883d95f420319 100-105
+  s_338fce53cba5a1::t_49fb4402ed0ccd 54-62,75-78
+  s_338fce53cba5a1::t_48a8669e51fc3d 51,63,67,74,79-81,136,236
+  s_338fce53cba5a1::t_12edd92f4fc1be 241-242,244-246
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 2-5,20-22,28-30,33-35,40-42,44-49,53,64-66,68-69,92-94,96,119-122,126,129,131-132,137-142,145-165,167,169-170,173-179,182,186-193,195-198,200-202,204-206,208-210,214-233,237-240,254-258,261-265,268-270
+  s_338fce53cba5a1::t_666ac0a0cfaba2 82-83,85-91,95,117-118,123-125,127-128,130
+  s_338fce53cba5a1::t_883d9d07c8e997 247-250
+  s_338fce53cba5a1::t_22b909ce8f9359 180
+crates/kanban-protocol/src/mcp.rs
+  s_338fce53cba5a1::t_5bbfba9e96e2f8 565
+schemas/fixtures/cli/cycle-cancel-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+apps/web/src/adapters/host/explorer-read-model.test.ts
+  s_338fce53cba5a1::t_e97762e38e900e 58-60
+schemas/fixtures/api/cancel-cycle-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/json-schema/draft-2020-12/api/claim-task-response.v1.schema.json
+  s_338fce53cba5a1::t_47c69bea0510c3 225-230,278-290,360-362
+schemas/json-schema/draft-2020-12/api/close-cycle-request.v1.schema.json
+  s_338fce53cba5a1::t_a84de875b65a93 24
+  s_338fce53cba5a1::t_efce90bad513ff 1-23,25-69
+schemas/fixtures/api/add-task-label-response.v1.valid.json
+  s_338fce53cba5a1::t_c16643368793c3 48-51
+schemas/fixtures/cli/cycle-list-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-6
+schemas/fixtures/api/get-module-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+crates/kanban-service/src/maintenance.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 3796-3797
+crates/kanban-service/src/dto.rs
+  s_338fce53cba5a1::t_1793f7e1e48622 252-254
+schemas/fixtures/api/archive-cycle-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/json-schema/draft-2020-12/api/add-module-task-request.v1.schema.json
+  s_338fce53cba5a1::t_a84de875b65a93 24
+  s_338fce53cba5a1::t_421715ba38f1f3 1-23,25-63
+schemas/fixtures/api/create-cycle-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+crates/kanban-cli/src/main.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 58-61,63-67,227-228
+  s_338fce53cba5a1::t_8130ec7e88c9fa 57,62
+schemas/fixtures/api/archive-module-request.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/close-cycle-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/cli/cycle-task-remove-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+crates/kanban-service/src/store_operations/lifecycle/task_lifecycle_tests.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 21-23
+crates/kanban-service/src/store_operations/lifecycle/claim.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 231,256-257,259-260
+  s_338fce53cba5a1::t_520831d559ee2f 258
+schemas/json-schema/draft-2020-12/api/archive-module-path.v1.schema.json
+  s_338fce53cba5a1::t_a84de875b65a93 2
+  s_338fce53cba5a1::t_5696dc12337a09 1,3-19
+crates/kanban-protocol/src/task_catalog.rs
+  s_338fce53cba5a1::t_8224045843f844 175-180,190-194
+  s_338fce53cba5a1::t_1862c1741b80d4 32-39
+  s_338fce53cba5a1::t_185bc683483327 167-171
+schemas/fixtures/api/get-module-overview-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/api/list-modules-query.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/update-cycle-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/cli/cycle-close-output.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-29
+schemas/fixtures/cli/module-create-output.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+crates/kanban-cli/README.md
+  s_338fce53cba5a1::t_48860bce1751c8 23-52
+schemas/fixtures/api/start-cycle-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/start-cycle-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-30
+schemas/fixtures/api/archive-module-path.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-5
+schemas/fixtures/api/archive-module-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-26
+schemas/fixtures/api/list-modules-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-3
+crates/kanban-service/src/object_model/planning/reads.rs
+  s_338fce53cba5a1::t_db6c1a49fe8d1d 1,8-12,16-25,27-29,31-52,56-66,73-78,80-99,102-104,106-115,117-122,124-126,131-138,140-144,159-162,167-181,183-189,192-202,208-213
+  s_338fce53cba5a1::t_b6d57e5a784ea1 2-7,13-15,26,30,53-55,67-72,79,100-101,105,116,123,127-130,139,145-158,163-166,182,190-191,203-207,214-215
+crates/kanban-service/src/store_operations/lifecycle/reclaim.rs
+  s_338fce53cba5a1::t_fbf63e630347b0 191,204-205,207-208
+  s_338fce53cba5a1::t_1c2db30b99ab79 206
+schemas/fixtures/api/get-module-path.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-4
+schemas/fixtures/api/list-cycles-query.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-7
+schemas/fixtures/api/list-cycle-tasks-response.v1.invalid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-10
+schemas/fixtures/api/list-cycles-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-6
+schemas/fixtures/api/create-module-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+schemas/fixtures/api/remove-module-task-response.v1.valid.json
+  s_338fce53cba5a1::t_00bab733dcf019 1-25
+apps/web/src/generated/rpc/kanban/v1/dto_pb.ts
+  s_338fce53cba5a1::t_89e78160c05f7f 17,38-56,74-93,117,136,155-193,212,231,250,269,288-307,326,345-364,383,402,421,440,459,478,497-516,535-554,573,592,611,630,649,668,692,756,805,864,898,917-1319,1321,1324,1326,1329,1331,1334,1336,1339,1341,1344,1346,1349,1351,1354,1356,1360-1361,1363-1364,1367,1369,1371,1373,1375,1378,1380,1383,1385,1388,1390-1410,1414-1415,1417-1418,1421,1423,1425,1427,1429,1432,1434,1438-1439,1441-1442,1445,1447,1449,1456,1458,1461,1463,1466,1468,1471,1473,1477-1478,1480-1481,1484,1486,1488,1490,1492,1495,1497,1500,1502,1505,1507,1510,1512,1516-1517,1519-1520,1523,1525,1527,1529,1531,1534,1536,1539,1541,1544,1546,1549,1551,1554,1556,1560-1561,1563-1564,1618,1652,1731,1760,1768-1782,1974,1991,2080,2109,2143,2167,2186,2215,2244,2288,2317,2391,2415,2434,2458,2502,2566,2600,2624,2653,2697,2756,2810,2854,2893,2912-2970,3009,3028,3047,3101,3135,3289,3304,3483,3502,3541,3610,3639,3678,3697,3771,3788,3812,3861,3910,3964,4033,4062,4131,4160,4204,4233,4362,4391,4420,4444,4563,4602,4771,4795,4824,4853,4942,4976,5140,5204,5248,5277,5401,5475,5524,5573,5642,5696,5725,5744,5763,5792,5841,5905,5939-5997,6016,6040-6069,6168,6217,6236,6300,6329,6403,6442,6476,6495,6519,6538,6562,6631,6655,6689,6718,6812,6871,6895,6954,6971,6995,7029,7088,7117,7166,7210,7284,7313,7337,7371,7390,7409,7533,7647,7664,7683,7717,7751,7770,7794,7813,7852,7871,7900,7934,7988,8022,8096,8145,8194,8213,8232-8270,8289,8308,8327,8346,8365,8384-8441,8460,8479,8498,8517,8536,8560,8584,8603,8622,8641,8660,8679,8698,8717,8736,8755,8774,8793,8812-8895,8914,8933,8957,8976,9000,9019-9102,9119,9136,9155,9179,9198,9217,9236,9260,9284,9303,9322,9341,9360,9379,9398,9417,9436,9455,9472,9491,9522,9553,9584,9603,9622,9641,9660,9679,9698,9717,9736,9755,9774,9793-9812,9831-9850,9869,9888,9907,9926,9945-9983,10002,10026,10050,10069,10093,10117,10136,10155-10174,10193,10212,10231,10250,10269,10288-10326,10345,10364,10383,10402,10421,10440,10459,10478,10497,10516,10535,10573-10608,10693,10724,10765,10796,10822,10873,10934,10960,10991,11017,11048,11079,11170,11226,11257,11303,11339,11385,11416,11457,11488,11519-11545,11571,11592,11633,11664,11695,11811,11872
+apps/web/src/generated/rpc/kanban/v1/kanban_pb.ts
+  s_338fce53cba5a1::t_d5290a90d675e8 11,19,194-203,273-282,347-366,480-509,4270-4272,4274-4289,4291,4293-4294,4296,4298-4299,4301,4303-4304,4306,4308-4309,4311,4313-4314,4316,4318-4333,4335,4337-4338,4340,4342-4357,4359,4361-4362,4364,4366-4367,4369,4371-4372,4374,4376-4377,4379,4381-4382,4384,4386-4387,4389,4391-4392,4394,4396-4411,4413,4415-4416,4418,4420-4421,4423,4425-4426,4428,4430-4431,4433,4435-4436,4438,4440-4441,4443,4445-5531,6302-6493
+apps/web/src/lib/api/generated/contracts/api-add-dependency-response.ts
+  s_338fce53cba5a1::t_7e7b01dc93d1e9 5
+apps/web/src/lib/api/generated/contracts/api-add-task-label-response.ts
+  s_338fce53cba5a1::t_fa34dedaf21627 5
+apps/web/src/lib/api/generated/contracts/api-archive-task-response.ts
+  s_338fce53cba5a1::t_9d1a17f60e82e5 5
+apps/web/src/lib/api/generated/contracts/api-block-task-response.ts
+  s_338fce53cba5a1::t_62a8290581ddfa 5
+apps/web/src/lib/api/generated/contracts/api-board-task-map-response.ts
+  s_338fce53cba5a1::t_7f75f8f6c868de 5
+apps/web/src/lib/api/generated/contracts/api-claim-task-response.ts
+  s_338fce53cba5a1::t_951031c4709caa 5
+apps/web/src/lib/api/generated/contracts/api-complete-step-response.ts
+  s_338fce53cba5a1::t_44f162145bbe11 5
+apps/web/src/lib/api/generated/contracts/api-complete-task-response.ts
+  s_338fce53cba5a1::t_3ac08cb391818c 5
+apps/web/src/lib/api/generated/contracts/api-create-step-response.ts
+  s_338fce53cba5a1::t_3baec0c89316ed 5
+apps/web/src/lib/api/generated/contracts/api-create-task-response.ts
+  s_338fce53cba5a1::t_9b123a545c1f12 5
+apps/web/src/lib/api/generated/contracts/api-explain-label-atom-response.ts
+  s_338fce53cba5a1::t_44cd371cd508e1 5
+apps/web/src/lib/api/generated/contracts/api-get-task-response.ts
+  s_338fce53cba5a1::t_1d7d93eb65ffe3 5
+apps/web/src/lib/api/generated/contracts/api-heartbeat-task-response.ts
+  s_338fce53cba5a1::t_836d9f1641f875 5
+apps/web/src/lib/api/generated/contracts/api-list-dependencies-response.ts
+  s_338fce53cba5a1::t_e51d4a4a390e1d 5
+apps/web/src/lib/api/generated/contracts/api-list-steps-response.ts
+  s_338fce53cba5a1::t_3fbdf375074bac 5
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-query.ts
+  s_338fce53cba5a1::t_30f768c43f3981 6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-by-status-response.ts
+  s_338fce53cba5a1::t_1df2f80e15cf51 5
+apps/web/src/lib/api/generated/contracts/api-list-tasks-query.ts
+  s_338fce53cba5a1::t_cbb3a99f120ab7 6
+apps/web/src/lib/api/generated/contracts/api-list-tasks-response.ts
+  s_338fce53cba5a1::t_fc91e990abd572 5
+apps/web/src/lib/api/generated/contracts/api-promote-task-response.ts
+  s_338fce53cba5a1::t_9c28f2dbf55e4b 5
+apps/web/src/lib/api/generated/contracts/api-remove-dependency-response.ts
+  s_338fce53cba5a1::t_72e7ebf9d0e37a 5
+apps/web/src/lib/api/generated/contracts/api-remove-step-response.ts
+  s_338fce53cba5a1::t_db3ff428306106 5
+apps/web/src/lib/api/generated/contracts/api-remove-task-label-response.ts
+  s_338fce53cba5a1::t_d28ca1450f7bce 5
+apps/web/src/lib/api/generated/contracts/api-reopen-step-response.ts
+  s_338fce53cba5a1::t_8660e6d544efaa 5
+apps/web/src/lib/api/generated/contracts/api-skip-step-response.ts
+  s_338fce53cba5a1::t_0e014f4f88a341 5
+apps/web/src/lib/api/generated/contracts/api-specify-task-response.ts
+  s_338fce53cba5a1::t_377643e7c5e8de 5
+apps/web/src/lib/api/generated/contracts/api-submit-review-task-response.ts
+  s_338fce53cba5a1::t_28507b0bcbb266 5
+apps/web/src/lib/api/generated/contracts/api-task-neighborhood-response.ts
+  s_338fce53cba5a1::t_8f5c94ecf8a49c 5
+apps/web/src/lib/api/generated/contracts/api-unblock-task-response.ts
+  s_338fce53cba5a1::t_36e105b3e1dc84 5
+apps/web/src/lib/api/generated/contracts/api-update-step-response.ts
+  s_338fce53cba5a1::t_728b04f7faa75a 5
+apps/web/src/lib/api/generated/contracts/api-update-task-request.ts
+  s_338fce53cba5a1::t_3e1e9dca8f0798 5
+apps/web/src/lib/api/generated/contracts/api-update-task-response.ts
+  s_338fce53cba5a1::t_341a97aaa8f5de 5
+apps/web/src/lib/api/generated/fixtures/api-add-dependency-response.valid.json
+  s_338fce53cba5a1::t_834bf4e35f6fdd 1-77
+apps/web/src/lib/api/generated/fixtures/api-add-task-label-response.valid.json
+  s_338fce53cba5a1::t_78f6b5a4047993 48-51
+apps/web/src/lib/api/generated/fixtures/api-archive-task-response.valid.json
+  s_338fce53cba5a1::t_79fa47786299ee 42-45
+apps/web/src/lib/api/generated/fixtures/api-block-task-response.valid.json
+  s_338fce53cba5a1::t_5bb81f962e4565 1-47
+apps/web/src/lib/api/generated/fixtures/api-board-task-map-response.valid.json
+  s_338fce53cba5a1::t_d459de8ddd34da 42-45
+apps/web/src/lib/api/generated/fixtures/api-claim-task-response.valid.json
+  s_338fce53cba5a1::t_3f63b8d460ac4e 1-63
+apps/web/src/lib/api/generated/fixtures/api-complete-task-response.valid.json
+  s_338fce53cba5a1::t_cea2bc5b32560b 1-49
+apps/web/src/lib/api/generated/fixtures/api-create-task-response.valid.json
+  s_338fce53cba5a1::t_96ef8ab2733af5 1-57
+apps/web/src/lib/api/generated/fixtures/api-get-label-ontology-signal-response.valid.json
+  s_338fce53cba5a1::t_44472c61be0957 97-100
+apps/web/src/lib/api/generated/fixtures/api-heartbeat-task-response.valid.json
+  s_338fce53cba5a1::t_2c97912d0f11df 1-47
+apps/web/src/lib/api/generated/fixtures/api-list-tasks-response.valid.json
+  s_338fce53cba5a1::t_36258d093b72c5 40-43
+apps/web/src/lib/api/generated/fixtures/api-promote-task-response.valid.json
+  s_338fce53cba5a1::t_2869f256ca6eb6 42-45
+apps/web/src/lib/api/generated/fixtures/api-remove-task-label-response.valid.json
+  s_338fce53cba5a1::t_369fd908d926dd 39-42
+apps/web/src/lib/api/generated/fixtures/api-specify-task-response.valid.json
+  s_338fce53cba5a1::t_b0adfad58e0ec4 42-45
+apps/web/src/lib/api/generated/fixtures/api-submit-review-task-response.valid.json
+  s_338fce53cba5a1::t_2319b0c0e07ac7 1-47
+apps/web/src/lib/api/generated/fixtures/api-update-task-response.valid.json
+  s_338fce53cba5a1::t_92190840cb11ab 1-55
+apps/web/src/lib/api/generated/manifest.json
+  s_338fce53cba5a1::t_7253996b3a5603 5008-5009
+apps/web/src/lib/api/generated/schemas/api-add-dependency-response.schema.json
+  s_338fce53cba5a1::t_ebefadddbaacab 188-193,241-253,323-325
+apps/web/src/lib/api/generated/schemas/api-add-task-label-response.schema.json
+  s_338fce53cba5a1::t_20f3c5a1056145 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-archive-task-response.schema.json
+  s_338fce53cba5a1::t_ff7dcf77d7f2ed 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-block-task-response.schema.json
+  s_338fce53cba5a1::t_99aae93123a4c6 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-board-task-map-response.schema.json
+  s_338fce53cba5a1::t_83c8e525dbeeda 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-claim-task-response.schema.json
+  s_338fce53cba5a1::t_1101b94a708208 225-230,278-290,360-362
+apps/web/src/lib/api/generated/schemas/api-complete-step-response.schema.json
+  s_338fce53cba5a1::t_8a32597bad1861 151-156,204-216,286-288
+apps/web/src/lib/api/generated/schemas/api-complete-task-response.schema.json
+  s_338fce53cba5a1::t_64615aa2ec45c9 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-create-step-response.schema.json
+  s_338fce53cba5a1::t_4958b26ea58960 151-156,204-216,286-288
+apps/web/src/lib/api/generated/schemas/api-create-task-request.schema.json
+  s_338fce53cba5a1::t_98615ab292f315 11-30,49-54,75-87,116-122
+apps/web/src/lib/api/generated/schemas/api-create-task-response.schema.json
+  s_338fce53cba5a1::t_8be274b8217709 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-explain-label-atom-response.schema.json
+  s_338fce53cba5a1::t_6578ce013fbab8 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-get-task-response.schema.json
+  s_338fce53cba5a1::t_2f1c5ad244999b 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-heartbeat-task-response.schema.json
+  s_338fce53cba5a1::t_c187c236f85586 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-list-dependencies-response.schema.json
+  s_338fce53cba5a1::t_92f4b2fe183129 188-193,241-253,323-325
+apps/web/src/lib/api/generated/schemas/api-list-steps-response.schema.json
+  s_338fce53cba5a1::t_0f72efb9c913c8 151-156,204-216,286-288
+apps/web/src/lib/api/generated/schemas/api-list-tasks-by-status-query.schema.json
+  s_338fce53cba5a1::t_29e87419f4819c 75-80,101-107
+apps/web/src/lib/api/generated/schemas/api-list-tasks-by-status-response.schema.json
+  s_338fce53cba5a1::t_8fb81c877bc2e1 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-list-tasks-query.schema.json
+  s_338fce53cba5a1::t_e0452739a36309 75-80,101-107
+apps/web/src/lib/api/generated/schemas/api-list-tasks-response.schema.json
+  s_338fce53cba5a1::t_fbffe7ef563ff5 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-promote-task-response.schema.json
+  s_338fce53cba5a1::t_6fc072abd82b25 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-remove-dependency-response.schema.json
+  s_338fce53cba5a1::t_e83f39283bd464 188-193,241-253,323-325
+apps/web/src/lib/api/generated/schemas/api-remove-step-response.schema.json
+  s_338fce53cba5a1::t_c75a06d5e9f8a7 151-156,204-216,286-288
+apps/web/src/lib/api/generated/schemas/api-remove-task-label-response.schema.json
+  s_338fce53cba5a1::t_146f7223c88ecb 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-reopen-step-response.schema.json
+  s_338fce53cba5a1::t_519a95e032b079 151-156,204-216,286-288
+apps/web/src/lib/api/generated/schemas/api-skip-step-response.schema.json
+  s_338fce53cba5a1::t_7eb01493cc1b73 151-156,204-216,286-288
+apps/web/src/lib/api/generated/schemas/api-specify-task-response.schema.json
+  s_338fce53cba5a1::t_88bec87bee9d58 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-submit-review-task-response.schema.json
+  s_338fce53cba5a1::t_3d887a3aa345b2 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-task-neighborhood-response.schema.json
+  s_338fce53cba5a1::t_ba591ba092d484 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-unblock-task-response.schema.json
+  s_338fce53cba5a1::t_657ed737c3a8f0 107-112,160-172,242-244
+apps/web/src/lib/api/generated/schemas/api-update-step-response.schema.json
+  s_338fce53cba5a1::t_0220f38a945896 151-156,204-216,286-288
+apps/web/src/lib/api/generated/schemas/api-update-task-request.schema.json
+  s_338fce53cba5a1::t_a84636ff8ef259 2-23,27,41-47,61-67,72-84,93-100,105-110
+apps/web/src/lib/api/generated/schemas/api-update-task-response.schema.json
+  s_338fce53cba5a1::t_404b398b57128b 107-112,160-172,242-244
+apps/web/src/lib/rpc/codec.generated.ts
+  s_338fce53cba5a1::t_c7aa23f0914486 59,63-64,79,83-84,99,102-105,134,137-142,1295-1605,1618-1629,1642-1653,1692-1715,1776-1787,1812-1823,1908-1919,1932-1943,2169-2247,2373-2502,2618,2620-2622,2664-2666,3147,3153,3176-3177,3237-3268,4815-4846,4873-4895,6068-6091,6164-6199,6432-6473,6550-6591,6955-6966,6979-6990,7051-7074,7179-7190,7263-7286,7540-7563,7689-7712,7725-7727,7729,7765,7773,7780-7781,7790,7792,7797,7800-7801,7838-7861
+apps/web/src/lib/rpc/fixtures.generated.test.ts
+  s_338fce53cba5a1::t_0b3ec7e49159a2 20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,70,72,97,99,101,150,164,172,174,176,178,239-286
+apps/web/src/lib/rpc/methods.generated.ts
+  s_338fce53cba5a1::t_45d6f46c5287ce 122-145
+crates/kanban-mcp/src/main.rs
+  s_338fce53cba5a1::t_4c1dba99514b08 23,45
+crates/kanban-mcp/src/tools.rs
+  s_338fce53cba5a1::t_96ca49016a32b7 19-20
+crates/kanban-protocol/proto/kanban/v1/dto.proto
+  s_338fce53cba5a1::t_677fb8d48c07ea 11-15,21-25,42-51,77-81,92-96,132-136,142-146,251-291,361-419,482-484,784-797,1569-1582,1594-1606,2173-2182,2213-2227,2325-2343,2376-2394,2574-2578,2584-2588,2614-2623,2668-2672,2703-2712
+crates/kanban-protocol/proto/kanban/v1/kanban.proto
+  s_338fce53cba5a1::t_69ab62a775dfa2 127-150,191-192,207-208,222-225,249-254,1031-1251
+crates/kanban-protocol/proto/rpc-field-numbers.json
+  s_338fce53cba5a1::t_3ec10fbe90dd28 14-26,35-47,80-103,166-177,191-203,278-291,315-327,345,349-350,355,457-492,550-596,659,670-671,895-904,1550-1559,1567-1576,2044-2057,2093-2109,2237-2265,2316-2344,2392,2396,2411,2415,2632-2644,2652-2664,2707-2730,2815-2826,2882-2912,2930,2933,2935-2936,2939,2941
+crates/kanban-protocol/proto/rpc-methods.json
+  s_338fce53cba5a1::t_0ad5450e223a11 188-201,297-310,399-426,582-623,5708-7174
+crates/kanban-protocol/src/rpc/generated.rs
+  s_338fce53cba5a1::t_cc21696aecc311 155-156,211-212,266-267,322-323,370-378,420-426,510-531,600-621,4588-4590,4592-4593,4596-4627,4629-4633,4635-4646,4650-4661,4663-4667,4669-4670,4674-4704,4706-4710,4712-4722,4726-4774,4776-4780,4782-5968,6067-6089,6095-6116,6123,6125,6132-6134,6137,6144-6146,6148,6304-6326,6350-6372,6705-6813,6963-7124,7126-7130,7133-7134,7139,7141-7150,7154,7156-7167,7170,7172,7174-7182,7186,7188-7198,7375-7377,7430-7432,8410-8453,11182-11225,11270-11314,13178-13219,13350-13414,13810-13860,13869,13871-13872,13881,13883,13889-13903,13907,13909-13910,13915-13925,13930,13932,13938-13949,13953,13955-13956,13961-13966,14125-14214,14884-14906,14924-14946,15046-15091,15330-15352,15497-15542
+crates/kanban-protocol/tests/rpc/fixtures.rs
+  s_338fce53cba5a1::t_a3c8c0212087a7 3556-4313
+crates/kanban-server/src/knowledge_adoption.rs
+  s_338fce53cba5a1::t_4c0e26dcfa566a 99-102,135-138,170-173
+crates/kanban-service/src/realtime/tests.rs
+  s_338fce53cba5a1::t_57d63ad5d7a41c 131-132,166-168
+crates/kanban-service/src/test_support.rs
+  s_338fce53cba5a1::t_4d0890f0240d88 32-33
+schemas/fixtures/api/add-dependency-response.v1.valid.json
+  s_338fce53cba5a1::t_f9d2a563e70c74 1-77
+schemas/fixtures/api/archive-task-response.v1.valid.json
+  s_338fce53cba5a1::t_7dacfed1e8fc18 42-45
+schemas/fixtures/api/block-task-response.v1.valid.json
+  s_338fce53cba5a1::t_5bc80728ff2e3d 1-47
+schemas/fixtures/api/board-task-map-response.v1.valid.json
+  s_338fce53cba5a1::t_ba3fcdb45d1dd8 42-45
+schemas/fixtures/api/bootstrap-task-label-response.v1.valid.json
+  s_338fce53cba5a1::t_998e828f70dead 49-52
+schemas/fixtures/api/claim-task-response.v1.valid.json
+  s_338fce53cba5a1::t_27c2dd0ea70e36 1-63
+schemas/fixtures/api/complete-task-response.v1.valid.json
+  s_338fce53cba5a1::t_663b5c6bae33b7 1-49
+schemas/fixtures/api/create-task-response.v1.valid.json
+  s_338fce53cba5a1::t_5645b7c7b847f5 1-57
+schemas/fixtures/api/get-label-ontology-signal-response.v1.valid.json
+  s_338fce53cba5a1::t_d04a22f8c92954 97-100
+schemas/fixtures/api/get-task-response.v1.valid.json
+  s_338fce53cba5a1::t_4ecebe443065ef 1-57
+schemas/fixtures/api/heartbeat-task-response.v1.valid.json
+  s_338fce53cba5a1::t_5d68a8f7cad7d4 1-47
+schemas/fixtures/api/list-dependencies-response.v1.valid.json
+  s_338fce53cba5a1::t_7e9d8026d59332 1-77
+schemas/fixtures/api/promote-task-response.v1.valid.json
+  s_338fce53cba5a1::t_a6521d8f7328c2 42-45
+schemas/fixtures/api/reclaim-task-response.v1.valid.json
+  s_338fce53cba5a1::t_1a0537a0d575bf 1-47
+schemas/fixtures/api/record-label-ontology-observation-response.v1.valid.json
+  s_338fce53cba5a1::t_70705dd2fd4fd3 64-67
+schemas/fixtures/api/release-task-response.v1.valid.json
+  s_338fce53cba5a1::t_19c4eea643e7b1 1-46
+schemas/fixtures/api/reopen-task-response.v1.valid.json
+  s_338fce53cba5a1::t_bb4e22af22aabb 42-45
+schemas/fixtures/api/search-tasks-by-status-response.v1.valid.json
+  s_338fce53cba5a1::t_d1f92b92bbbf29 1-112
+schemas/fixtures/api/search-tasks-response.v1.valid.json
+  s_338fce53cba5a1::t_7b393693f897a6 1-87
+schemas/fixtures/api/specify-task-response.v1.valid.json
+  s_338fce53cba5a1::t_4bbda53a5f63ba 42-45
+schemas/fixtures/api/submit-review-task-response.v1.valid.json
+  s_338fce53cba5a1::t_100dab7591d956 1-47
+schemas/fixtures/api/task-neighborhood-response.v1.valid.json
+  s_338fce53cba5a1::t_43094435086496 43-46
+schemas/fixtures/api/unblock-task-response.v1.valid.json
+  s_338fce53cba5a1::t_6a1ed2c809d24f 42-45
+schemas/fixtures/api/update-task-response.v1.valid.json
+  s_338fce53cba5a1::t_5967697ed4986b 1-55
+schemas/fixtures/cli/graph-map-output.v1.valid.json
+  s_338fce53cba5a1::t_66ac823f5fd04f 42-45
+schemas/fixtures/cli/graph-neighborhood-output.v1.valid.json
+  s_338fce53cba5a1::t_30b9e87edbc3cd 43-46
+schemas/fixtures/cli/label-add-output.v1.valid.json
+  s_338fce53cba5a1::t_eb23eccb24ffd6 59-62
+schemas/fixtures/cli/label-bootstrap-output.v1.valid.json
+  s_338fce53cba5a1::t_f3d7a29d2024b1 4-6,55-57,107-110
+schemas/fixtures/cli/label-ontology-record-output.v1.valid.json
+  s_338fce53cba5a1::t_d9944ec9dab2eb 63-66,77-78,85
+schemas/fixtures/cli/label-ontology-show-output.v1.valid.json
+  s_338fce53cba5a1::t_861e7b48007659 65-68,79-80,87
+schemas/fixtures/cli/label-remove-output.v1.valid.json
+  s_338fce53cba5a1::t_80082f92e6bbd2 39-42
+schemas/fixtures/cli/search-output.v1.valid.json
+  s_338fce53cba5a1::t_7bd289cfa8992e 1-66
+schemas/fixtures/cli/task-archive-output.v1.valid.json
+  s_338fce53cba5a1::t_c9d2a606d31162 41-44
+schemas/fixtures/cli/task-block-output.v1.valid.json
+  s_338fce53cba5a1::t_6b652cad255414 41-44
+schemas/fixtures/cli/task-claim-output.v1.valid.json
+  s_338fce53cba5a1::t_e0d39a24eb8466 59-62
+schemas/fixtures/cli/task-create-output.v1.valid.json
+  s_338fce53cba5a1::t_e271ace073388f 39-42
+schemas/fixtures/cli/task-done-output.v1.valid.json
+  s_338fce53cba5a1::t_7cc083493b8b54 41-44
+schemas/fixtures/cli/task-heartbeat-output.v1.valid.json
+  s_338fce53cba5a1::t_983ce620678c6d 41-44
+schemas/fixtures/cli/task-list-output.v1.valid.json
+  s_338fce53cba5a1::t_f7aa66f43bc73f 1-55
+schemas/fixtures/cli/task-promote-output.v1.valid.json
+  s_338fce53cba5a1::t_11858eb0df0e15 41-44
+schemas/fixtures/cli/task-reclaim-output.v1.valid.json
+  s_338fce53cba5a1::t_676f996d9b0d81 39-42
+schemas/fixtures/cli/task-release-output.v1.valid.json
+  s_338fce53cba5a1::t_92533c2e30f983 1-46
+schemas/fixtures/cli/task-reopen-output.v1.valid.json
+  s_338fce53cba5a1::t_46884ed6f18370 41-44
+schemas/fixtures/cli/task-review-output.v1.valid.json
+  s_338fce53cba5a1::t_f40de830a8df6f 41-44
+schemas/fixtures/cli/task-show-output.v1.valid.json
+  s_338fce53cba5a1::t_817404b72dc31d 1-58
+schemas/fixtures/cli/task-specify-output.v1.valid.json
+  s_338fce53cba5a1::t_02223abf09e958 42-45
+schemas/fixtures/cli/task-step-list-output.v1.valid.json
+  s_338fce53cba5a1::t_34292fe79a643d 54-57
+schemas/fixtures/cli/task-step-remove-output.v1.valid.json
+  s_338fce53cba5a1::t_c382f37314ef6c 46-49
+schemas/fixtures/cli/task-unblock-output.v1.valid.json
+  s_338fce53cba5a1::t_fb06efaeb7bbd4 41-44
+schemas/fixtures/cli/task-update-output.v1.valid.json
+  s_338fce53cba5a1::t_4b115ca0b45cc3 39-42
+schemas/json-schema/draft-2020-12/api/add-cycle-task-headers.v1.schema.json
+  s_338fce53cba5a1::t_3aa461dcbf8d8f 1-27
+schemas/json-schema/draft-2020-12/api/add-cycle-task-request.v1.schema.json
+  s_338fce53cba5a1::t_988cac4635fe47 1-63
+schemas/json-schema/draft-2020-12/api/add-cycle-task-response.v1.schema.json
+  s_338fce53cba5a1::t_f2118fb35f9cd4 1-183
+schemas/json-schema/draft-2020-12/api/add-dependency-response.v1.schema.json
+  s_338fce53cba5a1::t_96c6cb5b697767 188-193,241-253,323-325
+schemas/json-schema/draft-2020-12/api/add-module-task-headers.v1.schema.json
+  s_338fce53cba5a1::t_770218d409a6d9 1-27
+schemas/json-schema/draft-2020-12/api/archive-cycle-response.v1.schema.json
+  s_338fce53cba5a1::t_f1f7951cf97361 1-183
+schemas/json-schema/draft-2020-12/api/archive-module-headers.v1.schema.json
+  s_338fce53cba5a1::t_44f5521444cbe5 1-27
+schemas/json-schema/draft-2020-12/api/block-task-response.v1.schema.json
+  s_338fce53cba5a1::t_39db9e009385f0 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/board-task-map-response.v1.schema.json
+  s_338fce53cba5a1::t_1ae5e78f1021d4 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/bootstrap-task-label-response.v1.schema.json
+  s_338fce53cba5a1::t_8c4be58b49a3ca 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/cancel-cycle-headers.v1.schema.json
+  s_338fce53cba5a1::t_ba56df7caa5ed7 1-27
+schemas/json-schema/draft-2020-12/api/cancel-cycle-path.v1.schema.json
+  s_338fce53cba5a1::t_96cf242c2367d4 1-19
+schemas/json-schema/draft-2020-12/api/cancel-cycle-response.v1.schema.json
+  s_338fce53cba5a1::t_38e360c8b947e8 1-183
+schemas/json-schema/draft-2020-12/api/close-cycle-headers.v1.schema.json
+  s_338fce53cba5a1::t_d7ca432812d830 1-27
+schemas/json-schema/draft-2020-12/api/close-cycle-response.v1.schema.json
+  s_338fce53cba5a1::t_3b90d466a4e5fc 1-183
+schemas/json-schema/draft-2020-12/api/complete-step-response.v1.schema.json
+  s_338fce53cba5a1::t_05bf63a97d60ea 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/api/complete-task-response.v1.schema.json
+  s_338fce53cba5a1::t_8b2787e80952b5 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/create-cycle-headers.v1.schema.json
+  s_338fce53cba5a1::t_498eab5accd255 1-27
+schemas/json-schema/draft-2020-12/api/create-cycle-path.v1.schema.json
+  s_338fce53cba5a1::t_e9cd121c6bf6e1 1-15
+schemas/json-schema/draft-2020-12/api/create-cycle-request.v1.schema.json
+  s_338fce53cba5a1::t_d7e2ca09f985c6 1-78
+schemas/json-schema/draft-2020-12/api/create-module-headers.v1.schema.json
+  s_338fce53cba5a1::t_dcb46d26c40864 1-27
+schemas/json-schema/draft-2020-12/api/create-step-response.v1.schema.json
+  s_338fce53cba5a1::t_2291905215058a 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/api/create-task-request.v1.schema.json
+  s_338fce53cba5a1::t_cffd86fca00821 11-30,49-54,75-87,116-122
+schemas/json-schema/draft-2020-12/api/create-task-response.v1.schema.json
+  s_338fce53cba5a1::t_48231130ea07e2 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/explain-label-atom-response.v1.schema.json
+  s_338fce53cba5a1::t_a9dee1aeb9ba20 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/get-cycle-headers.v1.schema.json
+  s_338fce53cba5a1::t_2bb13a47cc0765 1-15
+schemas/json-schema/draft-2020-12/api/get-cycle-overview-headers.v1.schema.json
+  s_338fce53cba5a1::t_1491b3e80a35c4 1-15
+schemas/json-schema/draft-2020-12/api/get-cycle-overview-path.v1.schema.json
+  s_338fce53cba5a1::t_89e4f9c7601813 1-19
+schemas/json-schema/draft-2020-12/api/get-cycle-overview-response.v1.schema.json
+  s_338fce53cba5a1::t_bd93e8618b2a9d 1-177
+schemas/json-schema/draft-2020-12/api/get-cycle-path.v1.schema.json
+  s_338fce53cba5a1::t_9e597be45ec318 1-19
+schemas/json-schema/draft-2020-12/api/get-cycle-response.v1.schema.json
+  s_338fce53cba5a1::t_83ed52c088881e 1-106
+schemas/json-schema/draft-2020-12/api/get-module-headers.v1.schema.json
+  s_338fce53cba5a1::t_97f393e9e45ae8 1-15
+schemas/json-schema/draft-2020-12/api/get-module-overview-headers.v1.schema.json
+  s_338fce53cba5a1::t_135017b277ec92 1-15
+schemas/json-schema/draft-2020-12/api/get-module-overview-path.v1.schema.json
+  s_338fce53cba5a1::t_0a15ffc5d04a79 1-19
+schemas/json-schema/draft-2020-12/api/get-module-overview-response.v1.schema.json
+  s_338fce53cba5a1::t_4e5f04b0d0ebc8 1-145
+schemas/json-schema/draft-2020-12/api/get-module-path.v1.schema.json
+  s_338fce53cba5a1::t_8feb327e731f72 1-19
+schemas/json-schema/draft-2020-12/api/get-module-response.v1.schema.json
+  s_338fce53cba5a1::t_d8b3535e96a91b 1-74
+schemas/json-schema/draft-2020-12/api/get-planning-capabilities-headers.v1.schema.json
+  s_338fce53cba5a1::t_5d2ef28bbbee60 1-15
+schemas/json-schema/draft-2020-12/api/get-planning-capabilities-response.v1.schema.json
+  s_338fce53cba5a1::t_94855242c8be31 1-39
+schemas/json-schema/draft-2020-12/api/get-task-response.v1.schema.json
+  s_338fce53cba5a1::t_a5316c11082956 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/heartbeat-task-response.v1.schema.json
+  s_338fce53cba5a1::t_fc66d5ff402d7a 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/list-cycle-tasks-headers.v1.schema.json
+  s_338fce53cba5a1::t_328f375428aeab 1-15
+schemas/json-schema/draft-2020-12/api/list-cycle-tasks-path.v1.schema.json
+  s_338fce53cba5a1::t_910c8e9dfd718f 1-19
+schemas/json-schema/draft-2020-12/api/list-cycle-tasks-query.v1.schema.json
+  s_338fce53cba5a1::t_b2c74a51ee081e 1-21
+schemas/json-schema/draft-2020-12/api/list-cycle-tasks-response.v1.schema.json
+  s_338fce53cba5a1::t_b093346c2a02a4 1-128
+schemas/json-schema/draft-2020-12/api/list-cycles-headers.v1.schema.json
+  s_338fce53cba5a1::t_3fb0009358d2d8 1-15
+schemas/json-schema/draft-2020-12/api/list-cycles-path.v1.schema.json
+  s_338fce53cba5a1::t_82c91247a7e818 1-15
+schemas/json-schema/draft-2020-12/api/list-cycles-query.v1.schema.json
+  s_338fce53cba5a1::t_3e7bf6e68e1b70 1-52
+schemas/json-schema/draft-2020-12/api/list-cycles-response.v1.schema.json
+  s_338fce53cba5a1::t_8ec6e34cfdbf73 1-120
+schemas/json-schema/draft-2020-12/api/list-dependencies-response.v1.schema.json
+  s_338fce53cba5a1::t_ba3eec61cff01f 188-193,241-253,323-325
+schemas/json-schema/draft-2020-12/api/list-module-tasks-headers.v1.schema.json
+  s_338fce53cba5a1::t_ff2c09e52ed664 1-15
+schemas/json-schema/draft-2020-12/api/list-module-tasks-path.v1.schema.json
+  s_338fce53cba5a1::t_045cfe1340f95b 1-19
+schemas/json-schema/draft-2020-12/api/list-module-tasks-query.v1.schema.json
+  s_338fce53cba5a1::t_c35b26e44579a7 1-21
+schemas/json-schema/draft-2020-12/api/list-module-tasks-response.v1.schema.json
+  s_338fce53cba5a1::t_661866e536c7b0 1-128
+schemas/json-schema/draft-2020-12/api/list-modules-headers.v1.schema.json
+  s_338fce53cba5a1::t_ad6cfd0d0819ea 1-15
+schemas/json-schema/draft-2020-12/api/list-modules-path.v1.schema.json
+  s_338fce53cba5a1::t_8dffe4470a8e50 1-15
+schemas/json-schema/draft-2020-12/api/list-modules-query.v1.schema.json
+  s_338fce53cba5a1::t_768d8c8b75bb76 1-37
+schemas/json-schema/draft-2020-12/api/list-modules-response.v1.schema.json
+  s_338fce53cba5a1::t_9a8055b7a404f0 1-88
+schemas/json-schema/draft-2020-12/api/list-steps-response.v1.schema.json
+  s_338fce53cba5a1::t_2d04bb639f18ce 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/api/list-tasks-by-status-query.v1.schema.json
+  s_338fce53cba5a1::t_3a37c09f4cb65c 75-80,101-107
+schemas/json-schema/draft-2020-12/api/list-tasks-by-status-response.v1.schema.json
+  s_338fce53cba5a1::t_32b45939a8f345 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/list-tasks-query.v1.schema.json
+  s_338fce53cba5a1::t_c4ba3111d7c6ea 75-80,101-107
+schemas/json-schema/draft-2020-12/api/list-tasks-response.v1.schema.json
+  s_338fce53cba5a1::t_3c533e53b686af 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/promote-task-response.v1.schema.json
+  s_338fce53cba5a1::t_a82c319ab0b808 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/reclaim-task-response.v1.schema.json
+  s_338fce53cba5a1::t_4bdc2129c2b9ee 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/release-task-response.v1.schema.json
+  s_338fce53cba5a1::t_c1dd832522622e 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/remove-cycle-task-headers.v1.schema.json
+  s_338fce53cba5a1::t_224eed1296f050 1-27
+schemas/json-schema/draft-2020-12/api/remove-cycle-task-path.v1.schema.json
+  s_338fce53cba5a1::t_bc3b5ba45a15ff 1-23
+schemas/json-schema/draft-2020-12/api/remove-cycle-task-request.v1.schema.json
+  s_338fce53cba5a1::t_ba140da188493c 1-63
+schemas/json-schema/draft-2020-12/api/remove-cycle-task-response.v1.schema.json
+  s_338fce53cba5a1::t_d8a4721d77d60d 1-183
+schemas/json-schema/draft-2020-12/api/remove-dependency-response.v1.schema.json
+  s_338fce53cba5a1::t_526a886af56834 188-193,241-253,323-325
+schemas/json-schema/draft-2020-12/api/remove-module-task-headers.v1.schema.json
+  s_338fce53cba5a1::t_80632f73ce7192 1-27
+schemas/json-schema/draft-2020-12/api/remove-module-task-path.v1.schema.json
+  s_338fce53cba5a1::t_bc2bba62c8b8a9 1-23
+schemas/json-schema/draft-2020-12/api/remove-module-task-request.v1.schema.json
+  s_338fce53cba5a1::t_276ed34dcf3556 1-63
+schemas/json-schema/draft-2020-12/api/remove-module-task-response.v1.schema.json
+  s_338fce53cba5a1::t_b566ead76f1744 1-151
+schemas/json-schema/draft-2020-12/api/remove-step-response.v1.schema.json
+  s_338fce53cba5a1::t_32ddd2da955cc7 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/api/remove-task-label-response.v1.schema.json
+  s_338fce53cba5a1::t_2abab0ae0591e8 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/reopen-step-response.v1.schema.json
+  s_338fce53cba5a1::t_1e3d3d623b5291 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/api/reopen-task-response.v1.schema.json
+  s_338fce53cba5a1::t_86e5eaee6b498a 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/restore-cycle-headers.v1.schema.json
+  s_338fce53cba5a1::t_9284de47ca9d4d 1-27
+schemas/json-schema/draft-2020-12/api/restore-cycle-path.v1.schema.json
+  s_338fce53cba5a1::t_5e21cc356167fb 1-19
+schemas/json-schema/draft-2020-12/api/restore-cycle-request.v1.schema.json
+  s_338fce53cba5a1::t_34cda275d513fa 1-63
+schemas/json-schema/draft-2020-12/api/restore-cycle-response.v1.schema.json
+  s_338fce53cba5a1::t_db630c73c1ad4e 1-183
+schemas/json-schema/draft-2020-12/api/restore-module-headers.v1.schema.json
+  s_338fce53cba5a1::t_ff96723721720c 1-27
+schemas/json-schema/draft-2020-12/api/restore-module-path.v1.schema.json
+  s_338fce53cba5a1::t_ff6ef95013ea47 1-19
+schemas/json-schema/draft-2020-12/api/restore-module-request.v1.schema.json
+  s_338fce53cba5a1::t_60807c9914c927 1-63
+schemas/json-schema/draft-2020-12/api/restore-module-response.v1.schema.json
+  s_338fce53cba5a1::t_4f0e91b4713f70 1-151
+schemas/json-schema/draft-2020-12/api/search-tasks-by-status-response.v1.schema.json
+  s_338fce53cba5a1::t_23d840e90fe5e6 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/search-tasks-response.v1.schema.json
+  s_338fce53cba5a1::t_bcb2539f68c681 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/skip-step-response.v1.schema.json
+  s_338fce53cba5a1::t_ac01489e854c55 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/api/specify-task-response.v1.schema.json
+  s_338fce53cba5a1::t_6ec3985505f9ce 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/start-cycle-headers.v1.schema.json
+  s_338fce53cba5a1::t_8fdfa09bbb8571 1-27
+schemas/json-schema/draft-2020-12/api/start-cycle-path.v1.schema.json
+  s_338fce53cba5a1::t_c616b5ed794089 1-19
+schemas/json-schema/draft-2020-12/api/start-cycle-request.v1.schema.json
+  s_338fce53cba5a1::t_a08e60324c0fd1 1-63
+schemas/json-schema/draft-2020-12/api/start-cycle-response.v1.schema.json
+  s_338fce53cba5a1::t_efe40b825cd1d4 1-183
+schemas/json-schema/draft-2020-12/api/submit-review-task-response.v1.schema.json
+  s_338fce53cba5a1::t_bfa03ddfde6562 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/task-neighborhood-response.v1.schema.json
+  s_338fce53cba5a1::t_0289e33cf08fdf 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/unblock-task-response.v1.schema.json
+  s_338fce53cba5a1::t_57f4effecb1aba 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/api/update-cycle-headers.v1.schema.json
+  s_338fce53cba5a1::t_6a50c40f8d8a8d 1-27
+schemas/json-schema/draft-2020-12/api/update-cycle-path.v1.schema.json
+  s_338fce53cba5a1::t_982e4618cec3c7 1-19
+schemas/json-schema/draft-2020-12/api/update-cycle-request.v1.schema.json
+  s_338fce53cba5a1::t_6d66255c51d08b 1-89
+schemas/json-schema/draft-2020-12/api/update-cycle-response.v1.schema.json
+  s_338fce53cba5a1::t_c1d0c8be9bbae6 1-183
+schemas/json-schema/draft-2020-12/api/update-module-headers.v1.schema.json
+  s_338fce53cba5a1::t_54d9d87db18d73 1-27
+schemas/json-schema/draft-2020-12/api/update-module-path.v1.schema.json
+  s_338fce53cba5a1::t_ddab58f2a0b021 1-19
+schemas/json-schema/draft-2020-12/api/update-module-request.v1.schema.json
+  s_338fce53cba5a1::t_8c4162a9eb61d7 1-81
+schemas/json-schema/draft-2020-12/api/update-module-response.v1.schema.json
+  s_338fce53cba5a1::t_6c8f00a0e6c28c 1-151
+schemas/json-schema/draft-2020-12/api/update-step-response.v1.schema.json
+  s_338fce53cba5a1::t_a475727e499723 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/api/update-task-request.v1.schema.json
+  s_338fce53cba5a1::t_071e1a976afb73 2-23,27,41-47,61-67,72-84,93-100,105-110
+schemas/json-schema/draft-2020-12/api/update-task-response.v1.schema.json
+  s_338fce53cba5a1::t_3326a7f2a841f1 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/cycle-archive-output.v1.schema.json
+  s_338fce53cba5a1::t_8483fe138cdbcc 1-183
+schemas/json-schema/draft-2020-12/cli/cycle-cancel-output.v1.schema.json
+  s_338fce53cba5a1::t_3d65719661f56a 1-183
+schemas/json-schema/draft-2020-12/cli/cycle-close-output.v1.schema.json
+  s_338fce53cba5a1::t_df573f658b7b11 1-183
+schemas/json-schema/draft-2020-12/cli/cycle-create-output.v1.schema.json
+  s_338fce53cba5a1::t_cc55bf5fe855c0 1-183
+schemas/json-schema/draft-2020-12/cli/cycle-list-output.v1.schema.json
+  s_338fce53cba5a1::t_94ffcead707e29 1-120
+schemas/json-schema/draft-2020-12/cli/cycle-overview-output.v1.schema.json
+  s_338fce53cba5a1::t_99d6a87a923d63 1-177
+schemas/json-schema/draft-2020-12/cli/cycle-restore-output.v1.schema.json
+  s_338fce53cba5a1::t_177b6fd221f141 1-183
+schemas/json-schema/draft-2020-12/cli/cycle-show-output.v1.schema.json
+  s_338fce53cba5a1::t_0f73718654be1d 1-106
+schemas/json-schema/draft-2020-12/cli/cycle-start-output.v1.schema.json
+  s_338fce53cba5a1::t_35dfdc5c44bfe5 1-183
+schemas/json-schema/draft-2020-12/cli/cycle-task-add-output.v1.schema.json
+  s_338fce53cba5a1::t_e7e145b68fd657 1-183
+schemas/json-schema/draft-2020-12/cli/cycle-task-list-output.v1.schema.json
+  s_338fce53cba5a1::t_98099572821b57 1-128
+schemas/json-schema/draft-2020-12/cli/cycle-task-remove-output.v1.schema.json
+  s_338fce53cba5a1::t_f334114733e269 1-183
+schemas/json-schema/draft-2020-12/cli/cycle-update-output.v1.schema.json
+  s_338fce53cba5a1::t_4a496c0a4cbf4b 1-183
+schemas/json-schema/draft-2020-12/cli/graph-map-output.v1.schema.json
+  s_338fce53cba5a1::t_a57139ced13998 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/graph-neighborhood-output.v1.schema.json
+  s_338fce53cba5a1::t_89d9ffa5b2c4b5 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/label-add-output.v1.schema.json
+  s_338fce53cba5a1::t_75f2a492e221c1 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/label-atoms-explain-output.v1.schema.json
+  s_338fce53cba5a1::t_57a99b92eabaa3 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/label-bootstrap-output.v1.schema.json
+  s_338fce53cba5a1::t_02800eda1d1424 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/label-remove-output.v1.schema.json
+  s_338fce53cba5a1::t_464355050df499 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/module-archive-output.v1.schema.json
+  s_338fce53cba5a1::t_903b214438e5cd 1-151
+schemas/json-schema/draft-2020-12/cli/module-create-output.v1.schema.json
+  s_338fce53cba5a1::t_f8843d45a89593 1-151
+schemas/json-schema/draft-2020-12/cli/module-list-output.v1.schema.json
+  s_338fce53cba5a1::t_db60b7a0a54cdd 1-88
+schemas/json-schema/draft-2020-12/cli/module-overview-output.v1.schema.json
+  s_338fce53cba5a1::t_eb795509f6e3ef 1-145
+schemas/json-schema/draft-2020-12/cli/module-restore-output.v1.schema.json
+  s_338fce53cba5a1::t_54cc2cbd5f1003 1-151
+schemas/json-schema/draft-2020-12/cli/module-show-output.v1.schema.json
+  s_338fce53cba5a1::t_38693dd4a26e6b 1-74
+schemas/json-schema/draft-2020-12/cli/module-task-add-output.v1.schema.json
+  s_338fce53cba5a1::t_1ef364bbeb651a 1-151
+schemas/json-schema/draft-2020-12/cli/module-task-list-output.v1.schema.json
+  s_338fce53cba5a1::t_4f37afcf712998 1-128
+schemas/json-schema/draft-2020-12/cli/module-task-remove-output.v1.schema.json
+  s_338fce53cba5a1::t_9fe95ee88c16a5 1-151
+schemas/json-schema/draft-2020-12/cli/module-update-output.v1.schema.json
+  s_338fce53cba5a1::t_b8ee71d3185525 1-151
+schemas/json-schema/draft-2020-12/cli/search-output.v1.schema.json
+  s_338fce53cba5a1::t_6b5ca07114f119 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-archive-output.v1.schema.json
+  s_338fce53cba5a1::t_ad06f0840395ca 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-block-output.v1.schema.json
+  s_338fce53cba5a1::t_1e9cf0c7562ad5 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-claim-output.v1.schema.json
+  s_338fce53cba5a1::t_024ad7e7184b44 225-230,278-290,360-362
+schemas/json-schema/draft-2020-12/cli/task-create-output.v1.schema.json
+  s_338fce53cba5a1::t_a75e531fad7130 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-done-output.v1.schema.json
+  s_338fce53cba5a1::t_9fb24a9542e3fa 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-heartbeat-output.v1.schema.json
+  s_338fce53cba5a1::t_2e7f50b11b7555 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-list-output.v1.schema.json
+  s_338fce53cba5a1::t_97424fba37053d 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-promote-output.v1.schema.json
+  s_338fce53cba5a1::t_673aebc2b19790 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-reclaim-output.v1.schema.json
+  s_338fce53cba5a1::t_73611a2f758cfb 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-release-output.v1.schema.json
+  s_338fce53cba5a1::t_20fcdc3fc58297 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-reopen-output.v1.schema.json
+  s_338fce53cba5a1::t_39e49ceb04c218 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-review-output.v1.schema.json
+  s_338fce53cba5a1::t_3ada6db2b9d7a3 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-show-output.v1.schema.json
+  s_338fce53cba5a1::t_dd592e3d59c8d6 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-specify-output.v1.schema.json
+  s_338fce53cba5a1::t_5b8dcac0755da6 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-step-add-output.v1.schema.json
+  s_338fce53cba5a1::t_384a2cd329490c 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/cli/task-step-done-output.v1.schema.json
+  s_338fce53cba5a1::t_4cb29c25945455 115-120,168-180,250-252
+schemas/json-schema/draft-2020-12/cli/task-step-list-output.v1.schema.json
+  s_338fce53cba5a1::t_a220d631975e31 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/cli/task-step-remove-output.v1.schema.json
+  s_338fce53cba5a1::t_60a83f06ccf564 115-120,168-180,250-252
+schemas/json-schema/draft-2020-12/cli/task-step-reopen-output.v1.schema.json
+  s_338fce53cba5a1::t_fbffce812aa427 115-120,168-180,250-252
+schemas/json-schema/draft-2020-12/cli/task-step-skip-output.v1.schema.json
+  s_338fce53cba5a1::t_48fd616cc7519c 115-120,168-180,250-252
+schemas/json-schema/draft-2020-12/cli/task-step-update-output.v1.schema.json
+  s_338fce53cba5a1::t_55c051e85ff882 151-156,204-216,286-288
+schemas/json-schema/draft-2020-12/cli/task-unblock-output.v1.schema.json
+  s_338fce53cba5a1::t_ebae5d851df7c1 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/cli/task-update-output.v1.schema.json
+  s_338fce53cba5a1::t_1c2a72ac5eb1aa 107-112,160-172,242-244
+schemas/json-schema/draft-2020-12/dto-bindings.json
+  s_338fce53cba5a1::t_3e9ca8395b9ca8 1236-1493,2775-2958
+schemas/json-schema/draft-2020-12/dto-contracts.json
+  s_338fce53cba5a1::t_7b1d5c6b327d7a 596-603,731-738,12310-14894
+schemas/json-schema/draft-2020-12/manifest.json
+  s_338fce53cba5a1::t_ddef33392b450a 4,8,88,318,338,358,378,408,418,458,488,498,538,578,618,658,698,738,778,818,858,898,938,968,998,1038,1078,1108,1148,1188,1228,1298,1328,1358,1738,1778,1808,2158,3148,3188,3218,3248,4648,4658,4698,4918,5008,5268,5278,5478,5488,5498,5508,5518,5528,5538,5548,5558,5568,5578,5588,5598,5608,5618,5628,5648,5658,5668,5678,5688,5698,5791-6920,6944
+schemas/json-schema/draft-2020-12/rpc-catalog.json
+  s_338fce53cba5a1::t_14781e05ddc104 954-1145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73b0eabd3097d7577916c3dbd8c2e02fb3221418",
+  "prompts": {},
+  "sessions": {
+    "s_338fce53cba5a1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c37d-8611-7ef3-86f9-d59b95b49380",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

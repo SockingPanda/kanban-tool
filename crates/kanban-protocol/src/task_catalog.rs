@@ -30,6 +30,14 @@ const GET_TASK_QUERY_PARAMETERS: &[WireParameter] = &[WireParameter {
 
 const TASK_READ_QUERY_PARAMETERS: &[WireParameter] = &[
     WireParameter {
+        name: "module_ids",
+        cardinality: Some(crate::WireParameterCardinality::RepeatedOrdered),
+    },
+    WireParameter {
+        name: "cycle_id",
+        cardinality: Some(crate::WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
         name: "status",
         cardinality: Some(crate::WireParameterCardinality::RepeatedOrdered),
     },
@@ -156,13 +164,21 @@ macro_rules! task_policy {
     };
 }
 
-task_policy!(TASK_LIST_BINDING, "task_list", ["api.list-tasks"]);
+task_policy!(
+    TASK_LIST_BINDING,
+    "task_list",
+    ["api.get-planning-capabilities", "api.list-tasks"]
+);
 task_policy!(
     TASK_LIST_BY_STATUS_BINDING,
     "task_list_by_status",
-    ["api.list-tasks-by-status"]
+    ["api.get-planning-capabilities", "api.list-tasks-by-status"]
 );
-task_policy!(TASK_CREATE_BINDING, "task_create", ["api.create-task"]);
+task_policy!(
+    TASK_CREATE_BINDING,
+    "task_create",
+    ["api.get-planning-capabilities", "api.create-task"]
+);
 task_policy!(
     TASK_SHOW_BINDING,
     "task_show",
@@ -171,7 +187,11 @@ task_policy!(
 task_policy!(
     TASK_UPDATE_BINDING,
     "task_update",
-    ["api.list-tasks", "api.update-task"]
+    [
+        "api.list-tasks",
+        "api.get-planning-capabilities",
+        "api.update-task"
+    ]
 );
 task_policy!(
     TASK_SPECIFY_BINDING,

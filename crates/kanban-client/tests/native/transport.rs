@@ -57,3 +57,54 @@ async fn unary_budget_cancels_a_stalled_rpc_after_thirty_seconds() {
     );
     tokio::time::resume();
 }
+
+#[tokio::test]
+async fn old_host_rejects_planning_before_sending_task_mutations_or_filters() {
+    use crate::common::{input, task_request};
+    use serde_json::json;
+    let peer = Http2Peer::with_grpc_status("12").await;
+    let mut create = task_request("t_compatibility");
+    create.module_ids = vec!["obj_module".into()];
+    assert_eq!(
+        peer.client
+            .create_task("default", create)
+            .await
+            .unwrap_err()
+            .code(),
+        "feature_not_available"
+    );
+    assert_eq!(peer.requests.load(Ordering::SeqCst), 1);
+    for patch in [
+        json!({"module_ids":[]}),
+        json!({"cycle_id":null}),
+        json!({"cycle_id":"obj_cycle"}),
+    ] {
+        assert_eq!(
+            peer.client
+                .update_task("t_compatibility", &input(patch))
+                .await
+                .unwrap_err()
+                .code(),
+            "feature_not_available"
+        );
+    }
+    assert_eq!(peer.requests.load(Ordering::SeqCst), 4);
+    assert_eq!(
+        peer.client
+            .list_tasks("default", &input(json!({"module_ids":["obj_module"]})))
+            .await
+            .unwrap_err()
+            .code(),
+        "feature_not_available"
+    );
+    assert_eq!(
+        peer.client
+            .list_tasks_by_status("default", &input(json!({"cycle_id":"obj_cycle"})))
+            .await
+            .unwrap_err()
+            .code(),
+        "feature_not_available"
+    );
+    // 六个调用各只发送 capability 读取，未降级发送可能被旧 Host 忽略的新字段。
+    assert_eq!(peer.requests.load(Ordering::SeqCst), 6);
+}

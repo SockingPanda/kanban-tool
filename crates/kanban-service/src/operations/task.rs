@@ -56,6 +56,9 @@ pub(crate) fn application_task(
         }
     };
     Ok(crate::TaskRecord {
+        module_ids: task.module_ids,
+        cycle_id: task.cycle_id,
+        object_version: task.object_version,
         id: task.id,
         board_id: task.board_id,
         board_slug: task.board_slug,

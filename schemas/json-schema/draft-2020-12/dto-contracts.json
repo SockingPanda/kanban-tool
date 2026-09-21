@@ -595,6 +595,14 @@
       "parameters": [
         {
           "cardinality": "repeated_ordered",
+          "name": "module_ids"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "cycle_id"
+        },
+        {
+          "cardinality": "repeated_ordered",
           "name": "status"
         },
         {
@@ -720,6 +728,14 @@
       "location": "query",
       "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
       "parameters": [
+        {
+          "cardinality": "repeated_ordered",
+          "name": "module_ids"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "cycle_id"
+        },
         {
           "cardinality": "repeated_ordered",
           "name": "status"
@@ -12285,6 +12301,2591 @@
     "operation": "import-v30",
     "path": "kanban import-v30 --json stdout",
     "schema_id": "urn:kanban-tool:schema:cli:import-v30-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-planning-capabilities-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-planning-capabilities.response",
+    "operation": "GET /api/v1/planning/capabilities",
+    "path": "GET /api/v1/planning/capabilities response",
+    "schema_id": "urn:kanban-tool:schema:api:get-planning-capabilities-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/planning/capabilities",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-planning-capabilities.headers",
+    "operation": "GET /api/v1/planning/capabilities",
+    "path": "GET /api/v1/planning/capabilities headers",
+    "schema_id": "urn:kanban-tool:schema:api:get-planning-capabilities-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/planning/capabilities",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-modules-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-modules.path",
+    "operation": "GET /api/v1/boards/:board/modules/list-modules",
+    "path": "GET /api/v1/boards/:board/modules/list-modules path",
+    "schema_id": "urn:kanban-tool:schema:api:list-modules-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/modules/list-modules",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-modules-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-modules.query",
+    "operation": "GET /api/v1/boards/:board/modules/list-modules",
+    "path": "GET /api/v1/boards/:board/modules/list-modules query",
+    "schema_id": "urn:kanban-tool:schema:api:list-modules-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/boards/:board/modules/list-modules",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "q"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "include_archived"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "offset"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "parent_id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-modules-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-modules.response",
+    "operation": "GET /api/v1/boards/:board/modules/list-modules",
+    "path": "GET /api/v1/boards/:board/modules/list-modules response",
+    "schema_id": "urn:kanban-tool:schema:api:list-modules-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/modules/list-modules",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-modules.headers",
+    "operation": "GET /api/v1/boards/:board/modules/list-modules",
+    "path": "GET /api/v1/boards/:board/modules/list-modules headers",
+    "schema_id": "urn:kanban-tool:schema:api:list-modules-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/modules/list-modules",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-list-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-list.output",
+    "operation": "module list",
+    "path": "kanban module list --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-list-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-module-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-module.path",
+    "operation": "GET /api/v1/boards/:board/modules/:id/get-module",
+    "path": "GET /api/v1/boards/:board/modules/:id/get-module path",
+    "schema_id": "urn:kanban-tool:schema:api:get-module-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/get-module",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-module-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-module.response",
+    "operation": "GET /api/v1/boards/:board/modules/:id/get-module",
+    "path": "GET /api/v1/boards/:board/modules/:id/get-module response",
+    "schema_id": "urn:kanban-tool:schema:api:get-module-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/get-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-module.headers",
+    "operation": "GET /api/v1/boards/:board/modules/:id/get-module",
+    "path": "GET /api/v1/boards/:board/modules/:id/get-module headers",
+    "schema_id": "urn:kanban-tool:schema:api:get-module-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/get-module",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-show-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-show.output",
+    "operation": "module show",
+    "path": "kanban module show --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-show-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-module-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-module.path",
+    "operation": "POST /api/v1/boards/:board/modules/create-module",
+    "path": "POST /api/v1/boards/:board/modules/create-module path",
+    "schema_id": "urn:kanban-tool:schema:api:create-module-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/modules/create-module",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-module-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-module.request",
+    "operation": "POST /api/v1/boards/:board/modules/create-module",
+    "path": "POST /api/v1/boards/:board/modules/create-module request",
+    "schema_id": "urn:kanban-tool:schema:api:create-module-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/modules/create-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-module-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-module.response",
+    "operation": "POST /api/v1/boards/:board/modules/create-module",
+    "path": "POST /api/v1/boards/:board/modules/create-module response",
+    "schema_id": "urn:kanban-tool:schema:api:create-module-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/modules/create-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-module.headers",
+    "operation": "POST /api/v1/boards/:board/modules/create-module",
+    "path": "POST /api/v1/boards/:board/modules/create-module headers",
+    "schema_id": "urn:kanban-tool:schema:api:create-module-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/modules/create-module",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-create-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-create.output",
+    "operation": "module create",
+    "path": "kanban module create --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-create-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/update-module-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.update-module.path",
+    "operation": "POST /api/v1/boards/:board/modules/:id/update-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/update-module path",
+    "schema_id": "urn:kanban-tool:schema:api:update-module-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/update-module",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/update-module-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.update-module.request",
+    "operation": "POST /api/v1/boards/:board/modules/:id/update-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/update-module request",
+    "schema_id": "urn:kanban-tool:schema:api:update-module-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/update-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/update-module-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.update-module.response",
+    "operation": "POST /api/v1/boards/:board/modules/:id/update-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/update-module response",
+    "schema_id": "urn:kanban-tool:schema:api:update-module-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/update-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.update-module.headers",
+    "operation": "POST /api/v1/boards/:board/modules/:id/update-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/update-module headers",
+    "schema_id": "urn:kanban-tool:schema:api:update-module-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/update-module",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-update-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-update.output",
+    "operation": "module update",
+    "path": "kanban module update --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-update-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/archive-module-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.archive-module.path",
+    "operation": "POST /api/v1/boards/:board/modules/:id/archive-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/archive-module path",
+    "schema_id": "urn:kanban-tool:schema:api:archive-module-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/archive-module",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/archive-module-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.archive-module.request",
+    "operation": "POST /api/v1/boards/:board/modules/:id/archive-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/archive-module request",
+    "schema_id": "urn:kanban-tool:schema:api:archive-module-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/archive-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/archive-module-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.archive-module.response",
+    "operation": "POST /api/v1/boards/:board/modules/:id/archive-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/archive-module response",
+    "schema_id": "urn:kanban-tool:schema:api:archive-module-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/archive-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.archive-module.headers",
+    "operation": "POST /api/v1/boards/:board/modules/:id/archive-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/archive-module headers",
+    "schema_id": "urn:kanban-tool:schema:api:archive-module-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/archive-module",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-archive-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-archive.output",
+    "operation": "module archive",
+    "path": "kanban module archive --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-archive-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/restore-module-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.restore-module.path",
+    "operation": "POST /api/v1/boards/:board/modules/:id/restore-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/restore-module path",
+    "schema_id": "urn:kanban-tool:schema:api:restore-module-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/restore-module",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/restore-module-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.restore-module.request",
+    "operation": "POST /api/v1/boards/:board/modules/:id/restore-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/restore-module request",
+    "schema_id": "urn:kanban-tool:schema:api:restore-module-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/restore-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/restore-module-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.restore-module.response",
+    "operation": "POST /api/v1/boards/:board/modules/:id/restore-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/restore-module response",
+    "schema_id": "urn:kanban-tool:schema:api:restore-module-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/restore-module",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.restore-module.headers",
+    "operation": "POST /api/v1/boards/:board/modules/:id/restore-module",
+    "path": "POST /api/v1/boards/:board/modules/:id/restore-module headers",
+    "schema_id": "urn:kanban-tool:schema:api:restore-module-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/restore-module",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-restore-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-restore.output",
+    "operation": "module restore",
+    "path": "kanban module restore --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-restore-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-module-overview-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-module-overview.path",
+    "operation": "GET /api/v1/boards/:board/modules/:id/get-module-overview",
+    "path": "GET /api/v1/boards/:board/modules/:id/get-module-overview path",
+    "schema_id": "urn:kanban-tool:schema:api:get-module-overview-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/get-module-overview",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-module-overview-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-module-overview.response",
+    "operation": "GET /api/v1/boards/:board/modules/:id/get-module-overview",
+    "path": "GET /api/v1/boards/:board/modules/:id/get-module-overview response",
+    "schema_id": "urn:kanban-tool:schema:api:get-module-overview-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/get-module-overview",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-module-overview.headers",
+    "operation": "GET /api/v1/boards/:board/modules/:id/get-module-overview",
+    "path": "GET /api/v1/boards/:board/modules/:id/get-module-overview headers",
+    "schema_id": "urn:kanban-tool:schema:api:get-module-overview-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/get-module-overview",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-overview-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-overview.output",
+    "operation": "module overview",
+    "path": "kanban module overview --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-overview-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-module-tasks-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-module-tasks.path",
+    "operation": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+    "path": "GET /api/v1/boards/:board/modules/:id/list-module-tasks path",
+    "schema_id": "urn:kanban-tool:schema:api:list-module-tasks-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-module-tasks-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-module-tasks.query",
+    "operation": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+    "path": "GET /api/v1/boards/:board/modules/:id/list-module-tasks query",
+    "schema_id": "urn:kanban-tool:schema:api:list-module-tasks-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "offset"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-module-tasks-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-module-tasks.response",
+    "operation": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+    "path": "GET /api/v1/boards/:board/modules/:id/list-module-tasks response",
+    "schema_id": "urn:kanban-tool:schema:api:list-module-tasks-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-module-tasks.headers",
+    "operation": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+    "path": "GET /api/v1/boards/:board/modules/:id/list-module-tasks headers",
+    "schema_id": "urn:kanban-tool:schema:api:list-module-tasks-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/modules/:id/list-module-tasks",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-task-list-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-task-list.output",
+    "operation": "module task list",
+    "path": "kanban module task list --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-task-list-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/add-module-task-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.add-module-task.path",
+    "operation": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+    "path": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task path",
+    "schema_id": "urn:kanban-tool:schema:api:add-module-task-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/add-module-task-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.add-module-task.request",
+    "operation": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+    "path": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task request",
+    "schema_id": "urn:kanban-tool:schema:api:add-module-task-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/add-module-task-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.add-module-task.response",
+    "operation": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+    "path": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task response",
+    "schema_id": "urn:kanban-tool:schema:api:add-module-task-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.add-module-task.headers",
+    "operation": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+    "path": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task headers",
+    "schema_id": "urn:kanban-tool:schema:api:add-module-task-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/add-module-task",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-task-add-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-task-add.output",
+    "operation": "module task add",
+    "path": "kanban module task add --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-task-add-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/remove-module-task-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.remove-module-task.path",
+    "operation": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+    "path": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task path",
+    "schema_id": "urn:kanban-tool:schema:api:remove-module-task-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/remove-module-task-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.remove-module-task.request",
+    "operation": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+    "path": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task request",
+    "schema_id": "urn:kanban-tool:schema:api:remove-module-task-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/remove-module-task-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.remove-module-task.response",
+    "operation": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+    "path": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task response",
+    "schema_id": "urn:kanban-tool:schema:api:remove-module-task-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.remove-module-task.headers",
+    "operation": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+    "path": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task headers",
+    "schema_id": "urn:kanban-tool:schema:api:remove-module-task-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/modules/:id/tasks/:task_id/remove-module-task",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/module-task-remove-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.module-task-remove.output",
+    "operation": "module task remove",
+    "path": "kanban module task remove --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:module-task-remove-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-cycles-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-cycles.path",
+    "operation": "GET /api/v1/boards/:board/cycles/list-cycles",
+    "path": "GET /api/v1/boards/:board/cycles/list-cycles path",
+    "schema_id": "urn:kanban-tool:schema:api:list-cycles-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/cycles/list-cycles",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-cycles-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-cycles.query",
+    "operation": "GET /api/v1/boards/:board/cycles/list-cycles",
+    "path": "GET /api/v1/boards/:board/cycles/list-cycles query",
+    "schema_id": "urn:kanban-tool:schema:api:list-cycles-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/boards/:board/cycles/list-cycles",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "q"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "include_archived"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "offset"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "status"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-cycles-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-cycles.response",
+    "operation": "GET /api/v1/boards/:board/cycles/list-cycles",
+    "path": "GET /api/v1/boards/:board/cycles/list-cycles response",
+    "schema_id": "urn:kanban-tool:schema:api:list-cycles-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/cycles/list-cycles",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-cycles.headers",
+    "operation": "GET /api/v1/boards/:board/cycles/list-cycles",
+    "path": "GET /api/v1/boards/:board/cycles/list-cycles headers",
+    "schema_id": "urn:kanban-tool:schema:api:list-cycles-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/cycles/list-cycles",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-list-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-list.output",
+    "operation": "cycle list",
+    "path": "kanban cycle list --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-list-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-cycle-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-cycle.path",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/get-cycle",
+    "path": "GET /api/v1/boards/:board/cycles/:id/get-cycle path",
+    "schema_id": "urn:kanban-tool:schema:api:get-cycle-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/get-cycle",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-cycle-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-cycle.response",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/get-cycle",
+    "path": "GET /api/v1/boards/:board/cycles/:id/get-cycle response",
+    "schema_id": "urn:kanban-tool:schema:api:get-cycle-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/get-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-cycle.headers",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/get-cycle",
+    "path": "GET /api/v1/boards/:board/cycles/:id/get-cycle headers",
+    "schema_id": "urn:kanban-tool:schema:api:get-cycle-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/get-cycle",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-show-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-show.output",
+    "operation": "cycle show",
+    "path": "kanban cycle show --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-show-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-cycle-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-cycle.path",
+    "operation": "POST /api/v1/boards/:board/cycles/create-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/create-cycle path",
+    "schema_id": "urn:kanban-tool:schema:api:create-cycle-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/create-cycle",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-cycle-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-cycle.request",
+    "operation": "POST /api/v1/boards/:board/cycles/create-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/create-cycle request",
+    "schema_id": "urn:kanban-tool:schema:api:create-cycle-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/create-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-cycle-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-cycle.response",
+    "operation": "POST /api/v1/boards/:board/cycles/create-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/create-cycle response",
+    "schema_id": "urn:kanban-tool:schema:api:create-cycle-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/create-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-cycle.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/create-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/create-cycle headers",
+    "schema_id": "urn:kanban-tool:schema:api:create-cycle-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/create-cycle",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-create-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-create.output",
+    "operation": "cycle create",
+    "path": "kanban cycle create --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-create-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/update-cycle-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.update-cycle.path",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/update-cycle path",
+    "schema_id": "urn:kanban-tool:schema:api:update-cycle-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/update-cycle-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.update-cycle.request",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/update-cycle request",
+    "schema_id": "urn:kanban-tool:schema:api:update-cycle-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/update-cycle-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.update-cycle.response",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/update-cycle response",
+    "schema_id": "urn:kanban-tool:schema:api:update-cycle-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.update-cycle.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/update-cycle headers",
+    "schema_id": "urn:kanban-tool:schema:api:update-cycle-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/update-cycle",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-update-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-update.output",
+    "operation": "cycle update",
+    "path": "kanban cycle update --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-update-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/archive-cycle-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.archive-cycle.path",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/archive-cycle path",
+    "schema_id": "urn:kanban-tool:schema:api:archive-cycle-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/archive-cycle-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.archive-cycle.request",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/archive-cycle request",
+    "schema_id": "urn:kanban-tool:schema:api:archive-cycle-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/archive-cycle-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.archive-cycle.response",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/archive-cycle response",
+    "schema_id": "urn:kanban-tool:schema:api:archive-cycle-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.archive-cycle.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/archive-cycle headers",
+    "schema_id": "urn:kanban-tool:schema:api:archive-cycle-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/archive-cycle",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-archive-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-archive.output",
+    "operation": "cycle archive",
+    "path": "kanban cycle archive --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-archive-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/restore-cycle-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.restore-cycle.path",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/restore-cycle path",
+    "schema_id": "urn:kanban-tool:schema:api:restore-cycle-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/restore-cycle-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.restore-cycle.request",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/restore-cycle request",
+    "schema_id": "urn:kanban-tool:schema:api:restore-cycle-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/restore-cycle-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.restore-cycle.response",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/restore-cycle response",
+    "schema_id": "urn:kanban-tool:schema:api:restore-cycle-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.restore-cycle.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/restore-cycle headers",
+    "schema_id": "urn:kanban-tool:schema:api:restore-cycle-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/restore-cycle",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-restore-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-restore.output",
+    "operation": "cycle restore",
+    "path": "kanban cycle restore --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-restore-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-cycle-overview-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-cycle-overview.path",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview",
+    "path": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview path",
+    "schema_id": "urn:kanban-tool:schema:api:get-cycle-overview-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/get-cycle-overview-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-cycle-overview.response",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview",
+    "path": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview response",
+    "schema_id": "urn:kanban-tool:schema:api:get-cycle-overview-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.get-cycle-overview.headers",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview",
+    "path": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview headers",
+    "schema_id": "urn:kanban-tool:schema:api:get-cycle-overview-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/get-cycle-overview",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-overview-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-overview.output",
+    "operation": "cycle overview",
+    "path": "kanban cycle overview --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-overview-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-cycle-tasks-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-cycle-tasks.path",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+    "path": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks path",
+    "schema_id": "urn:kanban-tool:schema:api:list-cycle-tasks-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-cycle-tasks-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-cycle-tasks.query",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+    "path": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks query",
+    "schema_id": "urn:kanban-tool:schema:api:list-cycle-tasks-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "offset"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-cycle-tasks-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-cycle-tasks.response",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+    "path": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks response",
+    "schema_id": "urn:kanban-tool:schema:api:list-cycle-tasks-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-cycle-tasks.headers",
+    "operation": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+    "path": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks headers",
+    "schema_id": "urn:kanban-tool:schema:api:list-cycle-tasks-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/cycles/:id/list-cycle-tasks",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-task-list-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-task-list.output",
+    "operation": "cycle task list",
+    "path": "kanban cycle task list --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-task-list-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/add-cycle-task-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.add-cycle-task.path",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+    "path": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task path",
+    "schema_id": "urn:kanban-tool:schema:api:add-cycle-task-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/add-cycle-task-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.add-cycle-task.request",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+    "path": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task request",
+    "schema_id": "urn:kanban-tool:schema:api:add-cycle-task-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/add-cycle-task-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.add-cycle-task.response",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+    "path": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task response",
+    "schema_id": "urn:kanban-tool:schema:api:add-cycle-task-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.add-cycle-task.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+    "path": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task headers",
+    "schema_id": "urn:kanban-tool:schema:api:add-cycle-task-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/add-cycle-task",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-task-add-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-task-add.output",
+    "operation": "cycle task add",
+    "path": "kanban cycle task add --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-task-add-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/remove-cycle-task-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.remove-cycle-task.path",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+    "path": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task path",
+    "schema_id": "urn:kanban-tool:schema:api:remove-cycle-task-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/remove-cycle-task-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.remove-cycle-task.request",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+    "path": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task request",
+    "schema_id": "urn:kanban-tool:schema:api:remove-cycle-task-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/remove-cycle-task-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.remove-cycle-task.response",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+    "path": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task response",
+    "schema_id": "urn:kanban-tool:schema:api:remove-cycle-task-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.remove-cycle-task.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+    "path": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task headers",
+    "schema_id": "urn:kanban-tool:schema:api:remove-cycle-task-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/tasks/:task_id/remove-cycle-task",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-task-remove-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-task-remove.output",
+    "operation": "cycle task remove",
+    "path": "kanban cycle task remove --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-task-remove-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/start-cycle-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.start-cycle.path",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/start-cycle path",
+    "schema_id": "urn:kanban-tool:schema:api:start-cycle-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/start-cycle-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.start-cycle.request",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/start-cycle request",
+    "schema_id": "urn:kanban-tool:schema:api:start-cycle-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/start-cycle-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.start-cycle.response",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/start-cycle response",
+    "schema_id": "urn:kanban-tool:schema:api:start-cycle-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.start-cycle.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/start-cycle headers",
+    "schema_id": "urn:kanban-tool:schema:api:start-cycle-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/start-cycle",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-start-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-start.output",
+    "operation": "cycle start",
+    "path": "kanban cycle start --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-start-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/close-cycle-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.close-cycle.path",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/close-cycle path",
+    "schema_id": "urn:kanban-tool:schema:api:close-cycle-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/close-cycle-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.close-cycle.request",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/close-cycle request",
+    "schema_id": "urn:kanban-tool:schema:api:close-cycle-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/close-cycle-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.close-cycle.response",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/close-cycle response",
+    "schema_id": "urn:kanban-tool:schema:api:close-cycle-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.close-cycle.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/close-cycle headers",
+    "schema_id": "urn:kanban-tool:schema:api:close-cycle-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/close-cycle",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-close-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-close.output",
+    "operation": "cycle close",
+    "path": "kanban cycle close --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-close-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/cancel-cycle-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.cancel-cycle.path",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle path",
+    "schema_id": "urn:kanban-tool:schema:api:cancel-cycle-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "id"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/cancel-cycle-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.cancel-cycle.request",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle request",
+    "schema_id": "urn:kanban-tool:schema:api:cancel-cycle-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/cancel-cycle-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.cancel-cycle.response",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle response",
+    "schema_id": "urn:kanban-tool:schema:api:cancel-cycle-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.cancel-cycle.headers",
+    "operation": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+    "path": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle headers",
+    "schema_id": "urn:kanban-tool:schema:api:cancel-cycle-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/boards/:board/cycles/:id/cancel-cycle",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/cycle-cancel-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.cycle-cancel.output",
+    "operation": "cycle cancel",
+    "path": "kanban cycle cancel --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:cycle-cancel-output:v1",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {

@@ -346,7 +346,19 @@ impl WebEmitter<'_> {
                     ))
                 }
             },
-            Ty::List(_) | Ty::Map(_, _) => self.decode_value(&field.ty, source),
+            Ty::List(_) | Ty::Map(_, _) => {
+                let value = self.decode_value(&field.ty, source)?;
+                if skip.is_some_and(|skip| skip.ends_with("::is_empty")) {
+                    let empty = if matches!(field.ty, Ty::List(_)) {
+                        format!("{source}.length === 0")
+                    } else {
+                        format!("Object.keys({source}).length === 0")
+                    };
+                    Ok(format!("{empty} ? undefined : {value}"))
+                } else {
+                    Ok(value)
+                }
+            }
             _ => self.decode_value(
                 &field.ty,
                 &format!("c.required({source}, {:?})", field.name),

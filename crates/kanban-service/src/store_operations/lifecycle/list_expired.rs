@@ -52,6 +52,7 @@ impl TursoStore {
         while let Some(row) = rows.next().await? {
             tasks.push(task_from_row(row)?);
         }
+        crate::object_model::task_planning::hydrate(&connection, &mut tasks).await?;
         Ok(tasks)
     }
 }

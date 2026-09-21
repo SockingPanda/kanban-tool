@@ -18,6 +18,9 @@ mod tests {
             .update_task(
                 &task.id,
                 UpdateTaskInput {
+                    planning: Default::default(),
+                    request_id: None,
+                    request_fingerprint: None,
                     expected_lock_version: 0,
                     actor: "editor".into(),
                     title: Some("Updated".into()),

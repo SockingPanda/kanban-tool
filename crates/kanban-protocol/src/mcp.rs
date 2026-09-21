@@ -562,7 +562,7 @@ mod tests {
     #[test]
     fn catalog_is_valid_and_has_unique_sorted_tool_names() {
         validate_mcp_operation_catalog(mcp_operation_catalog()).unwrap();
-        assert_eq!(mcp_operation_catalog().len(), 105);
+        assert_eq!(mcp_operation_catalog().len(), 128);
         let names = mcp_operation_catalog()
             .iter()
             .map(|descriptor| descriptor.tool_name)

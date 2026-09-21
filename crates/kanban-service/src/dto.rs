@@ -249,6 +249,9 @@ pub struct ExecutionPlanRecord {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRecord {
+    pub module_ids: Vec<String>,
+    pub cycle_id: Option<String>,
+    pub object_version: i64,
     pub id: String,
     pub board_id: String,
     pub board_slug: String,

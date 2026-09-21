@@ -566,3 +566,102 @@ async fn modern_requests_can_overlap_and_busy_does_not_start_another_call() {
     );
     mcp.finish().await;
 }
+
+#[tokio::test]
+async fn planning_mcp_profiles_membership_nullability_and_frozen_snapshots() {
+    let host = Host::start().await;
+    let mut mcp = Mcp::start_with_config(
+        &host.url,
+        "default",
+        json!({"profile":"work","disabled_tools":["module_archive"]}),
+        true,
+    )
+    .await;
+    let tools = mcp.list_all("tools/list", "tools").await;
+    let names: Vec<_> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"module_create") && names.contains(&"cycle_close"));
+    assert!(!names.contains(&"module_archive"));
+    assert!(!names.iter().any(|n| n.starts_with("iteration_")));
+    let module = mcp
+        .call(
+            "module_create",
+            json!({"title":"MCP 模块","body":"正文","request_id":"mcp-module"}),
+        )
+        .await;
+    let module_id = module["data"]["object"]["id"].as_str().unwrap();
+    let cycle = mcp.call("cycle_create",json!({"title":"MCP 迭代","starts_at":1,"ends_at":9007199254740993_i64,"request_id":"mcp-cycle"})).await;
+    let cycle_id = cycle["data"]["object"]["id"].as_str().unwrap();
+    let input = json!({"title":"MCP 成员","description":"规格","module_ids":[module_id],"cycle_id":cycle_id,"idempotency_key":"mcp-member"});
+    let task = mcp.call("task_create", input.clone()).await;
+    let task_id = task["data"]["id"].as_str().unwrap();
+    let listed = mcp
+        .call(
+            "task_list_by_status",
+            json!({"status":["todo"],"module_ids":[module_id],"cycle_id":cycle_id,"limit":1}),
+        )
+        .await;
+    assert_eq!(listed["data"]["statuses"][0]["page"]["total"], 1);
+    let update =
+        json!({"task_ref":task_id,"module_ids":[],"cycle_id":null,"request_id":"mcp-clear"});
+    let clear = mcp.call("task_update", update.clone()).await;
+    assert_eq!(clear["data"]["module_ids"], json!([]));
+    assert!(clear["data"]["cycle_id"].is_null());
+    assert_eq!(mcp.call("task_create", input).await, clear);
+    mcp.call(
+        "cycle_task_add",
+        json!({"cycle_id":cycle_id,"task_ref":"#1","request_id":"mcp-add"}),
+    )
+    .await;
+    mcp.call(
+        "task_update",
+        json!({"task_ref":task_id,"title":"只改标题"}),
+    )
+    .await;
+    assert_eq!(
+        mcp.call("task_show", json!({"task_ref":task_id})).await["data"]["cycle_id"],
+        cycle_id
+    );
+    mcp.call("cycle_start", json!({"cycle_id":cycle_id})).await;
+    mcp.call(
+        "cycle_close",
+        json!({"cycle_id":cycle_id,"request_id":"mcp-close"}),
+    )
+    .await;
+    let members = mcp
+        .call("cycle_task_list", json!({"cycle_id":cycle_id,"limit":1}))
+        .await;
+    assert_eq!(members["source"], "frozen_snapshot");
+    assert_eq!(members["total"], 1);
+    assert_eq!(members["data"][0]["title"], "只改标题");
+    assert_eq!(
+        mcp.call("cycle_overview", json!({"cycle_id":cycle_id}))
+            .await["data"]["progress"]["total"],
+        1
+    );
+    let denied = mcp
+        .call_error(
+            "cycle_task_add",
+            json!({"cycle_id":cycle_id,"task_ref":task_id}),
+        )
+        .await;
+    assert_eq!(denied["code"], "invalid_transition");
+    mcp.finish().await;
+    let mut readonly =
+        Mcp::start_with_config(&host.url, "default", json!({"profile":"read_only"}), true).await;
+    let tools = readonly.list_all("tools/list", "tools").await;
+    let names: Vec<_> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"module_show") && names.contains(&"cycle_task_list"));
+    for write in [
+        "module_create",
+        "module_update",
+        "cycle_close",
+        "cycle_task_add",
+    ] {
+        assert!(!names.contains(&write));
+    }
+    readonly
+        .call("module_show", json!({"module_id":module_id}))
+        .await;
+    readonly.finish().await;
+    host.finish().await;
+}

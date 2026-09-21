@@ -43,7 +43,10 @@
         "status_reason": null,
         "title": "Linked implementation",
         "unfinished_parent_count": 0,
-        "updated_at": 105
+        "updated_at": 105,
+        "module_ids": [],
+        "cycle_id": null,
+        "object_version": 1
       },
       "parent_task_id": "t_parent",
       "position": 2048,

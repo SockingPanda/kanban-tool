@@ -40,6 +40,8 @@ pub enum TaskListSort {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskListOptions {
+    pub module_ids: Vec<String>,
+    pub cycle_id: Option<String>,
     pub statuses: Vec<TaskStatus>,
     pub priorities: Vec<i64>,
     pub labels: Vec<String>,
@@ -55,6 +57,8 @@ pub struct TaskListOptions {
 impl Default for TaskListOptions {
     fn default() -> Self {
         Self {
+            module_ids: Vec::new(),
+            cycle_id: None,
             statuses: Vec::new(),
             priorities: Vec::new(),
             labels: Vec::new(),
@@ -83,6 +87,8 @@ where
         let board = board.trim().to_owned();
         let options = normalize_task_list_options(&board, options)?;
         let store_options = crate::store_operations::StoreTaskListOptions {
+            module_ids: options.module_ids,
+            cycle_id: options.cycle_id,
             statuses: options
                 .statuses
                 .into_iter()
@@ -221,6 +227,8 @@ mod tests {
         let options = normalize_task_list_options(
             "default",
             TaskListOptions {
+                module_ids: Vec::new(),
+                cycle_id: None,
                 statuses: vec![TaskStatus::Todo],
                 priorities: vec![1],
                 labels: vec![" bug ".into(), " ".into()],
@@ -244,6 +252,8 @@ mod tests {
         let error = normalize_task_list_options(
             "default",
             TaskListOptions {
+                module_ids: Vec::new(),
+                cycle_id: None,
                 limit: 1_001,
                 statuses: Vec::new(),
                 priorities: Vec::new(),
@@ -262,6 +272,8 @@ mod tests {
         let error = normalize_task_list_options(
             "default",
             TaskListOptions {
+                module_ids: Vec::new(),
+                cycle_id: None,
                 statuses: Vec::new(),
                 priorities: vec![4],
                 labels: Vec::new(),

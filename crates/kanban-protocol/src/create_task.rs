@@ -29,6 +29,15 @@ pub enum ApiCreateTaskStatus {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateTaskRequest {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "schema", schemars(length(max = 100)))]
+    pub module_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cycle_id: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub expected_versions: BTreeMap<String, crate::ApiObjectVersion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_catalog_version: Option<i64>,
     /// 可选的 client 生成 typed ID；省略时由 host 生成。
     pub task_id: Option<String>,
     /// 作用域限定在所选看板上的 entity-local 重试 key。

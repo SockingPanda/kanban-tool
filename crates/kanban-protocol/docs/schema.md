@@ -30,6 +30,11 @@ descriptor。`xtask` 从这些声明生成 `proto/rpc-extensions.json`，并纳�
 对象属性以 `JsonValue` 保留有符号、无符号 64 位整数，文件按有界块上传、流式下载。
 这些 RPC 不自动扩展领域 CLI/MCP 工具目录。
 
+模块、迭代的专用 DTO 由 `planning` 持有，具名业务 RPC 与 `planning_catalog` 显式绑定 CLI/MCP。
+通用 ObjectService 保留原契约；专用 DTO 不依赖 service 的存储类型。任务模块集合、迭代及并发
+前提是现有 DTO 的追加字段，字段编号通过原 ledger 保持稳定。小型只读 planning capability
+让共享 client 在发送这些字段或筛选前识别旧 Host，避免 Protobuf 未知字段被忽略后产生假成功。
+
 schema 描述序列化形状、字段可选性和 transport envelope；状态 transition、claim token、board
 isolation、依赖环、idempotency 和事务原子性由 service/server/client 测试与领域规则证明，不能从
 JSON Schema 推断。

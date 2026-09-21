@@ -117,9 +117,10 @@ pub struct UpdateTaskPath {
     pub task_id: String,
 }
 
-/// 明确可写的 PATCH 字段。这里有意不包含 canonical status、claim 凭据、
-/// 当前 run identity 和完成时间戳。
-fn deserialize_patch_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+/// 保留显式 null 为 Some(None)；字段缺省由 serde(default) 表示 None。
+pub(crate) fn deserialize_patch_nullable<'de, D, T>(
+    deserializer: D,
+) -> Result<Option<Option<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: serde::Deserialize<'de>,
@@ -127,7 +128,7 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
-fn deserialize_patch_present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+pub(crate) fn deserialize_patch_present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: serde::Deserialize<'de>,
@@ -135,10 +136,34 @@ where
     T::deserialize(deserializer).map(Some)
 }
 
+/// 明确可写的 PATCH 字段；状态、claim、run 和完成时间通过生命周期动作修改。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct UpdateTaskRequest {
+    /// 替换整个模块集合；省略时保留，空数组清空，null 无效。
+    #[serde(
+        default,
+        deserialize_with = "crate::task_core::deserialize_patch_present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "schema", schemars(with = "Vec<String>", length(max = 100)))]
+    pub module_ids: Option<Vec<String>>,
+    /// 原子替换当前迭代；省略时保留，null 清空。
+    #[serde(
+        default,
+        deserialize_with = "crate::task_core::deserialize_patch_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cycle_id: Option<Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_object_version: Option<i64>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub expected_versions: std::collections::BTreeMap<String, crate::ApiObjectVersion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_catalog_version: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
     #[serde(
         default,
         deserialize_with = "deserialize_patch_present",

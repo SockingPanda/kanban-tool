@@ -1,0 +1,21 @@
+{
+  "$id": "urn:kanban-tool:schema:api:list-cycle-tasks-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 100,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "offset": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "title": "api.list-cycle-tasks.query",
+  "type": "object"
+}

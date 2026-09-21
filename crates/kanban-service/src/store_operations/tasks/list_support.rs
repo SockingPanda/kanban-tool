@@ -7,6 +7,17 @@ use crate::{
 pub(crate) const TASK_FROM: &str = "FROM tasks AS t JOIN boards AS b ON b.id = t.board_id";
 
 pub(crate) fn validate_task_list_options(options: &TaskListOptions) -> Result<(), StoreError> {
+    if options.module_ids.len() > 100
+        || options
+            .module_ids
+            .iter()
+            .chain(options.cycle_id.iter())
+            .any(|id| !id.starts_with("obj_") || id.len() <= 4)
+    {
+        return Err(StoreError::InvalidInput(
+            "归属筛选需要 obj_... ID，最多 100 个模块".into(),
+        ));
+    }
     if options.limit > 1000 {
         return Err(StoreError::InvalidInput("limit must be <= 1000".to_owned()));
     }
@@ -84,6 +95,15 @@ pub(crate) fn task_list_where(
         params.push((name, Value::Text(label.trim().to_owned())));
     }
 
+    for (index, module) in options.module_ids.iter().enumerate() {
+        let name = format!(":module_{index}");
+        clauses.push(format!("EXISTS (SELECT 1 FROM object_relation_edges e WHERE e.board_id=t.board_id AND e.relation_key='module_members' AND e.target_id=t.id AND e.source_id={name})"));
+        params.push((name, Value::Text(module.clone())));
+    }
+    if let Some(cycle) = &options.cycle_id {
+        clauses.push("EXISTS (SELECT 1 FROM object_relation_edges e WHERE e.board_id=t.board_id AND e.relation_key='cycle_members' AND e.target_id=t.id AND e.source_id=:cycle_id)".into());
+        params.push((":cycle_id".into(), Value::Text(cycle.clone())));
+    }
     for filter in &options.plan_filters {
         let clause = match filter {
             TaskPlanFilter::PlanNeeded => {

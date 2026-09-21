@@ -38,6 +38,8 @@ pub enum TaskPlanFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskListOptions {
+    pub module_ids: Vec<String>,
+    pub cycle_id: Option<String>,
     pub statuses: Vec<String>,
     pub priorities: Vec<i64>,
     pub labels: Vec<String>,
@@ -53,6 +55,8 @@ pub struct TaskListOptions {
 impl Default for TaskListOptions {
     fn default() -> Self {
         Self {
+            module_ids: Vec::new(),
+            cycle_id: None,
             statuses: Vec::new(),
             priorities: Vec::new(),
             labels: Vec::new(),
@@ -74,7 +78,8 @@ impl TursoStore {
         options: TaskListOptions,
     ) -> Result<TaskListPage, StoreError> {
         validate_task_list_options(&options)?;
-        let connection = self.connection().await?;
+        let mut c = self.connection().await?;
+        let connection = c.transaction().await?;
         let board = first_row(
             connection
                 .query(
@@ -136,6 +141,8 @@ impl TursoStore {
                 task.labels = labels_by_task.remove(&task.id).unwrap_or_default();
             }
         }
+        crate::object_model::task_planning::hydrate(&connection, &mut tasks).await?;
+        connection.commit().await?;
         Ok(TaskListPage { tasks, total })
     }
 }

@@ -91,12 +91,17 @@ impl Drop for Host {
 pub struct Http2Peer {
     pub client: KanbanClient,
     pub accepted: Arc<AtomicUsize>,
+    pub requests: Arc<AtomicUsize>,
     cut: mpsc::Sender<()>,
     server: JoinHandle<()>,
 }
 
 impl Http2Peer {
     pub async fn start() -> Self {
+        Self::with_grpc_status("0").await
+    }
+
+    pub async fn with_grpc_status(status: &'static str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let client = KanbanClient::new(
             format!("http://{}", listener.local_addr().unwrap()),
@@ -105,6 +110,8 @@ impl Http2Peer {
         .unwrap();
         let accepted = Arc::new(AtomicUsize::new(0));
         let count = accepted.clone();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let request_count = requests.clone();
         let (cut, mut receiver) = mpsc::channel(1);
         let server = tokio::spawn(async move {
             let mut connections = JoinSet::new();
@@ -117,6 +124,7 @@ impl Http2Peer {
                     incoming = listener.accept() => {
                         let (mut downstream, _) = incoming.unwrap();
                         count.fetch_add(1, Ordering::SeqCst);
+                        let request_count = request_count.clone();
                         connections.spawn(async move {
                             let mut preface = [0; 24];
                             downstream.read_exact(&mut preface).await.unwrap();
@@ -125,6 +133,7 @@ impl Http2Peer {
                             loop {
                                 let (kind, stream, _) = next_http2_frame(&mut downstream).await;
                                 if kind == 1 && stream > 0 {
+                                    request_count.fetch_add(1, Ordering::SeqCst);
                                     // :status 200 与 application/grpc；空 protobuf 是有效的空 ListBoardsResponse。
                                     let mut headers = vec![0x88, 0x0f, 0x10, 16];
                                     headers.extend_from_slice(b"application/grpc");
@@ -132,7 +141,8 @@ impl Http2Peer {
                                     write_http2_frame(&mut downstream, 0, 0, stream, &[0, 0, 0, 0, 0]).await;
                                     let mut trailers = vec![0, 11];
                                     trailers.extend_from_slice(b"grpc-status");
-                                    trailers.extend_from_slice(&[1, b'0']);
+                                    trailers.push(status.len() as u8);
+                                    trailers.extend_from_slice(status.as_bytes());
                                     write_http2_frame(&mut downstream, 1, 5, stream, &trailers).await;
                                 }
                             }
@@ -145,6 +155,7 @@ impl Http2Peer {
         Self {
             client,
             accepted,
+            requests,
             cut,
             server,
         }

@@ -228,7 +228,7 @@ impl TursoStore {
                 )
                 .await?;
 
-        let claimed_task = task_from_row(
+        let mut claimed_task = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -253,6 +253,11 @@ impl TursoStore {
                 .await?,
             )?;
 
+        crate::object_model::task_planning::hydrate(
+            &transaction,
+            std::slice::from_mut(&mut claimed_task),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(ClaimTaskRecord {
             task: claimed_task,

@@ -56,7 +56,10 @@
       "status_reason": null,
       "title": "Claim contract task",
       "unfinished_parent_count": 0,
-      "updated_at": 102
+      "updated_at": 102,
+      "module_ids": [],
+      "cycle_id": null,
+      "object_version": 1
     }
   }
 }

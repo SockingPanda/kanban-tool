@@ -35,6 +35,15 @@ label proposal 查询区分 task scope 与 board scope：调用 `list_task_label
 `list_board_label_proposals`，后者可传 `status` 过滤。ontology 的既有 `Value` 外壳在 client 边界转换为
 具名 typed DTO；`ontology_data` 是同步的本地 DTO 转换。
 
+模块与迭代有专用 typed 方法，Board selector 在共享 client 中解析，容器只接受 `obj_...` ID，
+成员任务复用看板内引用解析。新增任务归属、版本前提及筛选在调用前通过只读
+`planning_capabilities` 检查；旧 Host 或明确关闭能力的 Host 返回 `feature_not_available`，不会
+收到可能被忽略的新字段。普通旧调用省略新参数时保留原调用路径。
+
+模块与迭代写入的 `request_id` 缺省时由 client 生成；需要跨调用重试时由调用者传入稳定标识并保留完整输入。
+任务创建使用 `idempotency_key`，提供该 key 后，client 不再为每次重试附加不同的任务 ID。
+冲突直接返回调用者，client 不读取新版本覆盖原命令后重试。
+
 ## 事件订阅
 
 `open_event_stream(...).await` 在正式 `QueryService` 中订阅完整 `ListEvents` 查询窗口。

@@ -16,6 +16,9 @@ use crate::shared::{KanbanMcp, call_client};
 struct TaskListArgs {
     /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
+    #[serde(default)]
+    module_ids: Vec<String>,
+    cycle_id: Option<String>,
     status: Vec<ApiTaskStatus>,
     priority: Vec<i64>,
     label: Vec<String>,
@@ -34,6 +37,9 @@ struct TaskListArgs {
 struct TaskListByStatusArgs {
     /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
+    #[serde(default)]
+    module_ids: Vec<String>,
+    cycle_id: Option<String>,
     status: Vec<ApiTaskStatus>,
     priority: Vec<i64>,
     label: Vec<String>,
@@ -74,6 +80,8 @@ impl KanbanMcp {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let query = ListTasksQuery {
+            module_ids: args.module_ids,
+            cycle_id: args.cycle_id,
             status: args.status,
             priority,
             label: args
@@ -120,6 +128,8 @@ impl KanbanMcp {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let query = ListTasksByStatusQuery {
+            module_ids: args.module_ids,
+            cycle_id: args.cycle_id,
             status: args.status,
             priority,
             label: args

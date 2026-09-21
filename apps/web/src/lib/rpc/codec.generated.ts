@@ -56,10 +56,12 @@ export function encodeListBoardColumnsRequest(call: RpcCall): s.ListBoardColumns
 
 export function encodeListTasksRequest(call: RpcCall): s.ListTasksRequest {
   const path = c.record(call.path ?? {}, ["board"])
-  const query = c.record(call.query ?? {}, ["status","priority","label","plan_filter","assignee","q","include_archived","limit","offset","sort"])
+  const query = c.record(call.query ?? {}, ["status","module_ids","cycle_id","priority","label","plan_filter","assignee","q","include_archived","limit","offset","sort"])
   return create(s.ListTasksRequestSchema, {
     board: c.text(path["board"]),
     status: c.array((query["status"] ?? []), (value) => encodeDtoApiTaskStatus(value)),
+    moduleIds: c.array((query["module_ids"] ?? []), (value) => c.text(value)),
+    cycleId: c.optional(query["cycle_id"], (value) => c.text(value)),
     priority: c.array((query["priority"] ?? []), (value) => encodeDtoApiTaskPriority(value)),
     label: c.array((query["label"] ?? []), (value) => encodeDtoTaskReadLabel(value)),
     planFilter: c.array((query["plan_filter"] ?? []), (value) => encodeDtoTaskReadPlanFilter(value)),
@@ -74,10 +76,12 @@ export function encodeListTasksRequest(call: RpcCall): s.ListTasksRequest {
 
 export function encodeListTasksByStatusRequest(call: RpcCall): s.ListTasksByStatusRequest {
   const path = c.record(call.path ?? {}, ["board"])
-  const query = c.record(call.query ?? {}, ["status","priority","label","plan_filter","assignee","q","include_archived","limit","offset","sort"])
+  const query = c.record(call.query ?? {}, ["status","module_ids","cycle_id","priority","label","plan_filter","assignee","q","include_archived","limit","offset","sort"])
   return create(s.ListTasksByStatusRequestSchema, {
     board: c.text(path["board"]),
     status: c.array((query["status"] ?? []), (value) => encodeDtoApiTaskStatus(value)),
+    moduleIds: c.array((query["module_ids"] ?? []), (value) => c.text(value)),
+    cycleId: c.optional(query["cycle_id"], (value) => c.text(value)),
     priority: c.array((query["priority"] ?? []), (value) => encodeDtoApiTaskPriority(value)),
     label: c.array((query["label"] ?? []), (value) => encodeDtoTaskReadLabel(value)),
     planFilter: c.array((query["plan_filter"] ?? []), (value) => encodeDtoTaskReadPlanFilter(value)),
@@ -92,9 +96,13 @@ export function encodeListTasksByStatusRequest(call: RpcCall): s.ListTasksByStat
 
 export function encodeCreateTaskRequest(call: RpcCall): s.CreateTaskRequest {
   const path = c.record(call.path ?? {}, ["board"])
-  const input = c.record(call.input ?? {}, ["task_id","idempotency_key","title","description","status","assignee","priority","scheduled_at","due_at","max_retries","metadata","labels","depends_on","actor"])
+  const input = c.record(call.input ?? {}, ["module_ids","cycle_id","expected_versions","expected_catalog_version","task_id","idempotency_key","title","description","status","assignee","priority","scheduled_at","due_at","max_retries","metadata","labels","depends_on","actor"])
   return create(s.CreateTaskRequestSchema, {
     board: c.text(path["board"]),
+    moduleIds: c.array((input["module_ids"] ?? []), (value) => c.text(value)),
+    cycleId: c.optional(input["cycle_id"], (value) => c.text(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
     taskId: c.optional(input["task_id"], (value) => c.text(value)),
     idempotencyKey: c.optional(input["idempotency_key"], (value) => c.text(value)),
     title: c.text(input["title"]),
@@ -123,9 +131,15 @@ export function encodeGetTaskRequest(call: RpcCall): s.GetTaskRequest {
 
 export function encodeUpdateTaskRequest(call: RpcCall): s.UpdateTaskRequest {
   const path = c.record(call.path ?? {}, ["task_id"])
-  const input = c.record(call.input ?? {}, ["title","description","assignee","priority","scheduled_at","due_at","max_retries","metadata","actor","expected_lock_version"])
+  const input = c.record(call.input ?? {}, ["module_ids","cycle_id","expected_object_version","expected_versions","expected_catalog_version","request_id","title","description","assignee","priority","scheduled_at","due_at","max_retries","metadata","actor","expected_lock_version"])
   return create(s.UpdateTaskRequestSchema, {
     taskId: c.text(path["task_id"]),
+    moduleIds: c.optional(input["module_ids"], (value) => encodeListOfString(value)),
+    cycleId: c.present(input["cycle_id"], (value) => create(d.PatchStringSchema, { change: value === null ? { case: "clear", value: create(EmptySchema) } : { case: "value", value: c.text(value) } })),
+    expectedObjectVersion: c.optional(input["expected_object_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
     title: c.optional(input["title"], (value) => c.text(value)),
     description: c.present(input["description"], (value) => create(d.PatchStringSchema, { change: value === null ? { case: "clear", value: create(EmptySchema) } : { case: "value", value: c.text(value) } })),
     assignee: c.present(input["assignee"], (value) => create(d.PatchStringSchema, { change: value === null ? { case: "clear", value: create(EmptySchema) } : { case: "value", value: c.text(value) } })),
@@ -1278,6 +1292,317 @@ export function encodeGetLabelOntologyQualityRequest(call: RpcCall): s.GetLabelO
   })
 }
 
+export function encodeGetPlanningCapabilitiesRequest(call: RpcCall): s.GetPlanningCapabilitiesRequest {
+  void call
+  return create(s.GetPlanningCapabilitiesRequestSchema, {
+  })
+}
+
+export function encodeListModulesRequest(call: RpcCall): s.ListModulesRequest {
+  const path = c.record(call.path ?? {}, ["board"])
+  const query = c.record(call.query ?? {}, ["q","include_archived","limit","offset","parent_id"])
+  return create(s.ListModulesRequestSchema, {
+    board: c.text(path["board"]),
+    q: c.optional(query["q"], (value) => c.text(value)),
+    includeArchived: c.present(query["include_archived"], (value) => c.bool(value)),
+    limit: c.present(query["limit"], (value) => c.int64(value, true)),
+    offset: c.present(query["offset"], (value) => c.int64(value, true)),
+    parentId: c.optional(query["parent_id"], (value) => c.text(value)),
+  })
+}
+
+export function encodeGetModuleRequest(call: RpcCall): s.GetModuleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  return create(s.GetModuleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+  })
+}
+
+export function encodeCreateModuleRequest(call: RpcCall): s.CreateModuleRequest {
+  const path = c.record(call.path ?? {}, ["board"])
+  const input = c.record(call.input ?? {}, ["title","body","parent_id","request_id","actor","expected_versions","expected_catalog_version"])
+  return create(s.CreateModuleRequestSchema, {
+    board: c.text(path["board"]),
+    title: c.text(input["title"]),
+    body: c.optional(input["body"], (value) => c.text(value)),
+    parentId: c.optional(input["parent_id"], (value) => c.text(value)),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeUpdateModuleRequest(call: RpcCall): s.UpdateModuleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["title","body","parent_id","request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.UpdateModuleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    title: c.optional(input["title"], (value) => c.text(value)),
+    body: c.present(input["body"], (value) => create(d.PatchStringSchema, { change: value === null ? { case: "clear", value: create(EmptySchema) } : { case: "value", value: c.text(value) } })),
+    parentId: c.present(input["parent_id"], (value) => create(d.PatchStringSchema, { change: value === null ? { case: "clear", value: create(EmptySchema) } : { case: "value", value: c.text(value) } })),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeArchiveModuleRequest(call: RpcCall): s.ArchiveModuleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.ArchiveModuleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeRestoreModuleRequest(call: RpcCall): s.RestoreModuleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.RestoreModuleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeGetModuleOverviewRequest(call: RpcCall): s.GetModuleOverviewRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  return create(s.GetModuleOverviewRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+  })
+}
+
+export function encodeListModuleTasksRequest(call: RpcCall): s.ListModuleTasksRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const query = c.record(call.query ?? {}, ["limit","offset"])
+  return create(s.ListModuleTasksRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    limit: c.present(query["limit"], (value) => c.int64(value, true)),
+    offset: c.present(query["offset"], (value) => c.int64(value, true)),
+  })
+}
+
+export function encodeAddModuleTaskRequest(call: RpcCall): s.AddModuleTaskRequest {
+  const path = c.record(call.path ?? {}, ["board","id","task_id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.AddModuleTaskRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    taskId: c.text(path["task_id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeRemoveModuleTaskRequest(call: RpcCall): s.RemoveModuleTaskRequest {
+  const path = c.record(call.path ?? {}, ["board","id","task_id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.RemoveModuleTaskRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    taskId: c.text(path["task_id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeListCyclesRequest(call: RpcCall): s.ListCyclesRequest {
+  const path = c.record(call.path ?? {}, ["board"])
+  const query = c.record(call.query ?? {}, ["q","include_archived","limit","offset","status"])
+  return create(s.ListCyclesRequestSchema, {
+    board: c.text(path["board"]),
+    q: c.optional(query["q"], (value) => c.text(value)),
+    includeArchived: c.present(query["include_archived"], (value) => c.bool(value)),
+    limit: c.present(query["limit"], (value) => c.int64(value, true)),
+    offset: c.present(query["offset"], (value) => c.int64(value, true)),
+    status: c.optional(query["status"], (value) => encodeDtoApiCycleStatus(value)),
+  })
+}
+
+export function encodeGetCycleRequest(call: RpcCall): s.GetCycleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  return create(s.GetCycleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+  })
+}
+
+export function encodeCreateCycleRequest(call: RpcCall): s.CreateCycleRequest {
+  const path = c.record(call.path ?? {}, ["board"])
+  const input = c.record(call.input ?? {}, ["title","body","starts_at","ends_at","request_id","actor","expected_versions","expected_catalog_version"])
+  return create(s.CreateCycleRequestSchema, {
+    board: c.text(path["board"]),
+    title: c.text(input["title"]),
+    body: c.optional(input["body"], (value) => c.text(value)),
+    startsAt: c.int64(input["starts_at"]),
+    endsAt: c.int64(input["ends_at"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeUpdateCycleRequest(call: RpcCall): s.UpdateCycleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["title","body","starts_at","ends_at","request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.UpdateCycleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    title: c.optional(input["title"], (value) => c.text(value)),
+    body: c.present(input["body"], (value) => create(d.PatchStringSchema, { change: value === null ? { case: "clear", value: create(EmptySchema) } : { case: "value", value: c.text(value) } })),
+    startsAt: c.optional(input["starts_at"], (value) => c.int64(value)),
+    endsAt: c.optional(input["ends_at"], (value) => c.int64(value)),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeArchiveCycleRequest(call: RpcCall): s.ArchiveCycleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.ArchiveCycleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeRestoreCycleRequest(call: RpcCall): s.RestoreCycleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.RestoreCycleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeGetCycleOverviewRequest(call: RpcCall): s.GetCycleOverviewRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  return create(s.GetCycleOverviewRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+  })
+}
+
+export function encodeListCycleTasksRequest(call: RpcCall): s.ListCycleTasksRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const query = c.record(call.query ?? {}, ["limit","offset"])
+  return create(s.ListCycleTasksRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    limit: c.present(query["limit"], (value) => c.int64(value, true)),
+    offset: c.present(query["offset"], (value) => c.int64(value, true)),
+  })
+}
+
+export function encodeAddCycleTaskRequest(call: RpcCall): s.AddCycleTaskRequest {
+  const path = c.record(call.path ?? {}, ["board","id","task_id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.AddCycleTaskRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    taskId: c.text(path["task_id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeRemoveCycleTaskRequest(call: RpcCall): s.RemoveCycleTaskRequest {
+  const path = c.record(call.path ?? {}, ["board","id","task_id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.RemoveCycleTaskRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    taskId: c.text(path["task_id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeStartCycleRequest(call: RpcCall): s.StartCycleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.StartCycleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeCloseCycleRequest(call: RpcCall): s.CloseCycleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["carry_to","request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.CloseCycleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    carryTo: c.optional(input["carry_to"], (value) => c.text(value)),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
+export function encodeCancelCycleRequest(call: RpcCall): s.CancelCycleRequest {
+  const path = c.record(call.path ?? {}, ["board","id"])
+  const input = c.record(call.input ?? {}, ["request_id","actor","expected_version","expected_versions","expected_catalog_version"])
+  return create(s.CancelCycleRequestSchema, {
+    board: c.text(path["board"]),
+    id: c.text(path["id"]),
+    requestId: c.optional(input["request_id"], (value) => c.text(value)),
+    actor: c.optional(input["actor"], (value) => c.text(value)),
+    expectedVersion: c.optional(input["expected_version"], (value) => c.int64(value)),
+    expectedVersions: c.dictionary((input["expected_versions"] ?? {}), (value) => encodeDtoApiObjectVersion(value)),
+    expectedCatalogVersion: c.optional(input["expected_catalog_version"], (value) => c.int64(value)),
+  })
+}
+
 export function encodeAcceptLabelProposalResponse(value: unknown): d.AcceptLabelProposalResponse {
   const dto = c.record(value, ["data"])
   return create(d.AcceptLabelProposalResponseSchema, {
@@ -1290,6 +1615,18 @@ export function decodeAcceptLabelProposalResponse(wire: d.AcceptLabelProposalRes
   })
 }
 
+export function encodeAddCycleTaskResponse(value: unknown): d.AddCycleTaskResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.AddCycleTaskResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeAddCycleTaskResponse(wire: d.AddCycleTaskResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
+  })
+}
+
 export function encodeAddDependencyResponse(value: unknown): d.AddDependencyResponse {
   const dto = c.record(value, ["data"])
   return create(d.AddDependencyResponseSchema, {
@@ -1299,6 +1636,18 @@ export function encodeAddDependencyResponse(value: unknown): d.AddDependencyResp
 export function decodeAddDependencyResponse(wire: d.AddDependencyResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": decodeDtoApiDependencies(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeAddModuleTaskResponse(value: unknown): d.AddModuleTaskResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.AddModuleTaskResponseSchema, {
+    data: encodeDtoModuleMutationData(dto["data"]),
+  })
+}
+export function decodeAddModuleTaskResponse(wire: d.AddModuleTaskResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoModuleMutationData(c.required(wire.data, "data")),
   })
 }
 
@@ -1337,6 +1686,30 @@ export function encodeArchiveBoardResponse(value: unknown): d.ArchiveBoardRespon
 export function decodeArchiveBoardResponse(wire: d.ArchiveBoardResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": decodeDtoApiBoard(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeArchiveCycleResponse(value: unknown): d.ArchiveCycleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.ArchiveCycleResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeArchiveCycleResponse(wire: d.ArchiveCycleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeArchiveModuleResponse(value: unknown): d.ArchiveModuleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.ArchiveModuleResponseSchema, {
+    data: encodeDtoModuleMutationData(dto["data"]),
+  })
+}
+export function decodeArchiveModuleResponse(wire: d.ArchiveModuleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoModuleMutationData(c.required(wire.data, "data")),
   })
 }
 
@@ -1400,6 +1773,18 @@ export function decodeBuildContextResponse(wire: d.BuildContextResponse): Record
   })
 }
 
+export function encodeCancelCycleResponse(value: unknown): d.CancelCycleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.CancelCycleResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeCancelCycleResponse(wire: d.CancelCycleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
+  })
+}
+
 export function encodeCheckpointResponse(value: unknown): d.CheckpointResponse {
   const dto = c.record(value, ["data"])
   return create(d.CheckpointResponseSchema, {
@@ -1421,6 +1806,18 @@ export function encodeClaimTaskResponse(value: unknown): d.ClaimTaskResponse {
 export function decodeClaimTaskResponse(wire: d.ClaimTaskResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": decodeDtoApiClaim(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeCloseCycleResponse(value: unknown): d.CloseCycleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.CloseCycleResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeCloseCycleResponse(wire: d.CloseCycleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
   })
 }
 
@@ -1508,6 +1905,18 @@ export function decodeCreateCommentResponse(wire: d.CreateCommentResponse): Reco
   })
 }
 
+export function encodeCreateCycleResponse(value: unknown): d.CreateCycleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.CreateCycleResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeCreateCycleResponse(wire: d.CreateCycleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
+  })
+}
+
 export function encodeCreateLabelOntologyActionResponse(value: unknown): d.CreateLabelOntologyActionResponse {
   const dto = c.record(value, ["data"])
   return create(d.CreateLabelOntologyActionResponseSchema, {
@@ -1517,6 +1926,18 @@ export function encodeCreateLabelOntologyActionResponse(value: unknown): d.Creat
 export function decodeCreateLabelOntologyActionResponse(wire: d.CreateLabelOntologyActionResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": decodeDtoLabelOntologyActionWire(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeCreateModuleResponse(value: unknown): d.CreateModuleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.CreateModuleResponseSchema, {
+    data: encodeDtoModuleMutationData(dto["data"]),
+  })
+}
+export function decodeCreateModuleResponse(wire: d.CreateModuleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoModuleMutationData(c.required(wire.data, "data")),
   })
 }
 
@@ -1745,6 +2166,85 @@ const DtoApiCreateTaskStatusNames = {
 export function encodeDtoApiCreateTaskStatus(value: unknown): d.DtoApiCreateTaskStatus { return c.enumValue(value, DtoApiCreateTaskStatusNames) }
 export function decodeDtoApiCreateTaskStatus(value: d.DtoApiCreateTaskStatus): string { return c.enumName(value, DtoApiCreateTaskStatusNames) }
 
+export function encodeDtoApiCycle(value: unknown): d.DtoApiCycle {
+  const dto = c.record(value, ["id","board_id","title","version","created_at","updated_at","archived_at","body","status","starts_at","ends_at","started_at","closed_at"])
+  return create(d.DtoApiCycleSchema, {
+    id: c.text(dto["id"]),
+    boardId: c.text(dto["board_id"]),
+    title: c.text(dto["title"]),
+    version: c.int64(dto["version"]),
+    createdAt: c.int64(dto["created_at"]),
+    updatedAt: c.int64(dto["updated_at"]),
+    archivedAt: c.optional(dto["archived_at"], (value) => c.int64(value)),
+    body: c.optional(dto["body"], (value) => c.text(value)),
+    status: encodeDtoApiCycleStatus(dto["status"]),
+    startsAt: c.int64(dto["starts_at"]),
+    endsAt: c.int64(dto["ends_at"]),
+    startedAt: c.optional(dto["started_at"], (value) => c.int64(value)),
+    closedAt: c.optional(dto["closed_at"], (value) => c.int64(value)),
+  })
+}
+export function decodeDtoApiCycle(wire: d.DtoApiCycle): Record<string, unknown> {
+  return c.omitUndefined({
+    "id": c.required(wire.id, "id"),
+    "board_id": c.required(wire.boardId, "board_id"),
+    "title": c.required(wire.title, "title"),
+    "version": c.integerValue(c.required(wire.version, "version")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.integerValue(value))(wire.archivedAt),
+    "body": wire.body === undefined ? null : ((value) => value)(wire.body),
+    "status": decodeDtoApiCycleStatus(c.required(wire.status, "status")),
+    "starts_at": c.integerValue(c.required(wire.startsAt, "starts_at")),
+    "ends_at": c.integerValue(c.required(wire.endsAt, "ends_at")),
+    "started_at": wire.startedAt === undefined ? null : ((value) => c.integerValue(value))(wire.startedAt),
+    "closed_at": wire.closedAt === undefined ? null : ((value) => c.integerValue(value))(wire.closedAt),
+  })
+}
+
+const DtoApiCycleStatusNames = {
+  "planned": d.DtoApiCycleStatus.PLANNED,
+  "active": d.DtoApiCycleStatus.ACTIVE,
+  "completed": d.DtoApiCycleStatus.COMPLETED,
+  "cancelled": d.DtoApiCycleStatus.CANCELLED,
+} as const
+export function encodeDtoApiCycleStatus(value: unknown): d.DtoApiCycleStatus { return c.enumValue(value, DtoApiCycleStatusNames) }
+export function decodeDtoApiCycleStatus(value: d.DtoApiCycleStatus): string { return c.enumName(value, DtoApiCycleStatusNames) }
+
+export function encodeDtoApiCycleSummary(value: unknown): d.DtoApiCycleSummary {
+  const dto = c.record(value, ["id","board_id","title","version","created_at","updated_at","archived_at","status","starts_at","ends_at","started_at","closed_at"])
+  return create(d.DtoApiCycleSummarySchema, {
+    id: c.text(dto["id"]),
+    boardId: c.text(dto["board_id"]),
+    title: c.text(dto["title"]),
+    version: c.int64(dto["version"]),
+    createdAt: c.int64(dto["created_at"]),
+    updatedAt: c.int64(dto["updated_at"]),
+    archivedAt: c.optional(dto["archived_at"], (value) => c.int64(value)),
+    status: encodeDtoApiCycleStatus(dto["status"]),
+    startsAt: c.int64(dto["starts_at"]),
+    endsAt: c.int64(dto["ends_at"]),
+    startedAt: c.optional(dto["started_at"], (value) => c.int64(value)),
+    closedAt: c.optional(dto["closed_at"], (value) => c.int64(value)),
+  })
+}
+export function decodeDtoApiCycleSummary(wire: d.DtoApiCycleSummary): Record<string, unknown> {
+  return c.omitUndefined({
+    "id": c.required(wire.id, "id"),
+    "board_id": c.required(wire.boardId, "board_id"),
+    "title": c.required(wire.title, "title"),
+    "version": c.integerValue(c.required(wire.version, "version")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.integerValue(value))(wire.archivedAt),
+    "status": decodeDtoApiCycleStatus(c.required(wire.status, "status")),
+    "starts_at": c.integerValue(c.required(wire.startsAt, "starts_at")),
+    "ends_at": c.integerValue(c.required(wire.endsAt, "ends_at")),
+    "started_at": wire.startedAt === undefined ? null : ((value) => c.integerValue(value))(wire.startedAt),
+    "closed_at": wire.closedAt === undefined ? null : ((value) => c.integerValue(value))(wire.closedAt),
+  })
+}
+
 export function encodeDtoApiDependencies(value: unknown): d.DtoApiDependencies {
   const dto = c.record(value, ["task","parents","children","edges"])
   return create(d.DtoApiDependenciesSchema, {
@@ -1870,6 +2370,136 @@ export function decodeDtoApiLabel(wire: d.DtoApiLabel): Record<string, unknown> 
   })
 }
 
+export function encodeDtoApiModule(value: unknown): d.DtoApiModule {
+  const dto = c.record(value, ["id","board_id","title","version","created_at","updated_at","archived_at","body","parent_id"])
+  return create(d.DtoApiModuleSchema, {
+    id: c.text(dto["id"]),
+    boardId: c.text(dto["board_id"]),
+    title: c.text(dto["title"]),
+    version: c.int64(dto["version"]),
+    createdAt: c.int64(dto["created_at"]),
+    updatedAt: c.int64(dto["updated_at"]),
+    archivedAt: c.optional(dto["archived_at"], (value) => c.int64(value)),
+    body: c.optional(dto["body"], (value) => c.text(value)),
+    parentId: c.optional(dto["parent_id"], (value) => c.text(value)),
+  })
+}
+export function decodeDtoApiModule(wire: d.DtoApiModule): Record<string, unknown> {
+  return c.omitUndefined({
+    "id": c.required(wire.id, "id"),
+    "board_id": c.required(wire.boardId, "board_id"),
+    "title": c.required(wire.title, "title"),
+    "version": c.integerValue(c.required(wire.version, "version")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.integerValue(value))(wire.archivedAt),
+    "body": wire.body === undefined ? null : ((value) => value)(wire.body),
+    "parent_id": wire.parentId === undefined ? null : ((value) => value)(wire.parentId),
+  })
+}
+
+export function encodeDtoApiModuleSummary(value: unknown): d.DtoApiModuleSummary {
+  const dto = c.record(value, ["id","board_id","title","version","created_at","updated_at","archived_at","parent_id"])
+  return create(d.DtoApiModuleSummarySchema, {
+    id: c.text(dto["id"]),
+    boardId: c.text(dto["board_id"]),
+    title: c.text(dto["title"]),
+    version: c.int64(dto["version"]),
+    createdAt: c.int64(dto["created_at"]),
+    updatedAt: c.int64(dto["updated_at"]),
+    archivedAt: c.optional(dto["archived_at"], (value) => c.int64(value)),
+    parentId: c.optional(dto["parent_id"], (value) => c.text(value)),
+  })
+}
+export function decodeDtoApiModuleSummary(wire: d.DtoApiModuleSummary): Record<string, unknown> {
+  return c.omitUndefined({
+    "id": c.required(wire.id, "id"),
+    "board_id": c.required(wire.boardId, "board_id"),
+    "title": c.required(wire.title, "title"),
+    "version": c.integerValue(c.required(wire.version, "version")),
+    "created_at": c.integerValue(c.required(wire.createdAt, "created_at")),
+    "updated_at": c.integerValue(c.required(wire.updatedAt, "updated_at")),
+    "archived_at": wire.archivedAt === undefined ? null : ((value) => c.integerValue(value))(wire.archivedAt),
+    "parent_id": wire.parentId === undefined ? null : ((value) => value)(wire.parentId),
+  })
+}
+
+export function encodeDtoApiObjectVersion(value: unknown): d.DtoApiObjectVersion {
+  const dto = c.record(value, ["object","source"])
+  return create(d.DtoApiObjectVersionSchema, {
+    object: c.int64(dto["object"]),
+    source: c.optional(dto["source"], (value) => c.int64(value)),
+  })
+}
+export function decodeDtoApiObjectVersion(wire: d.DtoApiObjectVersion): Record<string, unknown> {
+  return c.omitUndefined({
+    "object": c.integerValue(c.required(wire.object, "object")),
+    "source": wire.source === undefined ? null : ((value) => c.integerValue(value))(wire.source),
+  })
+}
+
+export function encodeDtoApiPlanningMember(value: unknown): d.DtoApiPlanningMember {
+  const dto = c.record(value, ["id","title","status","version","carried_to"])
+  return create(d.DtoApiPlanningMemberSchema, {
+    id: c.text(dto["id"]),
+    title: c.text(dto["title"]),
+    status: encodeDtoApiTaskStatus(dto["status"]),
+    version: encodeDtoApiObjectVersion(dto["version"]),
+    carriedTo: c.optional(dto["carried_to"], (value) => c.text(value)),
+  })
+}
+export function decodeDtoApiPlanningMember(wire: d.DtoApiPlanningMember): Record<string, unknown> {
+  return c.omitUndefined({
+    "id": c.required(wire.id, "id"),
+    "title": c.required(wire.title, "title"),
+    "status": decodeDtoApiTaskStatus(c.required(wire.status, "status")),
+    "version": decodeDtoApiObjectVersion(c.required(wire.version, "version")),
+    "carried_to": wire.carriedTo === undefined ? null : ((value) => value)(wire.carriedTo),
+  })
+}
+
+export function encodeDtoApiPlanningProgress(value: unknown): d.DtoApiPlanningProgress {
+  const dto = c.record(value, ["total","done","archived","blocked","completion_ratio"])
+  return create(d.DtoApiPlanningProgressSchema, {
+    total: c.int64(dto["total"]),
+    done: c.int64(dto["done"]),
+    archived: c.int64(dto["archived"]),
+    blocked: c.int64(dto["blocked"]),
+    completionRatio: c.optional(dto["completion_ratio"], (value) => c.float(value)),
+  })
+}
+export function decodeDtoApiPlanningProgress(wire: d.DtoApiPlanningProgress): Record<string, unknown> {
+  return c.omitUndefined({
+    "total": c.integerValue(c.required(wire.total, "total")),
+    "done": c.integerValue(c.required(wire.done, "done")),
+    "archived": c.integerValue(c.required(wire.archived, "archived")),
+    "blocked": c.integerValue(c.required(wire.blocked, "blocked")),
+    "completion_ratio": wire.completionRatio === undefined ? null : ((value) => c.float(value))(wire.completionRatio),
+  })
+}
+
+export function encodeDtoApiPlanningReceipt(value: unknown): d.DtoApiPlanningReceipt {
+  const dto = c.record(value, ["request_id","ids","event_sequence","catalog_version","replayed","versions"])
+  return create(d.DtoApiPlanningReceiptSchema, {
+    requestId: c.text(dto["request_id"]),
+    ids: c.array(dto["ids"], (value) => c.text(value)),
+    eventSequence: c.int64(dto["event_sequence"]),
+    catalogVersion: c.int64(dto["catalog_version"]),
+    replayed: c.bool(dto["replayed"]),
+    versions: c.dictionary(dto["versions"], (value) => encodeDtoApiObjectVersion(value)),
+  })
+}
+export function decodeDtoApiPlanningReceipt(wire: d.DtoApiPlanningReceipt): Record<string, unknown> {
+  return c.omitUndefined({
+    "request_id": c.required(wire.requestId, "request_id"),
+    "ids": wire.ids.map((value) => value),
+    "event_sequence": c.integerValue(c.required(wire.eventSequence, "event_sequence")),
+    "catalog_version": c.integerValue(c.required(wire.catalogVersion, "catalog_version")),
+    "replayed": c.required(wire.replayed, "replayed"),
+    "versions": Object.fromEntries(Object.entries(wire.versions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),
+  })
+}
+
 export function encodeDtoApiRelation(value: unknown): d.DtoApiRelation {
   const dto = c.record(value, ["subject_uri","predicate","object_uri","graph_uri","provenance","metadata","created_at","updated_at"])
   return create(d.DtoApiRelationSchema, {
@@ -1985,8 +2615,11 @@ export function encodeDtoApiStepStatus(value: unknown): d.DtoApiStepStatus { ret
 export function decodeDtoApiStepStatus(value: d.DtoApiStepStatus): string { return c.enumName(value, DtoApiStepStatusNames) }
 
 export function encodeDtoApiTask(value: unknown): d.DtoApiTask {
-  const dto = c.record(value, ["id","board_id","board_slug","ref","seq","title","description","status","status_reason","assignee","priority","position","scheduled_at","due_at","created_by","created_at","updated_at","started_at","completed_at","archived_at","claim_owner","claim_expires_at","last_heartbeat_at","current_run_id","retry_count","max_retries","result_summary","result","metadata","lock_version","dependency_blocked","unfinished_parent_count","execution_plan_state","required_step_count","completed_required_step_count","optional_step_count","labels"])
+  const dto = c.record(value, ["module_ids","cycle_id","object_version","id","board_id","board_slug","ref","seq","title","description","status","status_reason","assignee","priority","position","scheduled_at","due_at","created_by","created_at","updated_at","started_at","completed_at","archived_at","claim_owner","claim_expires_at","last_heartbeat_at","current_run_id","retry_count","max_retries","result_summary","result","metadata","lock_version","dependency_blocked","unfinished_parent_count","execution_plan_state","required_step_count","completed_required_step_count","optional_step_count","labels"])
   return create(d.DtoApiTaskSchema, {
+    moduleIds: c.array((dto["module_ids"] ?? []), (value) => c.text(value)),
+    cycleId: c.optional(dto["cycle_id"], (value) => c.text(value)),
+    objectVersion: c.optional(dto["object_version"], (value) => c.int64(value)),
     id: c.text(dto["id"]),
     boardId: c.text(dto["board_id"]),
     boardSlug: c.text(dto["board_slug"]),
@@ -2028,6 +2661,9 @@ export function encodeDtoApiTask(value: unknown): d.DtoApiTask {
 }
 export function decodeDtoApiTask(wire: d.DtoApiTask): Record<string, unknown> {
   return c.omitUndefined({
+    "module_ids": wire.moduleIds.map((value) => value),
+    "cycle_id": wire.cycleId === undefined ? null : ((value) => value)(wire.cycleId),
+    "object_version": wire.objectVersion === undefined ? null : ((value) => c.integerValue(value))(wire.objectVersion),
     "id": c.required(wire.id, "id"),
     "board_id": c.required(wire.boardId, "board_id"),
     "board_slug": c.required(wire.boardSlug, "board_slug"),
@@ -2508,13 +3144,13 @@ export function decodeDtoContextItem(wire: d.DtoContextItem): Record<string, unk
   return c.omitUndefined({
     "entity_uri": c.required(wire.entityUri, "entity_uri"),
     "source": c.required(wire.source, "source"),
-    "provenance": wire.provenance.map((value) => value),
+    "provenance": wire.provenance.length === 0 ? undefined : wire.provenance.map((value) => value),
     "score": wire.score === undefined ? null : ((value) => c.float(value))(wire.score),
     "title": wire.title === undefined ? null : ((value) => value)(wire.title),
     "snippet": wire.snippet === undefined ? null : ((value) => value)(wire.snippet),
     "rank": c.integerValue(c.required(wire.rank, "rank")),
     "reason": c.required(wire.reason, "reason"),
-    "evidence": wire.evidence.map((value) => decodeDtoContextEvidence(value)),
+    "evidence": wire.evidence.length === 0 ? undefined : wire.evidence.map((value) => decodeDtoContextEvidence(value)),
   })
 }
 
@@ -2537,8 +3173,8 @@ export function decodeDtoContextPack(wire: d.DtoContextPack): Record<string, unk
     "policy": decodeDtoContextPolicy(c.required(wire.policy, "policy")),
     "items": wire.items.map((value) => decodeDtoContextItem(value)),
     "degraded": wire.degraded.map((value) => value),
-    "diagnostics": wire.diagnostics.map((value) => decodeDtoContextDiagnostic(value)),
-    "providers": wire.providers.map((value) => decodeDtoContextProviderStatus(value)),
+    "diagnostics": wire.diagnostics.length === 0 ? undefined : wire.diagnostics.map((value) => decodeDtoContextDiagnostic(value)),
+    "providers": wire.providers.length === 0 ? undefined : wire.providers.map((value) => decodeDtoContextProviderStatus(value)),
     "truncated": c.required(wire.truncated, "truncated"),
     "truncation_reason": wire.truncationReason === undefined ? undefined : ((value) => value)(wire.truncationReason),
   })
@@ -2595,6 +3231,38 @@ export function encodeDtoCreatedLabelsMetaOfDtoApiLabel(value: unknown): d.DtoCr
 export function decodeDtoCreatedLabelsMetaOfDtoApiLabel(wire: d.DtoCreatedLabelsMetaOfDtoApiLabel): Record<string, unknown> {
   return c.omitUndefined({
     "created_labels": wire.createdLabels.map((value) => decodeDtoApiLabel(value)),
+  })
+}
+
+export function encodeDtoCycleMutationData(value: unknown): d.DtoCycleMutationData {
+  const dto = c.record(value, ["object","receipt"])
+  return create(d.DtoCycleMutationDataSchema, {
+    object: encodeDtoApiCycle(dto["object"]),
+    receipt: encodeDtoApiPlanningReceipt(dto["receipt"]),
+  })
+}
+export function decodeDtoCycleMutationData(wire: d.DtoCycleMutationData): Record<string, unknown> {
+  return c.omitUndefined({
+    "object": decodeDtoApiCycle(c.required(wire.object, "object")),
+    "receipt": decodeDtoApiPlanningReceipt(c.required(wire.receipt, "receipt")),
+  })
+}
+
+export function encodeDtoCycleOverview(value: unknown): d.DtoCycleOverview {
+  const dto = c.record(value, ["object","progress","source","captured_at"])
+  return create(d.DtoCycleOverviewSchema, {
+    object: encodeDtoApiCycle(dto["object"]),
+    progress: encodeDtoApiPlanningProgress(dto["progress"]),
+    source: encodeDtoPlanningReadSource(dto["source"]),
+    capturedAt: c.optional(dto["captured_at"], (value) => c.int64(value)),
+  })
+}
+export function decodeDtoCycleOverview(wire: d.DtoCycleOverview): Record<string, unknown> {
+  return c.omitUndefined({
+    "object": decodeDtoApiCycle(c.required(wire.object, "object")),
+    "progress": decodeDtoApiPlanningProgress(c.required(wire.progress, "progress")),
+    "source": decodeDtoPlanningReadSource(c.required(wire.source, "source")),
+    "captured_at": wire.capturedAt === undefined ? null : ((value) => c.integerValue(value))(wire.capturedAt),
   })
 }
 
@@ -4144,6 +4812,38 @@ export function decodeDtoMaintenanceStatusReport(wire: d.DtoMaintenanceStatusRep
   })
 }
 
+export function encodeDtoModuleMutationData(value: unknown): d.DtoModuleMutationData {
+  const dto = c.record(value, ["object","receipt"])
+  return create(d.DtoModuleMutationDataSchema, {
+    object: encodeDtoApiModule(dto["object"]),
+    receipt: encodeDtoApiPlanningReceipt(dto["receipt"]),
+  })
+}
+export function decodeDtoModuleMutationData(wire: d.DtoModuleMutationData): Record<string, unknown> {
+  return c.omitUndefined({
+    "object": decodeDtoApiModule(c.required(wire.object, "object")),
+    "receipt": decodeDtoApiPlanningReceipt(c.required(wire.receipt, "receipt")),
+  })
+}
+
+export function encodeDtoModuleOverview(value: unknown): d.DtoModuleOverview {
+  const dto = c.record(value, ["object","progress","source","captured_at"])
+  return create(d.DtoModuleOverviewSchema, {
+    object: encodeDtoApiModule(dto["object"]),
+    progress: encodeDtoApiPlanningProgress(dto["progress"]),
+    source: encodeDtoPlanningReadSource(dto["source"]),
+    capturedAt: c.optional(dto["captured_at"], (value) => c.int64(value)),
+  })
+}
+export function decodeDtoModuleOverview(wire: d.DtoModuleOverview): Record<string, unknown> {
+  return c.omitUndefined({
+    "object": decodeDtoApiModule(c.required(wire.object, "object")),
+    "progress": decodeDtoApiPlanningProgress(c.required(wire.progress, "progress")),
+    "source": decodeDtoPlanningReadSource(c.required(wire.source, "source")),
+    "captured_at": wire.capturedAt === undefined ? null : ((value) => c.integerValue(value))(wire.capturedAt),
+  })
+}
+
 export function encodeDtoNextAfterMeta(value: unknown): d.DtoNextAfterMeta {
   const dto = c.record(value, ["next_after"])
   return create(d.DtoNextAfterMetaSchema, {
@@ -4169,6 +4869,29 @@ export function decodeDtoOffsetPaginationMeta(wire: d.DtoOffsetPaginationMeta): 
     "offset": c.integerValue(c.required(wire.offset, "offset")),
   })
 }
+
+export function encodeDtoPlanningCapabilities(value: unknown): d.DtoPlanningCapabilities {
+  const dto = c.record(value, ["version","task_membership","task_membership_filters"])
+  return create(d.DtoPlanningCapabilitiesSchema, {
+    version: c.int32(dto["version"], true),
+    taskMembership: c.bool(dto["task_membership"]),
+    taskMembershipFilters: c.bool(dto["task_membership_filters"]),
+  })
+}
+export function decodeDtoPlanningCapabilities(wire: d.DtoPlanningCapabilities): Record<string, unknown> {
+  return c.omitUndefined({
+    "version": c.required(wire.version, "version"),
+    "task_membership": c.required(wire.taskMembership, "task_membership"),
+    "task_membership_filters": c.required(wire.taskMembershipFilters, "task_membership_filters"),
+  })
+}
+
+const DtoPlanningReadSourceNames = {
+  "current": d.DtoPlanningReadSource.CURRENT,
+  "frozen_snapshot": d.DtoPlanningReadSource.FROZEN_SNAPSHOT,
+} as const
+export function encodeDtoPlanningReadSource(value: unknown): d.DtoPlanningReadSource { return c.enumValue(value, DtoPlanningReadSourceNames) }
+export function decodeDtoPlanningReadSource(value: d.DtoPlanningReadSource): string { return c.enumName(value, DtoPlanningReadSourceNames) }
 
 export function encodeDtoProjectionStoreStatus(value: unknown): d.DtoProjectionStoreStatus {
   const dto = c.record(value, ["store_name","active_generation","active_fingerprint","previous_generation","building_generation","lifecycle_status","fence_epoch","last_event_id","dirty","pending","running","failed","last_error","phase","degraded","errors","updated_at"])
@@ -5342,6 +6065,30 @@ export function decodeGetBoardResponse(wire: d.GetBoardResponse): Record<string,
   })
 }
 
+export function encodeGetCycleOverviewResponse(value: unknown): d.GetCycleOverviewResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.GetCycleOverviewResponseSchema, {
+    data: encodeDtoCycleOverview(dto["data"]),
+  })
+}
+export function decodeGetCycleOverviewResponse(wire: d.GetCycleOverviewResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleOverview(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeGetCycleResponse(value: unknown): d.GetCycleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.GetCycleResponseSchema, {
+    data: encodeDtoApiCycle(dto["data"]),
+  })
+}
+export function decodeGetCycleResponse(wire: d.GetCycleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoApiCycle(c.required(wire.data, "data")),
+  })
+}
+
 export function encodeGetEntityResponse(value: unknown): d.GetEntityResponse {
   const dto = c.record(value, ["data"])
   return create(d.GetEntityResponseSchema, {
@@ -5411,6 +6158,42 @@ export function encodeGetLabelSemanticsResponse(value: unknown): d.GetLabelSeman
 export function decodeGetLabelSemanticsResponse(wire: d.GetLabelSemanticsResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": decodeDtoLabelSemanticsWire(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeGetModuleOverviewResponse(value: unknown): d.GetModuleOverviewResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.GetModuleOverviewResponseSchema, {
+    data: encodeDtoModuleOverview(dto["data"]),
+  })
+}
+export function decodeGetModuleOverviewResponse(wire: d.GetModuleOverviewResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoModuleOverview(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeGetModuleResponse(value: unknown): d.GetModuleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.GetModuleResponseSchema, {
+    data: encodeDtoApiModule(dto["data"]),
+  })
+}
+export function decodeGetModuleResponse(wire: d.GetModuleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoApiModule(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeGetPlanningCapabilitiesResponse(value: unknown): d.GetPlanningCapabilitiesResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.GetPlanningCapabilitiesResponseSchema, {
+    data: encodeDtoPlanningCapabilities(dto["data"]),
+  })
+}
+export function decodeGetPlanningCapabilitiesResponse(wire: d.GetPlanningCapabilitiesResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoPlanningCapabilities(c.required(wire.data, "data")),
   })
 }
 
@@ -5646,6 +6429,48 @@ export function decodeListCommentsResponse(wire: d.ListCommentsResponse): Record
   })
 }
 
+export function encodeListCycleTasksResponse(value: unknown): d.ListCycleTasksResponse {
+  const dto = c.record(value, ["data","total","limit","offset","source","captured_at","object_version"])
+  return create(d.ListCycleTasksResponseSchema, {
+    data: c.array(dto["data"], (value) => encodeDtoApiPlanningMember(value)),
+    total: c.int64(dto["total"], true),
+    limit: c.int64(dto["limit"], true),
+    offset: c.int64(dto["offset"], true),
+    source: encodeDtoPlanningReadSource(dto["source"]),
+    capturedAt: c.optional(dto["captured_at"], (value) => c.int64(value)),
+    objectVersion: c.int64(dto["object_version"]),
+  })
+}
+export function decodeListCycleTasksResponse(wire: d.ListCycleTasksResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": wire.data.map((value) => decodeDtoApiPlanningMember(value)),
+    "total": c.integerValue(c.required(wire.total, "total")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
+    "offset": c.integerValue(c.required(wire.offset, "offset")),
+    "source": decodeDtoPlanningReadSource(c.required(wire.source, "source")),
+    "captured_at": wire.capturedAt === undefined ? null : ((value) => c.integerValue(value))(wire.capturedAt),
+    "object_version": c.integerValue(c.required(wire.objectVersion, "object_version")),
+  })
+}
+
+export function encodeListCyclesResponse(value: unknown): d.ListCyclesResponse {
+  const dto = c.record(value, ["data","total","limit","offset"])
+  return create(d.ListCyclesResponseSchema, {
+    data: c.array(dto["data"], (value) => encodeDtoApiCycleSummary(value)),
+    total: c.int64(dto["total"], true),
+    limit: c.int64(dto["limit"], true),
+    offset: c.int64(dto["offset"], true),
+  })
+}
+export function decodeListCyclesResponse(wire: d.ListCyclesResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": wire.data.map((value) => decodeDtoApiCycleSummary(value)),
+    "total": c.integerValue(c.required(wire.total, "total")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
+    "offset": c.integerValue(c.required(wire.offset, "offset")),
+  })
+}
+
 export function encodeListDependenciesResponse(value: unknown): d.ListDependenciesResponse {
   const dto = c.record(value, ["data"])
   return create(d.ListDependenciesResponseSchema, {
@@ -5719,6 +6544,48 @@ export function encodeListLabelSemanticsResponse(value: unknown): d.ListLabelSem
 export function decodeListLabelSemanticsResponse(wire: d.ListLabelSemanticsResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": wire.data.map((value) => decodeDtoLabelSemanticsWire(value)),
+  })
+}
+
+export function encodeListModuleTasksResponse(value: unknown): d.ListModuleTasksResponse {
+  const dto = c.record(value, ["data","total","limit","offset","source","captured_at","object_version"])
+  return create(d.ListModuleTasksResponseSchema, {
+    data: c.array(dto["data"], (value) => encodeDtoApiPlanningMember(value)),
+    total: c.int64(dto["total"], true),
+    limit: c.int64(dto["limit"], true),
+    offset: c.int64(dto["offset"], true),
+    source: encodeDtoPlanningReadSource(dto["source"]),
+    capturedAt: c.optional(dto["captured_at"], (value) => c.int64(value)),
+    objectVersion: c.int64(dto["object_version"]),
+  })
+}
+export function decodeListModuleTasksResponse(wire: d.ListModuleTasksResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": wire.data.map((value) => decodeDtoApiPlanningMember(value)),
+    "total": c.integerValue(c.required(wire.total, "total")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
+    "offset": c.integerValue(c.required(wire.offset, "offset")),
+    "source": decodeDtoPlanningReadSource(c.required(wire.source, "source")),
+    "captured_at": wire.capturedAt === undefined ? null : ((value) => c.integerValue(value))(wire.capturedAt),
+    "object_version": c.integerValue(c.required(wire.objectVersion, "object_version")),
+  })
+}
+
+export function encodeListModulesResponse(value: unknown): d.ListModulesResponse {
+  const dto = c.record(value, ["data","total","limit","offset"])
+  return create(d.ListModulesResponseSchema, {
+    data: c.array(dto["data"], (value) => encodeDtoApiModuleSummary(value)),
+    total: c.int64(dto["total"], true),
+    limit: c.int64(dto["limit"], true),
+    offset: c.int64(dto["offset"], true),
+  })
+}
+export function decodeListModulesResponse(wire: d.ListModulesResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": wire.data.map((value) => decodeDtoApiModuleSummary(value)),
+    "total": c.integerValue(c.required(wire.total, "total")),
+    "limit": c.integerValue(c.required(wire.limit, "limit")),
+    "offset": c.integerValue(c.required(wire.offset, "offset")),
   })
 }
 
@@ -6085,6 +6952,18 @@ export function decodeReleaseTaskResponse(wire: d.ReleaseTaskResponse): Record<s
   })
 }
 
+export function encodeRemoveCycleTaskResponse(value: unknown): d.RemoveCycleTaskResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.RemoveCycleTaskResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeRemoveCycleTaskResponse(wire: d.RemoveCycleTaskResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
+  })
+}
+
 export function encodeRemoveDependencyResponse(value: unknown): d.RemoveDependencyResponse {
   const dto = c.record(value, ["data"])
   return create(d.RemoveDependencyResponseSchema, {
@@ -6094,6 +6973,18 @@ export function encodeRemoveDependencyResponse(value: unknown): d.RemoveDependen
 export function decodeRemoveDependencyResponse(wire: d.RemoveDependencyResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": decodeDtoApiDependencies(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeRemoveModuleTaskResponse(value: unknown): d.RemoveModuleTaskResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.RemoveModuleTaskResponseSchema, {
+    data: encodeDtoModuleMutationData(dto["data"]),
+  })
+}
+export function decodeRemoveModuleTaskResponse(wire: d.RemoveModuleTaskResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoModuleMutationData(c.required(wire.data, "data")),
   })
 }
 
@@ -6154,6 +7045,30 @@ export function encodeResolveSignalsResponse(value: unknown): d.ResolveSignalsRe
 export function decodeResolveSignalsResponse(wire: d.ResolveSignalsResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": wire.data.map((value) => decodeDtoSignalWire(value)),
+  })
+}
+
+export function encodeRestoreCycleResponse(value: unknown): d.RestoreCycleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.RestoreCycleResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeRestoreCycleResponse(wire: d.RestoreCycleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeRestoreModuleResponse(value: unknown): d.RestoreModuleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.RestoreModuleResponseSchema, {
+    data: encodeDtoModuleMutationData(dto["data"]),
+  })
+}
+export function decodeRestoreModuleResponse(wire: d.RestoreModuleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoModuleMutationData(c.required(wire.data, "data")),
   })
 }
 
@@ -6261,6 +7176,18 @@ export function decodeSpecifyTaskResponse(wire: d.SpecifyTaskResponse): Record<s
   })
 }
 
+export function encodeStartCycleResponse(value: unknown): d.StartCycleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.StartCycleResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeStartCycleResponse(wire: d.StartCycleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
+  })
+}
+
 export function encodeSubmitReviewTaskResponse(value: unknown): d.SubmitReviewTaskResponse {
   const dto = c.record(value, ["data"])
   return create(d.SubmitReviewTaskResponseSchema, {
@@ -6330,6 +7257,30 @@ export function encodeUnblockTaskResponse(value: unknown): d.UnblockTaskResponse
 export function decodeUnblockTaskResponse(wire: d.UnblockTaskResponse): Record<string, unknown> {
   return c.omitUndefined({
     "data": decodeDtoApiTask(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeUpdateCycleResponse(value: unknown): d.UpdateCycleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.UpdateCycleResponseSchema, {
+    data: encodeDtoCycleMutationData(dto["data"]),
+  })
+}
+export function decodeUpdateCycleResponse(wire: d.UpdateCycleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoCycleMutationData(c.required(wire.data, "data")),
+  })
+}
+
+export function encodeUpdateModuleResponse(value: unknown): d.UpdateModuleResponse {
+  const dto = c.record(value, ["data"])
+  return create(d.UpdateModuleResponseSchema, {
+    data: encodeDtoModuleMutationData(dto["data"]),
+  })
+}
+export function decodeUpdateModuleResponse(wire: d.UpdateModuleResponse): Record<string, unknown> {
+  return c.omitUndefined({
+    "data": decodeDtoModuleMutationData(c.required(wire.data, "data")),
   })
 }
 
@@ -6586,6 +7537,30 @@ export async function invokeRpc(client: Client<typeof s.KanbanService>, call: Rp
     case "MaintenanceImportV30": return decodeMaintenanceImportV30Response(await client.maintenanceImportV30(encodeMaintenanceImportV30Request(call), options))
     case "GetTaskDetails": return decodeGetTaskDetailsResponse(await client.getTaskDetails(encodeGetTaskDetailsRequest(call), options))
     case "GetLabelOntologyQuality": return decodeGetLabelOntologyQualityResponse(await client.getLabelOntologyQuality(encodeGetLabelOntologyQualityRequest(call), options))
+    case "GetPlanningCapabilities": return decodeGetPlanningCapabilitiesResponse(await client.getPlanningCapabilities(encodeGetPlanningCapabilitiesRequest(call), options))
+    case "ListModules": return decodeListModulesResponse(await client.listModules(encodeListModulesRequest(call), options))
+    case "GetModule": return decodeGetModuleResponse(await client.getModule(encodeGetModuleRequest(call), options))
+    case "CreateModule": return decodeCreateModuleResponse(await client.createModule(encodeCreateModuleRequest(call), options))
+    case "UpdateModule": return decodeUpdateModuleResponse(await client.updateModule(encodeUpdateModuleRequest(call), options))
+    case "ArchiveModule": return decodeArchiveModuleResponse(await client.archiveModule(encodeArchiveModuleRequest(call), options))
+    case "RestoreModule": return decodeRestoreModuleResponse(await client.restoreModule(encodeRestoreModuleRequest(call), options))
+    case "GetModuleOverview": return decodeGetModuleOverviewResponse(await client.getModuleOverview(encodeGetModuleOverviewRequest(call), options))
+    case "ListModuleTasks": return decodeListModuleTasksResponse(await client.listModuleTasks(encodeListModuleTasksRequest(call), options))
+    case "AddModuleTask": return decodeAddModuleTaskResponse(await client.addModuleTask(encodeAddModuleTaskRequest(call), options))
+    case "RemoveModuleTask": return decodeRemoveModuleTaskResponse(await client.removeModuleTask(encodeRemoveModuleTaskRequest(call), options))
+    case "ListCycles": return decodeListCyclesResponse(await client.listCycles(encodeListCyclesRequest(call), options))
+    case "GetCycle": return decodeGetCycleResponse(await client.getCycle(encodeGetCycleRequest(call), options))
+    case "CreateCycle": return decodeCreateCycleResponse(await client.createCycle(encodeCreateCycleRequest(call), options))
+    case "UpdateCycle": return decodeUpdateCycleResponse(await client.updateCycle(encodeUpdateCycleRequest(call), options))
+    case "ArchiveCycle": return decodeArchiveCycleResponse(await client.archiveCycle(encodeArchiveCycleRequest(call), options))
+    case "RestoreCycle": return decodeRestoreCycleResponse(await client.restoreCycle(encodeRestoreCycleRequest(call), options))
+    case "GetCycleOverview": return decodeGetCycleOverviewResponse(await client.getCycleOverview(encodeGetCycleOverviewRequest(call), options))
+    case "ListCycleTasks": return decodeListCycleTasksResponse(await client.listCycleTasks(encodeListCycleTasksRequest(call), options))
+    case "AddCycleTask": return decodeAddCycleTaskResponse(await client.addCycleTask(encodeAddCycleTaskRequest(call), options))
+    case "RemoveCycleTask": return decodeRemoveCycleTaskResponse(await client.removeCycleTask(encodeRemoveCycleTaskRequest(call), options))
+    case "StartCycle": return decodeStartCycleResponse(await client.startCycle(encodeStartCycleRequest(call), options))
+    case "CloseCycle": return decodeCloseCycleResponse(await client.closeCycle(encodeCloseCycleRequest(call), options))
+    case "CancelCycle": return decodeCancelCycleResponse(await client.cancelCycle(encodeCancelCycleRequest(call), options))
   }
 }
 
@@ -6711,6 +7686,30 @@ export function encodeRpcResponse(method: RpcMethod, payload: unknown): Uint8Arr
     case "MaintenanceImportV30": return toBinary(d.MaintenanceImportV30ResponseSchema, encodeMaintenanceImportV30Response(payload))
     case "GetTaskDetails": return toBinary(d.GetTaskDetailsResponseSchema, encodeGetTaskDetailsResponse(payload))
     case "GetLabelOntologyQuality": return toBinary(d.GetLabelOntologyQualityResponseSchema, encodeGetLabelOntologyQualityResponse(payload))
+    case "GetPlanningCapabilities": return toBinary(d.GetPlanningCapabilitiesResponseSchema, encodeGetPlanningCapabilitiesResponse(payload))
+    case "ListModules": return toBinary(d.ListModulesResponseSchema, encodeListModulesResponse(payload))
+    case "GetModule": return toBinary(d.GetModuleResponseSchema, encodeGetModuleResponse(payload))
+    case "CreateModule": return toBinary(d.CreateModuleResponseSchema, encodeCreateModuleResponse(payload))
+    case "UpdateModule": return toBinary(d.UpdateModuleResponseSchema, encodeUpdateModuleResponse(payload))
+    case "ArchiveModule": return toBinary(d.ArchiveModuleResponseSchema, encodeArchiveModuleResponse(payload))
+    case "RestoreModule": return toBinary(d.RestoreModuleResponseSchema, encodeRestoreModuleResponse(payload))
+    case "GetModuleOverview": return toBinary(d.GetModuleOverviewResponseSchema, encodeGetModuleOverviewResponse(payload))
+    case "ListModuleTasks": return toBinary(d.ListModuleTasksResponseSchema, encodeListModuleTasksResponse(payload))
+    case "AddModuleTask": return toBinary(d.AddModuleTaskResponseSchema, encodeAddModuleTaskResponse(payload))
+    case "RemoveModuleTask": return toBinary(d.RemoveModuleTaskResponseSchema, encodeRemoveModuleTaskResponse(payload))
+    case "ListCycles": return toBinary(d.ListCyclesResponseSchema, encodeListCyclesResponse(payload))
+    case "GetCycle": return toBinary(d.GetCycleResponseSchema, encodeGetCycleResponse(payload))
+    case "CreateCycle": return toBinary(d.CreateCycleResponseSchema, encodeCreateCycleResponse(payload))
+    case "UpdateCycle": return toBinary(d.UpdateCycleResponseSchema, encodeUpdateCycleResponse(payload))
+    case "ArchiveCycle": return toBinary(d.ArchiveCycleResponseSchema, encodeArchiveCycleResponse(payload))
+    case "RestoreCycle": return toBinary(d.RestoreCycleResponseSchema, encodeRestoreCycleResponse(payload))
+    case "GetCycleOverview": return toBinary(d.GetCycleOverviewResponseSchema, encodeGetCycleOverviewResponse(payload))
+    case "ListCycleTasks": return toBinary(d.ListCycleTasksResponseSchema, encodeListCycleTasksResponse(payload))
+    case "AddCycleTask": return toBinary(d.AddCycleTaskResponseSchema, encodeAddCycleTaskResponse(payload))
+    case "RemoveCycleTask": return toBinary(d.RemoveCycleTaskResponseSchema, encodeRemoveCycleTaskResponse(payload))
+    case "StartCycle": return toBinary(d.StartCycleResponseSchema, encodeStartCycleResponse(payload))
+    case "CloseCycle": return toBinary(d.CloseCycleResponseSchema, encodeCloseCycleResponse(payload))
+    case "CancelCycle": return toBinary(d.CancelCycleResponseSchema, encodeCancelCycleResponse(payload))
   }
 }
 
@@ -6723,11 +7722,11 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "GetBoard": { const wire = fromBinary(s.GetBoardRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
     case "ArchiveBoard": { const wire = fromBinary(s.ArchiveBoardRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
     case "ListBoardColumns": { const wire = fromBinary(s.ListBoardColumnsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
-    case "ListTasks": { const wire = fromBinary(s.ListTasksRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"priority": wire.priority.map((value) => decodeDtoApiTaskPriority(value)),"label": wire.label.map((value) => decodeDtoTaskReadLabel(value)),"plan_filter": wire.planFilter.map((value) => decodeDtoTaskReadPlanFilter(value)),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"sort": wire.sort === undefined ? undefined : decodeDtoTaskReadSort(c.required(wire.sort, "sort")),}),} }
-    case "ListTasksByStatus": { const wire = fromBinary(s.ListTasksByStatusRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"priority": wire.priority.map((value) => decodeDtoApiTaskPriority(value)),"label": wire.label.map((value) => decodeDtoTaskReadLabel(value)),"plan_filter": wire.planFilter.map((value) => decodeDtoTaskReadPlanFilter(value)),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"sort": wire.sort === undefined ? undefined : decodeDtoTaskReadSort(c.required(wire.sort, "sort")),}),} }
-    case "CreateTask": { const wire = fromBinary(s.CreateTaskRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"idempotency_key": wire.idempotencyKey === undefined ? null : ((value) => value)(wire.idempotencyKey),"title": c.required(wire.title, "title"),"description": wire.description === undefined ? null : ((value) => value)(wire.description),"status": wire.status === undefined ? null : ((value) => decodeDtoApiCreateTaskStatus(value))(wire.status),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"priority": wire.priority === undefined ? undefined : c.integerValue(c.required(wire.priority, "priority")),"scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.integerValue(value))(wire.scheduledAt),"due_at": wire.dueAt === undefined ? null : ((value) => c.integerValue(value))(wire.dueAt),"max_retries": wire.maxRetries === undefined ? null : ((value) => c.integerValue(value))(wire.maxRetries),"metadata": wire.metadata === undefined ? null : ((value) => decodeMapOfJsonValue(value))(wire.metadata),"labels": wire.labels.map((value) => value),"depends_on": wire.dependsOn.map((value) => value),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
+    case "ListTasks": { const wire = fromBinary(s.ListTasksRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"module_ids": wire.moduleIds.length === 0 ? undefined : wire.moduleIds.map((value) => value),"cycle_id": wire.cycleId === undefined ? undefined : ((value) => value)(wire.cycleId),"priority": wire.priority.map((value) => decodeDtoApiTaskPriority(value)),"label": wire.label.map((value) => decodeDtoTaskReadLabel(value)),"plan_filter": wire.planFilter.map((value) => decodeDtoTaskReadPlanFilter(value)),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"sort": wire.sort === undefined ? undefined : decodeDtoTaskReadSort(c.required(wire.sort, "sort")),}),} }
+    case "ListTasksByStatus": { const wire = fromBinary(s.ListTasksByStatusRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"module_ids": wire.moduleIds.length === 0 ? undefined : wire.moduleIds.map((value) => value),"cycle_id": wire.cycleId === undefined ? undefined : ((value) => value)(wire.cycleId),"priority": wire.priority.map((value) => decodeDtoApiTaskPriority(value)),"label": wire.label.map((value) => decodeDtoTaskReadLabel(value)),"plan_filter": wire.planFilter.map((value) => decodeDtoTaskReadPlanFilter(value)),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"sort": wire.sort === undefined ? undefined : decodeDtoTaskReadSort(c.required(wire.sort, "sort")),}),} }
+    case "CreateTask": { const wire = fromBinary(s.CreateTaskRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"module_ids": wire.moduleIds.length === 0 ? undefined : wire.moduleIds.map((value) => value),"cycle_id": wire.cycleId === undefined ? undefined : ((value) => value)(wire.cycleId),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? undefined : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"idempotency_key": wire.idempotencyKey === undefined ? null : ((value) => value)(wire.idempotencyKey),"title": c.required(wire.title, "title"),"description": wire.description === undefined ? null : ((value) => value)(wire.description),"status": wire.status === undefined ? null : ((value) => decodeDtoApiCreateTaskStatus(value))(wire.status),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),"priority": wire.priority === undefined ? undefined : c.integerValue(c.required(wire.priority, "priority")),"scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.integerValue(value))(wire.scheduledAt),"due_at": wire.dueAt === undefined ? null : ((value) => c.integerValue(value))(wire.dueAt),"max_retries": wire.maxRetries === undefined ? null : ((value) => c.integerValue(value))(wire.maxRetries),"metadata": wire.metadata === undefined ? null : ((value) => decodeMapOfJsonValue(value))(wire.metadata),"labels": wire.labels.map((value) => value),"depends_on": wire.dependsOn.map((value) => value),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
     case "GetTask": { const wire = fromBinary(s.GetTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"include": wire.include === undefined ? null : ((value) => value)(wire.include),}),} }
-    case "UpdateTask": { const wire = fromBinary(s.UpdateTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"title": wire.title === undefined ? undefined : ((value) => value)(wire.title),"description": c.decodePatch(wire.description?.change, (change) => change.value),"assignee": c.decodePatch(wire.assignee?.change, (change) => change.value),"priority": wire.priority === undefined ? undefined : ((value) => c.integerValue(value))(wire.priority),"scheduled_at": c.decodePatch(wire.scheduledAt?.change, (change) => c.integerValue(change.value)),"due_at": c.decodePatch(wire.dueAt?.change, (change) => c.integerValue(change.value)),"max_retries": c.decodePatch(wire.maxRetries?.change, (change) => c.integerValue(change.value)),"metadata": c.decodePatch(wire.metadata?.change, (change) => c.decodeJson(change.value)),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"expected_lock_version": wire.expectedLockVersion === undefined ? undefined : ((value) => c.integerValue(value))(wire.expectedLockVersion),}),} }
+    case "UpdateTask": { const wire = fromBinary(s.UpdateTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"module_ids": wire.moduleIds === undefined ? undefined : ((value) => decodeListOfString(value))(wire.moduleIds),"cycle_id": c.decodePatch(wire.cycleId?.change, (change) => change.value),"expected_object_version": wire.expectedObjectVersion === undefined ? undefined : ((value) => c.integerValue(value))(wire.expectedObjectVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? undefined : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),"request_id": wire.requestId === undefined ? undefined : ((value) => value)(wire.requestId),"title": wire.title === undefined ? undefined : ((value) => value)(wire.title),"description": c.decodePatch(wire.description?.change, (change) => change.value),"assignee": c.decodePatch(wire.assignee?.change, (change) => change.value),"priority": wire.priority === undefined ? undefined : ((value) => c.integerValue(value))(wire.priority),"scheduled_at": c.decodePatch(wire.scheduledAt?.change, (change) => c.integerValue(change.value)),"due_at": c.decodePatch(wire.dueAt?.change, (change) => c.integerValue(change.value)),"max_retries": c.decodePatch(wire.maxRetries?.change, (change) => c.integerValue(change.value)),"metadata": c.decodePatch(wire.metadata?.change, (change) => c.decodeJson(change.value)),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"expected_lock_version": wire.expectedLockVersion === undefined ? undefined : ((value) => c.integerValue(value))(wire.expectedLockVersion),}),} }
     case "SpecifyTask": { const wire = fromBinary(s.SpecifyTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"description": wire.description === undefined ? null : ((value) => value)(wire.description),"scheduled_at": wire.scheduledAt === undefined ? null : ((value) => c.integerValue(value))(wire.scheduledAt),}),} }
     case "PromoteTask": { const wire = fromBinary(s.PromoteTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),}),} }
     case "ClaimTask": { const wire = fromBinary(s.ClaimTaskRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"ttl_ms": wire.ttlMs === undefined ? undefined : c.integerValue(c.required(wire.ttlMs, "ttl_ms")),"worker_profile": wire.workerProfile === undefined ? null : ((value) => value)(wire.workerProfile),"metadata": wire.metadata === undefined ? null : ((value) => c.decodeJson(value))(wire.metadata),}),} }
@@ -6763,7 +7762,7 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "ListEvents": { const wire = fromBinary(s.ListEventsRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"after": wire.after === undefined ? undefined : c.integerValue(c.required(wire.after, "after")),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
     case "ListTaskLabels": { const wire = fromBinary(s.ListTaskLabelsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),} }
     case "AddTaskLabel": { const wire = fromBinary(s.AddTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"name": wire.name === undefined ? undefined : ((value) => value)(wire.name),"names": wire.names === undefined ? undefined : ((value) => decodeListOfString(value))(wire.names),"create_missing": wire.createMissing === undefined ? undefined : c.required(wire.createMissing, "create_missing"),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),}),} }
-    case "BootstrapTaskLabel": { const wire = fromBinary(s.BootstrapTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"name": c.required(wire.name, "name"),"description": wire.description === undefined ? undefined : ((value) => value)(wire.description),"applies_when": wire.appliesWhen.map((value) => value),"excludes_when": wire.excludesWhen.map((value) => value),"positive_examples": wire.positiveExamples.map((value) => value),"negative_examples": wire.negativeExamples.map((value) => value),"verify": wire.verify === undefined ? undefined : c.required(wire.verify, "verify"),"min_verify_score": wire.minVerifyScore === undefined ? undefined : c.float(c.required(wire.minVerifyScore, "min_verify_score")),"vector_config": wire.vectorConfig === undefined ? undefined : ((value) => decodeDtoVectorConfigureRequest(value))(wire.vectorConfig),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),}),} }
+    case "BootstrapTaskLabel": { const wire = fromBinary(s.BootstrapTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"name": c.required(wire.name, "name"),"description": wire.description === undefined ? undefined : ((value) => value)(wire.description),"applies_when": wire.appliesWhen.length === 0 ? undefined : wire.appliesWhen.map((value) => value),"excludes_when": wire.excludesWhen.length === 0 ? undefined : wire.excludesWhen.map((value) => value),"positive_examples": wire.positiveExamples.length === 0 ? undefined : wire.positiveExamples.map((value) => value),"negative_examples": wire.negativeExamples.length === 0 ? undefined : wire.negativeExamples.map((value) => value),"verify": wire.verify === undefined ? undefined : c.required(wire.verify, "verify"),"min_verify_score": wire.minVerifyScore === undefined ? undefined : c.float(c.required(wire.minVerifyScore, "min_verify_score")),"vector_config": wire.vectorConfig === undefined ? undefined : ((value) => decodeDtoVectorConfigureRequest(value))(wire.vectorConfig),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),}),} }
     case "RemoveTaskLabel": { const wire = fromBinary(s.RemoveTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),"label_id": c.required(wire.labelId, "label_id"),}),} }
     case "ListBoardLabels": { const wire = fromBinary(s.ListBoardLabelsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
     case "ListBoardLabelProposals": { const wire = fromBinary(s.ListBoardLabelProposalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status === undefined ? undefined : ((value) => decodeDtoLabelProposalStatusWire(value))(wire.status),}),} }
@@ -6771,15 +7770,15 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "DeleteBoardLabel": { const wire = fromBinary(s.DeleteBoardLabelRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"label_id": c.required(wire.labelId, "label_id"),}),query: c.omitUndefined({"force": wire.force === undefined ? undefined : c.required(wire.force, "force"),}),} }
     case "ListLabelSemantics": { const wire = fromBinary(s.ListLabelSemanticsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
     case "GetLabelSemantics": { const wire = fromBinary(s.GetLabelSemanticsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"label_id": c.required(wire.labelId, "label_id"),}),} }
-    case "UpsertLabelSemantics": { const wire = fromBinary(s.UpsertLabelSemanticsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"label_id": c.required(wire.labelId, "label_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"expected_semantics_hash": wire.expectedSemanticsHash === undefined ? undefined : ((value) => value)(wire.expectedSemanticsHash),"replace": wire.replace === undefined ? undefined : c.required(wire.replace, "replace"),"reason": wire.reason === undefined ? undefined : ((value) => value)(wire.reason),"source_signal_ids": wire.sourceSignalIds.map((value) => value),"description": wire.description === undefined ? undefined : ((value) => value)(wire.description),"applies_when": wire.appliesWhen === undefined ? undefined : ((value) => decodeListOfString(value))(wire.appliesWhen),"excludes_when": wire.excludesWhen === undefined ? undefined : ((value) => decodeListOfString(value))(wire.excludesWhen),"positive_examples": wire.positiveExamples === undefined ? undefined : ((value) => decodeListOfString(value))(wire.positiveExamples),"negative_examples": wire.negativeExamples === undefined ? undefined : ((value) => decodeListOfString(value))(wire.negativeExamples),"remove_applies_when": wire.removeAppliesWhen.map((value) => value),"remove_excludes_when": wire.removeExcludesWhen.map((value) => value),"remove_positive_examples": wire.removePositiveExamples.map((value) => value),"remove_negative_examples": wire.removeNegativeExamples.map((value) => value),}),} }
+    case "UpsertLabelSemantics": { const wire = fromBinary(s.UpsertLabelSemanticsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"label_id": c.required(wire.labelId, "label_id"),}),input: c.omitUndefined({"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"expected_semantics_hash": wire.expectedSemanticsHash === undefined ? undefined : ((value) => value)(wire.expectedSemanticsHash),"replace": wire.replace === undefined ? undefined : c.required(wire.replace, "replace"),"reason": wire.reason === undefined ? undefined : ((value) => value)(wire.reason),"source_signal_ids": wire.sourceSignalIds.length === 0 ? undefined : wire.sourceSignalIds.map((value) => value),"description": wire.description === undefined ? undefined : ((value) => value)(wire.description),"applies_when": wire.appliesWhen === undefined ? undefined : ((value) => decodeListOfString(value))(wire.appliesWhen),"excludes_when": wire.excludesWhen === undefined ? undefined : ((value) => decodeListOfString(value))(wire.excludesWhen),"positive_examples": wire.positiveExamples === undefined ? undefined : ((value) => decodeListOfString(value))(wire.positiveExamples),"negative_examples": wire.negativeExamples === undefined ? undefined : ((value) => decodeListOfString(value))(wire.negativeExamples),"remove_applies_when": wire.removeAppliesWhen.length === 0 ? undefined : wire.removeAppliesWhen.map((value) => value),"remove_excludes_when": wire.removeExcludesWhen.length === 0 ? undefined : wire.removeExcludesWhen.map((value) => value),"remove_positive_examples": wire.removePositiveExamples.length === 0 ? undefined : wire.removePositiveExamples.map((value) => value),"remove_negative_examples": wire.removeNegativeExamples.length === 0 ? undefined : wire.removeNegativeExamples.map((value) => value),}),} }
     case "DeleteLabelSemantics": { const wire = fromBinary(s.DeleteLabelSemanticsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"label_id": c.required(wire.labelId, "label_id"),}),query: c.omitUndefined({"expected_semantics_hash": c.required(wire.expectedSemanticsHash, "expected_semantics_hash"),"reason": c.required(wire.reason, "reason"),}),} }
     case "ListLabelAtoms": { const wire = fromBinary(s.ListLabelAtomsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
     case "ExplainLabelAtom": { const wire = fromBinary(s.ExplainLabelAtomRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"atom_ref": c.required(wire.atomRef, "atom_ref"),}),} }
     case "LabelAtomIndexStatus": { const wire = fromBinary(s.LabelAtomIndexStatusRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
     case "RebuildLabelAtomIndex": { const wire = fromBinary(s.RebuildLabelAtomIndexRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),} }
     case "QueryLabelAtomIndex": { const wire = fromBinary(s.QueryLabelAtomIndexRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"q": wire.q === undefined ? undefined : ((value) => value)(wire.q),"vector_json": wire.vectorJson === undefined ? undefined : ((value) => value)(wire.vectorJson),"embedding_model": wire.embeddingModel === undefined ? undefined : ((value) => value)(wire.embeddingModel),"include_vector": wire.includeVector === undefined ? undefined : c.required(wire.includeVector, "include_vector"),"polarity": wire.polarity === undefined ? undefined : ((value) => value)(wire.polarity),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
-    case "ListSignals": { const wire = fromBinary(s.ListSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
-    case "ReviewSignals": { const wire = fromBinary(s.ReviewSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
+    case "ListSignals": { const wire = fromBinary(s.ListSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.length === 0 ? undefined : wire.status.map((value) => value),"kind": wire.kind.length === 0 ? undefined : wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
+    case "ReviewSignals": { const wire = fromBinary(s.ReviewSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.length === 0 ? undefined : wire.status.map((value) => value),"kind": wire.kind.length === 0 ? undefined : wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
     case "GetSignal": { const wire = fromBinary(s.GetSignalRequestSchema, bytes); return {path: c.omitUndefined({"signal_id": c.required(wire.signalId, "signal_id"),}),} }
     case "RecordSignal": { const wire = fromBinary(s.RecordSignalRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"kind": c.required(wire.kind, "kind"),"title": c.required(wire.title, "title"),"summary": c.required(wire.summary, "summary"),"severity": wire.severity === undefined ? null : ((value) => value)(wire.severity),"task_ref": wire.taskRef === undefined ? null : ((value) => value)(wire.taskRef),"task_id": wire.taskId === undefined ? null : ((value) => value)(wire.taskId),"run_id": wire.runId === undefined ? null : ((value) => value)(wire.runId),"comment_id": wire.commentId === undefined ? null : ((value) => value)(wire.commentId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"agent_type": wire.agentType === undefined ? null : ((value) => value)(wire.agentType),"dedupe_key": wire.dedupeKey === undefined ? null : ((value) => value)(wire.dedupeKey),"source": wire.source === undefined ? null : ((value) => value)(wire.source),"evidence": wire.evidence === undefined ? null : ((value) => decodeDtoStructuredMetadataJsonObject(value))(wire.evidence),"comment": wire.comment === undefined ? null : ((value) => decodeDtoSignalCommentRequest(value))(wire.comment),}),} }
     case "ConfirmSignals": { const wire = fromBinary(s.ConfirmSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.integerValue(value))(wire.expectedUpdatedAt),}),} }
@@ -6788,18 +7787,18 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "SupersedeSignals": { const wire = fromBinary(s.SupersedeSignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"replacement_signal_id": wire.replacementSignalId === undefined ? null : ((value) => value)(wire.replacementSignalId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_updated_at": wire.expectedUpdatedAt === undefined ? null : ((value) => c.integerValue(value))(wire.expectedUpdatedAt),}),} }
     case "SuggestTaskLabels": { const wire = fromBinary(s.SuggestTaskLabelsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"candidate_limit": wire.candidateLimit === undefined ? undefined : c.integerValue(c.required(wire.candidateLimit, "candidate_limit")),"atom_limit": wire.atomLimit === undefined ? undefined : c.integerValue(c.required(wire.atomLimit, "atom_limit")),"max_selected_labels": wire.maxSelectedLabels === undefined ? undefined : c.integerValue(c.required(wire.maxSelectedLabels, "max_selected_labels")),"min_score": wire.minScore === undefined ? undefined : c.float(c.required(wire.minScore, "min_score")),}),} }
     case "ListTaskLabelProposals": { const wire = fromBinary(s.ListTaskLabelProposalsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"status": wire.status === undefined ? null : ((value) => value)(wire.status),}),} }
-    case "ProposeTaskLabel": { const wire = fromBinary(s.ProposeTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"candidate_limit": wire.candidateLimit === undefined ? undefined : c.integerValue(c.required(wire.candidateLimit, "candidate_limit")),"atom_limit": wire.atomLimit === undefined ? undefined : c.integerValue(c.required(wire.atomLimit, "atom_limit")),"max_selected_labels": wire.maxSelectedLabels === undefined ? undefined : c.integerValue(c.required(wire.maxSelectedLabels, "max_selected_labels")),"min_score": wire.minScore === undefined ? undefined : c.float(c.required(wire.minScore, "min_score")),}),input: c.omitUndefined({"proposal": wire.proposal === undefined ? undefined : ((value) => decodeDtoLabelProposalCandidateWire(value))(wire.proposal),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
+    case "ProposeTaskLabel": { const wire = fromBinary(s.ProposeTaskLabelRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"candidate_limit": wire.candidateLimit === undefined ? undefined : c.integerValue(c.required(wire.candidateLimit, "candidate_limit")),"atom_limit": wire.atomLimit === undefined ? undefined : c.integerValue(c.required(wire.atomLimit, "atom_limit")),"max_selected_labels": wire.maxSelectedLabels === undefined ? undefined : c.integerValue(c.required(wire.maxSelectedLabels, "max_selected_labels")),"min_score": wire.minScore === undefined ? undefined : c.float(c.required(wire.minScore, "min_score")),}),input: c.omitUndefined({"proposal": wire.proposal === undefined ? undefined : ((value) => decodeDtoLabelProposalCandidateWire(value))(wire.proposal),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.length === 0 ? undefined : wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
     case "RecordLabelOntologyObservation": { const wire = fromBinary(s.RecordLabelOntologyObservationRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"board": wire.board === undefined ? null : ((value) => value)(wire.board),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"agent_candidates": wire.agentCandidates === undefined ? undefined : c.decodeJson(wire.agentCandidates),"suggestion_snapshot": wire.suggestionSnapshot === undefined ? undefined : c.decodeJson(wire.suggestionSnapshot),"final_decision": wire.finalDecision === undefined ? undefined : c.decodeJson(wire.finalDecision),"suggest_coverage": wire.suggestCoverage === undefined ? undefined : ((value) => c.float(value))(wire.suggestCoverage),"suggest_coverage_cosine": wire.suggestCoverageCosine === undefined ? undefined : ((value) => c.float(value))(wire.suggestCoverageCosine),"suggest_residual_norm": wire.suggestResidualNorm === undefined ? undefined : ((value) => c.float(value))(wire.suggestResidualNorm),"suggest_needs_new_label": wire.suggestNeedsNewLabel === undefined ? undefined : ((value) => value)(wire.suggestNeedsNewLabel),"suggest_degraded": wire.suggestDegraded === undefined ? undefined : ((value) => value)(wire.suggestDegraded),"diagnostics": wire.diagnostics === undefined ? undefined : c.decodeJson(wire.diagnostics),"capture_fingerprint": wire.captureFingerprint === undefined ? undefined : ((value) => value)(wire.captureFingerprint),"signals": wire.signals.map((value) => decodeDtoLabelOntologySignalRequest(value)),}),} }
-    case "ListLabelOntologySignals": { const wire = fromBinary(s.ListLabelOntologySignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.map((value) => value),"kind": wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"target_label_ref": wire.targetLabelRef === undefined ? undefined : ((value) => value)(wire.targetLabelRef),"proposed_label_name": wire.proposedLabelName === undefined ? undefined : ((value) => value)(wire.proposedLabelName),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
+    case "ListLabelOntologySignals": { const wire = fromBinary(s.ListLabelOntologySignalsRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"status": wire.status.length === 0 ? undefined : wire.status.map((value) => value),"kind": wire.kind.length === 0 ? undefined : wire.kind.map((value) => value),"task_ref": wire.taskRef === undefined ? undefined : ((value) => value)(wire.taskRef),"target_label_ref": wire.targetLabelRef === undefined ? undefined : ((value) => value)(wire.targetLabelRef),"proposed_label_name": wire.proposedLabelName === undefined ? undefined : ((value) => value)(wire.proposedLabelName),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
     case "ReviewLabelOntology": { const wire = fromBinary(s.ReviewLabelOntologyRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"group_by": wire.groupBy === undefined ? undefined : decodeDtoLabelOntologyReviewGroupByWire(c.required(wire.groupBy, "group_by")),"include_all": wire.includeAll === undefined ? undefined : c.required(wire.includeAll, "include_all"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),}),} }
     case "CreateLabelOntologyAction": { const wire = fromBinary(s.CreateLabelOntologyActionRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"idempotency_key": wire.idempotencyKey === undefined ? undefined : ((value) => value)(wire.idempotencyKey),"action_type": decodeDtoLabelOntologyActionTypeWire(c.required(wire.actionType, "action_type")),"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"superseded_by_signal_id": wire.supersededBySignalId === undefined ? undefined : ((value) => value)(wire.supersededBySignalId),"parent_action_id": wire.parentActionId === undefined ? undefined : ((value) => value)(wire.parentActionId),"target_label_ref": wire.targetLabelRef === undefined ? undefined : ((value) => value)(wire.targetLabelRef),"result_label_ref": wire.resultLabelRef === undefined ? undefined : ((value) => value)(wire.resultLabelRef),"result_atom_id": wire.resultAtomId === undefined ? undefined : ((value) => value)(wire.resultAtomId),"result_atom_content_hash": wire.resultAtomContentHash === undefined ? undefined : ((value) => value)(wire.resultAtomContentHash),"result_proposal_id": wire.resultProposalId === undefined ? undefined : ((value) => value)(wire.resultProposalId),"canonical_before_hash": wire.canonicalBeforeHash === undefined ? undefined : ((value) => value)(wire.canonicalBeforeHash),"canonical_after_hash": wire.canonicalAfterHash === undefined ? undefined : ((value) => value)(wire.canonicalAfterHash),"change": wire.change === undefined ? undefined : c.decodeJson(wire.change),"validation_status": wire.validationStatus === undefined ? undefined : ((value) => decodeDtoLabelOntologyValidationStatusWire(value))(wire.validationStatus),"validation": wire.validation === undefined ? undefined : c.decodeJson(wire.validation),}),} }
     case "ApplyLabelOntologyAtom": { const wire = fromBinary(s.ApplyLabelOntologyAtomRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"signal_ids": wire.signalIds.map((value) => value),"label_ref": c.required(wire.labelRef, "label_ref"),"kind": c.required(wire.kind, "kind"),"text": c.required(wire.text, "text"),"reason": c.required(wire.reason, "reason"),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
     case "RevertLabelOntologyMutation": { const wire = fromBinary(s.RevertLabelOntologyMutationRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"target_action_id": c.required(wire.targetActionId, "target_action_id"),"expected_current_hash": wire.expectedCurrentHash === undefined ? undefined : ((value) => value)(wire.expectedCurrentHash),"reason": c.required(wire.reason, "reason"),}),} }
-    case "ValidateLabelOntologyAction": { const wire = fromBinary(s.ValidateLabelOntologyActionRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"parent_action_id": c.required(wire.parentActionId, "parent_action_id"),"signal_ids": wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"validation_status": decodeDtoLabelOntologyValidationStatusWire(c.required(wire.validationStatus, "validation_status")),"validation": wire.validation === undefined ? undefined : c.decodeJson(wire.validation),}),} }
+    case "ValidateLabelOntologyAction": { const wire = fromBinary(s.ValidateLabelOntologyActionRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"actor": decodeDtoLabelOntologyActorWire(c.required(wire.actor, "actor")),"parent_action_id": c.required(wire.parentActionId, "parent_action_id"),"signal_ids": wire.signalIds.length === 0 ? undefined : wire.signalIds.map((value) => value),"reason": c.required(wire.reason, "reason"),"validation_status": decodeDtoLabelOntologyValidationStatusWire(c.required(wire.validationStatus, "validation_status")),"validation": wire.validation === undefined ? undefined : c.decodeJson(wire.validation),}),} }
     case "GetLabelOntologySignal": { const wire = fromBinary(s.GetLabelOntologySignalRequestSchema, bytes); return {path: c.omitUndefined({"signal_id": c.required(wire.signalId, "signal_id"),}),} }
     case "GetLabelProposal": { const wire = fromBinary(s.GetLabelProposalRequestSchema, bytes); return {path: c.omitUndefined({"proposal_id": c.required(wire.proposalId, "proposal_id"),}),} }
-    case "AcceptLabelProposal": { const wire = fromBinary(s.AcceptLabelProposalRequestSchema, bytes); return {path: c.omitUndefined({"proposal_id": c.required(wire.proposalId, "proposal_id"),}),input: c.omitUndefined({"reason": wire.reason === undefined ? undefined : ((value) => value)(wire.reason),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
-    case "RejectLabelProposal": { const wire = fromBinary(s.RejectLabelProposalRequestSchema, bytes); return {path: c.omitUndefined({"proposal_id": c.required(wire.proposalId, "proposal_id"),}),input: c.omitUndefined({"reason": wire.reason === undefined ? undefined : ((value) => value)(wire.reason),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
+    case "AcceptLabelProposal": { const wire = fromBinary(s.AcceptLabelProposalRequestSchema, bytes); return {path: c.omitUndefined({"proposal_id": c.required(wire.proposalId, "proposal_id"),}),input: c.omitUndefined({"reason": wire.reason === undefined ? undefined : ((value) => value)(wire.reason),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.length === 0 ? undefined : wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
+    case "RejectLabelProposal": { const wire = fromBinary(s.RejectLabelProposalRequestSchema, bytes); return {path: c.omitUndefined({"proposal_id": c.required(wire.proposalId, "proposal_id"),}),input: c.omitUndefined({"reason": wire.reason === undefined ? undefined : ((value) => value)(wire.reason),"actor": wire.actor === undefined ? undefined : ((value) => value)(wire.actor),"source_signal_ids": wire.sourceSignalIds.length === 0 ? undefined : wire.sourceSignalIds.map((value) => value),"ontology_actor": wire.ontologyActor === undefined ? undefined : ((value) => decodeDtoLabelOntologyActorWire(value))(wire.ontologyActor),"allow_retarget": wire.allowRetarget === undefined ? undefined : c.required(wire.allowRetarget, "allow_retarget"),"retarget_reason": wire.retargetReason === undefined ? undefined : ((value) => value)(wire.retargetReason),}),} }
     case "BoardTaskMap": { const wire = fromBinary(s.BoardTaskMapRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"active_only": wire.activeOnly === undefined ? undefined : c.required(wire.activeOnly, "active_only"),"context_depth": wire.contextDepth === undefined ? undefined : c.integerValue(c.required(wire.contextDepth, "context_depth")),"limit_nodes": wire.limitNodes === undefined ? undefined : c.integerValue(c.required(wire.limitNodes, "limit_nodes")),"include_done_context": wire.includeDoneContext === undefined ? undefined : c.required(wire.includeDoneContext, "include_done_context"),"include_archived_context": wire.includeArchivedContext === undefined ? undefined : c.required(wire.includeArchivedContext, "include_archived_context"),"hide_isolated": wire.hideIsolated === undefined ? undefined : c.required(wire.hideIsolated, "hide_isolated"),}),} }
     case "TaskNeighborhood": { const wire = fromBinary(s.TaskNeighborhoodRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),query: c.omitUndefined({"depth": wire.depth === undefined ? undefined : c.integerValue(c.required(wire.depth, "depth")),"limit_nodes": wire.limitNodes === undefined ? undefined : c.integerValue(c.required(wire.limitNodes, "limit_nodes")),"include_archived_context": wire.includeArchivedContext === undefined ? undefined : c.required(wire.includeArchivedContext, "include_archived_context"),}),} }
     case "SearchTasks": { const wire = fromBinary(s.SearchTasksRequestSchema, bytes); return {query: c.omitUndefined({"board": wire.board === undefined ? undefined : c.required(wire.board, "board"),"q": wire.q === undefined ? null : ((value) => value)(wire.q),"status": wire.status.map((value) => decodeDtoApiTaskStatus(value)),"label": wire.label.map((value) => value),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"assignee": wire.assignee === undefined ? null : ((value) => value)(wire.assignee),}),} }
@@ -6836,5 +7835,29 @@ export function decodeRpcRequest(method: RpcMethod, bytes: Uint8Array): Pick<Rpc
     case "MaintenanceImportV30": { const wire = fromBinary(s.MaintenanceImportV30RequestSchema, bytes); return {input: c.omitUndefined({"path": c.required(wire.path, "path"),"canonical_attachment_root": wire.canonicalAttachmentRoot === undefined ? null : ((value) => value)(wire.canonicalAttachmentRoot),}),} }
     case "GetTaskDetails": { const wire = fromBinary(s.GetTaskDetailsRequestSchema, bytes); return {path: c.omitUndefined({"task_id": c.required(wire.taskId, "task_id"),}),} }
     case "GetLabelOntologyQuality": { const wire = fromBinary(s.GetLabelOntologyQualityRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"sample_limit": wire.sampleLimit === undefined ? undefined : c.integerValue(c.required(wire.sampleLimit, "sample_limit")),}),} }
+    case "GetPlanningCapabilities": { const wire = fromBinary(s.GetPlanningCapabilitiesRequestSchema, bytes); void wire; return {} }
+    case "ListModules": { const wire = fromBinary(s.ListModulesRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"parent_id": wire.parentId === undefined ? null : ((value) => value)(wire.parentId),}),} }
+    case "GetModule": { const wire = fromBinary(s.GetModuleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),} }
+    case "CreateModule": { const wire = fromBinary(s.CreateModuleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"title": c.required(wire.title, "title"),"body": wire.body === undefined ? null : ((value) => value)(wire.body),"parent_id": wire.parentId === undefined ? null : ((value) => value)(wire.parentId),"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "UpdateModule": { const wire = fromBinary(s.UpdateModuleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"title": wire.title === undefined ? undefined : ((value) => value)(wire.title),"body": c.decodePatch(wire.body?.change, (change) => change.value),"parent_id": c.decodePatch(wire.parentId?.change, (change) => change.value),"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "ArchiveModule": { const wire = fromBinary(s.ArchiveModuleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "RestoreModule": { const wire = fromBinary(s.RestoreModuleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "GetModuleOverview": { const wire = fromBinary(s.GetModuleOverviewRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),} }
+    case "ListModuleTasks": { const wire = fromBinary(s.ListModuleTasksRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),query: c.omitUndefined({"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),}),} }
+    case "AddModuleTask": { const wire = fromBinary(s.AddModuleTaskRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "RemoveModuleTask": { const wire = fromBinary(s.RemoveModuleTaskRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "ListCycles": { const wire = fromBinary(s.ListCyclesRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),query: c.omitUndefined({"q": wire.q === undefined ? null : ((value) => value)(wire.q),"include_archived": wire.includeArchived === undefined ? undefined : c.required(wire.includeArchived, "include_archived"),"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),"status": wire.status === undefined ? null : ((value) => decodeDtoApiCycleStatus(value))(wire.status),}),} }
+    case "GetCycle": { const wire = fromBinary(s.GetCycleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),} }
+    case "CreateCycle": { const wire = fromBinary(s.CreateCycleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),}),input: c.omitUndefined({"title": c.required(wire.title, "title"),"body": wire.body === undefined ? null : ((value) => value)(wire.body),"starts_at": c.integerValue(c.required(wire.startsAt, "starts_at")),"ends_at": c.integerValue(c.required(wire.endsAt, "ends_at")),"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "UpdateCycle": { const wire = fromBinary(s.UpdateCycleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"title": wire.title === undefined ? undefined : ((value) => value)(wire.title),"body": c.decodePatch(wire.body?.change, (change) => change.value),"starts_at": wire.startsAt === undefined ? undefined : ((value) => c.integerValue(value))(wire.startsAt),"ends_at": wire.endsAt === undefined ? undefined : ((value) => c.integerValue(value))(wire.endsAt),"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "ArchiveCycle": { const wire = fromBinary(s.ArchiveCycleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "RestoreCycle": { const wire = fromBinary(s.RestoreCycleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "GetCycleOverview": { const wire = fromBinary(s.GetCycleOverviewRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),} }
+    case "ListCycleTasks": { const wire = fromBinary(s.ListCycleTasksRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),query: c.omitUndefined({"limit": wire.limit === undefined ? undefined : c.integerValue(c.required(wire.limit, "limit")),"offset": wire.offset === undefined ? undefined : c.integerValue(c.required(wire.offset, "offset")),}),} }
+    case "AddCycleTask": { const wire = fromBinary(s.AddCycleTaskRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "RemoveCycleTask": { const wire = fromBinary(s.RemoveCycleTaskRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),"task_id": c.required(wire.taskId, "task_id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "StartCycle": { const wire = fromBinary(s.StartCycleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "CloseCycle": { const wire = fromBinary(s.CloseCycleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"carry_to": wire.carryTo === undefined ? null : ((value) => value)(wire.carryTo),"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
+    case "CancelCycle": { const wire = fromBinary(s.CancelCycleRequestSchema, bytes); return {path: c.omitUndefined({"board": c.required(wire.board, "board"),"id": c.required(wire.id, "id"),}),input: c.omitUndefined({"request_id": wire.requestId === undefined ? null : ((value) => value)(wire.requestId),"actor": wire.actor === undefined ? null : ((value) => value)(wire.actor),"expected_version": wire.expectedVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedVersion),"expected_versions": Object.keys(wire.expectedVersions).length === 0 ? undefined : Object.fromEntries(Object.entries(wire.expectedVersions).map(([key, value]) => [key, decodeDtoApiObjectVersion(value)])),"expected_catalog_version": wire.expectedCatalogVersion === undefined ? null : ((value) => c.integerValue(value))(wire.expectedCatalogVersion),}),} }
   }
 }

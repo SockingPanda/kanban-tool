@@ -247,7 +247,7 @@ impl TursoStore {
                 )
                 .await?;
 
-        let released = task_from_row(
+        let mut released = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -261,6 +261,11 @@ impl TursoStore {
             .await?,
         )?;
 
+        crate::object_model::task_planning::hydrate(
+            &transaction,
+            std::slice::from_mut(&mut released),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(released)
     }

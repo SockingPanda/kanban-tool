@@ -128,6 +128,8 @@ async fn service(name: &str) -> (tempfile::TempDir, KanbanService) {
 
 fn task_command(task_id: &str) -> CreateTaskCommand {
     CreateTaskCommand {
+        planning: Default::default(),
+        request_fingerprint: None,
         task_id: task_id.to_owned(),
         board: "default".to_owned(),
         idempotency_key: None,
@@ -161,6 +163,9 @@ fn comment_command(key: &str) -> CreateCommentCommand {
 
 fn update_command(task: &TaskRecord, title: &str) -> UpdateTaskCommand {
     UpdateTaskCommand {
+        planning: Default::default(),
+        request_fingerprint: None,
+        request_id: None,
         task_id: task.id.clone(),
         actor: "realtime-test".to_owned(),
         expected_lock_version: Some(task.lock_version),

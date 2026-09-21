@@ -199,7 +199,7 @@ impl TursoStore {
                 )
                 .await?;
 
-        let reviewed = task_from_row(
+        let mut reviewed = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -213,6 +213,11 @@ impl TursoStore {
             .await?,
         )?;
 
+        crate::object_model::task_planning::hydrate(
+            &transaction,
+            std::slice::from_mut(&mut reviewed),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(reviewed)
     }

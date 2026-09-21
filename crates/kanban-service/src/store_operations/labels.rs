@@ -1118,7 +1118,7 @@ async fn labels_from_rows(rows: &mut turso::Rows) -> Result<Vec<LabelRecord>, St
 }
 
 pub(crate) async fn list_task_labels_in_transaction(
-    transaction: &Transaction<'_>,
+    transaction: &turso::Connection,
     board_id: &str,
     task_id: &str,
 ) -> Result<Vec<LabelRecord>, StoreError> {
@@ -1148,7 +1148,10 @@ async fn task_in_transaction(
         turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
         other => StoreError::Turso(other),
     })?;
-    task_from_row(row)
+    let mut task = task_from_row(row)?;
+    crate::object_model::task_planning::hydrate(transaction, std::slice::from_mut(&mut task))
+        .await?;
+    Ok(task)
 }
 
 async fn label_by_name_in_transaction(

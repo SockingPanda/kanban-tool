@@ -8,6 +8,13 @@ impl KanbanClient {
         board: &str,
         request: CreateTaskRequest,
     ) -> Result<ApiTask, ClientError> {
+        if !request.module_ids.is_empty()
+            || request.cycle_id.is_some()
+            || !request.expected_versions.is_empty()
+            || request.expected_catalog_version.is_some()
+        {
+            self.require_planning(false).await?;
+        }
         let request = prepare_create_request(request);
         let response: kanban_protocol::CreateTaskResponse = rpc!(
             self,

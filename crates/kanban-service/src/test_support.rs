@@ -29,6 +29,8 @@ pub(crate) fn create_input(
     title: &str,
 ) -> CreateTaskInput {
     CreateTaskInput {
+        planning: Default::default(),
+        request_fingerprint: None,
         id: id.to_owned(),
         idempotency_key: idempotency_key.map(str::to_owned),
         title: title.to_owned(),

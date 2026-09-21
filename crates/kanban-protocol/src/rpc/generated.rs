@@ -152,6 +152,8 @@ impl v1::ListTasksRequest {
                             .try_into()
                     })
                     .collect::<Result<Vec<_>, _>>()?,
+                module_ids: self.module_ids,
+                cycle_id: self.cycle_id,
                 priority: (self.priority)
                     .into_iter()
                     .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
@@ -206,6 +208,8 @@ impl v1::ListTasksRequest {
                     Ok(i32::from(v1::DtoApiTaskStatus::try_from(value)?))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
+            module_ids: query.module_ids,
+            cycle_id: query.cycle_id,
             priority: (query.priority)
                 .into_iter()
                 .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
@@ -259,6 +263,8 @@ impl v1::ListTasksByStatusRequest {
                             .try_into()
                     })
                     .collect::<Result<Vec<_>, _>>()?,
+                module_ids: self.module_ids,
+                cycle_id: self.cycle_id,
                 priority: (self.priority)
                     .into_iter()
                     .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
@@ -313,6 +319,8 @@ impl v1::ListTasksByStatusRequest {
                     Ok(i32::from(v1::DtoApiTaskStatus::try_from(value)?))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
+            module_ids: query.module_ids,
+            cycle_id: query.cycle_id,
             priority: (query.priority)
                 .into_iter()
                 .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
@@ -359,6 +367,15 @@ impl v1::CreateTaskRequest {
             },
             (),
             crate::create_task::CreateTaskRequest {
+                module_ids: self.module_ids,
+                cycle_id: self.cycle_id,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
                 task_id: self.task_id,
                 idempotency_key: self.idempotency_key,
                 title: required(self.title, "title")?,
@@ -400,6 +417,13 @@ impl v1::CreateTaskRequest {
     ) -> Result<Self, RpcCodecError> {
         Ok(Self {
             board: Some(path.board),
+            module_ids: input.module_ids,
+            cycle_id: input.cycle_id,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
             task_id: input.task_id,
             idempotency_key: input.idempotency_key,
             title: Some(input.title),
@@ -483,6 +507,28 @@ impl v1::UpdateTaskRequest {
             },
             (),
             crate::task_core::UpdateTaskRequest {
+                module_ids: self
+                    .module_ids
+                    .map(|value| -> Result<_, RpcCodecError> { Ok((value).items) })
+                    .transpose()?,
+                cycle_id: self
+                    .cycle_id
+                    .map(|patch| -> Result<_, RpcCodecError> {
+                        Ok(match required(patch.change, "cycle_id")? {
+                            v1::patch_string::Change::Clear(_) => None,
+                            v1::patch_string::Change::Value(value) => Some(value),
+                        })
+                    })
+                    .transpose()?,
+                expected_object_version: self.expected_object_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+                request_id: self.request_id,
                 title: self.title,
                 description: self
                     .description
@@ -551,6 +597,28 @@ impl v1::UpdateTaskRequest {
     ) -> Result<Self, RpcCodecError> {
         Ok(Self {
             task_id: Some(path.task_id),
+            module_ids: input
+                .module_ids
+                .map(|value| -> Result<_, RpcCodecError> { Ok(v1::ListOfString { items: value }) })
+                .transpose()?,
+            cycle_id: input
+                .cycle_id
+                .map(|change| -> Result<_, RpcCodecError> {
+                    Ok(v1::PatchString {
+                        change: Some(match change {
+                            None => v1::patch_string::Change::Clear(v1::Empty {}),
+                            Some(value) => v1::patch_string::Change::Value(value),
+                        }),
+                    })
+                })
+                .transpose()?,
+            expected_object_version: input.expected_object_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+            request_id: input.request_id,
             title: input.title,
             description: input
                 .description
@@ -4517,6 +4585,1164 @@ impl v1::GetLabelOntologyQualityRequest {
         })
     }
 }
+impl v1::GetPlanningCapabilitiesRequest {
+    pub fn decode_parts(self) -> Result<((), (), ()), RpcCodecError> {
+        Ok(((), (), ()))
+    }
+    pub fn from_parts(_path: (), _query: (), _input: ()) -> Result<Self, RpcCodecError> {
+        Ok(Self {})
+    }
+}
+impl v1::ListModulesRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningBoardPath,
+            crate::planning::ListModulesQuery,
+            (),
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningBoardPath {
+                board: required(self.board, "board")?,
+            },
+            crate::planning::ListModulesQuery {
+                q: self.q,
+                include_archived: self.include_archived.unwrap_or_default(),
+                limit: match self.limit {
+                    Some(value) => usize::try_from(value)
+                        .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+                    None => 100,
+                },
+                offset: match self.offset {
+                    Some(value) => usize::try_from(value)
+                        .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+                    None => Default::default(),
+                },
+                parent_id: self.parent_id,
+            },
+            (),
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningBoardPath,
+        query: crate::planning::ListModulesQuery,
+        _input: (),
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            q: query.q,
+            include_archived: Some(query.include_archived),
+            limit: Some(
+                u64::try_from(query.limit)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            offset: Some(
+                u64::try_from(query.offset)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            parent_id: query.parent_id,
+        })
+    }
+}
+impl v1::GetModuleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<(crate::planning::PlanningObjectPath, (), ()), RpcCodecError> {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            (),
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        _input: (),
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+        })
+    }
+}
+impl v1::CreateModuleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningBoardPath,
+            (),
+            crate::planning::CreateModuleRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningBoardPath {
+                board: required(self.board, "board")?,
+            },
+            (),
+            crate::planning::CreateModuleRequest {
+                title: required(self.title, "title")?,
+                body: self.body,
+                parent_id: self.parent_id,
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningBoardPath,
+        _query: (),
+        input: crate::planning::CreateModuleRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            title: Some(input.title),
+            body: input.body,
+            parent_id: input.parent_id,
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::UpdateModuleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::UpdateModuleRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::UpdateModuleRequest {
+                title: self.title,
+                body: self
+                    .body
+                    .map(|patch| -> Result<_, RpcCodecError> {
+                        Ok(match required(patch.change, "body")? {
+                            v1::patch_string::Change::Clear(_) => None,
+                            v1::patch_string::Change::Value(value) => Some(value),
+                        })
+                    })
+                    .transpose()?,
+                parent_id: self
+                    .parent_id
+                    .map(|patch| -> Result<_, RpcCodecError> {
+                        Ok(match required(patch.change, "parent_id")? {
+                            v1::patch_string::Change::Clear(_) => None,
+                            v1::patch_string::Change::Value(value) => Some(value),
+                        })
+                    })
+                    .transpose()?,
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::UpdateModuleRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            title: input.title,
+            body: input
+                .body
+                .map(|change| -> Result<_, RpcCodecError> {
+                    Ok(v1::PatchString {
+                        change: Some(match change {
+                            None => v1::patch_string::Change::Clear(v1::Empty {}),
+                            Some(value) => v1::patch_string::Change::Value(value),
+                        }),
+                    })
+                })
+                .transpose()?,
+            parent_id: input
+                .parent_id
+                .map(|change| -> Result<_, RpcCodecError> {
+                    Ok(v1::PatchString {
+                        change: Some(match change {
+                            None => v1::patch_string::Change::Clear(v1::Empty {}),
+                            Some(value) => v1::patch_string::Change::Value(value),
+                        }),
+                    })
+                })
+                .transpose()?,
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::ArchiveModuleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::RestoreModuleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::GetModuleOverviewRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<(crate::planning::PlanningObjectPath, (), ()), RpcCodecError> {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            (),
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        _input: (),
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+        })
+    }
+}
+impl v1::ListModuleTasksRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            crate::planning::PlanningMembersQuery,
+            (),
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            crate::planning::PlanningMembersQuery {
+                limit: match self.limit {
+                    Some(value) => usize::try_from(value)
+                        .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+                    None => 100,
+                },
+                offset: match self.offset {
+                    Some(value) => usize::try_from(value)
+                        .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+                    None => Default::default(),
+                },
+            },
+            (),
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        query: crate::planning::PlanningMembersQuery,
+        _input: (),
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            limit: Some(
+                u64::try_from(query.limit)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            offset: Some(
+                u64::try_from(query.offset)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+        })
+    }
+}
+impl v1::AddModuleTaskRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningMemberPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningMemberPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+                task_id: required(self.task_id, "task_id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningMemberPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            task_id: Some(path.task_id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::RemoveModuleTaskRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningMemberPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningMemberPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+                task_id: required(self.task_id, "task_id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningMemberPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            task_id: Some(path.task_id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::ListCyclesRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningBoardPath,
+            crate::planning::ListCyclesQuery,
+            (),
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningBoardPath {
+                board: required(self.board, "board")?,
+            },
+            crate::planning::ListCyclesQuery {
+                q: self.q,
+                include_archived: self.include_archived.unwrap_or_default(),
+                limit: match self.limit {
+                    Some(value) => usize::try_from(value)
+                        .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+                    None => 100,
+                },
+                offset: match self.offset {
+                    Some(value) => usize::try_from(value)
+                        .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+                    None => Default::default(),
+                },
+                status: self
+                    .status
+                    .map(|value| -> Result<_, RpcCodecError> {
+                        v1::DtoApiCycleStatus::try_from(value)
+                            .map_err(|_| RpcCodecError::invalid("未知 enum 数值"))?
+                            .try_into()
+                    })
+                    .transpose()?,
+            },
+            (),
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningBoardPath,
+        query: crate::planning::ListCyclesQuery,
+        _input: (),
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            q: query.q,
+            include_archived: Some(query.include_archived),
+            limit: Some(
+                u64::try_from(query.limit)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            offset: Some(
+                u64::try_from(query.offset)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            status: query
+                .status
+                .map(|value| -> Result<_, RpcCodecError> {
+                    Ok(i32::from(v1::DtoApiCycleStatus::try_from(value)?))
+                })
+                .transpose()?,
+        })
+    }
+}
+impl v1::GetCycleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<(crate::planning::PlanningObjectPath, (), ()), RpcCodecError> {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            (),
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        _input: (),
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+        })
+    }
+}
+impl v1::CreateCycleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningBoardPath,
+            (),
+            crate::planning::CreateCycleRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningBoardPath {
+                board: required(self.board, "board")?,
+            },
+            (),
+            crate::planning::CreateCycleRequest {
+                title: required(self.title, "title")?,
+                body: self.body,
+                starts_at: required(self.starts_at, "starts_at")?,
+                ends_at: required(self.ends_at, "ends_at")?,
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningBoardPath,
+        _query: (),
+        input: crate::planning::CreateCycleRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            title: Some(input.title),
+            body: input.body,
+            starts_at: Some(input.starts_at),
+            ends_at: Some(input.ends_at),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::UpdateCycleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::UpdateCycleRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::UpdateCycleRequest {
+                title: self.title,
+                body: self
+                    .body
+                    .map(|patch| -> Result<_, RpcCodecError> {
+                        Ok(match required(patch.change, "body")? {
+                            v1::patch_string::Change::Clear(_) => None,
+                            v1::patch_string::Change::Value(value) => Some(value),
+                        })
+                    })
+                    .transpose()?,
+                starts_at: self.starts_at,
+                ends_at: self.ends_at,
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::UpdateCycleRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            title: input.title,
+            body: input
+                .body
+                .map(|change| -> Result<_, RpcCodecError> {
+                    Ok(v1::PatchString {
+                        change: Some(match change {
+                            None => v1::patch_string::Change::Clear(v1::Empty {}),
+                            Some(value) => v1::patch_string::Change::Value(value),
+                        }),
+                    })
+                })
+                .transpose()?,
+            starts_at: input.starts_at,
+            ends_at: input.ends_at,
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::ArchiveCycleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::RestoreCycleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::GetCycleOverviewRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<(crate::planning::PlanningObjectPath, (), ()), RpcCodecError> {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            (),
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        _input: (),
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+        })
+    }
+}
+impl v1::ListCycleTasksRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            crate::planning::PlanningMembersQuery,
+            (),
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            crate::planning::PlanningMembersQuery {
+                limit: match self.limit {
+                    Some(value) => usize::try_from(value)
+                        .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+                    None => 100,
+                },
+                offset: match self.offset {
+                    Some(value) => usize::try_from(value)
+                        .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+                    None => Default::default(),
+                },
+            },
+            (),
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        query: crate::planning::PlanningMembersQuery,
+        _input: (),
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            limit: Some(
+                u64::try_from(query.limit)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            offset: Some(
+                u64::try_from(query.offset)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+        })
+    }
+}
+impl v1::AddCycleTaskRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningMemberPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningMemberPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+                task_id: required(self.task_id, "task_id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningMemberPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            task_id: Some(path.task_id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::RemoveCycleTaskRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningMemberPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningMemberPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+                task_id: required(self.task_id, "task_id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningMemberPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            task_id: Some(path.task_id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::StartCycleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::CloseCycleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::CloseCycleRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::CloseCycleRequest {
+                carry_to: self.carry_to,
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::CloseCycleRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            carry_to: input.carry_to,
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
+impl v1::CancelCycleRequest {
+    pub fn decode_parts(
+        self,
+    ) -> Result<
+        (
+            crate::planning::PlanningObjectPath,
+            (),
+            crate::planning::PlanningActionRequest,
+        ),
+        RpcCodecError,
+    > {
+        Ok((
+            crate::planning::PlanningObjectPath {
+                board: required(self.board, "board")?,
+                id: required(self.id, "id")?,
+            },
+            (),
+            crate::planning::PlanningActionRequest {
+                request_id: self.request_id,
+                actor: self.actor,
+                expected_version: self.expected_version,
+                expected_versions: (self.expected_versions)
+                    .into_iter()
+                    .map(|(key, value)| -> Result<_, RpcCodecError> {
+                        Ok((key, (value).try_into()?))
+                    })
+                    .collect::<Result<_, _>>()?,
+                expected_catalog_version: self.expected_catalog_version,
+            },
+        ))
+    }
+    pub fn from_parts(
+        path: crate::planning::PlanningObjectPath,
+        _query: (),
+        input: crate::planning::PlanningActionRequest,
+    ) -> Result<Self, RpcCodecError> {
+        Ok(Self {
+            board: Some(path.board),
+            id: Some(path.id),
+            request_id: input.request_id,
+            actor: input.actor,
+            expected_version: input.expected_version,
+            expected_versions: (input.expected_versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+            expected_catalog_version: input.expected_catalog_version,
+        })
+    }
+}
 impl TryFrom<crate::wire::DataEnvelope<crate::label_surfaces::LabelSemanticProposalWire>>
     for v1::AcceptLabelProposalResponse
 {
@@ -4540,6 +5766,29 @@ impl TryFrom<v1::AcceptLabelProposalResponse>
         Ok(result)
     }
 }
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::AddCycleTaskResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::AddCycleTaskResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::AddCycleTaskResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::dependencies::AddDependencyResponse> for v1::AddDependencyResponse {
     type Error = RpcCodecError;
     fn try_from(dto: crate::dependencies::AddDependencyResponse) -> Result<Self, Self::Error> {
@@ -4552,6 +5801,29 @@ impl TryFrom<v1::AddDependencyResponse> for crate::dependencies::AddDependencyRe
     type Error = RpcCodecError;
     fn try_from(wire: v1::AddDependencyResponse) -> Result<Self, Self::Error> {
         let result: Self = crate::dependencies::AddDependencyResponse {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ModuleMutationData>>
+    for v1::AddModuleTaskResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ModuleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::AddModuleTaskResponse>
+    for crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::AddModuleTaskResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
             data: (required(wire.data, "data")?).try_into()?,
         };
         Ok(result)
@@ -4634,6 +5906,52 @@ impl TryFrom<v1::ArchiveBoardResponse> for crate::boards::ArchiveBoardResponse {
     type Error = RpcCodecError;
     fn try_from(wire: v1::ArchiveBoardResponse) -> Result<Self, Self::Error> {
         let result: Self = crate::boards::ArchiveBoardResponse {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::ArchiveCycleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::ArchiveCycleResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::ArchiveCycleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ModuleMutationData>>
+    for v1::ArchiveModuleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ModuleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::ArchiveModuleResponse>
+    for crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::ArchiveModuleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
             data: (required(wire.data, "data")?).try_into()?,
         };
         Ok(result)
@@ -4746,6 +6064,29 @@ impl TryFrom<v1::BuildContextResponse> for crate::wire::DataEnvelope<crate::deri
         Ok(result)
     }
 }
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::CancelCycleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::CancelCycleResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::CancelCycleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::wire::DataEnvelope<crate::maintenance::CheckpointReport>>
     for v1::CheckpointResponse
 {
@@ -4782,6 +6123,29 @@ impl TryFrom<crate::wire::DataEnvelope<crate::runs::ApiClaim>> for v1::ClaimTask
 impl TryFrom<v1::ClaimTaskResponse> for crate::wire::DataEnvelope<crate::runs::ApiClaim> {
     type Error = RpcCodecError;
     fn try_from(wire: v1::ClaimTaskResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::CloseCycleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::CloseCycleResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::CloseCycleResponse) -> Result<Self, Self::Error> {
         let result: Self = crate::wire::DataEnvelope {
             data: (required(wire.data, "data")?).try_into()?,
         };
@@ -4937,6 +6301,29 @@ impl TryFrom<v1::CreateCommentResponse> for crate::comments::CreateCommentRespon
         Ok(result)
     }
 }
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::CreateCycleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::CreateCycleResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::CreateCycleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::wire::DataEnvelope<crate::label_surfaces::LabelOntologyActionWire>>
     for v1::CreateLabelOntologyActionResponse
 {
@@ -4954,6 +6341,29 @@ impl TryFrom<v1::CreateLabelOntologyActionResponse>
 {
     type Error = RpcCodecError;
     fn try_from(wire: v1::CreateLabelOntologyActionResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ModuleMutationData>>
+    for v1::CreateModuleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ModuleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::CreateModuleResponse>
+    for crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::CreateModuleResponse) -> Result<Self, Self::Error> {
         let result: Self = crate::wire::DataEnvelope {
             data: (required(wire.data, "data")?).try_into()?,
         };
@@ -5292,6 +6702,115 @@ impl TryFrom<v1::DtoApiCreateTaskStatus> for crate::create_task::ApiCreateTaskSt
         })
     }
 }
+impl TryFrom<crate::planning::ApiCycle> for v1::DtoApiCycle {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiCycle) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Some(dto.id),
+            board_id: Some(dto.board_id),
+            title: Some(dto.title),
+            version: Some(dto.version),
+            created_at: Some(dto.created_at),
+            updated_at: Some(dto.updated_at),
+            archived_at: dto.archived_at,
+            body: dto.body,
+            status: Some(i32::from(v1::DtoApiCycleStatus::try_from(dto.status)?)),
+            starts_at: Some(dto.starts_at),
+            ends_at: Some(dto.ends_at),
+            started_at: dto.started_at,
+            closed_at: dto.closed_at,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiCycle> for crate::planning::ApiCycle {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiCycle) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ApiCycle {
+            id: required(wire.id, "id")?,
+            board_id: required(wire.board_id, "board_id")?,
+            title: required(wire.title, "title")?,
+            version: required(wire.version, "version")?,
+            created_at: required(wire.created_at, "created_at")?,
+            updated_at: required(wire.updated_at, "updated_at")?,
+            archived_at: wire.archived_at,
+            body: wire.body,
+            status: v1::DtoApiCycleStatus::try_from(required(wire.status, "status")?)
+                .map_err(|_| RpcCodecError::invalid("未知 enum 数值"))?
+                .try_into()?,
+            starts_at: required(wire.starts_at, "starts_at")?,
+            ends_at: required(wire.ends_at, "ends_at")?,
+            started_at: wire.started_at,
+            closed_at: wire.closed_at,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ApiCycleStatus> for v1::DtoApiCycleStatus {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiCycleStatus) -> Result<Self, Self::Error> {
+        Ok(match dto {
+            crate::planning::ApiCycleStatus::Planned => Self::Planned,
+            crate::planning::ApiCycleStatus::Active => Self::Active,
+            crate::planning::ApiCycleStatus::Completed => Self::Completed,
+            crate::planning::ApiCycleStatus::Cancelled => Self::Cancelled,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiCycleStatus> for crate::planning::ApiCycleStatus {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiCycleStatus) -> Result<Self, Self::Error> {
+        Ok(match wire {
+            v1::DtoApiCycleStatus::Planned => Self::Planned,
+            v1::DtoApiCycleStatus::Active => Self::Active,
+            v1::DtoApiCycleStatus::Completed => Self::Completed,
+            v1::DtoApiCycleStatus::Cancelled => Self::Cancelled,
+            v1::DtoApiCycleStatus::Unspecified => {
+                return Err(RpcCodecError::invalid("enum 未指定"));
+            }
+        })
+    }
+}
+impl TryFrom<crate::planning::ApiCycleSummary> for v1::DtoApiCycleSummary {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiCycleSummary) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Some(dto.id),
+            board_id: Some(dto.board_id),
+            title: Some(dto.title),
+            version: Some(dto.version),
+            created_at: Some(dto.created_at),
+            updated_at: Some(dto.updated_at),
+            archived_at: dto.archived_at,
+            status: Some(i32::from(v1::DtoApiCycleStatus::try_from(dto.status)?)),
+            starts_at: Some(dto.starts_at),
+            ends_at: Some(dto.ends_at),
+            started_at: dto.started_at,
+            closed_at: dto.closed_at,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiCycleSummary> for crate::planning::ApiCycleSummary {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiCycleSummary) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ApiCycleSummary {
+            id: required(wire.id, "id")?,
+            board_id: required(wire.board_id, "board_id")?,
+            title: required(wire.title, "title")?,
+            version: required(wire.version, "version")?,
+            created_at: required(wire.created_at, "created_at")?,
+            updated_at: required(wire.updated_at, "updated_at")?,
+            archived_at: wire.archived_at,
+            status: v1::DtoApiCycleStatus::try_from(required(wire.status, "status")?)
+                .map_err(|_| RpcCodecError::invalid("未知 enum 数值"))?
+                .try_into()?,
+            starts_at: required(wire.starts_at, "starts_at")?,
+            ends_at: required(wire.ends_at, "ends_at")?,
+            started_at: wire.started_at,
+            closed_at: wire.closed_at,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::dependencies::ApiDependencies> for v1::DtoApiDependencies {
     type Error = RpcCodecError;
     fn try_from(dto: crate::dependencies::ApiDependencies) -> Result<Self, Self::Error> {
@@ -5507,6 +7026,180 @@ impl TryFrom<v1::DtoApiLabel> for crate::api_components::ApiLabel {
         Ok(result)
     }
 }
+impl TryFrom<crate::planning::ApiModule> for v1::DtoApiModule {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiModule) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Some(dto.id),
+            board_id: Some(dto.board_id),
+            title: Some(dto.title),
+            version: Some(dto.version),
+            created_at: Some(dto.created_at),
+            updated_at: Some(dto.updated_at),
+            archived_at: dto.archived_at,
+            body: dto.body,
+            parent_id: dto.parent_id,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiModule> for crate::planning::ApiModule {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiModule) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ApiModule {
+            id: required(wire.id, "id")?,
+            board_id: required(wire.board_id, "board_id")?,
+            title: required(wire.title, "title")?,
+            version: required(wire.version, "version")?,
+            created_at: required(wire.created_at, "created_at")?,
+            updated_at: required(wire.updated_at, "updated_at")?,
+            archived_at: wire.archived_at,
+            body: wire.body,
+            parent_id: wire.parent_id,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ApiModuleSummary> for v1::DtoApiModuleSummary {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiModuleSummary) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Some(dto.id),
+            board_id: Some(dto.board_id),
+            title: Some(dto.title),
+            version: Some(dto.version),
+            created_at: Some(dto.created_at),
+            updated_at: Some(dto.updated_at),
+            archived_at: dto.archived_at,
+            parent_id: dto.parent_id,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiModuleSummary> for crate::planning::ApiModuleSummary {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiModuleSummary) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ApiModuleSummary {
+            id: required(wire.id, "id")?,
+            board_id: required(wire.board_id, "board_id")?,
+            title: required(wire.title, "title")?,
+            version: required(wire.version, "version")?,
+            created_at: required(wire.created_at, "created_at")?,
+            updated_at: required(wire.updated_at, "updated_at")?,
+            archived_at: wire.archived_at,
+            parent_id: wire.parent_id,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ApiObjectVersion> for v1::DtoApiObjectVersion {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiObjectVersion) -> Result<Self, Self::Error> {
+        Ok(Self {
+            object: Some(dto.object),
+            source: dto.source,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiObjectVersion> for crate::planning::ApiObjectVersion {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiObjectVersion) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ApiObjectVersion {
+            object: required(wire.object, "object")?,
+            source: wire.source,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ApiPlanningMember> for v1::DtoApiPlanningMember {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiPlanningMember) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Some(dto.id),
+            title: Some(dto.title),
+            status: Some(i32::from(v1::DtoApiTaskStatus::try_from(dto.status)?)),
+            version: Some((dto.version).try_into()?),
+            carried_to: dto.carried_to,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiPlanningMember> for crate::planning::ApiPlanningMember {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiPlanningMember) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ApiPlanningMember {
+            id: required(wire.id, "id")?,
+            title: required(wire.title, "title")?,
+            status: v1::DtoApiTaskStatus::try_from(required(wire.status, "status")?)
+                .map_err(|_| RpcCodecError::invalid("未知 enum 数值"))?
+                .try_into()?,
+            version: (required(wire.version, "version")?).try_into()?,
+            carried_to: wire.carried_to,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ApiPlanningProgress> for v1::DtoApiPlanningProgress {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiPlanningProgress) -> Result<Self, Self::Error> {
+        Ok(Self {
+            total: Some(dto.total),
+            done: Some(dto.done),
+            archived: Some(dto.archived),
+            blocked: Some(dto.blocked),
+            completion_ratio: dto
+                .completion_ratio
+                .map(|value| -> Result<_, RpcCodecError> { finite(value) })
+                .transpose()?,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiPlanningProgress> for crate::planning::ApiPlanningProgress {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiPlanningProgress) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ApiPlanningProgress {
+            total: required(wire.total, "total")?,
+            done: required(wire.done, "done")?,
+            archived: required(wire.archived, "archived")?,
+            blocked: required(wire.blocked, "blocked")?,
+            completion_ratio: wire
+                .completion_ratio
+                .map(|value| -> Result<_, RpcCodecError> { finite(value) })
+                .transpose()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ApiPlanningReceipt> for v1::DtoApiPlanningReceipt {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ApiPlanningReceipt) -> Result<Self, Self::Error> {
+        Ok(Self {
+            request_id: Some(dto.request_id),
+            ids: dto.ids,
+            event_sequence: Some(dto.event_sequence),
+            catalog_version: Some(dto.catalog_version),
+            replayed: Some(dto.replayed),
+            versions: (dto.versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+impl TryFrom<v1::DtoApiPlanningReceipt> for crate::planning::ApiPlanningReceipt {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoApiPlanningReceipt) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ApiPlanningReceipt {
+            request_id: required(wire.request_id, "request_id")?,
+            ids: wire.ids,
+            event_sequence: required(wire.event_sequence, "event_sequence")?,
+            catalog_version: required(wire.catalog_version, "catalog_version")?,
+            replayed: required(wire.replayed, "replayed")?,
+            versions: (wire.versions)
+                .into_iter()
+                .map(|(key, value)| -> Result<_, RpcCodecError> { Ok((key, (value).try_into()?)) })
+                .collect::<Result<_, _>>()?,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::derived::ApiRelation> for v1::DtoApiRelation {
     type Error = RpcCodecError;
     fn try_from(dto: crate::derived::ApiRelation) -> Result<Self, Self::Error> {
@@ -5679,6 +7372,9 @@ impl TryFrom<crate::api_components::ApiTask> for v1::DtoApiTask {
     type Error = RpcCodecError;
     fn try_from(dto: crate::api_components::ApiTask) -> Result<Self, Self::Error> {
         Ok(Self {
+            module_ids: dto.module_ids,
+            cycle_id: dto.cycle_id,
+            object_version: dto.object_version,
             id: Some(dto.id),
             board_id: Some(dto.board_id),
             board_slug: Some(dto.board_slug),
@@ -5731,6 +7427,9 @@ impl TryFrom<v1::DtoApiTask> for crate::api_components::ApiTask {
     type Error = RpcCodecError;
     fn try_from(wire: v1::DtoApiTask) -> Result<Self, Self::Error> {
         let result: Self = crate::api_components::ApiTask {
+            module_ids: wire.module_ids,
+            cycle_id: wire.cycle_id,
+            object_version: wire.object_version,
             id: required(wire.id, "id")?,
             board_id: required(wire.board_id, "board_id")?,
             board_slug: required(wire.board_slug, "board_slug")?,
@@ -6704,6 +8403,50 @@ impl TryFrom<v1::DtoCreatedLabelsMetaOfDtoApiLabel>
                 .into_iter()
                 .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
                 .collect::<Result<Vec<_>, _>>()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::CycleMutationData> for v1::DtoCycleMutationData {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::CycleMutationData) -> Result<Self, Self::Error> {
+        Ok(Self {
+            object: Some((dto.object).try_into()?),
+            receipt: Some((dto.receipt).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::DtoCycleMutationData> for crate::planning::CycleMutationData {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoCycleMutationData) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::CycleMutationData {
+            object: (required(wire.object, "object")?).try_into()?,
+            receipt: (required(wire.receipt, "receipt")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::CycleOverview> for v1::DtoCycleOverview {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::CycleOverview) -> Result<Self, Self::Error> {
+        Ok(Self {
+            object: Some((dto.object).try_into()?),
+            progress: Some((dto.progress).try_into()?),
+            source: Some(i32::from(v1::DtoPlanningReadSource::try_from(dto.source)?)),
+            captured_at: dto.captured_at,
+        })
+    }
+}
+impl TryFrom<v1::DtoCycleOverview> for crate::planning::CycleOverview {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoCycleOverview) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::CycleOverview {
+            object: (required(wire.object, "object")?).try_into()?,
+            progress: (required(wire.progress, "progress")?).try_into()?,
+            source: v1::DtoPlanningReadSource::try_from(required(wire.source, "source")?)
+                .map_err(|_| RpcCodecError::invalid("未知 enum 数值"))?
+                .try_into()?,
+            captured_at: wire.captured_at,
         };
         Ok(result)
     }
@@ -9436,6 +11179,50 @@ impl TryFrom<v1::DtoMaintenanceStatusReport> for crate::maintenance::Maintenance
         Ok(result)
     }
 }
+impl TryFrom<crate::planning::ModuleMutationData> for v1::DtoModuleMutationData {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ModuleMutationData) -> Result<Self, Self::Error> {
+        Ok(Self {
+            object: Some((dto.object).try_into()?),
+            receipt: Some((dto.receipt).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::DtoModuleMutationData> for crate::planning::ModuleMutationData {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoModuleMutationData) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ModuleMutationData {
+            object: (required(wire.object, "object")?).try_into()?,
+            receipt: (required(wire.receipt, "receipt")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ModuleOverview> for v1::DtoModuleOverview {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ModuleOverview) -> Result<Self, Self::Error> {
+        Ok(Self {
+            object: Some((dto.object).try_into()?),
+            progress: Some((dto.progress).try_into()?),
+            source: Some(i32::from(v1::DtoPlanningReadSource::try_from(dto.source)?)),
+            captured_at: dto.captured_at,
+        })
+    }
+}
+impl TryFrom<v1::DtoModuleOverview> for crate::planning::ModuleOverview {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoModuleOverview) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ModuleOverview {
+            object: (required(wire.object, "object")?).try_into()?,
+            progress: (required(wire.progress, "progress")?).try_into()?,
+            source: v1::DtoPlanningReadSource::try_from(required(wire.source, "source")?)
+                .map_err(|_| RpcCodecError::invalid("未知 enum 数值"))?
+                .try_into()?,
+            captured_at: wire.captured_at,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::wire::NextAfterMeta> for v1::DtoNextAfterMeta {
     type Error = RpcCodecError;
     fn try_from(dto: crate::wire::NextAfterMeta) -> Result<Self, Self::Error> {
@@ -9478,6 +11265,51 @@ impl TryFrom<v1::DtoOffsetPaginationMeta> for crate::wire::OffsetPaginationMeta 
                 .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
         };
         Ok(result)
+    }
+}
+impl TryFrom<crate::planning::PlanningCapabilities> for v1::DtoPlanningCapabilities {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::PlanningCapabilities) -> Result<Self, Self::Error> {
+        Ok(Self {
+            version: Some(dto.version),
+            task_membership: Some(dto.task_membership),
+            task_membership_filters: Some(dto.task_membership_filters),
+        })
+    }
+}
+impl TryFrom<v1::DtoPlanningCapabilities> for crate::planning::PlanningCapabilities {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoPlanningCapabilities) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::PlanningCapabilities {
+            version: required(wire.version, "version")?,
+            task_membership: required(wire.task_membership, "task_membership")?,
+            task_membership_filters: required(
+                wire.task_membership_filters,
+                "task_membership_filters",
+            )?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::PlanningReadSource> for v1::DtoPlanningReadSource {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::PlanningReadSource) -> Result<Self, Self::Error> {
+        Ok(match dto {
+            crate::planning::PlanningReadSource::Current => Self::Current,
+            crate::planning::PlanningReadSource::FrozenSnapshot => Self::FrozenSnapshot,
+        })
+    }
+}
+impl TryFrom<v1::DtoPlanningReadSource> for crate::planning::PlanningReadSource {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::DtoPlanningReadSource) -> Result<Self, Self::Error> {
+        Ok(match wire {
+            v1::DtoPlanningReadSource::Current => Self::Current,
+            v1::DtoPlanningReadSource::FrozenSnapshot => Self::FrozenSnapshot,
+            v1::DtoPlanningReadSource::Unspecified => {
+                return Err(RpcCodecError::invalid("enum 未指定"));
+            }
+        })
     }
 }
 impl TryFrom<crate::maintenance::ProjectionStoreStatus> for v1::DtoProjectionStoreStatus {
@@ -11343,6 +13175,48 @@ impl TryFrom<v1::GetBoardResponse> for crate::boards::GetBoardResponse {
         Ok(result)
     }
 }
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleOverview>>
+    for v1::GetCycleOverviewResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleOverview>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::GetCycleOverviewResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleOverview>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::GetCycleOverviewResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ApiCycle>> for v1::GetCycleResponse {
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ApiCycle>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::GetCycleResponse> for crate::wire::DataEnvelope<crate::planning::ApiCycle> {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::GetCycleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::wire::DataEnvelope<crate::cli::CliEntity>> for v1::GetEntityResponse {
     type Error = RpcCodecError;
     fn try_from(
@@ -11467,6 +13341,71 @@ impl TryFrom<v1::GetLabelSemanticsResponse>
 {
     type Error = RpcCodecError;
     fn try_from(wire: v1::GetLabelSemanticsResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ModuleOverview>>
+    for v1::GetModuleOverviewResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ModuleOverview>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::GetModuleOverviewResponse>
+    for crate::wire::DataEnvelope<crate::planning::ModuleOverview>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::GetModuleOverviewResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ApiModule>> for v1::GetModuleResponse {
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ApiModule>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::GetModuleResponse> for crate::wire::DataEnvelope<crate::planning::ApiModule> {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::GetModuleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::PlanningCapabilities>>
+    for v1::GetPlanningCapabilitiesResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::PlanningCapabilities>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::GetPlanningCapabilitiesResponse>
+    for crate::wire::DataEnvelope<crate::planning::PlanningCapabilities>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::GetPlanningCapabilitiesResponse) -> Result<Self, Self::Error> {
         let result: Self = crate::wire::DataEnvelope {
             data: (required(wire.data, "data")?).try_into()?,
         };
@@ -11939,6 +13878,96 @@ impl TryFrom<v1::ListCommentsResponse> for crate::comments::ListCommentsResponse
         Ok(result)
     }
 }
+impl TryFrom<crate::planning::PlanningMembersResponse> for v1::ListCycleTasksResponse {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::PlanningMembersResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: (dto.data)
+                .into_iter()
+                .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
+                .collect::<Result<Vec<_>, _>>()?,
+            total: Some(
+                u64::try_from(dto.total)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            limit: Some(
+                u64::try_from(dto.limit)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            offset: Some(
+                u64::try_from(dto.offset)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            source: Some(i32::from(v1::DtoPlanningReadSource::try_from(dto.source)?)),
+            captured_at: dto.captured_at,
+            object_version: Some(dto.object_version),
+        })
+    }
+}
+impl TryFrom<v1::ListCycleTasksResponse> for crate::planning::PlanningMembersResponse {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::ListCycleTasksResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::PlanningMembersResponse {
+            data: (wire.data)
+                .into_iter()
+                .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
+                .collect::<Result<Vec<_>, _>>()?,
+            total: usize::try_from(required(wire.total, "total")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            limit: usize::try_from(required(wire.limit, "limit")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            offset: usize::try_from(required(wire.offset, "offset")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            source: v1::DtoPlanningReadSource::try_from(required(wire.source, "source")?)
+                .map_err(|_| RpcCodecError::invalid("未知 enum 数值"))?
+                .try_into()?,
+            captured_at: wire.captured_at,
+            object_version: required(wire.object_version, "object_version")?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ListCyclesResponse> for v1::ListCyclesResponse {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ListCyclesResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: (dto.data)
+                .into_iter()
+                .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
+                .collect::<Result<Vec<_>, _>>()?,
+            total: Some(
+                u64::try_from(dto.total)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            limit: Some(
+                u64::try_from(dto.limit)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            offset: Some(
+                u64::try_from(dto.offset)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+        })
+    }
+}
+impl TryFrom<v1::ListCyclesResponse> for crate::planning::ListCyclesResponse {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::ListCyclesResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ListCyclesResponse {
+            data: (wire.data)
+                .into_iter()
+                .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
+                .collect::<Result<Vec<_>, _>>()?,
+            total: usize::try_from(required(wire.total, "total")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            limit: usize::try_from(required(wire.limit, "limit")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            offset: usize::try_from(required(wire.offset, "offset")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::dependencies::ListDependenciesResponse> for v1::ListDependenciesResponse {
     type Error = RpcCodecError;
     fn try_from(dto: crate::dependencies::ListDependenciesResponse) -> Result<Self, Self::Error> {
@@ -12089,6 +14118,96 @@ impl TryFrom<v1::ListLabelSemanticsResponse>
                 .into_iter()
                 .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
                 .collect::<Result<Vec<_>, _>>()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::PlanningMembersResponse> for v1::ListModuleTasksResponse {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::PlanningMembersResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: (dto.data)
+                .into_iter()
+                .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
+                .collect::<Result<Vec<_>, _>>()?,
+            total: Some(
+                u64::try_from(dto.total)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            limit: Some(
+                u64::try_from(dto.limit)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            offset: Some(
+                u64::try_from(dto.offset)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            source: Some(i32::from(v1::DtoPlanningReadSource::try_from(dto.source)?)),
+            captured_at: dto.captured_at,
+            object_version: Some(dto.object_version),
+        })
+    }
+}
+impl TryFrom<v1::ListModuleTasksResponse> for crate::planning::PlanningMembersResponse {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::ListModuleTasksResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::PlanningMembersResponse {
+            data: (wire.data)
+                .into_iter()
+                .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
+                .collect::<Result<Vec<_>, _>>()?,
+            total: usize::try_from(required(wire.total, "total")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            limit: usize::try_from(required(wire.limit, "limit")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            offset: usize::try_from(required(wire.offset, "offset")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            source: v1::DtoPlanningReadSource::try_from(required(wire.source, "source")?)
+                .map_err(|_| RpcCodecError::invalid("未知 enum 数值"))?
+                .try_into()?,
+            captured_at: wire.captured_at,
+            object_version: required(wire.object_version, "object_version")?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::planning::ListModulesResponse> for v1::ListModulesResponse {
+    type Error = RpcCodecError;
+    fn try_from(dto: crate::planning::ListModulesResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: (dto.data)
+                .into_iter()
+                .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
+                .collect::<Result<Vec<_>, _>>()?,
+            total: Some(
+                u64::try_from(dto.total)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            limit: Some(
+                u64::try_from(dto.limit)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+            offset: Some(
+                u64::try_from(dto.offset)
+                    .map_err(|_| RpcCodecError::invalid("usize 超出 uint64"))?,
+            ),
+        })
+    }
+}
+impl TryFrom<v1::ListModulesResponse> for crate::planning::ListModulesResponse {
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::ListModulesResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::planning::ListModulesResponse {
+            data: (wire.data)
+                .into_iter()
+                .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
+                .collect::<Result<Vec<_>, _>>()?,
+            total: usize::try_from(required(wire.total, "total")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            limit: usize::try_from(required(wire.limit, "limit")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
+            offset: usize::try_from(required(wire.offset, "offset")?)
+                .map_err(|_| RpcCodecError::invalid("uint64 超出 usize"))?,
         };
         Ok(result)
     }
@@ -12762,6 +14881,29 @@ impl TryFrom<v1::ReleaseTaskResponse>
         Ok(result)
     }
 }
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::RemoveCycleTaskResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::RemoveCycleTaskResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::RemoveCycleTaskResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::dependencies::RemoveDependencyResponse> for v1::RemoveDependencyResponse {
     type Error = RpcCodecError;
     fn try_from(dto: crate::dependencies::RemoveDependencyResponse) -> Result<Self, Self::Error> {
@@ -12774,6 +14916,29 @@ impl TryFrom<v1::RemoveDependencyResponse> for crate::dependencies::RemoveDepend
     type Error = RpcCodecError;
     fn try_from(wire: v1::RemoveDependencyResponse) -> Result<Self, Self::Error> {
         let result: Self = crate::dependencies::RemoveDependencyResponse {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ModuleMutationData>>
+    for v1::RemoveModuleTaskResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ModuleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::RemoveModuleTaskResponse>
+    for crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::RemoveModuleTaskResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
             data: (required(wire.data, "data")?).try_into()?,
         };
         Ok(result)
@@ -12874,6 +15039,52 @@ impl TryFrom<v1::ResolveSignalsResponse>
                 .into_iter()
                 .map(|value| -> Result<_, RpcCodecError> { (value).try_into() })
                 .collect::<Result<Vec<_>, _>>()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::RestoreCycleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::RestoreCycleResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::RestoreCycleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ModuleMutationData>>
+    for v1::RestoreModuleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ModuleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::RestoreModuleResponse>
+    for crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::RestoreModuleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
         };
         Ok(result)
     }
@@ -13116,6 +15327,29 @@ impl TryFrom<v1::SpecifyTaskResponse>
         Ok(result)
     }
 }
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::StartCycleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::StartCycleResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::StartCycleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
 impl TryFrom<crate::wire::DataEnvelope<crate::api_components::ApiTask>>
     for v1::SubmitReviewTaskResponse
 {
@@ -13254,6 +15488,52 @@ impl TryFrom<v1::UnblockTaskResponse>
 {
     type Error = RpcCodecError;
     fn try_from(wire: v1::UnblockTaskResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::CycleMutationData>>
+    for v1::UpdateCycleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::CycleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::UpdateCycleResponse>
+    for crate::wire::DataEnvelope<crate::planning::CycleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::UpdateCycleResponse) -> Result<Self, Self::Error> {
+        let result: Self = crate::wire::DataEnvelope {
+            data: (required(wire.data, "data")?).try_into()?,
+        };
+        Ok(result)
+    }
+}
+impl TryFrom<crate::wire::DataEnvelope<crate::planning::ModuleMutationData>>
+    for v1::UpdateModuleResponse
+{
+    type Error = RpcCodecError;
+    fn try_from(
+        dto: crate::wire::DataEnvelope<crate::planning::ModuleMutationData>,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: Some((dto.data).try_into()?),
+        })
+    }
+}
+impl TryFrom<v1::UpdateModuleResponse>
+    for crate::wire::DataEnvelope<crate::planning::ModuleMutationData>
+{
+    type Error = RpcCodecError;
+    fn try_from(wire: v1::UpdateModuleResponse) -> Result<Self, Self::Error> {
         let result: Self = crate::wire::DataEnvelope {
             data: (required(wire.data, "data")?).try_into()?,
         };

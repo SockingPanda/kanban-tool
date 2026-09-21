@@ -3793,6 +3793,8 @@ mod tests {
                 entered.notify_one();
                 service
                     .create_task(crate::CreateTaskCommand {
+                        planning: Default::default(),
+                        request_fingerprint: None,
                         task_id: "t_quiesce_gate".to_owned(),
                         board: "default".to_owned(),
                         idempotency_key: None,

@@ -8,6 +8,11 @@ use crate::{context::CliContext, error::CliFailure, output};
 
 #[derive(Debug, Args)]
 pub(crate) struct CreateArgs {
+    #[arg(long = "module")]
+    pub(crate) module_ids: Vec<String>,
+    #[arg(long = "cycle")]
+    pub(crate) cycle_id: Option<String>,
+
     pub(crate) title: String,
     #[arg(long)]
     pub(crate) description: Option<String>,
@@ -58,6 +63,10 @@ pub(crate) async fn run(
         .create_task(
             &ctx.board,
             CreateTaskRequest {
+                module_ids: args.module_ids.clone(),
+                cycle_id: args.cycle_id.clone(),
+                expected_versions: Default::default(),
+                expected_catalog_version: None,
                 task_id: args.task_id.clone(),
                 idempotency_key: args.idempotency_key.clone(),
                 title: args.title.clone(),

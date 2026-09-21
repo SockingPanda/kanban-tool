@@ -116,3 +116,5 @@ pub use legacy_import::{
     LegacyImportOptions, LegacyImportResult, LegacyImportTableCount, LegacySqliteImportOptions,
     LegacySqliteImportResult,
 };
+
+pub use object_model::task_planning::TaskPlanningInput;

@@ -124,6 +124,30 @@ service KanbanService {
   rpc MaintenanceImportV30(MaintenanceImportV30Request) returns (MaintenanceImportV30Response);
   rpc GetTaskDetails(GetTaskDetailsRequest) returns (GetTaskDetailsResponse);
   rpc GetLabelOntologyQuality(GetLabelOntologyQualityRequest) returns (GetLabelOntologyQualityResponse);
+  rpc GetPlanningCapabilities(GetPlanningCapabilitiesRequest) returns (GetPlanningCapabilitiesResponse);
+  rpc ListModules(ListModulesRequest) returns (ListModulesResponse);
+  rpc GetModule(GetModuleRequest) returns (GetModuleResponse);
+  rpc CreateModule(CreateModuleRequest) returns (CreateModuleResponse);
+  rpc UpdateModule(UpdateModuleRequest) returns (UpdateModuleResponse);
+  rpc ArchiveModule(ArchiveModuleRequest) returns (ArchiveModuleResponse);
+  rpc RestoreModule(RestoreModuleRequest) returns (RestoreModuleResponse);
+  rpc GetModuleOverview(GetModuleOverviewRequest) returns (GetModuleOverviewResponse);
+  rpc ListModuleTasks(ListModuleTasksRequest) returns (ListModuleTasksResponse);
+  rpc AddModuleTask(AddModuleTaskRequest) returns (AddModuleTaskResponse);
+  rpc RemoveModuleTask(RemoveModuleTaskRequest) returns (RemoveModuleTaskResponse);
+  rpc ListCycles(ListCyclesRequest) returns (ListCyclesResponse);
+  rpc GetCycle(GetCycleRequest) returns (GetCycleResponse);
+  rpc CreateCycle(CreateCycleRequest) returns (CreateCycleResponse);
+  rpc UpdateCycle(UpdateCycleRequest) returns (UpdateCycleResponse);
+  rpc ArchiveCycle(ArchiveCycleRequest) returns (ArchiveCycleResponse);
+  rpc RestoreCycle(RestoreCycleRequest) returns (RestoreCycleResponse);
+  rpc GetCycleOverview(GetCycleOverviewRequest) returns (GetCycleOverviewResponse);
+  rpc ListCycleTasks(ListCycleTasksRequest) returns (ListCycleTasksResponse);
+  rpc AddCycleTask(AddCycleTaskRequest) returns (AddCycleTaskResponse);
+  rpc RemoveCycleTask(RemoveCycleTaskRequest) returns (RemoveCycleTaskResponse);
+  rpc StartCycle(StartCycleRequest) returns (StartCycleResponse);
+  rpc CloseCycle(CloseCycleRequest) returns (CloseCycleResponse);
+  rpc CancelCycle(CancelCycleRequest) returns (CancelCycleResponse);
 }
 
 message ErrorDetail {
@@ -164,6 +188,8 @@ message ListBoardColumnsRequest {
 message ListTasksRequest {
   optional string board = 1;
   repeated DtoApiTaskStatus status = 2;
+  repeated string module_ids = 12;
+  optional string cycle_id = 13;
   repeated DtoApiTaskPriority priority = 3;
   repeated DtoTaskReadLabel label = 4;
   repeated DtoTaskReadPlanFilter plan_filter = 5;
@@ -178,6 +204,8 @@ message ListTasksRequest {
 message ListTasksByStatusRequest {
   optional string board = 1;
   repeated DtoApiTaskStatus status = 2;
+  repeated string module_ids = 12;
+  optional string cycle_id = 13;
   repeated DtoApiTaskPriority priority = 3;
   repeated DtoTaskReadLabel label = 4;
   repeated DtoTaskReadPlanFilter plan_filter = 5;
@@ -191,6 +219,10 @@ message ListTasksByStatusRequest {
 // api.create-task
 message CreateTaskRequest {
   optional string board = 1;
+  repeated string module_ids = 16;
+  optional string cycle_id = 17;
+  map<string, DtoApiObjectVersion> expected_versions = 18;
+  optional int64 expected_catalog_version = 19;
   optional string task_id = 2;
   optional string idempotency_key = 3;
   optional string title = 4;
@@ -214,6 +246,12 @@ message GetTaskRequest {
 // api.update-task
 message UpdateTaskRequest {
   optional string task_id = 1;
+  ListOfString module_ids = 12;
+  PatchString cycle_id = 13;
+  optional int64 expected_object_version = 14;
+  map<string, DtoApiObjectVersion> expected_versions = 15;
+  optional int64 expected_catalog_version = 16;
+  optional string request_id = 17;
   optional string title = 2;
   PatchString description = 3;
   PatchString assignee = 4;
@@ -989,4 +1027,225 @@ message GetTaskDetailsRequest {
 message GetLabelOntologyQualityRequest {
   optional string board = 1;
   optional uint64 sample_limit = 2;
+}
+// api.get-planning-capabilities
+message GetPlanningCapabilitiesRequest {
+
+}
+// api.list-modules
+message ListModulesRequest {
+  optional string board = 1;
+  optional string q = 2;
+  optional bool include_archived = 3;
+  optional uint64 limit = 4;
+  optional uint64 offset = 5;
+  optional string parent_id = 6;
+}
+// api.get-module
+message GetModuleRequest {
+  optional string board = 1;
+  optional string id = 2;
+}
+// api.create-module
+message CreateModuleRequest {
+  optional string board = 1;
+  optional string title = 2;
+  optional string body = 3;
+  optional string parent_id = 4;
+  optional string request_id = 5;
+  optional string actor = 6;
+  map<string, DtoApiObjectVersion> expected_versions = 7;
+  optional int64 expected_catalog_version = 8;
+}
+// api.update-module
+message UpdateModuleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string title = 3;
+  PatchString body = 4;
+  PatchString parent_id = 5;
+  optional string request_id = 6;
+  optional string actor = 7;
+  optional int64 expected_version = 8;
+  map<string, DtoApiObjectVersion> expected_versions = 9;
+  optional int64 expected_catalog_version = 10;
+}
+// api.archive-module
+message ArchiveModuleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string request_id = 3;
+  optional string actor = 4;
+  optional int64 expected_version = 5;
+  map<string, DtoApiObjectVersion> expected_versions = 6;
+  optional int64 expected_catalog_version = 7;
+}
+// api.restore-module
+message RestoreModuleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string request_id = 3;
+  optional string actor = 4;
+  optional int64 expected_version = 5;
+  map<string, DtoApiObjectVersion> expected_versions = 6;
+  optional int64 expected_catalog_version = 7;
+}
+// api.get-module-overview
+message GetModuleOverviewRequest {
+  optional string board = 1;
+  optional string id = 2;
+}
+// api.list-module-tasks
+message ListModuleTasksRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional uint64 limit = 3;
+  optional uint64 offset = 4;
+}
+// api.add-module-task
+message AddModuleTaskRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string task_id = 3;
+  optional string request_id = 4;
+  optional string actor = 5;
+  optional int64 expected_version = 6;
+  map<string, DtoApiObjectVersion> expected_versions = 7;
+  optional int64 expected_catalog_version = 8;
+}
+// api.remove-module-task
+message RemoveModuleTaskRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string task_id = 3;
+  optional string request_id = 4;
+  optional string actor = 5;
+  optional int64 expected_version = 6;
+  map<string, DtoApiObjectVersion> expected_versions = 7;
+  optional int64 expected_catalog_version = 8;
+}
+// api.list-cycles
+message ListCyclesRequest {
+  optional string board = 1;
+  optional string q = 2;
+  optional bool include_archived = 3;
+  optional uint64 limit = 4;
+  optional uint64 offset = 5;
+  optional DtoApiCycleStatus status = 6;
+}
+// api.get-cycle
+message GetCycleRequest {
+  optional string board = 1;
+  optional string id = 2;
+}
+// api.create-cycle
+message CreateCycleRequest {
+  optional string board = 1;
+  optional string title = 2;
+  optional string body = 3;
+  optional int64 starts_at = 4;
+  optional int64 ends_at = 5;
+  optional string request_id = 6;
+  optional string actor = 7;
+  map<string, DtoApiObjectVersion> expected_versions = 8;
+  optional int64 expected_catalog_version = 9;
+}
+// api.update-cycle
+message UpdateCycleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string title = 3;
+  PatchString body = 4;
+  optional int64 starts_at = 5;
+  optional int64 ends_at = 6;
+  optional string request_id = 7;
+  optional string actor = 8;
+  optional int64 expected_version = 9;
+  map<string, DtoApiObjectVersion> expected_versions = 10;
+  optional int64 expected_catalog_version = 11;
+}
+// api.archive-cycle
+message ArchiveCycleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string request_id = 3;
+  optional string actor = 4;
+  optional int64 expected_version = 5;
+  map<string, DtoApiObjectVersion> expected_versions = 6;
+  optional int64 expected_catalog_version = 7;
+}
+// api.restore-cycle
+message RestoreCycleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string request_id = 3;
+  optional string actor = 4;
+  optional int64 expected_version = 5;
+  map<string, DtoApiObjectVersion> expected_versions = 6;
+  optional int64 expected_catalog_version = 7;
+}
+// api.get-cycle-overview
+message GetCycleOverviewRequest {
+  optional string board = 1;
+  optional string id = 2;
+}
+// api.list-cycle-tasks
+message ListCycleTasksRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional uint64 limit = 3;
+  optional uint64 offset = 4;
+}
+// api.add-cycle-task
+message AddCycleTaskRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string task_id = 3;
+  optional string request_id = 4;
+  optional string actor = 5;
+  optional int64 expected_version = 6;
+  map<string, DtoApiObjectVersion> expected_versions = 7;
+  optional int64 expected_catalog_version = 8;
+}
+// api.remove-cycle-task
+message RemoveCycleTaskRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string task_id = 3;
+  optional string request_id = 4;
+  optional string actor = 5;
+  optional int64 expected_version = 6;
+  map<string, DtoApiObjectVersion> expected_versions = 7;
+  optional int64 expected_catalog_version = 8;
+}
+// api.start-cycle
+message StartCycleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string request_id = 3;
+  optional string actor = 4;
+  optional int64 expected_version = 5;
+  map<string, DtoApiObjectVersion> expected_versions = 6;
+  optional int64 expected_catalog_version = 7;
+}
+// api.close-cycle
+message CloseCycleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string carry_to = 3;
+  optional string request_id = 4;
+  optional string actor = 5;
+  optional int64 expected_version = 6;
+  map<string, DtoApiObjectVersion> expected_versions = 7;
+  optional int64 expected_catalog_version = 8;
+}
+// api.cancel-cycle
+message CancelCycleRequest {
+  optional string board = 1;
+  optional string id = 2;
+  optional string request_id = 3;
+  optional string actor = 4;
+  optional int64 expected_version = 5;
+  map<string, DtoApiObjectVersion> expected_versions = 6;
+  optional int64 expected_catalog_version = 7;
 }

@@ -9,11 +9,13 @@ pub(crate) mod migration;
 #[cfg(test)]
 mod migration_tests;
 mod model;
+pub mod planning;
 pub(crate) mod portable;
 mod queries;
 mod relations;
 mod rollup;
 mod store;
+pub(crate) mod task_planning;
 #[cfg(test)]
 mod tests;
 mod validation;
@@ -197,10 +199,45 @@ async fn execute_in_transaction(
     hash: &str,
     now: i64,
 ) -> ObjectResult<ObjectReceipt> {
+    if let Some(receipt) = replay(c, &request.board_id, &request.request_id, hash).await? {
+        return Ok(receipt);
+    }
+    board(c, &request.board_id, true).await?;
+    let ids = commands::apply(c, request, now).await?;
+    let full_revision = matches!(
+        &request.mutation,
+        ObjectMutation::Create { .. }
+            | ObjectMutation::Patch { .. }
+            | ObjectMutation::SetBody { .. }
+            | ObjectMutation::SetArchived { .. }
+    );
+    record_command(
+        c,
+        CommandEvent {
+            board_id: &request.board_id,
+            request_id: &request.request_id,
+            actor: &request.actor,
+            mutation: serde_json::to_value(&request.mutation)?,
+        },
+        hash,
+        ids,
+        full_revision,
+        now,
+    )
+    .await
+}
+
+/// 先比较调用者原始请求，再补齐内部版本，重放不重新解释当前关系。
+pub(super) async fn replay(
+    c: &Connection,
+    board_id: &str,
+    request_id: &str,
+    hash: &str,
+) -> ObjectResult<Option<ObjectReceipt>> {
     let old = rows(
         c,
         "SELECT request_hash,receipt_json FROM object_requests WHERE board_id=?1 AND request_id=?2",
-        vec![s(&request.board_id), s(&request.request_id)],
+        vec![s(board_id), s(request_id)],
     )
     .await?;
     if let Some(row) = old.first() {
@@ -211,29 +248,38 @@ async fn execute_in_transaction(
         }
         let mut receipt: ObjectReceipt = serde_json::from_str(&text(&row[1])?)?;
         receipt.replayed = true;
-        return Ok(receipt);
+        return Ok(Some(receipt));
     }
-    board(c, &request.board_id, true).await?;
-    let mut ids = commands::apply(c, request, now).await?;
+    Ok(None)
+}
+
+pub(super) struct CommandEvent<'a> {
+    pub board_id: &'a str,
+    pub request_id: &'a str,
+    pub actor: &'a str,
+    pub mutation: serde_json::Value,
+}
+
+pub(super) async fn record_command(
+    c: &Connection,
+    request: CommandEvent<'_>,
+    hash: &str,
+    mut ids: Vec<String>,
+    full_revision: bool,
+    now: i64,
+) -> ObjectResult<ObjectReceipt> {
     ids.sort();
     ids.dedup();
     let mut versions = BTreeMap::new();
-    let full_revision = matches!(
-        &request.mutation,
-        ObjectMutation::Create { .. }
-            | ObjectMutation::Patch { .. }
-            | ObjectMutation::SetBody { .. }
-            | ObjectMutation::SetArchived { .. }
-    );
     for id in &ids {
-        let object = get(c, &request.board_id, id).await?;
+        let object = get(c, request.board_id, id).await?;
         validation::object(c, &object).await?;
         versions.insert(id.clone(), object.version.clone());
         // 任务成员的过程由事件和关闭快照记录；结转不复制所有任务正文与自定义字段。
         if full_revision || object.version.source.is_none() {
             snapshot(
                 c,
-                &request.board_id,
+                request.board_id,
                 id,
                 "revision",
                 &serde_json::json!({"request_id":request.request_id,"object":object}),
@@ -243,13 +289,32 @@ async fn execute_in_transaction(
         }
     }
     let catalog_version = catalog_version(c).await?;
-    let payload = serde_json::json!({"format":"kanban.object-event.v2","request_id":request.request_id,"object_ids":ids,"versions":versions,"catalog_version":catalog_version,"scope":if matches!(&request.mutation,ObjectMutation::DefineType{..}|ObjectMutation::DefineProperty{..}|ObjectMutation::BindProperty{..}|ObjectMutation::UnbindProperty{..}|ObjectMutation::RenameType{..}|ObjectMutation::RetireType{..}|ObjectMutation::DefineRelation{..}|ObjectMutation::DefineWorkflow{..}|ObjectMutation::DefineRollup{..}){"catalog"}else{"board"},"invalidate_board":true,"mutation":request.mutation});
+    let scope = if ids.is_empty()
+        && request.mutation["operation"].as_str().is_some_and(|op| {
+            matches!(
+                op,
+                "define_type"
+                    | "define_property"
+                    | "bind_property"
+                    | "unbind_property"
+                    | "rename_type"
+                    | "retire_type"
+                    | "define_relation"
+                    | "define_workflow"
+                    | "define_rollup"
+            )
+        }) {
+        "catalog"
+    } else {
+        "board"
+    };
+    let payload = serde_json::json!({"format":"kanban.object-event.v2","request_id":request.request_id,"object_ids":ids,"versions":versions,"catalog_version":catalog_version,"scope":scope,"invalidate_board":true,"mutation":request.mutation});
     let event_id = format!("e_{}", ulid::Ulid::new());
-    let operation = serde_json::to_value(&request.mutation)?["operation"]
+    let operation = request.mutation["operation"]
         .as_str()
         .ok_or_else(|| ObjectError::storage("命令缺少 operation"))?
         .to_owned();
-    exec(c,"INSERT INTO task_events(event_id,board_id,task_id,run_id,kind,actor,payload_json,created_at) VALUES (?1,?2,NULL,NULL,?3,?4,?5,?6)",vec![s(&event_id),s(&request.board_id),s(&format!("object.{operation}")),s(&request.actor),s(&serde_json::to_string(&payload)?),n(now)]).await?;
+    exec(c,"INSERT INTO task_events(event_id,board_id,task_id,run_id,kind,actor,payload_json,created_at) VALUES (?1,?2,NULL,NULL,?3,?4,?5,?6)",vec![s(&event_id),s(request.board_id),s(&format!("object.{operation}")),s(request.actor),s(&serde_json::to_string(&payload)?),n(now)]).await?;
     let sequence = count(
         c,
         "SELECT id FROM task_events WHERE event_id=?1",
@@ -260,18 +325,18 @@ async fn execute_in_transaction(
         exec(
             c,
             "INSERT INTO object_event_links(board_id,object_id,event_sequence) VALUES (?1,?2,?3)",
-            vec![s(&request.board_id), s(id), n(sequence)],
+            vec![s(request.board_id), s(id), n(sequence)],
         )
         .await?;
     }
     let receipt = ObjectReceipt {
-        request_id: request.request_id.clone(),
+        request_id: request.request_id.to_owned(),
         ids,
         event_sequence: sequence,
         catalog_version,
         replayed: false,
         versions,
     };
-    exec(c,"INSERT INTO object_requests(board_id,request_id,request_hash,receipt_json,event_sequence,created_at) VALUES (?1,?2,?3,?4,?5,?6)",vec![s(&request.board_id),s(&request.request_id),s(hash),s(&serde_json::to_string(&receipt)?),n(sequence),n(now)]).await?;
+    exec(c,"INSERT INTO object_requests(board_id,request_id,request_hash,receipt_json,event_sequence,created_at) VALUES (?1,?2,?3,?4,?5,?6)",vec![s(request.board_id),s(request.request_id),s(hash),s(&serde_json::to_string(&receipt)?),n(sequence),n(now)]).await?;
     Ok(receipt)
 }

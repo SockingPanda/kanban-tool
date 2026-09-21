@@ -5005,8 +5005,8 @@
   "selectionPath": "apps/web/web-contracts.json",
   "sourceHashes": {
     "protocolEndpoints": "sha256:8cfcaeccf1267b2c8925e47eb8373b014e4eea584505f04c6750e28957bb124d",
-    "protocolOperations": "sha256:f167802055e4d950096c1d0c634e7cc3e55da912dce48191bf1c6b8df76672bd",
-    "protocolSchemas": "sha256:cd85e67661043fcd698de56695d823060118c33f8aee7ed36a248f2bfe720460",
+    "protocolOperations": "sha256:9b37776886379b5469a040d2b16b589e2bedd361be9dd8f35a9b4a4a391b80a7",
+    "protocolSchemas": "sha256:0bd30322b53ad03e51972077a4fbb69c914d9a3962ecb10b2ee840c7710feb98",
     "selection": "sha256:997f0553d2139e25b3d0afd7a58c4747a6e4cf6d56dd09a78325d2ab8f2fc6be"
   }
 }

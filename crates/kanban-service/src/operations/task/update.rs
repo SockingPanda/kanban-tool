@@ -3,8 +3,12 @@ use kanban_core::{Clock, KanbanError, Result, new_event_id};
 use crate::{KanbanService, TaskRecord};
 
 /// 可安全修改的任务字段。状态、claim 和完成信息不在这里出现。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct UpdateTaskCommand {
+    pub planning: crate::TaskPlanningInput,
+    /// adapter 提供的原始请求摘要；在填充 ID、版本和规范化字段之前计算。
+    pub request_fingerprint: Option<String>,
+    pub request_id: Option<String>,
     pub task_id: String,
     pub actor: String,
     pub expected_lock_version: Option<i64>,
@@ -24,6 +28,10 @@ where
 {
     pub async fn update_task(&self, command: UpdateTaskCommand) -> Result<TaskRecord> {
         validate_update_task(&command)?;
+        let request_fingerprint = command.request_fingerprint.clone().unwrap_or(
+            crate::object_model::task_planning::digest(&command)
+                .map_err(crate::error::store_error)?,
+        );
         let task_id = command.task_id.trim();
         let actor = command.actor.trim();
         // 先序列化并校验 metadata，再获取 mutation gate，保证非法 JSON 没有副作用。
@@ -38,6 +46,9 @@ where
             .update_task(
                 task_id,
                 crate::store_operations::UpdateTaskInput {
+                    planning: command.planning,
+                    request_id: command.request_id,
+                    request_fingerprint: Some(request_fingerprint),
                     expected_lock_version,
                     actor: actor.to_owned(),
                     title: command.title.map(|title| title.trim().to_owned()),
@@ -63,6 +74,15 @@ where
 }
 
 fn validate_update_task(command: &UpdateTaskCommand) -> Result<()> {
+    if command
+        .request_id
+        .as_deref()
+        .is_some_and(|id| id.trim().is_empty() || id.len() > 128)
+    {
+        return Err(KanbanError::InvalidInput(
+            "request_id 需要 1..=128 字节的非空标识".into(),
+        ));
+    }
     let task_id = command.task_id.trim();
     if !task_id.starts_with("t_") || task_id.len() <= 2 {
         return Err(KanbanError::InvalidInput(
@@ -88,6 +108,7 @@ fn validate_update_task(command: &UpdateTaskCommand) -> Result<()> {
         && command.due_at.is_none()
         && command.max_retries.is_none()
         && command.metadata.is_none()
+        && !command.planning.requested()
     {
         return Err(KanbanError::InvalidInput("至少需要一个任务字段".to_owned()));
     }
@@ -145,6 +166,9 @@ mod tests {
 
     fn command() -> UpdateTaskCommand {
         UpdateTaskCommand {
+            planning: Default::default(),
+            request_fingerprint: None,
+            request_id: None,
             task_id: " t_update ".into(),
             actor: " editor ".into(),
             expected_lock_version: None,
@@ -195,6 +219,8 @@ mod tests {
             .expect("create secondary board");
 
         let command = crate::CreateTaskCommand {
+            planning: Default::default(),
+            request_fingerprint: None,
             task_id: "t_service_crud".into(),
             board: " default ".into(),
             idempotency_key: Some("service-crud-1".into()),
@@ -240,6 +266,8 @@ mod tests {
 
         let secondary_task = service
             .create_task(crate::CreateTaskCommand {
+                planning: Default::default(),
+                request_fingerprint: None,
                 task_id: "t_secondary_crud".into(),
                 board: secondary.slug.clone(),
                 idempotency_key: None,
@@ -293,6 +321,9 @@ mod tests {
 
         let updated = service
             .update_task(crate::UpdateTaskCommand {
+                planning: Default::default(),
+                request_fingerprint: None,
+                request_id: None,
                 task_id: created.id.clone(),
                 actor: " editor ".into(),
                 expected_lock_version: None,
@@ -315,6 +346,9 @@ mod tests {
 
         let stale = service
             .update_task(crate::UpdateTaskCommand {
+                planning: Default::default(),
+                request_fingerprint: None,
+                request_id: None,
                 task_id: created.id,
                 actor: "editor".into(),
                 expected_lock_version: Some(0),

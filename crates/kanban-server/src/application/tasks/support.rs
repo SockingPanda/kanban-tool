@@ -48,6 +48,9 @@ pub(crate) fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
             KanbanError::Storage(format!("存储的 task result 不是有效 JSON：{error}"))
         })?;
     Ok(ApiTask {
+        module_ids: task.module_ids,
+        cycle_id: task.cycle_id,
+        object_version: (task.object_version > 0).then_some(task.object_version),
         id: task.id,
         board_id: task.board_id,
         board_slug: task.board_slug,
@@ -127,4 +130,18 @@ pub(crate) fn api_task_status(status: TaskStatus) -> ApiTaskStatus {
         TaskStatus::Done => ApiTaskStatus::Done,
         TaskStatus::Archived => ApiTaskStatus::Archived,
     }
+}
+
+/// 在 Host 补充任务 ID、版本之前绑定请求与实际 actor；持久化只保存摘要。
+pub(super) fn request_fingerprint<T: serde::Serialize>(
+    request: &T,
+    actor: &str,
+) -> Result<String, ApiError> {
+    use sha2::{Digest, Sha256};
+    let mut original =
+        serde_json::to_value(request).map_err(|e| KanbanError::InvalidInput(e.to_string()))?;
+    original["actor"] = serde_json::json!(actor);
+    let bytes =
+        serde_json::to_vec(&original).map_err(|e| KanbanError::InvalidInput(e.to_string()))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
 }

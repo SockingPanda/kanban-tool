@@ -290,7 +290,7 @@ const B4_C2_LABEL_OPERATION_IDS: &[&str] = &[
 fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
     let endpoints = endpoint_catalog().iter().collect::<Vec<_>>();
     // 当前 catalog 同时包含完整领域、维护、graph 与 vector 的 JSON endpoint。
-    assert_eq!(endpoints.len(), 117);
+    assert_eq!(endpoints.len(), 141);
 
     for endpoint in endpoints {
         let EndpointObligation::Contract(expected_id) = endpoint.obligations.headers else {
@@ -364,6 +364,21 @@ fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
         .map(|spec| spec.endpoint.operation_id)
         .collect::<BTreeSet<_>>();
     let expected_actor_operations = [
+        "api.add-module-task",
+        "api.remove-module-task",
+        "api.create-module",
+        "api.update-module",
+        "api.archive-module",
+        "api.restore-module",
+        "api.add-cycle-task",
+        "api.remove-cycle-task",
+        "api.create-cycle",
+        "api.update-cycle",
+        "api.archive-cycle",
+        "api.restore-cycle",
+        "api.start-cycle",
+        "api.close-cycle",
+        "api.cancel-cycle",
         "api.accept-label-proposal",
         "api.add-dependency",
         "api.add-task-label",
@@ -597,7 +612,7 @@ fn public_operation_inventory_covers_every_public_surface() {
 fn public_catalog_preserves_contract_and_exclusion_counts() {
     assert_eq!(
         operation_inventory().len(),
-        580,
+        693,
         "public contract inventory 不得静默增删"
     );
     let exclusions = surface_operation_catalog()
@@ -655,9 +670,75 @@ fn foundation_registry_contains_generated_roots() {
         .filter(|id| id.contains(":api:") && id.ends_with("-headers:v1"))
         .copied()
         .collect::<BTreeSet<_>>();
-    assert_eq!(header_roots.len(), 117);
+    assert_eq!(header_roots.len(), 141);
     actual.retain(|id| !header_roots.contains(id));
     let mut expected = BTreeSet::from([
+        "urn:kanban-tool:schema:api:get-planning-capabilities-response:v1",
+        "urn:kanban-tool:schema:api:list-modules-path:v1",
+        "urn:kanban-tool:schema:api:list-modules-query:v1",
+        "urn:kanban-tool:schema:api:list-modules-response:v1",
+        "urn:kanban-tool:schema:api:get-module-path:v1",
+        "urn:kanban-tool:schema:api:get-module-response:v1",
+        "urn:kanban-tool:schema:api:create-module-path:v1",
+        "urn:kanban-tool:schema:api:create-module-request:v1",
+        "urn:kanban-tool:schema:api:create-module-response:v1",
+        "urn:kanban-tool:schema:api:update-module-path:v1",
+        "urn:kanban-tool:schema:api:update-module-request:v1",
+        "urn:kanban-tool:schema:api:update-module-response:v1",
+        "urn:kanban-tool:schema:api:archive-module-path:v1",
+        "urn:kanban-tool:schema:api:archive-module-request:v1",
+        "urn:kanban-tool:schema:api:archive-module-response:v1",
+        "urn:kanban-tool:schema:api:restore-module-path:v1",
+        "urn:kanban-tool:schema:api:restore-module-request:v1",
+        "urn:kanban-tool:schema:api:restore-module-response:v1",
+        "urn:kanban-tool:schema:api:get-module-overview-path:v1",
+        "urn:kanban-tool:schema:api:get-module-overview-response:v1",
+        "urn:kanban-tool:schema:api:list-module-tasks-path:v1",
+        "urn:kanban-tool:schema:api:list-module-tasks-query:v1",
+        "urn:kanban-tool:schema:api:list-module-tasks-response:v1",
+        "urn:kanban-tool:schema:api:add-module-task-path:v1",
+        "urn:kanban-tool:schema:api:add-module-task-request:v1",
+        "urn:kanban-tool:schema:api:add-module-task-response:v1",
+        "urn:kanban-tool:schema:api:remove-module-task-path:v1",
+        "urn:kanban-tool:schema:api:remove-module-task-request:v1",
+        "urn:kanban-tool:schema:api:remove-module-task-response:v1",
+        "urn:kanban-tool:schema:api:list-cycles-path:v1",
+        "urn:kanban-tool:schema:api:list-cycles-query:v1",
+        "urn:kanban-tool:schema:api:list-cycles-response:v1",
+        "urn:kanban-tool:schema:api:get-cycle-path:v1",
+        "urn:kanban-tool:schema:api:get-cycle-response:v1",
+        "urn:kanban-tool:schema:api:create-cycle-path:v1",
+        "urn:kanban-tool:schema:api:create-cycle-request:v1",
+        "urn:kanban-tool:schema:api:create-cycle-response:v1",
+        "urn:kanban-tool:schema:api:update-cycle-path:v1",
+        "urn:kanban-tool:schema:api:update-cycle-request:v1",
+        "urn:kanban-tool:schema:api:update-cycle-response:v1",
+        "urn:kanban-tool:schema:api:archive-cycle-path:v1",
+        "urn:kanban-tool:schema:api:archive-cycle-request:v1",
+        "urn:kanban-tool:schema:api:archive-cycle-response:v1",
+        "urn:kanban-tool:schema:api:restore-cycle-path:v1",
+        "urn:kanban-tool:schema:api:restore-cycle-request:v1",
+        "urn:kanban-tool:schema:api:restore-cycle-response:v1",
+        "urn:kanban-tool:schema:api:get-cycle-overview-path:v1",
+        "urn:kanban-tool:schema:api:get-cycle-overview-response:v1",
+        "urn:kanban-tool:schema:api:list-cycle-tasks-path:v1",
+        "urn:kanban-tool:schema:api:list-cycle-tasks-query:v1",
+        "urn:kanban-tool:schema:api:list-cycle-tasks-response:v1",
+        "urn:kanban-tool:schema:api:add-cycle-task-path:v1",
+        "urn:kanban-tool:schema:api:add-cycle-task-request:v1",
+        "urn:kanban-tool:schema:api:add-cycle-task-response:v1",
+        "urn:kanban-tool:schema:api:remove-cycle-task-path:v1",
+        "urn:kanban-tool:schema:api:remove-cycle-task-request:v1",
+        "urn:kanban-tool:schema:api:remove-cycle-task-response:v1",
+        "urn:kanban-tool:schema:api:start-cycle-path:v1",
+        "urn:kanban-tool:schema:api:start-cycle-request:v1",
+        "urn:kanban-tool:schema:api:start-cycle-response:v1",
+        "urn:kanban-tool:schema:api:close-cycle-path:v1",
+        "urn:kanban-tool:schema:api:close-cycle-request:v1",
+        "urn:kanban-tool:schema:api:close-cycle-response:v1",
+        "urn:kanban-tool:schema:api:cancel-cycle-path:v1",
+        "urn:kanban-tool:schema:api:cancel-cycle-request:v1",
+        "urn:kanban-tool:schema:api:cancel-cycle-response:v1",
         "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
         "urn:kanban-tool:schema:api:accept-label-proposal-path:v1",
         "urn:kanban-tool:schema:api:accept-label-proposal-response:v1",
@@ -1078,7 +1159,7 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        117,
+        141,
         "业务 DTO bindings 必须全部有 descriptor"
     );
     assert!(endpoints.iter().all(|endpoint| {
@@ -1600,6 +1681,8 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
     const REPEATED: WireParameterCardinality = WireParameterCardinality::RepeatedOrdered;
     const OPTIONAL: WireParameterCardinality = WireParameterCardinality::OptionalOne;
     let expected_query_parameters = [
+        ("module_ids", WireParameterCardinality::RepeatedOrdered),
+        ("cycle_id", WireParameterCardinality::OptionalOne),
         ("status", REPEATED),
         ("priority", REPEATED),
         ("label", REPEATED),
@@ -2260,6 +2343,9 @@ const REQUIRED_NULLABLE_TASK_FIELDS: &[&str] = &[
 
 fn api_task_fixture() -> serde_json::Value {
     serde_json::json!({
+        "module_ids": [],
+        "cycle_id": null,
+        "object_version": null,
         "id": "task-1",
         "board_id": "board-1",
         "board_slug": "default",

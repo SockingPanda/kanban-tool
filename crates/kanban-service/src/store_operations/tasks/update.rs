@@ -5,8 +5,11 @@ use crate::{
     store_operations::shared::canonical_ready_status,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct UpdateTaskInput {
+    pub planning: crate::TaskPlanningInput,
+    pub request_id: Option<String>,
+    pub request_fingerprint: Option<String>,
     pub expected_lock_version: i64,
     pub actor: String,
     pub title: Option<String>,
@@ -36,6 +39,34 @@ impl TursoStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
 
+        let request_hash = input
+            .request_fingerprint
+            .clone()
+            .unwrap_or(crate::object_model::task_planning::digest(&input)?);
+        let request_key = input
+            .request_id
+            .as_ref()
+            .map(|key| format!("task.update:{task_id}:{key}"))
+            .or_else(|| {
+                input
+                    .planning
+                    .requested()
+                    .then(|| format!("task.update:{task_id}:{}", input.event_id))
+            });
+        let current = super::show::read_task(&transaction, task_id).await?;
+        if let Some(key) = &request_key
+            && crate::object_model::task_planning::replay_task(
+                &transaction,
+                &current.board_id,
+                key,
+                &request_hash,
+            )
+            .await?
+            .is_some()
+        {
+            transaction.commit().await?;
+            return Ok(current);
+        }
         if let Some(metadata_json) = input.metadata_json.as_deref() {
             let valid = first_row(
                 transaction
@@ -79,6 +110,14 @@ impl TursoStore {
         if lock_version != input.expected_lock_version {
             return Err(StoreError::ClaimConflict("lock_version 不匹配".to_owned()));
         }
+        let touched = crate::object_model::task_planning::apply(
+            &transaction,
+            &board_id,
+            task_id,
+            &input.planning,
+            input.now,
+        )
+        .await?;
         let current_title = text_value(row.get_value(5)?, "tasks.title")?;
         let current_description = optional_text_value(row.get_value(6)?, "tasks.description")?;
         let current_assignee = optional_text_value(row.get_value(7)?, "tasks.assignee")?;
@@ -222,7 +261,23 @@ impl TursoStore {
                 ],
             )
             .await?;
-        let updated = task_from_row(
+        if let Some(key) = &request_key {
+            crate::object_model::task_planning::record_task(
+                &transaction,
+                &board_id,
+                crate::object_model::task_planning::TaskRequestEvent {
+                    task_id,
+                    event_id: &event_id,
+                    request_id: key,
+                    hash: &request_hash,
+                    actor: &actor,
+                    touched,
+                    now: input.now,
+                },
+            )
+            .await?;
+        }
+        let mut updated = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -235,6 +290,17 @@ impl TursoStore {
             )
             .await?,
         )?;
+        updated.labels = crate::store_operations::labels::list_task_labels_in_transaction(
+            &transaction,
+            &board_id,
+            task_id,
+        )
+        .await?;
+        crate::object_model::task_planning::hydrate(
+            &transaction,
+            std::slice::from_mut(&mut updated),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(updated)
     }

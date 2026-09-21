@@ -1,0 +1,23 @@
+{
+  "$id": "urn:kanban-tool:schema:api:remove-module-task-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "board",
+    "id",
+    "task_id"
+  ],
+  "title": "api.remove-module-task.path",
+  "type": "object"
+}

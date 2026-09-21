@@ -1,7 +1,9 @@
 {
   "data": {
     "semantics": {
-      "applies_when": ["touches Rust service code"],
+      "applies_when": [
+        "touches Rust service code"
+      ],
       "atoms": [
         {
           "board_id": "b_FIXTURE_1",
@@ -50,7 +52,9 @@
       "label_id": "l_FIXTURE_1",
       "label_name": "backend",
       "negative_examples": [],
-      "positive_examples": ["add a service command"],
+      "positive_examples": [
+        "add a service command"
+      ],
       "semantics_hash": "hash_fixture",
       "updated_at": 100
     },
@@ -100,7 +104,10 @@
       "status_reason": null,
       "title": "bootstrap fixture",
       "unfinished_parent_count": 0,
-      "updated_at": 100
+      "updated_at": 100,
+      "module_ids": [],
+      "cycle_id": null,
+      "object_version": 1
     },
     "verification": null
   }

@@ -952,6 +952,198 @@
     "service": "kanban.v1.KanbanService"
   },
   {
+    "method": "GetPlanningCapabilities",
+    "operation_id": "api.get-planning-capabilities",
+    "request": "GetPlanningCapabilitiesRequest",
+    "response": "GetPlanningCapabilitiesResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListModules",
+    "operation_id": "api.list-modules",
+    "request": "ListModulesRequest",
+    "response": "ListModulesResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetModule",
+    "operation_id": "api.get-module",
+    "request": "GetModuleRequest",
+    "response": "GetModuleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateModule",
+    "operation_id": "api.create-module",
+    "request": "CreateModuleRequest",
+    "response": "CreateModuleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "UpdateModule",
+    "operation_id": "api.update-module",
+    "request": "UpdateModuleRequest",
+    "response": "UpdateModuleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ArchiveModule",
+    "operation_id": "api.archive-module",
+    "request": "ArchiveModuleRequest",
+    "response": "ArchiveModuleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RestoreModule",
+    "operation_id": "api.restore-module",
+    "request": "RestoreModuleRequest",
+    "response": "RestoreModuleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetModuleOverview",
+    "operation_id": "api.get-module-overview",
+    "request": "GetModuleOverviewRequest",
+    "response": "GetModuleOverviewResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListModuleTasks",
+    "operation_id": "api.list-module-tasks",
+    "request": "ListModuleTasksRequest",
+    "response": "ListModuleTasksResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "AddModuleTask",
+    "operation_id": "api.add-module-task",
+    "request": "AddModuleTaskRequest",
+    "response": "AddModuleTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RemoveModuleTask",
+    "operation_id": "api.remove-module-task",
+    "request": "RemoveModuleTaskRequest",
+    "response": "RemoveModuleTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListCycles",
+    "operation_id": "api.list-cycles",
+    "request": "ListCyclesRequest",
+    "response": "ListCyclesResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetCycle",
+    "operation_id": "api.get-cycle",
+    "request": "GetCycleRequest",
+    "response": "GetCycleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CreateCycle",
+    "operation_id": "api.create-cycle",
+    "request": "CreateCycleRequest",
+    "response": "CreateCycleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "UpdateCycle",
+    "operation_id": "api.update-cycle",
+    "request": "UpdateCycleRequest",
+    "response": "UpdateCycleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ArchiveCycle",
+    "operation_id": "api.archive-cycle",
+    "request": "ArchiveCycleRequest",
+    "response": "ArchiveCycleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RestoreCycle",
+    "operation_id": "api.restore-cycle",
+    "request": "RestoreCycleRequest",
+    "response": "RestoreCycleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "GetCycleOverview",
+    "operation_id": "api.get-cycle-overview",
+    "request": "GetCycleOverviewRequest",
+    "response": "GetCycleOverviewResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "ListCycleTasks",
+    "operation_id": "api.list-cycle-tasks",
+    "request": "ListCycleTasksRequest",
+    "response": "ListCycleTasksResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "AddCycleTask",
+    "operation_id": "api.add-cycle-task",
+    "request": "AddCycleTaskRequest",
+    "response": "AddCycleTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "RemoveCycleTask",
+    "operation_id": "api.remove-cycle-task",
+    "request": "RemoveCycleTaskRequest",
+    "response": "RemoveCycleTaskResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "StartCycle",
+    "operation_id": "api.start-cycle",
+    "request": "StartCycleRequest",
+    "response": "StartCycleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CloseCycle",
+    "operation_id": "api.close-cycle",
+    "request": "CloseCycleRequest",
+    "response": "CloseCycleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
+    "method": "CancelCycle",
+    "operation_id": "api.cancel-cycle",
+    "request": "CancelCycleRequest",
+    "response": "CancelCycleResponse",
+    "server_streaming": false,
+    "service": "kanban.v1.KanbanService"
+  },
+  {
     "method": "WatchQueries",
     "operation_id": "rpc.watch-queries",
     "request": "WatchQueriesRequest",

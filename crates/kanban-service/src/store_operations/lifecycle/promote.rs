@@ -156,7 +156,7 @@ impl TursoStore {
                 )
                 .await?;
 
-        let promoted = task_from_row(
+        let mut promoted = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -170,6 +170,11 @@ impl TursoStore {
             .await?,
         )?;
 
+        crate::object_model::task_planning::hydrate(
+            &transaction,
+            std::slice::from_mut(&mut promoted),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(promoted)
     }

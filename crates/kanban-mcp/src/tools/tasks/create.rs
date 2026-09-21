@@ -13,6 +13,12 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskCreateArgs {
+    #[serde(default)]
+    module_ids: Vec<String>,
+    cycle_id: Option<String>,
+    #[serde(default)]
+    expected_versions: BTreeMap<String, kanban_protocol::ApiObjectVersion>,
+    expected_catalog_version: Option<i64>,
     /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
     title: String,
@@ -52,6 +58,10 @@ impl KanbanMcp {
         let task = call_client(client.create_task(
             &board,
             CreateTaskRequest {
+                module_ids: args.module_ids,
+                cycle_id: args.cycle_id,
+                expected_versions: args.expected_versions,
+                expected_catalog_version: args.expected_catalog_version,
                 task_id: args.task_id,
                 idempotency_key: args.idempotency_key,
                 title: args.title,

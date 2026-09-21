@@ -1,0 +1,37 @@
+{
+  "$id": "urn:kanban-tool:schema:api:list-modules-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "include_archived": {
+      "default": false,
+      "type": "boolean"
+    },
+    "limit": {
+      "default": 100,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "offset": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "parent_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "q": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "api.list-modules.query",
+  "type": "object"
+}

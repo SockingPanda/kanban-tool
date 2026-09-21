@@ -4,8 +4,11 @@ use kanban_core::{Clock, KanbanError, ReadinessFacts, Result, TaskStatus, initia
 
 use crate::{KanbanService, TaskRecord};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CreateTaskCommand {
+    pub planning: crate::TaskPlanningInput,
+    /// adapter 提供的原始请求摘要；在填充 ID、版本和规范化字段之前计算。
+    pub request_fingerprint: Option<String>,
     pub task_id: String,
     pub board: String,
     pub idempotency_key: Option<String>,
@@ -31,6 +34,10 @@ where
 {
     pub async fn create_task(&self, command: CreateTaskCommand) -> Result<TaskRecord> {
         validate_create_task(&command)?;
+        let request_fingerprint = command.request_fingerprint.clone().unwrap_or(
+            crate::object_model::task_planning::digest(&command)
+                .map_err(crate::error::store_error)?,
+        );
         let status = initial_task_status(&command, self.clock.now_ms())?;
         let metadata_json = serde_json::to_string(&command.metadata)
             .map_err(|error| KanbanError::InvalidInput(format!("invalid metadata: {error}")))?;
@@ -40,6 +47,8 @@ where
             .create_task(
                 &board,
                 crate::store_operations::CreateTaskInput {
+                    planning: command.planning,
+                    request_fingerprint: Some(request_fingerprint),
                     id: command.task_id,
                     idempotency_key: command.idempotency_key,
                     title: command.title.trim().to_owned(),
@@ -155,6 +164,8 @@ mod tests {
         scheduled_at: Option<i64>,
     ) -> CreateTaskCommand {
         CreateTaskCommand {
+            planning: Default::default(),
+            request_fingerprint: None,
             task_id: "t_test".into(),
             board: "default".into(),
             idempotency_key: Some("retry-1".into()),

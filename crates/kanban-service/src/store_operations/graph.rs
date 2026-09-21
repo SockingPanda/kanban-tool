@@ -974,7 +974,10 @@ async fn task_in_connection(
         turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
         other => StoreError::Turso(other),
     })?;
-    task_from_row(row)
+    let mut task = task_from_row(row)?;
+    crate::object_model::task_planning::hydrate(connection, std::slice::from_mut(&mut task))
+        .await?;
+    Ok(task)
 }
 
 async fn graph_data_for_board(
@@ -987,11 +990,15 @@ async fn graph_data_for_board(
             [(":board_id", board_id)],
         )
         .await?;
-    let mut tasks = BTreeMap::new();
+    let mut page = Vec::new();
     while let Some(row) = rows.next().await? {
-        let task = task_from_row(row)?;
-        tasks.insert(task.id.clone(), task);
+        page.push(task_from_row(row)?);
     }
+    crate::object_model::task_planning::hydrate(connection, &mut page).await?;
+    let tasks = page
+        .into_iter()
+        .map(|task| (task.id.clone(), task))
+        .collect::<BTreeMap<_, _>>();
     let mut edges = Vec::new();
     let mut seen = BTreeSet::new();
     let mut append = |edge: TaskGraphEdgeRecord| {

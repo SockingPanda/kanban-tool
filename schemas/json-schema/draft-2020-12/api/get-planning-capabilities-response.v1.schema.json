@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "PlanningCapabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "task_membership": {
+          "type": "boolean"
+        },
+        "task_membership_filters": {
+          "type": "boolean"
+        },
+        "version": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "task_membership",
+        "task_membership_filters"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:get-planning-capabilities-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/PlanningCapabilities"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "api.get-planning-capabilities.response",
+  "type": "object"
+}

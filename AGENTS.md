@@ -51,6 +51,7 @@
 ## 5. 技能路由
 
 - `$style`：Rust、Cargo、模块组织、依赖边界、错误和测试位置。
+- `$code-comments`：源码注释、TSDoc、React 状态与副作用契约，以及 rustdoc 和 TODO 的真实边界。
 - `$prose`：用户可见简体中文文案、README、指南和 ADR 表达。
 - `$docs`：事实源、领域术语、owner placement、文档同步和历史退出边界。
 - `$check`：根据当前 `justfile` 选择并报告最小充分验证。

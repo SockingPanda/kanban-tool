@@ -1,0 +1,119 @@
+crates/kanban-service/src/objects/views/catalog.rs
+  s_243209e7a7ea3a::t_3d91d654861914 1-41
+  s_243209e7a7ea3a::t_bc8b6b84657010 42-172
+crates/kanban-protocol/tests/rpc/objects/views.rs
+  s_243209e7a7ea3a::t_10f02c1b7e3065 1-33
+  s_243209e7a7ea3a::t_b78334dd97a94b 34-107
+crates/kanban-kernel/src/tests.rs
+  s_243209e7a7ea3a::t_6d4315d39445c7 10
+crates/kanban-protocol/docs/schema.md
+  s_243209e7a7ea3a::t_26a23470bb93d5 53-57
+crates/kanban-service/docs/object_kernel.md
+  s_243209e7a7ea3a::t_dec149560c3f57 93-96
+crates/kanban-server/src/grpc/object_kernel/codec/views.rs
+  s_243209e7a7ea3a::t_254f083cd67476 2,4-6,9-34,36-38,40-43,47-61,63-68,70-79,83-113,117-144
+  s_243209e7a7ea3a::t_224de4db49d419 1,3,7-8,35,39,44-46,62,69,80-82,114-116,145
+crates/kanban-protocol/src/rpc/objects/views.rs
+  s_243209e7a7ea3a::t_864f7e1434593c 7-13,17-21,23-28,32-34,36-43,46-54,59-63,71-76,81-85,88-92,96-101,105-119
+  s_243209e7a7ea3a::t_fbefb6385b219b 1-6,14-16,22,29-31,35,44-45,55-58,64-70,77-80,86-87,93-95,102-104,120-123
+  s_243209e7a7ea3a::t_349bf9f6f4b439 124-128
+crates/kanban-service/src/objects/views/tests.rs
+  s_243209e7a7ea3a::t_254f083cd67476 157,188,254-262,467-482,485-578
+  s_243209e7a7ea3a::t_be983a4b0f1f43 158-163,193-206,483-484,579-659
+  s_243209e7a7ea3a::t_30484b30a8d21f 1-3,8-10,14,28,39,62-65,88-92,101-102,109-110,135-136,151-156,164-173,184,189-192,207-209,225,240,272-281,316-318,322-323,326,334-339,355,365,374-376,381,389-397,438,442,446-447,461,466,660
+  s_243209e7a7ea3a::t_864f7e1434593c 4-7,11-13,15-27,29-38,40-61,66-87,93-100,103-108,111-134,137-150,174-183,185-187,210-224,226-239,241-253,263-271,282-315,319-321,324-325,327-333,340-354,356-364,366-373,377-380,382-388,398-437,439-441,443-445,448-460,462-465
+crates/kanban-service/README.md
+  s_243209e7a7ea3a::t_dec149560c3f57 50
+crates/kanban-server/src/grpc/object_kernel/tests/views.rs
+  s_243209e7a7ea3a::t_10f02c1b7e3065 1-34
+  s_243209e7a7ea3a::t_bfd0ef45ab5db9 35-173
+crates/kanban-kernel/src/snapshot.rs
+  s_243209e7a7ea3a::t_1a42725ff4f3b1 1-40
+  s_243209e7a7ea3a::t_179ed65d5ec218 41-61
+crates/kanban-service/src/objects/views/definition.rs
+  s_243209e7a7ea3a::t_9b4d5a2e24713b 1-143
+  s_243209e7a7ea3a::t_90e6004771bfac 144-301
+crates/kanban-server/src/grpc/object_kernel.rs
+  s_243209e7a7ea3a::t_224de4db49d419 29-45,57,70
+  s_243209e7a7ea3a::t_d629b7ba2981fb 46-56,58-69,71-80
+docs/adr/0011_object_kernel.md
+  s_243209e7a7ea3a::t_dec149560c3f57 38-42
+crates/kanban-service/src/objects/schema/tests.rs
+  s_243209e7a7ea3a::t_22a98648475c0d 95-98
+  s_243209e7a7ea3a::t_629b55c6e231f5 94,99
+  s_243209e7a7ea3a::t_1db620d549ae77 100-111
+crates/kanban-kernel/src/transaction.rs
+  s_243209e7a7ea3a::t_1a42725ff4f3b1 117-118,120-121
+  s_243209e7a7ea3a::t_94b0917fed8094 119
+  s_243209e7a7ea3a::t_e46079e0c4157f 122-123
+crates/kanban-kernel/README.md
+  s_243209e7a7ea3a::t_dec149560c3f57 82-86
+crates/kanban-kernel/src/query.rs
+  s_243209e7a7ea3a::t_6d4315d39445c7 322
+  s_243209e7a7ea3a::t_94b0917fed8094 370,377
+  s_243209e7a7ea3a::t_1a42725ff4f3b1 109-110,368-369,371-376
+  s_243209e7a7ea3a::t_2009f14e9f6e90 111,378-384
+crates/kanban-protocol/proto/kanban/objects/v2/kernel.proto
+  s_243209e7a7ea3a::t_fbefb6385b219b 456-475,477-484
+crates/kanban-kernel/src/tests/snapshot.rs
+  s_243209e7a7ea3a::t_6d4315d39445c7 1-38
+  s_243209e7a7ea3a::t_1e92ced26bb988 39-104
+crates/kanban-service/src/objects/planning/tests.rs
+  s_243209e7a7ea3a::t_9beeea1afd9ebb 352
+crates/kanban-service/src/objects/views.rs
+  s_243209e7a7ea3a::t_3d91d654861914 1-102
+  s_243209e7a7ea3a::t_93874c358ba301 103-134
+crates/kanban-protocol/src/rpc/objects.rs
+  s_243209e7a7ea3a::t_fbefb6385b219b 5
+crates/kanban-service/src/objects/catalog.rs
+  s_243209e7a7ea3a::t_3d91d654861914 26-27
+crates/kanban-service/src/objects/boards/tests.rs
+  s_243209e7a7ea3a::t_355ed3e94bc9ad 168-170
+  s_243209e7a7ea3a::t_c5d2c44004e7b6 171-173,177,647,680,682
+crates/kanban-server/docs/object_kernel_rpc.md
+  s_243209e7a7ea3a::t_dec149560c3f57 43-47
+crates/kanban-server/src/grpc/object_kernel/codec.rs
+  s_243209e7a7ea3a::t_254f083cd67476 9,151-198,208-214,218-236
+crates/kanban-service/src/objects/views/storage.rs
+  s_243209e7a7ea3a::t_ba32e77e29f46c 1-90
+  s_243209e7a7ea3a::t_b41bf5baf4e492 91-251
+crates/kanban-kernel/src/query/plan.rs
+  s_243209e7a7ea3a::t_94b0917fed8094 6
+crates/kanban-service/docs/object_views.md
+  s_243209e7a7ea3a::t_3d91d654861914 1-9,11-22
+  s_243209e7a7ea3a::t_22a98648475c0d 10
+crates/kanban-service/src/objects.rs
+  s_243209e7a7ea3a::t_3d91d654861914 14
+apps/web/src/generated/rpc/kanban/objects/v2/kernel_pb.ts
+  s_243209e7a7ea3a::t_7fa31d898a4a74 17,2441-2708,3046-3085
+crates/kanban-kernel/src/lib.rs
+  s_243209e7a7ea3a::t_f54d7bfe599a3e 12,20
+crates/kanban-protocol/proto/rpc-extensions.json
+  s_243209e7a7ea3a::t_7007e18bd3ce19 146-181
+crates/kanban-protocol/tests/rpc/objects.rs
+  s_243209e7a7ea3a::t_52e4c85dd295f2 7-8
+crates/kanban-server/src/grpc/object_kernel/codec/workflow.rs
+  s_243209e7a7ea3a::t_2797a3533aa5ab 10,47,60,73
+crates/kanban-server/src/grpc/object_kernel/tests.rs
+  s_243209e7a7ea3a::t_93e8b2d9e58b76 7
+schemas/json-schema/draft-2020-12/manifest.json
+  s_243209e7a7ea3a::t_c6bad26e8a198e 6944
+schemas/json-schema/draft-2020-12/rpc-catalog.json
+  s_243209e7a7ea3a::t_832f75514e2a07 1442-1477
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a040b2c64c72f96b0ba0eb04a869afc6f188c0ba",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

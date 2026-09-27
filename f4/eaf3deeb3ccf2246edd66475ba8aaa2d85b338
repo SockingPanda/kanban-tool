@@ -1,0 +1,35 @@
+crates/kanban-kernel/src/tests.rs
+  s_243209e7a7ea3a::t_1d13dfdd8bd40a 3
+crates/kanban-kernel/src/sort_index.rs
+  s_243209e7a7ea3a::t_4d4df635a6838b 5-10,13
+  s_243209e7a7ea3a::t_5bcc14f573b9ee 14,18
+crates/kanban-kernel/src/tests/catalog.rs
+  s_243209e7a7ea3a::t_3be9b7359e3eec 4-15,21-70,78-93,96-122,125-128,134-153,155-168,170-182,185-383
+  s_243209e7a7ea3a::t_1d13dfdd8bd40a 1-3,16-20,71-77,94-95,123-124,129-133,154,169,183-184,384
+crates/kanban-kernel/src/schema.sql
+  s_243209e7a7ea3a::t_4d4df635a6838b 20-21,58-59
+crates/kanban-kernel/src/transaction.rs
+  s_243209e7a7ea3a::t_4d4df635a6838b 714,716-718
+  s_243209e7a7ea3a::t_aa16ec54ed370a 8-9,12-18,34-35,66,88-94,461-477,525,532,549-552,569-570,572,680-681,683,687,713,795,884-894,923-924,928-942,962-965,1031-1032
+crates/kanban-kernel/src/bootstrap.rs
+  s_243209e7a7ea3a::t_4d4df635a6838b 91,146
+  s_243209e7a7ea3a::t_4ec0a7c89b4c50 5-6,147-148
+crates/kanban-kernel/README.md
+  s_243209e7a7ea3a::t_aa16ec54ed370a 31-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4eaf3deeb3ccf2246edd66475ba8aaa2d85b338",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

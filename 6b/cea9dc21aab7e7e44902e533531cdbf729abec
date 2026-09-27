@@ -1,0 +1,44 @@
+crates/kanban-service/src/objects/catalog.rs
+  s_243209e7a7ea3a::t_ffd140a173faa2 73
+  s_243209e7a7ea3a::t_87fd448c43477d 12,27,158-159
+crates/kanban-service/docs/object_kernel.md
+  s_243209e7a7ea3a::t_81ebe292cc37fa 19-28,39
+crates/kanban-service/src/objects.rs
+  s_243209e7a7ea3a::t_87fd448c43477d 5
+crates/kanban-service/src/objects/values.rs
+  s_243209e7a7ea3a::t_c227e009158088 109-116,143-161,163-181,183-202
+  s_243209e7a7ea3a::t_f3ff9f6bdb6b57 142,162,182,203-204
+  s_243209e7a7ea3a::t_d80a6adae12032 205-206
+crates/kanban-service/src/objects/task/related.rs
+  s_243209e7a7ea3a::t_87fd448c43477d 464
+crates/kanban-service/src/objects/labels.rs
+  s_243209e7a7ea3a::t_81ebe292cc37fa 2-5,37-41,62-63,66-70,84-88,95-96,100-104,112-120,131-133,135-140,143-146,150-151,154-165,175-184,197-198,219-233,237-241,247-252,256-259
+  s_243209e7a7ea3a::t_2c971a9327d1f2 58,91,147,192-193,253
+  s_243209e7a7ea3a::t_87fd448c43477d 1,6-36,42-57,59-61,64-65,71-83,89-90,92-94,97-99,105-111,121-130,134,141-142,148-149,152-153,166-174,185-191,194-196,199-218,234-236,242-246,254-255,260-266
+crates/kanban-service/src/objects/labels/tests.rs
+  s_243209e7a7ea3a::t_6a69bf9e79cf3e 1-10,14-19,28-29,42-43,57-58,80-84,94-101,105,117,122-123,137-138,143-145,168-177,184-187,193-196,208-210,216-221,227-232,245-253,266,274-276,299-302,317-318,331-333,339,350-352,362-366,379-380,397-400,411
+  s_243209e7a7ea3a::t_c227e009158088 11-13,20-27,30-41,44-56,59-79,85-93,102-104,106-116,118-121,124-136,139-142,146-167,178-183,188-192,197-207,211-215,222-226,233-244,254-265,267-273,277-298,303-316,319-330,334-338,340-349,353-361,367-378,381-396,401-410
+  s_243209e7a7ea3a::t_fc1b82a86b6e63 412-450
+docs/adr/0011_object_kernel.md
+  s_243209e7a7ea3a::t_81ebe292cc37fa 30-35
+crates/kanban-service/src/objects/task.rs
+  s_243209e7a7ea3a::t_2c971a9327d1f2 151
+  s_243209e7a7ea3a::t_94ee40376dbcfe 55,66
+  s_243209e7a7ea3a::t_87fd448c43477d 76,101,108,118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6bcea9dc21aab7e7e44902e533531cdbf729abec",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

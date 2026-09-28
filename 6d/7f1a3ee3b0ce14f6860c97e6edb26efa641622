@@ -1,0 +1,59 @@
+crates/kanban-service/src/migration_snapshot/conversion/attachments.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 145-147,149-157
+  s_243209e7a7ea3a::t_1075711bb10b78 148
+crates/kanban-service/src/migration_snapshot/conversion/custom.rs
+  s_243209e7a7ea3a::t_1075711bb10b78 193
+  s_243209e7a7ea3a::t_45259cecc9fdf4 190-192,194-202
+crates/kanban-service/src/migration_snapshot/conversion/history.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 145-147,149-157
+  s_243209e7a7ea3a::t_1075711bb10b78 148
+crates/kanban-service/src/migration_snapshot/conversion/cycle_closures.rs
+  s_243209e7a7ea3a::t_1075711bb10b78 123
+  s_243209e7a7ea3a::t_45259cecc9fdf4 120-122,124-132
+crates/kanban-service/src/migration_snapshot/conversion/time_windows.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 169-171,173-181
+  s_243209e7a7ea3a::t_1075711bb10b78 172
+crates/kanban-service/src/migration_snapshot/conversion/closures.rs
+  s_243209e7a7ea3a::t_1075711bb10b78 124
+  s_243209e7a7ea3a::t_45259cecc9fdf4 121-123,125-133
+crates/kanban-service/src/migration_snapshot/conversion/relations.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 149-151,153-161
+  s_243209e7a7ea3a::t_1075711bb10b78 152
+crates/kanban-service/src/migration_snapshot/conversion/settings.rs
+  s_243209e7a7ea3a::t_1075711bb10b78 92
+  s_243209e7a7ea3a::t_45259cecc9fdf4 89-91,93-101
+crates/kanban-service/src/migration_snapshot/conversion/planning.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 148-150,152-160
+  s_243209e7a7ea3a::t_1075711bb10b78 151
+crates/kanban-service/src/migration_snapshot/conversion/rollups.rs
+  s_243209e7a7ea3a::t_1075711bb10b78 100
+  s_243209e7a7ea3a::t_45259cecc9fdf4 97-99,101-109
+crates/kanban-service/src/migration_snapshot/conversion/builtin_metadata.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 164-166,168-176
+  s_243209e7a7ea3a::t_1075711bb10b78 167
+crates/kanban-service/src/migration_snapshot/conversion/subtasks.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 88-90,92-100
+  s_243209e7a7ea3a::t_1075711bb10b78 91
+crates/kanban-service/src/migration_snapshot/conversion/graph.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 126-128,130-138
+  s_243209e7a7ea3a::t_1075711bb10b78 129
+crates/kanban-service/src/migration_snapshot/conversion/queue.rs
+  s_243209e7a7ea3a::t_45259cecc9fdf4 186-188,190-198
+  s_243209e7a7ea3a::t_1075711bb10b78 189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6d7f1a3ee3b0ce14f6860c97e6edb26efa641622",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

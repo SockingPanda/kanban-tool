@@ -1,0 +1,33 @@
+crates/kanban-client/src/object_kernel.rs
+  s_243209e7a7ea3a::t_20e489ffe7cdc0 10-21,42,44,64,69-70,75-76,90,111-114,116,118-119,121,123-124
+crates/kanban-kernel/src/storage.rs
+  s_243209e7a7ea3a::t_a1e3a7f92edcda 20-21,161-167
+crates/kanban-kernel/src/transaction.rs
+  s_243209e7a7ea3a::t_02740b3033bf3d 24-29,288-290,316-318,341-343,1067-1068
+crates/kanban-service/src/objects/actions.rs
+  s_243209e7a7ea3a::t_653884df013eee 112-115,119,122,124
+crates/kanban-service/src/objects/task.rs
+  s_243209e7a7ea3a::t_21964ade4f253f 93-94
+crates/kanban-service/src/objects/task/commands.rs
+  s_243209e7a7ea3a::t_27d50bf39747e5 3-4,20-21,41-42,139-140,201-202,295
+crates/kanban-service/src/objects/task/execution.rs
+  s_243209e7a7ea3a::t_18232656e66e6f 5,14,50-54,205-206,259-262,371-372,420-423
+crates/kanban-service/src/objects/task/lifecycle.rs
+  s_243209e7a7ea3a::t_a9e8068927fdad 3,12,14,16,18,21,31-32,137-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "02cee3207843cc0d8a539a68fd19d0dab6d64ef8",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

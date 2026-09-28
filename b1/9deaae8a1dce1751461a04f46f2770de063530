@@ -1,0 +1,68 @@
+apps/web/src/app/object-kernel-app.tsx
+  s_243209e7a7ea3a::t_ff5a498a245a70 79
+  s_243209e7a7ea3a::t_7ae93917306d5f 45-56,72,81
+  s_243209e7a7ea3a::t_b04034c0a9cf8d 1-44,57-71,73-78,82-88,90-97
+  s_243209e7a7ea3a::t_eaf4d428768375 80
+  s_243209e7a7ea3a::t_687574ab242355 89
+apps/web/src/features/tasks/object-kernel-workspace.tsx
+  s_243209e7a7ea3a::t_489645822b1dd4 41
+  s_243209e7a7ea3a::t_6fefc9abc4fa2f 1-23,25-34,36-40,42-43,46-73,75-79,81-104,107-167,169-191,194-217,219-221
+  s_243209e7a7ea3a::t_d28c9b8c737251 24,44-45,218
+  s_243209e7a7ea3a::t_dc097b0aca6a2e 105-106,192-193
+  s_243209e7a7ea3a::t_42b65d3f29ea7f 35,74,80,168
+apps/web/src/app/styles.css
+  s_243209e7a7ea3a::t_b6f2e82a94199b 8
+apps/web/src/adapters/host/object-kernel-tasks.test.ts
+  s_243209e7a7ea3a::t_569aa2a32fcd85 1-11,16-26,28-30,32-34,37-63,65-73
+  s_243209e7a7ea3a::t_3fcbc02afee10d 12-15,27,31,35-36,64
+apps/web/README.md
+  s_243209e7a7ea3a::t_75e121a9ac5aaf 10,13-26,63-64,74-75,77,81-84,88-89,94-95
+  s_243209e7a7ea3a::t_687574ab242355 8-9,11-12
+apps/web/src/application/tasks/object-kernel-task-session.test.ts
+  s_243209e7a7ea3a::t_cb576fbae76838 1-31
+apps/web/src/application/data/object-kernel-tasks.ts
+  s_243209e7a7ea3a::t_e2264f9f316320 1-164
+apps/web/src/features/tasks/object-kernel-workspace.module.css
+  s_243209e7a7ea3a::t_27357764ac4e47 1-23
+apps/web/src/application/tasks/object-kernel-task-session.ts
+  s_243209e7a7ea3a::t_dc097b0aca6a2e 285,288,290
+  s_243209e7a7ea3a::t_72f8ddc30790dd 314
+  s_243209e7a7ea3a::t_eaf4d428768375 74-75
+  s_243209e7a7ea3a::t_ea44ca6f5186a4 12,110,162
+  s_243209e7a7ea3a::t_c87ec6b24b9531 1-11,13-73,76-109,111-112,114-118,120-150,152-161,163-181,186-203,205-218,220-224,226-227,229,231-232,234-235,240-259,261-277,279-280,282-284,287,291-309,315
+  s_243209e7a7ea3a::t_f5f0230e52060a 204,310-313
+  s_243209e7a7ea3a::t_3c5ab901f29808 119
+  s_243209e7a7ea3a::t_567775a0456d2c 219,225,228,230,233,239,260,278,281
+  s_243209e7a7ea3a::t_ac96e2379cc5c8 113,151,182-185
+  s_243209e7a7ea3a::t_d28c9b8c737251 236-238,286,289
+apps/web/src/adapters/host/object-kernel-tasks.ts
+  s_243209e7a7ea3a::t_5cd1acbb0729da 161-167
+  s_243209e7a7ea3a::t_dc097b0aca6a2e 213-215
+  s_243209e7a7ea3a::t_687574ab242355 225
+  s_243209e7a7ea3a::t_7839d1fa8c2738 97-112
+  s_243209e7a7ea3a::t_97b364117e85fd 1-42,49-96,113-160,168-212,216-224,226-227
+  s_243209e7a7ea3a::t_f5f0230e52060a 43-48
+apps/web/src/app/object-kernel-app.css
+  s_243209e7a7ea3a::t_ff5a498a245a70 6
+  s_243209e7a7ea3a::t_b6f2e82a94199b 1-5,7-10
+apps/web/src/app/app.tsx
+  s_243209e7a7ea3a::t_687574ab242355 178-181
+  s_243209e7a7ea3a::t_66fb85e4a747ed 5,171,175-177
+  s_243209e7a7ea3a::t_4fac2a812d8333 182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b19deaae8a1dce1751461a04f46f2770de063530",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

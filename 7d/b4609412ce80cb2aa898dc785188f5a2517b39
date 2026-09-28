@@ -1,0 +1,25 @@
+apps/web/src/adapters/host/object-kernel-tasks.ts
+  s_243209e7a7ea3a::t_447b095fbc4ab9 35-38,51,55,57,67-68
+apps/web/src/application/tasks/object-kernel-task-session.ts
+  s_243209e7a7ea3a::t_b40c80ee1e359b 317
+  s_243209e7a7ea3a::t_447b095fbc4ab9 4,158,328-329
+  s_243209e7a7ea3a::t_8b709167b51a08 196,206,211-214
+apps/web/src/application/tasks/object-kernel-task-session.test.ts
+  s_243209e7a7ea3a::t_7423f5ddb3fbd2 53-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7db4609412ce80cb2aa898dc785188f5a2517b39",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

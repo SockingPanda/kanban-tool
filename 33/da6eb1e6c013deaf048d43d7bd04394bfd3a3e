@@ -1,0 +1,29 @@
+apps/web/src/adapters/host/object-kernel-tasks.ts
+  s_243209e7a7ea3a::t_94e69bad58d94f 4,95-99
+  s_243209e7a7ea3a::t_f27486d22b9e53 100-102
+apps/web/src/application/tasks/object-kernel-task-session.ts
+  s_243209e7a7ea3a::t_d9446554228ead 47,215-217,220
+  s_243209e7a7ea3a::t_b248cdb16e0608 238
+  s_243209e7a7ea3a::t_94e69bad58d94f 46,69,159,164,195-214,218-219,221-237,239-255,377,383-389
+  s_243209e7a7ea3a::t_41eb33ffcba013 390-391
+apps/web/README.md
+  s_243209e7a7ea3a::t_38020a07d7d203 17-18,85-87
+apps/web/src/application/tasks/object-kernel-task-session.test.ts
+  s_243209e7a7ea3a::t_aae531e2922a11 69-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33da6eb1e6c013deaf048d43d7bd04394bfd3a3e",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

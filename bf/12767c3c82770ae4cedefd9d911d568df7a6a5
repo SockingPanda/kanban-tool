@@ -1,0 +1,47 @@
+crates/kanban-protocol/src/rpc/objects/json/tests.rs
+  s_243209e7a7ea3a::t_dbf298a9993ffa 1-140
+crates/kanban-protocol/src/rpc/objects.rs
+  s_243209e7a7ea3a::t_b6b3b20a3b5d45 4-5
+crates/kanban-mcp/Cargo.toml
+  s_243209e7a7ea3a::t_b6b3b20a3b5d45 15
+crates/kanban-protocol/docs/schema.md
+  s_243209e7a7ea3a::t_b6b3b20a3b5d45 38-41,44-49
+  s_243209e7a7ea3a::t_552e6e7e42349d 42-43
+crates/kanban-protocol/Cargo.toml
+  s_243209e7a7ea3a::t_b6b3b20a3b5d45 33,41
+xtask/Cargo.toml
+  s_243209e7a7ea3a::t_b6b3b20a3b5d45 22
+xtask/src/lib.rs
+  s_243209e7a7ea3a::t_b6b3b20a3b5d45 11-12,486
+Cargo.toml
+  s_243209e7a7ea3a::t_b6b3b20a3b5d45 77
+crates/kanban-protocol/src/rpc/objects/json.rs
+  s_243209e7a7ea3a::t_dbf298a9993ffa 1-187
+  s_243209e7a7ea3a::t_d891eaec1b59cf 188-197
+Cargo.lock
+  s_243209e7a7ea3a::t_7fe5fedf74f57e 2930,3746-3754,4205-4217,4885-4894,5482
+crates/kanban-protocol/src/rpc/objects/json/schema.rs
+  s_243209e7a7ea3a::t_b43bd050c0d696 1-177
+crates/kanban-protocol/src/rpc/objects/json/schema/tests.rs
+  s_243209e7a7ea3a::t_73978a5d189566 1-102
+xtask/src/check/dependencies.rs
+  s_243209e7a7ea3a::t_6533d00710405f 27,106,1026,1038-1039,1042,1055-1059,1064-1080,1083,1087-1088,1108-1112,1117-1118,1121,1229-1230,1233,1276-1287,1319-1324,1334-1346,1438-1472,1766,1828-1832,1911-1916,1944,1972,1988,2011-2014,2019,2085,2100,2384-2489
+xtask/src/object_json.rs
+  s_243209e7a7ea3a::t_ffdecfc8f024e7 1-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf12767c3c82770ae4cedefd9d911d568df7a6a5",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

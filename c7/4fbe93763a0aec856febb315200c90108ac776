@@ -1,0 +1,65 @@
+crates/kanban-server/src/grpc/object_kernel/codec/time_windows.rs
+  s_243209e7a7ea3a::t_eee55c334d81a5 1-75
+crates/kanban-mcp/src/tools/objects_v2/tests.rs
+  s_243209e7a7ea3a::t_288f88d2041a86 28,30,38-45
+crates/kanban-protocol/tests/rpc/objects.rs
+  s_243209e7a7ea3a::t_da436efe27bc20 13-14
+crates/kanban-protocol/src/rpc/objects.rs
+  s_243209e7a7ea3a::t_cbcf451fac91ba 12
+crates/kanban-mcp/src/policy.rs
+  s_243209e7a7ea3a::t_288f88d2041a86 273-276
+  s_243209e7a7ea3a::t_2c35f0fdaaca3a 80-82
+crates/kanban-server/src/grpc/object_kernel/tests.rs
+  s_243209e7a7ea3a::t_70fd6fc2e8519c 12
+crates/kanban-protocol/tests/rpc/objects/time_windows.rs
+  s_243209e7a7ea3a::t_da436efe27bc20 1-122
+crates/kanban-mcp/src/tools/objects_v2.rs
+  s_243209e7a7ea3a::t_2c35f0fdaaca3a 129-132
+crates/kanban-protocol/proto/kanban/objects/v2/kernel.proto
+  s_243209e7a7ea3a::t_0109c49abcf9c2 438-480,858-865
+crates/kanban-mcp/README.md
+  s_243209e7a7ea3a::t_825a2a15c51faa 69-72
+crates/kanban-server/src/grpc/object_kernel.rs
+  s_243209e7a7ea3a::t_eee55c334d81a5 589-640
+crates/kanban-protocol/proto/rpc-extensions.json
+  s_243209e7a7ea3a::t_e1e5db1173182b 578-613
+crates/kanban-protocol/src/rpc/objects/json/tests.rs
+  s_243209e7a7ea3a::t_da436efe27bc20 11,120-137,142
+  s_243209e7a7ea3a::t_916e711ed6ab79 140,143-164
+  s_243209e7a7ea3a::t_b582a213681c7a 138-139
+  s_243209e7a7ea3a::t_c6f8f70de78034 141
+crates/kanban-client/src/object_kernel.rs
+  s_243209e7a7ea3a::t_288f88d2041a86 195-225
+  s_243209e7a7ea3a::t_2c35f0fdaaca3a 97-100
+  s_243209e7a7ea3a::t_e011294c65f555 194
+crates/kanban-server/src/grpc/object_kernel/codec.rs
+  s_243209e7a7ea3a::t_eee55c334d81a5 14
+crates/kanban-protocol/src/rpc/objects/time_windows.rs
+  s_243209e7a7ea3a::t_cbcf451fac91ba 1-72
+crates/kanban-client/README.md
+  s_243209e7a7ea3a::t_825a2a15c51faa 51,55-56
+  s_243209e7a7ea3a::t_d2c2c4ec0d988e 57
+crates/kanban-protocol/docs/schema.md
+  s_243209e7a7ea3a::t_825a2a15c51faa 65-69
+crates/kanban-server/docs/object_kernel_rpc.md
+  s_243209e7a7ea3a::t_825a2a15c51faa 76-81
+crates/kanban-server/src/grpc/object_kernel/tests/time_windows.rs
+  s_243209e7a7ea3a::t_c5d840de9b0e59 73-74,83-84,96-98,106,109-110
+  s_243209e7a7ea3a::t_70fd6fc2e8519c 1-72,75-82,85-95,99-105,107-108,111-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c74fbe93763a0aec856febb315200c90108ac776",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+apps/web/src/lib/rpc/object-kernel.test.ts
+  s_243209e7a7ea3a::t_07d6eb364ab45f 33
+  s_243209e7a7ea3a::t_9b68be19dd32d7 1-32,34-176
+apps/web/README.md
+  s_243209e7a7ea3a::t_ab80a6d0444e2e 125-130
+apps/web/src/lib/rpc/client.ts
+  s_243209e7a7ea3a::t_c75cf18575e17d 6,9-13,20-28,31
+apps/web/src/lib/rpc/endpoint.ts
+  s_243209e7a7ea3a::t_7f3ba311839a34 4-11,58,79,97-100,105,113-114,144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "18c72e85a99052d20b72f863e0724ef2698a6aff",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

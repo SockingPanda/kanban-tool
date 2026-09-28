@@ -1,0 +1,67 @@
+crates/kanban-service/src/objects/schema.rs
+  s_243209e7a7ea3a::t_584afff892be10 80
+crates/kanban-service/src/migration_snapshot/conversion/identity.rs
+  s_243209e7a7ea3a::t_584afff892be10 386,388-390
+  s_243209e7a7ea3a::t_65c92fd08392c9 13,445
+crates/kanban-service/src/migration_snapshot/conversion/audit/graph.rs
+  s_243209e7a7ea3a::t_228f34a4fdded7 1-12,17-36,49,57-61
+  s_243209e7a7ea3a::t_10fa641dda976b 13-16,37-48,50-56
+crates/kanban-service/docs/migration_snapshot.md
+  s_243209e7a7ea3a::t_eb2296dfa9914e 317-343
+crates/kanban-service/src/migration_snapshot/conversion/input.rs
+  s_243209e7a7ea3a::t_65c92fd08392c9 98-106,110
+  s_243209e7a7ea3a::t_2d9b6788eda543 111-115
+crates/kanban-service/src/migration_snapshot/conversion.rs
+  s_243209e7a7ea3a::t_584afff892be10 13
+docs/adr/0011_object_kernel.md
+  s_243209e7a7ea3a::t_eb2296dfa9914e 118-121
+crates/kanban-service/src/objects.rs
+  s_243209e7a7ea3a::t_584afff892be10 10,75
+crates/kanban-service/src/migration_snapshot/conversion/graph/tests/fixture.rs
+  s_243209e7a7ea3a::t_eb2296dfa9914e 2-4,7-10,16-28,31,50-59,62-65,67-80,85-89,91-98,102-125,127-134,140-146,148-150,160-164,173-175,178-180,183-189,192-196
+  s_243209e7a7ea3a::t_f2267900c0b9dc 1,5-6,11-15,29-30,32-49,60-61,66,81-84,90,99-101,126,135-139,147,151-159,165-172,176-177,181-182,190-191,197-199
+crates/kanban-service/src/migration_snapshot/conversion/graph/transform.rs
+  s_243209e7a7ea3a::t_77c562bc079e21 1-84
+  s_243209e7a7ea3a::t_a0dc0fe066c670 85-196
+crates/kanban-service/src/migration_snapshot/conversion/identity/graph.rs
+  s_243209e7a7ea3a::t_65c92fd08392c9 1-35
+  s_243209e7a7ea3a::t_e6e74f7d82a628 36-81
+crates/kanban-service/src/migration_snapshot/conversion/audit.rs
+  s_243209e7a7ea3a::t_228f34a4fdded7 10,112-114,145-146,289
+crates/kanban-service/src/migration_snapshot/conversion/graph/tests.rs
+  s_243209e7a7ea3a::t_fc0d21c6295b0a 294
+  s_243209e7a7ea3a::t_e438e7978b9f71 171-172,174-177,225-230,255-261,266-273,279-286,289-293,295
+  s_243209e7a7ea3a::t_27322783705e70 1,6-11,17,24,31-43,54-55,58-62,83,94-95,102,111,119,128-129,140,153,161,190,203,248-249,274-276,299-300,313,315-318,371,373,381
+  s_243209e7a7ea3a::t_444a2d835ad282 2-5,12-16,18-23,25-30,44-53,56-57,63-82,84-93,96-101,103-110,112-118,120-127,130-139,141-152,154-160,162-170,173,178-189,191-202,204-224,231-247,250-254,262-265,277-278,287-288,296-298,301-312,314,319-370,372,374-380
+crates/kanban-service/src/objects/legacy_graph.rs
+  s_243209e7a7ea3a::t_584afff892be10 1-81
+  s_243209e7a7ea3a::t_70d45f15f0e3bc 82-102
+crates/kanban-service/src/migration_snapshot/conversion/graph/model.rs
+  s_243209e7a7ea3a::t_77c562bc079e21 1-10,12,14-18,28-32,38,48-49,55-57,89,97-103,123-129,150,159-163,174
+  s_243209e7a7ea3a::t_dd79d94ec430c0 11,13,19-27,33-37,39-47,50-54,58-88,90-96,104-122,130-149,151-158,164-173
+  s_243209e7a7ea3a::t_d1756886a311d1 175-199
+crates/kanban-service/src/objects/catalog.rs
+  s_243209e7a7ea3a::t_584afff892be10 41,65-66
+crates/kanban-service/src/migration_snapshot/conversion/graph.rs
+  s_243209e7a7ea3a::t_25bf72fded8c50 1-4,9-15,17,27-29,35-37,43-46,52,58-72,78-80,84-85,95-97,102-112,119,129-131,141-143,160-162,180,198,202-203,213,229-230,247-249,271-275,287-290,294,298-303,312
+  s_243209e7a7ea3a::t_dd79d94ec430c0 5-8,16,18-26,30-34,38-42,47-51,53-57,73-77,81-83,86-94,98-101,113-118,120-128,132-140,144-159,163-179,181-197,199-201,204-212,214-228,231-246,250-270,276-286,291-293,295-297,304-311,313-318
+  s_243209e7a7ea3a::t_77c562bc079e21 319
+crates/kanban-service/docs/object_kernel.md
+  s_243209e7a7ea3a::t_eb2296dfa9914e 40-45,47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb40bbed272028846d3813373596f699deaab6a7",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+apps/web/src/adapters/host/object-kernel-tasks.ts
+  s_243209e7a7ea3a::t_3f101bf8db3c5e 8,244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5b1e518cd7dbff137848bcef8d1d31688202b83",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

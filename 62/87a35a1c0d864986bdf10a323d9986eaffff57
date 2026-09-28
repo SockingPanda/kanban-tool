@@ -1,0 +1,29 @@
+apps/web/README.md
+  s_243209e7a7ea3a::t_b197a0a6c2de0a 13
+apps/web/src/application/tasks/object-kernel-task-session.test.ts
+  s_243209e7a7ea3a::t_332313ecf69c8f 32-52
+apps/web/src/application/tasks/object-kernel-task-session.ts
+  s_243209e7a7ea3a::t_b197a0a6c2de0a 219-226
+apps/web/src/adapters/host/object-kernel-tasks.ts
+  s_243209e7a7ea3a::t_b197a0a6c2de0a 168-171
+apps/web/src/features/tasks/object-kernel-workspace.module.css
+  s_243209e7a7ea3a::t_b197a0a6c2de0a 23-24
+apps/web/src/features/tasks/object-kernel-workspace.tsx
+  s_243209e7a7ea3a::t_b197a0a6c2de0a 53-79,233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6287a35a1c0d864986bdf10a323d9986eaffff57",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

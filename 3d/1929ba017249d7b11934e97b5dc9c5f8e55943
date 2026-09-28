@@ -1,0 +1,44 @@
+crates/kanban-service/src/objects/task.rs
+  s_243209e7a7ea3a::t_a9ac5a60a4859c 22-25
+  s_243209e7a7ea3a::t_fb88c323c2fb05 8
+crates/kanban-server/src/object_dispatcher.rs
+  s_243209e7a7ea3a::t_d1195510ae0029 21,231,281-283,457-460,516,613,700-703
+  s_243209e7a7ea3a::t_7642a485ca9600 89
+  s_243209e7a7ea3a::t_a9ac5a60a4859c 220
+  s_243209e7a7ea3a::t_0681aa5d20a469 413-415,418-425,434-437,490-503,557-562
+  s_243209e7a7ea3a::t_1c679b2913672b 616,624-639
+  s_243209e7a7ea3a::t_bbb39197ed59bb 537,574,577-599
+  s_243209e7a7ea3a::t_399f55a28c50e5 1-20,22-88,90-150,154-219,221-230,232-280,284-412,416-417,426-433,438-456,461-489,504-515,517-536,538-556,563-573,575-576,600-612,614-615,617-623,640-699,704-705,708-731
+  s_243209e7a7ea3a::t_3c669f25a0a86b 151-153
+  s_243209e7a7ea3a::t_aab3d2dab2372c 706-707
+crates/kanban-service/src/objects/task/dispatcher/tests.rs
+  s_243209e7a7ea3a::t_e900a53ceefd9c 1-221
+crates/kanban-service/src/objects/task/dispatcher.rs
+  s_243209e7a7ea3a::t_fb88c323c2fb05 1-2,4-22,29-30,32-85,87,92-107,109-118,120-123,125-156,158-160
+  s_243209e7a7ea3a::t_264c53e3d4cf23 3,25-26,119,124
+  s_243209e7a7ea3a::t_e900a53ceefd9c 161-163
+  s_243209e7a7ea3a::t_a9ac5a60a4859c 23-24,27-28,31,86,88-91,108,157
+crates/kanban-server/src/lib.rs
+  s_243209e7a7ea3a::t_399f55a28c50e5 6
+crates/kanban-server/src/object_dispatcher/tests.rs
+  s_243209e7a7ea3a::t_e900a53ceefd9c 1-49
+  s_243209e7a7ea3a::t_8c832ddd9c093b 50-135
+crates/kanban-service/docs/object_kernel.md
+  s_243209e7a7ea3a::t_c889595796f518 118-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3d1929ba017249d7b11934e97b5dc9c5f8e55943",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

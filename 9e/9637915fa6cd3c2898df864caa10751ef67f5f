@@ -1,0 +1,55 @@
+crates/kanban-service/src/migration_snapshot/conversion/time_windows/transform.rs
+  s_243209e7a7ea3a::t_66a4f6b1143b3a 2
+  s_243209e7a7ea3a::t_f53e8b379de454 182-186
+  s_243209e7a7ea3a::t_9862b07784bdc6 1,3-181,194-206,208-229,231-256,258-268,270-274,276-365
+  s_243209e7a7ea3a::t_e4de7610e0da78 207,257,269,275
+  s_243209e7a7ea3a::t_1795f99668726a 187-193,230
+crates/kanban-service/src/migration_snapshot/conversion/custom.rs
+  s_243209e7a7ea3a::t_cf8a2ecfcf2bbf 17-18,364
+crates/kanban-service/docs/time_window_migration.md
+  s_243209e7a7ea3a::t_6aafa905e8dea7 1-14,17-26,30
+  s_243209e7a7ea3a::t_0d86a6bef0343b 27-29
+  s_243209e7a7ea3a::t_d601fdb4cad7be 15-16
+crates/kanban-service/src/migration_snapshot/conversion/coverage/selectors.rs
+  s_243209e7a7ea3a::t_5cfa8fe8d5eec0 24,107-111
+  s_243209e7a7ea3a::t_0d86a6bef0343b 4,25,112-122
+  s_243209e7a7ea3a::t_cf8a2ecfcf2bbf 5,23,63-70,183-185
+crates/kanban-service/src/migration_snapshot/conversion/input.rs
+  s_243209e7a7ea3a::t_af95a875d6e218 118-121
+crates/kanban-service/src/migration_snapshot/conversion/rollups.rs
+  s_243209e7a7ea3a::t_af95a875d6e218 160,238-240,250,255
+  s_243209e7a7ea3a::t_1005fcce36178f 27-28
+crates/kanban-service/src/migration_snapshot/conversion/time_windows.rs
+  s_243209e7a7ea3a::t_f53e8b379de454 164,335-386
+  s_243209e7a7ea3a::t_cd5d58a42ea40f 1-15,17-163,165-204,206-334,387-425
+  s_243209e7a7ea3a::t_bb2daf36519514 205
+  s_243209e7a7ea3a::t_1005fcce36178f 16
+crates/kanban-service/docs/object_time_windows.md
+  s_243209e7a7ea3a::t_6aafa905e8dea7 27-28
+  s_243209e7a7ea3a::t_0d86a6bef0343b 29-30
+crates/kanban-service/src/migration_snapshot/conversion.rs
+  s_243209e7a7ea3a::t_cf8a2ecfcf2bbf 14
+crates/kanban-service/src/migration_snapshot/conversion/time_windows/tests.rs
+  s_243209e7a7ea3a::t_1d5c4eac515df9 71-76
+  s_243209e7a7ea3a::t_a606b326ffa5ff 1-70,77-103,105-106,108-184
+  s_243209e7a7ea3a::t_706915e2399d5b 185-216
+  s_243209e7a7ea3a::t_b128d1b21bb974 104,107
+crates/kanban-service/src/migration_snapshot/conversion/identity.rs
+  s_243209e7a7ea3a::t_cf8a2ecfcf2bbf 446
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9e9637915fa6cd3c2898df864caa10751ef67f5f",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

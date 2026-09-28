@@ -1,0 +1,57 @@
+crates/kanban-protocol/proto/kanban/objects/v2/kernel.proto
+  s_243209e7a7ea3a::t_e4aec9cdfaf003 524-533,961-964
+crates/kanban-server/src/grpc/object_kernel/codec/retrieval.rs
+  s_243209e7a7ea3a::t_759f8ab4a83547 27-30,37-40
+  s_243209e7a7ea3a::t_ec12f7861a428e 4-11,16-18,23-26,31-36,41
+  s_243209e7a7ea3a::t_c6c801c2f0e914 42
+crates/kanban-mcp/src/policy.rs
+  s_243209e7a7ea3a::t_e07bbe934ae657 244-245,280-281
+crates/kanban-protocol/tests/rpc/objects/retrieval.rs
+  s_243209e7a7ea3a::t_e07bbe934ae657 53-91
+  s_243209e7a7ea3a::t_fb279453b9d530 52
+crates/kanban-mcp/src/tools/objects_v2/tests.rs
+  s_243209e7a7ea3a::t_e07bbe934ae657 28,30,48-49
+crates/kanban-protocol/proto/rpc-extensions.json
+  s_243209e7a7ea3a::t_e4aec9cdfaf003 641-658
+crates/kanban-mcp/src/tools/objects_v2.rs
+  s_243209e7a7ea3a::t_4ac36bf78b717b 135-136
+crates/kanban-client/src/object_kernel.rs
+  s_243209e7a7ea3a::t_4ac36bf78b717b 125-126
+  s_243209e7a7ea3a::t_759f8ab4a83547 321-325,329-333
+  s_243209e7a7ea3a::t_19615ab37acc82 306-320,326-328,334-336
+crates/kanban-server/src/grpc/object_kernel/tests/retrieval.rs
+  s_243209e7a7ea3a::t_759f8ab4a83547 185-188,199-205,219-224,230-235
+  s_243209e7a7ea3a::t_013e5ba4a6ce8f 158-184,189-198,206-218,225-229,236-248
+crates/kanban-protocol/docs/schema.md
+  s_243209e7a7ea3a::t_03f0eb83769b4e 77-80
+crates/kanban-server/docs/object_kernel_rpc.md
+  s_243209e7a7ea3a::t_03f0eb83769b4e 102-105
+crates/kanban-mcp/README.md
+  s_243209e7a7ea3a::t_03f0eb83769b4e 77-79
+crates/kanban-client/README.md
+  s_243209e7a7ea3a::t_03f0eb83769b4e 62-64
+crates/kanban-protocol/src/rpc/objects/retrieval.rs
+  s_243209e7a7ea3a::t_81bc83c4ef065f 3-13,18-34
+crates/kanban-protocol/src/rpc/objects/json/tests.rs
+  s_243209e7a7ea3a::t_e07bbe934ae657 11
+  s_243209e7a7ea3a::t_21c22e4989de37 200-225
+  s_243209e7a7ea3a::t_2b5dec1c4f1122 199
+crates/kanban-server/src/grpc/object_kernel.rs
+  s_243209e7a7ea3a::t_0650b67c13a826 695-720
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6d1ce25623689c2e2a5e1c77de1cf8d853368fcf",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

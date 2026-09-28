@@ -1,0 +1,21 @@
+crates/kanban-kernel/src/tests/snapshot.rs
+  s_243209e7a7ea3a::t_d4029708e137d5 163-172
+crates/kanban-service/src/objects/task/tests.rs
+  s_243209e7a7ea3a::t_e943253ef4d72a 327-330,396-399
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1729ee6c5ac4ce42a5fcf5665db16094a215b75d",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

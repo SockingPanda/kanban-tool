@@ -1,0 +1,21 @@
+apps/web/src/features/objects/ObjectWorkspace.tsx
+  s_243209e7a7ea3a::t_c083b9b6b6c66f 36,52-54,67,70,79,86,88,103-106,125,127,130,136
+apps/web/tests/i18n/objects-files.spec.ts
+  s_243209e7a7ea3a::t_e2ac272436cae9 3,17-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b9cec86bd3ff769e4378cd8b9fdb6143ec8f697",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

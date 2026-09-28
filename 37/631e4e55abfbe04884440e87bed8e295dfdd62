@@ -1,0 +1,19 @@
+crates/kanban-protocol/proto/kanban/objects/v2/kernel.proto
+  s_243209e7a7ea3a::t_dfbe79a15b0f97 770
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "37631e4e55abfbe04884440e87bed8e295dfdd62",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

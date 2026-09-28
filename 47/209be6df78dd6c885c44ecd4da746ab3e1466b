@@ -1,0 +1,45 @@
+crates/kanban-service/src/objects/legacy_subtasks.rs
+  s_243209e7a7ea3a::t_be1f07256290e9 1-18
+  s_243209e7a7ea3a::t_706ea50718fb27 19-47
+crates/kanban-service/src/migration_snapshot/conversion/subtasks/tests.rs
+  s_243209e7a7ea3a::t_92952d8ae10082 2-3,9-15,17-18,20-32,36-42,44-81,83-91,93,96-162,164,166-173,179-181,183,188,190-206,208-218,220,222-225
+  s_243209e7a7ea3a::t_ce69375972febd 1,4-8,16,19,33-35,43,82,92,94-95,163,165,174-178,182,184-187,189,207,219,221,226
+crates/kanban-service/src/migration_snapshot/conversion/subtasks/transform.rs
+  s_243209e7a7ea3a::t_475a38f6a6eff9 1-2,24,66-69,121-123
+  s_243209e7a7ea3a::t_32d48951a57bd4 4-15,25-32,72-76,112-119
+  s_243209e7a7ea3a::t_a637b624482572 3,16-23,33-65,70-71,77-111,120
+crates/kanban-service/src/objects.rs
+  s_243209e7a7ea3a::t_be1f07256290e9 11
+crates/kanban-service/docs/object_kernel.md
+  s_243209e7a7ea3a::t_993e1414a3e5d2 35-39
+docs/adr/0011_object_kernel.md
+  s_243209e7a7ea3a::t_993e1414a3e5d2 110-113
+crates/kanban-service/src/migration_snapshot/conversion/subtasks.rs
+  s_243209e7a7ea3a::t_475a38f6a6eff9 1-11,13,31,39,44,49-50,57-58,64-66,72-74,179,196-199,205,207,216,221-223,230
+  s_243209e7a7ea3a::t_a637b624482572 12,14-30,32-38,40-43,45-48,51-56,59-63,67-71,75-178,180-195,200-204,206,208-215,217-220,224-229
+crates/kanban-service/docs/migration_snapshot.md
+  s_243209e7a7ea3a::t_993e1414a3e5d2 278-298
+crates/kanban-service/src/objects/catalog.rs
+  s_243209e7a7ea3a::t_be1f07256290e9 39,60-61
+crates/kanban-service/src/migration_snapshot/conversion/subtasks/tests/fixture.rs
+  s_243209e7a7ea3a::t_ce69375972febd 1-56
+  s_243209e7a7ea3a::t_f5654361bdbd7f 57-171
+crates/kanban-service/src/migration_snapshot/conversion.rs
+  s_243209e7a7ea3a::t_91071372814e68 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "47209be6df78dd6c885c44ecd4da746ab3e1466b",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

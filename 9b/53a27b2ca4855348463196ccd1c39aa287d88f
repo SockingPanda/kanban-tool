@@ -1,0 +1,28 @@
+crates/kanban-service/src/migration_snapshot/conversion/time_windows/transform.rs
+  s_243209e7a7ea3a::t_87d5443d41745b 265-266
+  s_243209e7a7ea3a::t_416ee92b93cb1c 171-176,259-264
+  s_243209e7a7ea3a::t_2da123a795348d 258
+crates/kanban-service/src/migration_snapshot/conversion/time_windows.rs
+  s_243209e7a7ea3a::t_fe7cdd909b83b3 65
+crates/kanban-service/src/migration_snapshot/conversion/time_windows/tests.rs
+  s_243209e7a7ea3a::t_2da123a795348d 5-12,14-16
+  s_243209e7a7ea3a::t_8726270c7bbeee 13
+crates/kanban-service/docs/time_window_migration.md
+  s_243209e7a7ea3a::t_fe7cdd909b83b3 17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9b53a27b2ca4855348463196ccd1c39aa287d88f",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

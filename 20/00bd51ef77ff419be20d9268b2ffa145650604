@@ -1,0 +1,60 @@
+crates/kanban-service/src/objects/planning.rs
+  s_243209e7a7ea3a::t_41674f052069fa 12-16
+  s_243209e7a7ea3a::t_a7e0580df1a4e8 8
+crates/kanban-service/src/objects/lifecycle.rs
+  s_243209e7a7ea3a::t_a7e0580df1a4e8 46-48
+crates/kanban-service/src/migration_snapshot/conversion/cycle_closures.rs
+  s_243209e7a7ea3a::t_0f119713f47b54 1-92,94-226
+  s_243209e7a7ea3a::t_b71bae5cc28461 93
+crates/kanban-service/src/migration_snapshot/conversion/cycle_closures/tests.rs
+  s_243209e7a7ea3a::t_27187da90798b9 136-140
+  s_243209e7a7ea3a::t_f61e05757dc113 1-135,141-176
+crates/kanban-service/src/objects/schema.rs
+  s_243209e7a7ea3a::t_a7e0580df1a4e8 95
+crates/kanban-service/src/migration_snapshot/conversion/history.rs
+  s_243209e7a7ea3a::t_a4dbd55080962d 65-67,221
+crates/kanban-service/src/objects/lifecycle/guards.rs
+  s_243209e7a7ea3a::t_a7e0580df1a4e8 150-153
+crates/kanban-service/src/objects.rs
+  s_243209e7a7ea3a::t_41674f052069fa 91
+crates/kanban-service/src/objects/planning/closure_history.rs
+  s_243209e7a7ea3a::t_4e919bdb4344fb 95-115,133-173
+  s_243209e7a7ea3a::t_a7e0580df1a4e8 1-2,5-15,59-75,78-94
+  s_243209e7a7ea3a::t_6fd38525b4c6df 116-132
+  s_243209e7a7ea3a::t_27187da90798b9 76-77
+  s_243209e7a7ea3a::t_41674f052069fa 3-4,16-58
+crates/kanban-service/src/migration_snapshot/conversion/closures/tests.rs
+  s_243209e7a7ea3a::t_99494f9d4b2080 239-281
+crates/kanban-service/docs/object_closure_migration.md
+  s_243209e7a7ea3a::t_c658b189b6085c 7-9
+crates/kanban-service/src/migration_snapshot/conversion.rs
+  s_243209e7a7ea3a::t_a4dbd55080962d 17
+crates/kanban-service/src/migration_snapshot/conversion/closures.rs
+  s_243209e7a7ea3a::t_a4dbd55080962d 1,136,169
+crates/kanban-service/src/migration_snapshot/conversion/cycle_closures/transform.rs
+  s_243209e7a7ea3a::t_b71bae5cc28461 1-20,22-87,89-104,109-127,131-170
+  s_243209e7a7ea3a::t_67475517d0a70f 21
+  s_243209e7a7ea3a::t_99494f9d4b2080 88
+  s_243209e7a7ea3a::t_27187da90798b9 105-108,128-130
+crates/kanban-service/docs/object_cycle_closure_migration.md
+  s_243209e7a7ea3a::t_27187da90798b9 20-23
+  s_243209e7a7ea3a::t_c658b189b6085c 1-19,24-30
+crates/kanban-service/src/objects/catalog.rs
+  s_243209e7a7ea3a::t_a7e0580df1a4e8 17,30,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2000bd51ef77ff419be20d9268b2ffa145650604",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

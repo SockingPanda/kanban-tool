@@ -1,0 +1,19 @@
+crates/kanban-service/src/migration_snapshot/runner/tests.rs
+  s_243209e7a7ea3a::t_5ade5412871c24 12,32-43,45-46,98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b33ef6395652305f8826f5c05933c7b05cfee02d",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

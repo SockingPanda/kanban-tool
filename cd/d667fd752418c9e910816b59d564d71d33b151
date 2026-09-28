@@ -1,0 +1,35 @@
+crates/kanban-service/docs/migration_snapshot.md
+  s_243209e7a7ea3a::t_1cba81c3a42940 149,280-281
+crates/kanban-service/src/migration_snapshot/conversion/logs.rs
+  s_243209e7a7ea3a::t_6900e08f888566 239-246
+crates/kanban-service/src/migration_snapshot/conversion/queue.rs
+  s_243209e7a7ea3a::t_d6f99c694f01aa 20-21,167,202,238,296
+crates/kanban-service/src/migration_snapshot/conversion/queue/transform.rs
+  s_243209e7a7ea3a::t_ea1090c6d4682a 8,15,212-220,222-231
+crates/kanban-service/src/migration_snapshot/conversion/queue/tests.rs
+  s_ca6c506c34b71e::t_0253c98268b526 4,397-443
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cdd667fd752418c9e910816b59d564d71d33b151",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    },
+    "s_ca6c506c34b71e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e818-eb96-7bb0-a1a1-0bc3b17a29ba",
+        "model": "unknown"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

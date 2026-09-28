@@ -1,0 +1,58 @@
+apps/web/src/features/object-kernel/ObjectKernelAdminWorkspace.tsx
+  s_243209e7a7ea3a::t_4856a3ce725980 1-20,23-54,56-66,69-72,75-76,78-112,114-139
+  s_243209e7a7ea3a::t_6aedf5f2bb5bf0 21-22,55,67-68,73-74,77,113
+apps/web/src/adapters/host/object-kernel-admin.ts
+  s_243209e7a7ea3a::t_ec4c09d5c05b75 1-9
+apps/web/src/application/data/object-kernel-admin.ts
+  s_243209e7a7ea3a::t_9430a2bb8e9bfe 162
+  s_243209e7a7ea3a::t_ec4c09d5c05b75 1-5,9-10,12-86,88-90,92-111,113-117,119-161,163-205,207-217,219-225,227-277
+  s_243209e7a7ea3a::t_584fb55141fe73 6-8,11,87,91,112,118,206,218,226
+apps/web/src/features/object-kernel/SchemaPanel.tsx
+  s_243209e7a7ea3a::t_538fc8d4b122ae 47,75,88,162,174-176,195,213,229
+  s_243209e7a7ea3a::t_9430a2bb8e9bfe 1,3-42,45-46,48-50,52-61,63-74,76-81,83-87,89-93,95-101,104-113,115-123,125-137,139-149,151-161,163-173,177-194,196-212,214-228,230-247
+  s_243209e7a7ea3a::t_8b48d9053d1c67 2,51,62,82,94,114,150
+  s_243209e7a7ea3a::t_b5796bd75c4502 43-44,102-103,124,138
+apps/web/src/features/object-kernel/index.ts
+  s_243209e7a7ea3a::t_4856a3ce725980 1-2
+apps/web/src/features/object-kernel/ObjectsPanel.tsx
+  s_243209e7a7ea3a::t_7dfdfa4f61076f 2,135,173,181,240,317,327
+  s_243209e7a7ea3a::t_6aedf5f2bb5bf0 64,73-74,330,339
+  s_243209e7a7ea3a::t_6e795caeb85912 1,3-63,65-72,75-134,136-172,174-180,182-239,241-316,318-326,328-329,331-338,340-430
+apps/web/docs/object-kernel-admin.md
+  s_243209e7a7ea3a::t_04139771637d75 1-28
+apps/web/src/features/object-kernel/object-kernel-admin.module.css
+  s_243209e7a7ea3a::t_4856a3ce725980 1-32
+apps/web/src/platform/localization/locales/en/object-admin.json
+  s_243209e7a7ea3a::t_98aaa226eed28f 1-21,23-103,105-107,112-136
+  s_243209e7a7ea3a::t_0679f0e58267ae 104,108-111
+  s_243209e7a7ea3a::t_800dc15942bcb3 22
+apps/web/src/features/object-kernel/WorkflowsPanel.tsx
+  s_243209e7a7ea3a::t_801abd0801dc53 1,3-37,39-47,49-176,180-185,188-201
+  s_243209e7a7ea3a::t_400e586963fa44 38,177-179,186-187
+  s_243209e7a7ea3a::t_8b48d9053d1c67 2,48
+apps/web/src/features/object-kernel/ViewsPanel.tsx
+  s_243209e7a7ea3a::t_0c6dcf84e40d6e 1,3-5,8-22,25-33,36-48,50-57,60-65,67,69-70,72-74,76-82,84-88,90-91,93-95,97-99,101,104-152,154-156,162-163,169-178,185-192,194-198,201-204
+  s_243209e7a7ea3a::t_5258a3815d2b93 6,153,157-161
+  s_243209e7a7ea3a::t_ebd5ae66da960d 7,23-24,34-35,49,58-59,66,68,75,89,92,96,100,102-103,164-168,179-184,193,199-200
+  s_243209e7a7ea3a::t_8b48d9053d1c67 2,71,83
+apps/web/src/platform/localization/locales/zh/object-admin.json
+  s_243209e7a7ea3a::t_0679f0e58267ae 104,108-111
+  s_243209e7a7ea3a::t_98aaa226eed28f 1-21,23-103,105-107,112-136
+  s_243209e7a7ea3a::t_800dc15942bcb3 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d65c5ae3ebcf4e233fde1d2efcd69e439d37be7d",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

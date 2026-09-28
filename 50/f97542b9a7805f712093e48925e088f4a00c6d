@@ -1,0 +1,25 @@
+crates/kanban-cli/README.md
+  s_243209e7a7ea3a::t_0853a2f9f49aef 42-43
+  s_243209e7a7ea3a::t_d6fcabd4396577 70
+crates/kanban-cli/src/commands/object_kernel.rs
+  s_243209e7a7ea3a::t_0853a2f9f49aef 39-47,705-706,712-713,719-720,724
+  s_243209e7a7ea3a::t_de89199a69537a 393
+crates/kanban-cli/src/commands/object_kernel/board.rs
+  s_243209e7a7ea3a::t_d6fcabd4396577 59-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "50f97542b9a7805f712093e48925e088f4a00c6d",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

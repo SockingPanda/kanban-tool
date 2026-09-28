@@ -1,0 +1,21 @@
+crates/kanban-kernel/src/import_session.rs
+  s_243209e7a7ea3a::t_037f19a5543a2a 8-12,202-203,209-241,243-250,296
+  s_243209e7a7ea3a::t_ac0de039b5b339 302
+  s_243209e7a7ea3a::t_850b30047520dd 251-253,271,276,297,305,315,322,344,368,386,392,407,418,430,448,464,475,481,492,501,512,545,571,577,585,614
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "49a51388b081f0a73f04cdc185b688be39234d22",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

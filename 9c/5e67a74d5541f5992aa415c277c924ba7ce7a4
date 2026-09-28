@@ -1,0 +1,29 @@
+crates/kanban-service/src/maintenance/snapshot.rs
+  s_243209e7a7ea3a::t_6c1c5584d5f81b 3,149-150,154-158,160,166-173,178,197,199,206
+crates/kanban-service/src/migration_snapshot/conversion/attachments.rs
+  s_243209e7a7ea3a::t_7b4d5605f55e6d 173
+crates/kanban-service/src/migration_snapshot/runner/stages.rs
+  s_243209e7a7ea3a::t_4e9d318d7f55da 1,5-9,16-36,170-175,181-182,187,199,237,253,255,257,286,295,306,317,328,338,348,360,364,376,391,400,404,414,424,434,444,454,458,462,466,470,480,490,500,513,528,531,534,537,540,543,546,549,552,555,558,561,564
+crates/kanban-service/src/migration_snapshot/tests.rs
+  s_243209e7a7ea3a::t_6c0eb1dc3287bc 73-109
+crates/kanban-service/docs/migration_runner.md
+  s_243209e7a7ea3a::t_dcc6a4908f8ea6 9-13
+crates/kanban-service/src/migration_snapshot/runner.rs
+  s_243209e7a7ea3a::t_762459f1e9d31b 170,172,200,216,222-223
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9c5e67a74d5541f5992aa415c277c924ba7ce7a4",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

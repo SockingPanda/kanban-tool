@@ -1,0 +1,51 @@
+crates/kanban-service/src/migration_snapshot/conversion/coverage/tests.rs
+  s_243209e7a7ea3a::t_b1a2d8ea64d50d 17-20,28,56-60,79-85,93-99,105-108,114-125,132-138,144-148,152-154,156-169,177-179,181-188,198-217,219-235,238-248,252-270,276-278
+  s_243209e7a7ea3a::t_a3e4cf7c9b3f69 1-16,21-27,29-55,61-78,86-92,100-104,109-113,126-131,139-143,149-151,155,170-176,180,189-197,218,236-237,249-251,271-275,279-282
+  s_243209e7a7ea3a::t_551c73bc5f46c3 283-285
+crates/kanban-service/src/migration_snapshot/conversion/coverage.rs
+  s_243209e7a7ea3a::t_db79c863938cf3 1-185,187-188,190-192,194-195,197-202,206-207,209-210,225-259,268-322
+  s_243209e7a7ea3a::t_2df4fe23d95d29 186,189,193,196,203-205,208,211-224,260-267
+  s_243209e7a7ea3a::t_1acb93dd8b0d06 323-350
+crates/kanban-service/docs/migration_snapshot.md
+  s_243209e7a7ea3a::t_a3e4cf7c9b3f69 86-101
+docs/adr/0011_object_kernel.md
+  s_243209e7a7ea3a::t_a3e4cf7c9b3f69 95-97
+crates/kanban-service/src/migration_snapshot/conversion.rs
+  s_243209e7a7ea3a::t_db79c863938cf3 12
+crates/kanban-service/src/migration_snapshot/conversion/attachments.rs
+  s_243209e7a7ea3a::t_e42c7bbebfafd3 46
+crates/kanban-service/src/migration_snapshot/conversion/coverage/selectors.rs
+  s_243209e7a7ea3a::t_4dbe73f007bcf2 1-136
+crates/kanban-service/src/migration_snapshot/conversion/custom.rs
+  s_243209e7a7ea3a::t_2a21489404dce9 60
+crates/kanban-service/src/migration_snapshot/conversion/graph.rs
+  s_243209e7a7ea3a::t_09257940e1b812 44
+crates/kanban-service/src/migration_snapshot/conversion/history.rs
+  s_243209e7a7ea3a::t_82facabf41b9be 41
+crates/kanban-service/src/migration_snapshot/conversion/planning.rs
+  s_243209e7a7ea3a::t_ef9f45039ebbdf 43
+crates/kanban-service/src/migration_snapshot/conversion/queue.rs
+  s_243209e7a7ea3a::t_4b68be00e0d4fa 79
+crates/kanban-service/src/migration_snapshot/conversion/relations.rs
+  s_243209e7a7ea3a::t_6eb91590674748 53
+crates/kanban-service/src/migration_snapshot/conversion/settings.rs
+  s_243209e7a7ea3a::t_0e5d4d6f7d5cf4 17
+crates/kanban-service/src/migration_snapshot/conversion/subtasks.rs
+  s_243209e7a7ea3a::t_adba1dca1c3e50 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "21016b9fc4b4fded8fe984ee1e8b32d8cabd05c3",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

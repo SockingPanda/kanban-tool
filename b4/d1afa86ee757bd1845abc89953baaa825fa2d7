@@ -1,0 +1,78 @@
+crates/kanban-kernel/src/diagnostics.rs
+  s_243209e7a7ea3a::t_19c1bcc3245709 1-192
+  s_243209e7a7ea3a::t_74e08ad8130b33 193-196
+crates/kanban-kernel/src/tests/diagnostics.rs
+  s_243209e7a7ea3a::t_ba31305126852f 1-122
+  s_243209e7a7ea3a::t_8239db6f8fc75c 123-186
+crates/kanban-kernel/Cargo.toml
+  s_243209e7a7ea3a::t_2262379df0717a 16
+crates/kanban-kernel/README.md
+  s_243209e7a7ea3a::t_ba31305126852f 134-145
+crates/kanban-kernel/src/snapshot.rs
+  s_243209e7a7ea3a::t_8834ea54e7c34d 4,21-41,43-52
+  s_243209e7a7ea3a::t_ed557f391de566 2,57-62
+crates/kanban-kernel/src/tests.rs
+  s_243209e7a7ea3a::t_ba31305126852f 4
+crates/kanban-kernel/src/lib.rs
+  s_243209e7a7ea3a::t_2262379df0717a 5,18,23
+Cargo.lock
+  s_2345e25ab01be7::t_eac6fe5a4fbd19 2895
+crates/kanban-kernel/src/bootstrap.rs
+  s_243209e7a7ea3a::t_8bac1b987d74fb 2
+crates/kanban-kernel/src/history.rs
+  s_243209e7a7ea3a::t_9cfdc553ba786d 2,10
+crates/kanban-kernel/src/import_graph.rs
+  s_243209e7a7ea3a::t_120720318df9a1 4-5
+crates/kanban-kernel/src/import_provenance.rs
+  s_243209e7a7ea3a::t_d9401356779997 2,5
+crates/kanban-kernel/src/import_session.rs
+  s_243209e7a7ea3a::t_1a39ee7fc65d10 2,9
+crates/kanban-kernel/src/index.rs
+  s_243209e7a7ea3a::t_362ef415d2639b 2,5
+crates/kanban-kernel/src/query.rs
+  s_243209e7a7ea3a::t_14134df55a7a95 2,5,221-245,247-256,346-372
+crates/kanban-kernel/src/query/plan.rs
+  s_243209e7a7ea3a::t_e64059b2400117 2,5
+crates/kanban-kernel/src/relations.rs
+  s_243209e7a7ea3a::t_6d606145d4717d 51
+crates/kanban-kernel/src/schema.rs
+  s_243209e7a7ea3a::t_8b570392d7526d 2,6
+crates/kanban-kernel/src/sort_index.rs
+  s_243209e7a7ea3a::t_529253c1e32da7 3
+crates/kanban-kernel/src/sql.rs
+  s_243209e7a7ea3a::t_e508b862a7f300 1-136
+crates/kanban-kernel/src/sql/tests.rs
+  s_243209e7a7ea3a::t_a144f90be8dc23 1-202
+crates/kanban-kernel/src/storage.rs
+  s_243209e7a7ea3a::t_64928ab2e3cc95 8,10,24,36,120,186-238,241-274,276
+crates/kanban-kernel/src/transaction.rs
+  s_243209e7a7ea3a::t_96e8b855ed0d6a 2,10,44,80,387,502-505,520,574,618,661,1073-1080,1083-1092,1207,1209
+crates/kanban-kernel/src/transaction/schema.rs
+  s_243209e7a7ea3a::t_ac4e80db4a0bd2 170
+crates/kanban-kernel/src/transaction/scopes.rs
+  s_243209e7a7ea3a::t_5cfbc642a4e352 45-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b4d1afa86ee757bd1845abc89953baaa825fa2d7",
+  "prompts": {},
+  "sessions": {
+    "s_2345e25ab01be7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e1ce-6541-7200-beb6-98ccca8e0ce1",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    },
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

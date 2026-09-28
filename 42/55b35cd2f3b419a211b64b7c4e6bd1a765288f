@@ -1,0 +1,64 @@
+crates/kanban-service/src/objects/lifecycle.rs
+  s_243209e7a7ea3a::t_2d2e0e70496b1d 41-46,53-62,106
+  s_243209e7a7ea3a::t_7f35d0233fadcc 107-109,114-116
+crates/kanban-service/src/objects/lifecycle/guards.rs
+  s_243209e7a7ea3a::t_96dad9faefca9c 48-51,65-68,144-145,147-149
+  s_243209e7a7ea3a::t_10fee9f1324413 150-153
+crates/kanban-service/src/objects/rollups/tests/time_windows.rs
+  s_243209e7a7ea3a::t_96dad9faefca9c 1-400
+  s_243209e7a7ea3a::t_24940a2754c68d 401-475
+crates/kanban-service/src/objects/time_windows/definition.rs
+  s_243209e7a7ea3a::t_2d2e0e70496b1d 1-185
+crates/kanban-service/src/objects/relations/mutation.rs
+  s_243209e7a7ea3a::t_7930bc949964d3 23-26,32-36,102-105
+crates/kanban-service/src/objects/rollups.rs
+  s_243209e7a7ea3a::t_2acb0b62d463e4 83-90,94,125-128,161
+crates/kanban-service/src/objects/rollups/query.rs
+  s_243209e7a7ea3a::t_5a6c0a9f01e728 22-26,32-43
+crates/kanban-service/src/objects/schema.rs
+  s_243209e7a7ea3a::t_9bbe006621f661 19-20,46-47,94
+crates/kanban-service/src/objects/time_windows.rs
+  s_243209e7a7ea3a::t_6de456aff2a61e 1-192
+crates/kanban-service/src/objects/time_windows/catalog.rs
+  s_243209e7a7ea3a::t_e68ad5930c95d8 1-161
+crates/kanban-service/src/objects/time_windows/closure.rs
+  s_243209e7a7ea3a::t_8d970dfc959ba6 1-317
+crates/kanban-service/src/objects/time_windows/execution.rs
+  s_243209e7a7ea3a::t_0e0e5faaeaac37 1-176
+crates/kanban-service/src/objects/time_windows/guards.rs
+  s_243209e7a7ea3a::t_63268d717c6ca8 1-165
+crates/kanban-service/docs/object_kernel.md
+  s_243209e7a7ea3a::t_5c9b9b32c3084e 76-77,209-212
+crates/kanban-service/docs/object_rollups.md
+  s_243209e7a7ea3a::t_c3786f766df6e1 23-25
+crates/kanban-service/docs/object_time_windows.md
+  s_243209e7a7ea3a::t_dd84cb0b0b8421 1-28
+crates/kanban-service/src/objects.rs
+  s_243209e7a7ea3a::t_986f180a5001bf 24,90
+crates/kanban-service/src/objects/catalog.rs
+  s_243209e7a7ea3a::t_14213257e07b34 46,76-77
+crates/kanban-service/src/objects/files/owners.rs
+  s_243209e7a7ea3a::t_fd330984650297 18
+crates/kanban-service/src/objects/rollups/tests.rs
+  s_243209e7a7ea3a::t_493a22b16cf2d6 4-5
+crates/kanban-service/src/objects/selections/mutation.rs
+  s_243209e7a7ea3a::t_bfa9f588e76a76 23
+crates/kanban-service/src/objects/type_lifecycle.rs
+  s_243209e7a7ea3a::t_3ba1e050de4910 77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4255b35cd2f3b419a211b64b7c4e6bd1a765288f",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,53 @@
+crates/kanban-cli/README.md
+  s_243209e7a7ea3a::t_db4e819eeb2950 30,47,52-56,58-60
+crates/kanban-cli/src/commands/object_kernel.rs
+  s_243209e7a7ea3a::t_0c332cef285255 979-981,999-1007,1010-1020
+  s_243209e7a7ea3a::t_d470c4bef50f6a 1021-1062
+  s_243209e7a7ea3a::t_b780c73826a1f4 1063-1073,1075-1081
+  s_243209e7a7ea3a::t_ab559c2933b989 851-860,863-872,875-890,893-904,961
+  s_243209e7a7ea3a::t_15057ab9822260 715,717-722,742-746,749-760,785-789
+  s_243209e7a7ea3a::t_042b5035b82fe1 12-13,259-263,406-410,412,432,439,448
+  s_243209e7a7ea3a::t_ec9a2034a33eca 496,611-616,636,656,674,685,698-703
+crates/kanban-cli/tests/cli_knowledge_adoption.rs
+  s_243209e7a7ea3a::t_7c67f5f1aa7ca8 1,10
+crates/kanban-cli/src/commands/object_kernel/board.rs
+  s_243209e7a7ea3a::t_915d9b0d2a7777 30
+  s_243209e7a7ea3a::t_ae5c2926ae624a 34-43,46
+crates/kanban-cli/src/commands/object_kernel/step.rs
+  s_243209e7a7ea3a::t_915d9b0d2a7777 38,79,94,105,128
+crates/kanban-cli/src/commands/object_kernel/dependency.rs
+  s_243209e7a7ea3a::t_3906248840290f 2,4,32,35,57
+crates/kanban-cli/Cargo.toml
+  s_243209e7a7ea3a::t_fd91c9ce3755b3 26
+  s_243209e7a7ea3a::t_56f269cbfa7cc3 22
+crates/kanban-cli/src/commands/object_kernel/comment.rs
+  s_243209e7a7ea3a::t_915d9b0d2a7777 44
+crates/kanban-cli/src/completion.rs
+  s_243209e7a7ea3a::t_e1fb2ec6e30caa 63
+crates/kanban-cli/tests/label_contract_adoption.rs
+  s_243209e7a7ea3a::t_c8373f6abd90ba 1,5
+crates/kanban-cli/src/main.rs
+  s_243209e7a7ea3a::t_ecc1b7707e8032 321-322,324,453-460,467-469,485-487
+  s_243209e7a7ea3a::t_13c9b3647b37a5 500-501
+  s_243209e7a7ea3a::t_6e6c89721d59cd 441-452,461-466,470-471,483-484,490-499,502-506
+  s_243209e7a7ea3a::t_6667a9442fc877 476-481,488-489
+  s_243209e7a7ea3a::t_6b8ffa18601735 323,472-475
+crates/kanban-cli/src/commands/object_kernel/task.rs
+  s_243209e7a7ea3a::t_0e3adbc3079e87 2,4,59,71-72,74,76,91,102,119,163,267,286,302,324
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3478e9d9780d357ce0a8afbe0f90f0bdae61665b",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

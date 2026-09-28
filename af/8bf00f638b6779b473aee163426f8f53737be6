@@ -1,0 +1,28 @@
+apps/mcp-app/src/app-session.ts
+  s_243209e7a7ea3a::t_bafffdaab141e2 36,54
+apps/mcp-app/src/workbench-controller.test.ts
+  s_243209e7a7ea3a::t_544f8d8327bffa 6,47
+  s_243209e7a7ea3a::t_51918faacec266 142
+  s_243209e7a7ea3a::t_abc1ec6ac7abca 141
+  s_243209e7a7ea3a::t_790ef84541dac5 135-140,143-160
+apps/mcp-app/src/app-session.test.ts
+  s_243209e7a7ea3a::t_e400c4108c23a0 20,38,115,177-178,205
+apps/mcp-app/src/workbench-controller.ts
+  s_243209e7a7ea3a::t_bafffdaab141e2 52,217-221,228-232,238,249-250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "af8bf00f638b6779b473aee163426f8f53737be6",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

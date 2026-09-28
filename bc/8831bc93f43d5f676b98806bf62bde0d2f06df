@@ -1,0 +1,27 @@
+Cargo.toml
+  s_243209e7a7ea3a::t_c286313b494700 31-37,76
+scripts/test-cargo-target-tools.sh
+  s_243209e7a7ea3a::t_c286313b494700 345,349-350,352-355,357,681
+docs/collaboration.md
+  s_243209e7a7ea3a::t_749c04cf67d25d 62-66
+Cargo.lock
+  s_243209e7a7ea3a::t_2ac56e72505632 2833,2840
+crates/kanban-cli/src/server.rs
+  s_243209e7a7ea3a::t_6bb23187d80083 146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bc8831bc93f43d5f676b98806bf62bde0d2f06df",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

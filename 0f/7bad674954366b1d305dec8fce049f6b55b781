@@ -1,0 +1,96 @@
+crates/kanban-server/src/grpc/object_kernel/tests/lifecycle.rs
+  s_243209e7a7ea3a::t_19da0dfcf3bcd7 34
+  s_243209e7a7ea3a::t_22c95c54641524 1-33,35-45
+  s_243209e7a7ea3a::t_2f0bd7abe8f103 46-138
+crates/kanban-service/src/migration_snapshot/conversion/custom/tests.rs
+  s_243209e7a7ea3a::t_22c95c54641524 283,286-290
+  s_243209e7a7ea3a::t_806e4c3998a42b 291-303,390-403,412-417
+crates/kanban-service/docs/object_relations.md
+  s_243209e7a7ea3a::t_19da0dfcf3bcd7 15-16
+crates/kanban-service/docs/object_workflow.md
+  s_243209e7a7ea3a::t_19da0dfcf3bcd7 55
+crates/kanban-server/docs/object_kernel_rpc.md
+  s_243209e7a7ea3a::t_8ff265016df77a 20-23
+crates/kanban-service/docs/migration_snapshot.md
+  s_243209e7a7ea3a::t_19da0dfcf3bcd7 188,193-195,211-213
+crates/kanban-protocol/src/rpc/objects/json/tests.rs
+  s_243209e7a7ea3a::t_22c95c54641524 11,71-85,88
+  s_243209e7a7ea3a::t_bb8089a0ee109f 86-87,89-94
+crates/kanban-service/docs/object_kernel.md
+  s_243209e7a7ea3a::t_22c95c54641524 19-20
+  s_243209e7a7ea3a::t_19da0dfcf3bcd7 17-18,67-77
+  s_243209e7a7ea3a::t_eeb54bade4268f 78
+crates/kanban-service/src/objects/lifecycle/guards.rs
+  s_243209e7a7ea3a::t_19da0dfcf3bcd7 1-139
+  s_243209e7a7ea3a::t_2958c09816e487 140-158
+crates/kanban-server/src/grpc/object_kernel/tests.rs
+  s_243209e7a7ea3a::t_22c95c54641524 6
+crates/kanban-protocol/src/rpc/objects/lifecycle.rs
+  s_243209e7a7ea3a::t_b0eb36ec737fa2 1-42
+crates/kanban-server/src/grpc/object_kernel.rs
+  s_243209e7a7ea3a::t_cb2328cb1a64cc 551-563
+crates/kanban-server/src/grpc/object_kernel/codec/lifecycle.rs
+  s_243209e7a7ea3a::t_6ae345cac93ba6 1-15
+crates/kanban-service/src/objects/lifecycle.rs
+  s_243209e7a7ea3a::t_42ed1b2b0d3e4b 1-125
+crates/kanban-service/src/objects/lifecycle/hierarchy.rs
+  s_243209e7a7ea3a::t_291db471963e8d 1-92
+crates/kanban-service/src/objects/lifecycle/tests.rs
+  s_243209e7a7ea3a::t_c11bb4d369c356 1-498
+crates/kanban-service/src/objects/relations/mutation.rs
+  s_243209e7a7ea3a::t_740db5aa348fdf 92-95,98,104-105,108-118
+crates/kanban-service/src/objects/selections/mutation.rs
+  s_243209e7a7ea3a::t_7450ec996535ae 20-23,28
+crates/kanban-client/src/object_kernel.rs
+  s_243209e7a7ea3a::t_4d543605afbc3f 94
+crates/kanban-mcp/src/tools/objects_v2.rs
+  s_243209e7a7ea3a::t_fa5956d4b00efe 126
+crates/kanban-mcp/src/tools/objects_v2/tests.rs
+  s_243209e7a7ea3a::t_d1b1c0104e79d0 28,30,35
+crates/kanban-protocol/proto/kanban/objects/v2/kernel.proto
+  s_243209e7a7ea3a::t_baa5215bc88b01 397-399,770
+crates/kanban-protocol/proto/rpc-extensions.json
+  s_243209e7a7ea3a::t_7a5ea15ed478b8 551-559
+crates/kanban-protocol/src/rpc/objects.rs
+  s_243209e7a7ea3a::t_e0fc59d359166e 6
+crates/kanban-server/src/grpc/object_kernel/codec.rs
+  s_243209e7a7ea3a::t_7ebe03c171dc7c 8
+crates/kanban-service/src/migration_snapshot/conversion/custom/catalog.rs
+  s_243209e7a7ea3a::t_76935f139fc67b 100-104
+crates/kanban-service/src/migration_snapshot/conversion/custom/values.rs
+  s_243209e7a7ea3a::t_6043273eb6e7cb 28-34
+crates/kanban-service/src/objects.rs
+  s_243209e7a7ea3a::t_76312e9ccb69bd 15,78,80,89-93,95-97
+crates/kanban-service/src/objects/catalog.rs
+  s_825f157e08ffee::t_9d7cbf0fad9bb7 44,71-72
+crates/kanban-service/src/objects/defaults.rs
+  s_243209e7a7ea3a::t_09fd2a5d065c02 63,65,67
+crates/kanban-service/src/objects/files/owners.rs
+  s_243209e7a7ea3a::t_a6d46b9bd082c5 17,87
+crates/kanban-service/src/objects/workflow/execution.rs
+  s_825f157e08ffee::t_fd650c061d47de 125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0f7bad674954366b1d305dec8fce049f6b55b781",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    },
+    "s_825f157e08ffee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e823-dccc-7fb2-aba5-39a0c0e16db7",
+        "model": "unknown"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+justfile
+  s_243209e7a7ea3a::t_2a85fd3a357e8d 256-259
+apps/desktop/README.md
+  s_243209e7a7ea3a::t_2a85fd3a357e8d 47-48
+scripts/test-desktop-package-config.sh
+  s_243209e7a7ea3a::t_2a85fd3a357e8d 110-115,118-120
+  s_243209e7a7ea3a::t_6222cdc109e1c0 116-117,138-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e858c7bf846f75ca4845c5fe9ee729ed4a25e038",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

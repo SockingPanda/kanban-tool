@@ -1,0 +1,54 @@
+apps/desktop/src-tauri/src/desktop_config.rs
+  s_243209e7a7ea3a::t_43eb6113eb57e6 45-50
+  s_243209e7a7ea3a::t_5ba36022a52983 216-221,226-235,239-255,259-262,264-299
+  s_243209e7a7ea3a::t_3422c5e8e30f2d 263
+  s_243209e7a7ea3a::t_73855a52c196fb 222-225,236-238,256-258
+  s_243209e7a7ea3a::t_dce8d779ccc1bb 3,8,11,13-44,51-63,71,78-79,83-130
+  s_243209e7a7ea3a::t_4c96ddcbce18b0 131
+apps/desktop/src-tauri/src/bootstrap_state.rs
+  s_243209e7a7ea3a::t_06bf747e908a87 3-4,106-113,127-129
+apps/desktop/docs/layout.md
+  s_243209e7a7ea3a::t_69ee0f4d961146 7-9
+apps/desktop/README.md
+  s_243209e7a7ea3a::t_69ee0f4d961146 15-36,40
+apps/desktop/src-tauri/src/lib.rs
+  s_243209e7a7ea3a::t_093b6980146342 21,60-68,71-74,77-78,80,86-91
+  s_243209e7a7ea3a::t_40802caac9e1f6 191-193
+apps/desktop/src-tauri/src/host_lifecycle.rs
+  s_243209e7a7ea3a::t_accc2962129faf 23,32-49,223,225,230,254-269,278,288,310,347-369,682,706,724-728,1218,1223,1369,1523
+  s_243209e7a7ea3a::t_ad2366e6b270b8 6,1282,1345-1368
+  s_243209e7a7ea3a::t_73855a52c196fb 50
+  s_243209e7a7ea3a::t_3422c5e8e30f2d 2379-2406,2412-2414,2416-2422,2424-2427,2429-2464
+  s_243209e7a7ea3a::t_edc5f474c93b78 2407-2411,2415,2423,2428
+  s_243209e7a7ea3a::t_816586b46cf41d 1370
+apps/desktop/src-tauri/src/bootstrap.rs
+  s_243209e7a7ea3a::t_73855a52c196fb 166
+  s_243209e7a7ea3a::t_4e9ec42027fcc4 21,24,156,172-180,204,387-397,740,866-868
+  s_243209e7a7ea3a::t_40802caac9e1f6 1059-1092
+  s_243209e7a7ea3a::t_d629d0bd5452e9 171
+  s_243209e7a7ea3a::t_28aa06250e3f6e 1058
+apps/desktop/bootstrap/index.html
+  s_243209e7a7ea3a::t_2e7cfa400f189a 29-40
+apps/desktop/bootstrap/bootstrap.js
+  s_243209e7a7ea3a::t_195322ae153d34 16-18,37-50,60-62,81-94,102-104,116-118,165-167,199,201-203,205-206,249-251
+  s_243209e7a7ea3a::t_259355190a4bfc 200,204
+apps/desktop/bootstrap/bootstrap.css
+  s_243209e7a7ea3a::t_259355190a4bfc 144-150,299-302
+  s_243209e7a7ea3a::t_c306f6256ad8c2 303-304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "249e1a6ba38c63d63bc63328cb84e3760625e94e",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

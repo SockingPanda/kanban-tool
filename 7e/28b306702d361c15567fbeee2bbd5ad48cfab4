@@ -1,0 +1,40 @@
+crates/kanban-mcp/src/tools/render.rs
+  s_243209e7a7ea3a::t_ae81d800d8cc9e 1-140
+  s_243209e7a7ea3a::t_0e30e086eb7ff7 141-173
+crates/kanban-mcp/tests/stdio_native.rs
+  s_243209e7a7ea3a::t_48069f3ad06117 63-69
+  s_243209e7a7ea3a::t_ad42ec1b674c6b 70-82,202,500
+crates/kanban-mcp/src/ui.rs
+  s_243209e7a7ea3a::t_21e4f008051c4f 7,14,87-97
+  s_243209e7a7ea3a::t_e9b757088f1fdb 98-101
+crates/kanban-mcp/README.md
+  s_243209e7a7ea3a::t_8dc7e9c43b34fe 41,45-49
+crates/kanban-mcp/src/handler.rs
+  s_243209e7a7ea3a::t_3c63b27954b14f 125-137
+crates/kanban-mcp/src/main.rs
+  s_243209e7a7ea3a::t_d2ab3255311a81 43,60,119
+crates/kanban-mcp/src/policy.rs
+  s_243209e7a7ea3a::t_1193d34f282804 24,50-51,128,147-153,237-238,254,259
+crates/kanban-mcp/src/resources.rs
+  s_243209e7a7ea3a::t_ba7d30c4f6c640 31-33,70-71,81-83
+crates/kanban-mcp/src/tools.rs
+  s_243209e7a7ea3a::t_6ba60491fc44d3 22
+crates/kanban-mcp/src/ui/tests.rs
+  s_243209e7a7ea3a::t_2ca462fdb79383 2,102-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7e28b306702d361c15567fbeee2bbd5ad48cfab4",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

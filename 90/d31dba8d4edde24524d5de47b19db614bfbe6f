@@ -1,0 +1,40 @@
+crates/kanban-service/src/migration_snapshot/conversion/history/payload.rs
+  s_243209e7a7ea3a::t_4aeea2ee354148 60
+  s_243209e7a7ea3a::t_80222a8b398bf3 53
+crates/kanban-service/src/migration_snapshot/conversion.rs
+  s_243209e7a7ea3a::t_80222a8b398bf3 15
+crates/kanban-service/src/migration_snapshot/conversion/history.rs
+  s_243209e7a7ea3a::t_80222a8b398bf3 11,62-68,190-200,203,220
+crates/kanban-service/src/migration_snapshot/conversion/closures/tests.rs
+  s_243209e7a7ea3a::t_353f4c37798801 1-9,11-105,110-153,156-159,161-238
+  s_243209e7a7ea3a::t_586a07e489aae8 106-109,154-155,160
+  s_243209e7a7ea3a::t_84d9751915744e 10
+crates/kanban-service/src/migration_snapshot/conversion/closures.rs
+  s_243209e7a7ea3a::t_227a1873e54ecb 1-23,25,27-168,170-236
+  s_243209e7a7ea3a::t_1fb8af8ceafc47 24,26,169
+crates/kanban-service/src/objects/time_windows/catalog.rs
+  s_243209e7a7ea3a::t_80222a8b398bf3 114-116,135,143
+crates/kanban-service/src/migration_snapshot/conversion/rows.rs
+  s_243209e7a7ea3a::t_67d8d2ca615807 91-106,169
+crates/kanban-service/docs/object_closure_migration.md
+  s_243209e7a7ea3a::t_1fb8af8ceafc47 3-5
+  s_243209e7a7ea3a::t_421d75149c8bbc 1-2,6-23
+crates/kanban-service/src/migration_snapshot/conversion/closures/transform.rs
+  s_243209e7a7ea3a::t_56ba54a271e77f 1-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90d31dba8d4edde24524d5de47b19db614bfbe6f",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

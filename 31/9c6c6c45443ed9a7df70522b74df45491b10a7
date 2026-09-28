@@ -1,0 +1,84 @@
+crates/kanban-protocol/src/rpc/objects/rollups.rs
+  s_243209e7a7ea3a::t_38afd837999f0a 1-69
+  s_243209e7a7ea3a::t_ff1b3c09100b44 70-94
+crates/kanban-service/README.md
+  s_243209e7a7ea3a::t_f870d4a5ec2d09 53
+crates/kanban-server/src/grpc/object_kernel.rs
+  s_243209e7a7ea3a::t_38afd837999f0a 564-576,584
+  s_243209e7a7ea3a::t_5b3c11ba23eaa9 577-583,585-588
+crates/kanban-server/src/grpc/object_kernel/codec/rollups.rs
+  s_243209e7a7ea3a::t_38afd837999f0a 1-32
+  s_243209e7a7ea3a::t_33c04515ccbc54 33-60
+crates/kanban-service/src/objects/rollups/tests.rs
+  s_243209e7a7ea3a::t_f870d4a5ec2d09 138
+  s_243209e7a7ea3a::t_eb16eb6c66920a 1-137,139-162
+  s_243209e7a7ea3a::t_7d77f2735d5188 163-422
+crates/kanban-protocol/src/rpc/objects.rs
+  s_243209e7a7ea3a::t_38afd837999f0a 8
+crates/kanban-server/docs/object_kernel_rpc.md
+  s_243209e7a7ea3a::t_4698e857331f7c 71-75
+crates/kanban-protocol/src/rpc/objects/json/tests.rs
+  s_243209e7a7ea3a::t_4698e857331f7c 11,17
+  s_243209e7a7ea3a::t_401494b2486391 71-88
+  s_243209e7a7ea3a::t_ea500f6e10f3ed 89-95
+crates/kanban-server/src/grpc/object_kernel/tests/rollups.rs
+  s_243209e7a7ea3a::t_4698e857331f7c 1-72
+  s_243209e7a7ea3a::t_b21c4fb3939b50 73-180
+crates/kanban-mcp/src/tools/objects_v2/tests.rs
+  s_243209e7a7ea3a::t_4698e857331f7c 28,30,36-37
+crates/kanban-service/src/objects/rollups/query.rs
+  s_243209e7a7ea3a::t_eb16eb6c66920a 1-73
+  s_243209e7a7ea3a::t_aa64b66c96b703 74-106
+crates/kanban-service/docs/object_kernel.md
+  s_243209e7a7ea3a::t_f870d4a5ec2d09 205-207
+crates/kanban-protocol/proto/kanban/objects/v2/kernel.proto
+  s_243209e7a7ea3a::t_38afd837999f0a 400-437,811-813
+  s_243209e7a7ea3a::t_3630c442970d1e 814
+crates/kanban-server/src/grpc/object_kernel/codec.rs
+  s_243209e7a7ea3a::t_38afd837999f0a 10
+crates/kanban-mcp/src/tools/objects_v2.rs
+  s_243209e7a7ea3a::t_38afd837999f0a 127-128
+crates/kanban-protocol/proto/rpc-extensions.json
+  s_243209e7a7ea3a::t_4698e857331f7c 560-577
+crates/kanban-server/src/grpc/object_kernel/tests.rs
+  s_243209e7a7ea3a::t_4698e857331f7c 8
+  s_243209e7a7ea3a::t_93b5c255e32b90 227-231
+crates/kanban-client/src/object_kernel.rs
+  s_243209e7a7ea3a::t_38afd837999f0a 95-96
+crates/kanban-service/src/objects/catalog.rs
+  s_243209e7a7ea3a::t_ca8848a2f1adfd 45,73-75
+crates/kanban-service/src/objects/rollups.rs
+  s_243209e7a7ea3a::t_e3d5c1985f0a28 1-173
+crates/kanban-service/src/objects/rollups/catalog.rs
+  s_243209e7a7ea3a::t_c0a707b1cbc72f 1-73
+crates/kanban-service/src/objects/rollups/definition.rs
+  s_243209e7a7ea3a::t_6932acb4894ab4 1-241
+crates/kanban-service/src/objects/rollups/guards.rs
+  s_243209e7a7ea3a::t_8b4021ae57616b 1-90
+crates/kanban-service/docs/object_rollups.md
+  s_243209e7a7ea3a::t_fe60ea0311d0c4 1-25
+crates/kanban-service/src/objects.rs
+  s_243209e7a7ea3a::t_95fa0148722d24 19,88
+crates/kanban-service/src/objects/relations.rs
+  s_243209e7a7ea3a::t_257f1dd9792e0d 11
+crates/kanban-service/src/objects/relations/definition.rs
+  s_243209e7a7ea3a::t_b7b5b4cb468775 198
+crates/kanban-service/src/objects/schema.rs
+  s_243209e7a7ea3a::t_917b5cf3129a1d 17,42-43,83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "319c6c6c45443ed9a7df70522b74df45491b10a7",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

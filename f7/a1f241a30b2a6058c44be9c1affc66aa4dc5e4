@@ -1,0 +1,30 @@
+crates/kanban-service/src/migration_snapshot/conversion/logs.rs
+  s_243209e7a7ea3a::t_5cfce59a3aca31 1-534
+  s_243209e7a7ea3a::t_86e348334dfa51 535-554
+crates/kanban-service/docs/migration_snapshot.md
+  s_243209e7a7ea3a::t_78f18e863481a9 242-261
+crates/kanban-service/src/migration_snapshot/conversion.rs
+  s_243209e7a7ea3a::t_78f18e863481a9 1
+  s_243209e7a7ea3a::t_5cfce59a3aca31 18
+crates/kanban-service/src/migration_snapshot/conversion/logs/tests.rs
+  s_243209e7a7ea3a::t_5cfce59a3aca31 1-232
+  s_243209e7a7ea3a::t_c89ea99e63fc94 233-236
+crates/kanban-service/src/migration_snapshot/files.rs
+  s_243209e7a7ea3a::t_fe42a3e36a5a1a 142-318,324-331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f7a1f241a30b2a6058c44be9c1affc66aa4dc5e4",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

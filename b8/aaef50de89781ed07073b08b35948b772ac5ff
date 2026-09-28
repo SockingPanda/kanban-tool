@@ -1,0 +1,22 @@
+apps/desktop/README.md
+  s_243209e7a7ea3a::t_c2cab451be68bd 35-36
+apps/desktop/src-tauri/src/host_lifecycle.rs
+  s_243209e7a7ea3a::t_8be8a5ed7d6158 24,49-55,326-332,2251,2452-2453,2481-2504
+  s_243209e7a7ea3a::t_a8fe532a38047c 2505
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8aaef50de89781ed07073b08b35948b772ac5ff",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

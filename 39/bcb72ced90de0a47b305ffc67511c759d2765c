@@ -1,0 +1,23 @@
+apps/web/README.md
+  s_243209e7a7ea3a::t_51a25db93c311b 131-136
+apps/web/src/lib/rpc/object-mcp-transport.test.ts
+  s_243209e7a7ea3a::t_17a879d4f2410b 1-136
+apps/web/src/lib/rpc/object-mcp-transport.ts
+  s_243209e7a7ea3a::t_8b76f9f5b877b9 1-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39bcb72ced90de0a47b305ffc67511c759d2765c",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

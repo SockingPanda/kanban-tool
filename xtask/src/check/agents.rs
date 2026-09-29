@@ -41,6 +41,7 @@ const REQUIRED_SKILL_ROUTES: &[&str] = &[
     "$code-comments",
     "$prose",
     "$docs",
+    "$test-design",
     "$check",
     "$commit",
     "$branch",
@@ -96,6 +97,7 @@ fn check_skill_packages(root: &Path) -> ToolResult<()> {
         "style",
         "branch",
         "code-comments",
+        "test-design",
     ];
     let mut actual = fs::read_dir(&skills_dir)?
         .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
@@ -336,6 +338,7 @@ mod tests {
             "style",
             "branch",
             "code-comments",
+            "test-design",
         ] {
             write_skill(&root, skill);
         }
@@ -387,7 +390,7 @@ mod tests {
 
         write_skill(&root, "check");
         assert!(run(&root).is_ok());
-        for skill in ["branch", "code-comments"] {
+        for skill in ["branch", "code-comments", "test-design"] {
             fs::remove_dir_all(root.join(".agents/skills").join(skill))
                 .expect("技能 fixture 应可删除");
             assert!(run(&root).unwrap_err().to_string().contains("必须精确包含"));

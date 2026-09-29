@@ -23,6 +23,9 @@ description: 在 kanban-tool 新写或修改 Rust、Cargo manifest、模块、�
 
 下面四个 section 是可执行的组织默认和条件规则；除上面明确列出的边界外，不把排版偏好当作无条件 hard invariant。
 
+测试契约、fixture 层次、合并／删除及缺陷反例由 `$test-design` 负责；本 skill 仅维护 Rust
+代码与模块组织，不把每个函数一个测试或每次改动新增测试当作风格要求。
+
 ## General
 
 - 类型定义后优先紧跟该类型的主要 inherent `impl`；相关 trait `impl` 默认排在 inherent `impl` 之后。只有条件编译、宏生成、trait 组织或清晰度确实需要时才拆开，并保持邻接关系可读。

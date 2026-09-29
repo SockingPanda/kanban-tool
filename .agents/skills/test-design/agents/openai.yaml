@@ -1,0 +1,6 @@
+interface:
+  display_name: "测试设计与精简"
+  short_description: "按行为契约精简重复测试，保留独有边界与可定位的证据"
+  default_prompt: "使用 $test-design 审核当前改动的测试：先核对实现与既有覆盖，再决定保留、下沉、合并、删除或补充最小反例；不要以条数为目标，验证命令交给 $check。"
+policy:
+  allow_implicit_invocation: true

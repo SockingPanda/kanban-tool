@@ -54,6 +54,7 @@
 - `$code-comments`：源码注释、TSDoc、React 状态与副作用契约，以及 rustdoc 和 TODO 的真实边界。
 - `$prose`：用户可见简体中文文案、README、指南和 ADR 表达。
 - `$docs`：事实源、领域术语、owner placement、文档同步和历史退出边界。
+- `$test-design`：新增或调整测试、修复行为缺陷、精简重复回归时，确定独有契约、最小验证层和覆盖保留方式。
 - `$check`：根据当前 `justfile` 选择并报告最小充分验证。
 - `$commit`：仅在用户明确授权后创建本地 Conventional Commit。
 - `$branch`：识别和创建分支，按层级执行已获授权的本地合并与必要的快进整理。
@@ -75,6 +76,7 @@
 
 ## 7. 验证边界
 
+- 新增、修改、合并或删除测试，以及修复行为缺陷时，先用 `$test-design` 决定验证设计，再用 `$check` 选择门禁；不以新增测试数或入口减少比例作为质量指标。
 - `justfile` 是命令入口的唯一事实源；不凭记忆发明 recipe 或参数。
 - 文件修改至少运行 `just diff-check`；纯文档结构改动补 `just docs-structure-check`，skill/根契约补 `just agents-check`；rustdoc、include 或公开 Rust 文档契约变化仍运行 `just docs-check`。
 - protocol/schema contract 改动才运行 `just schema-check`；Rust、Web、Desktop 和 package gate 只按真实影响升级。

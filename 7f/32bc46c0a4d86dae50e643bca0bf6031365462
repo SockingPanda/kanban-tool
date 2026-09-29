@@ -1,0 +1,19 @@
+crates/kanban-service/src/operations/vector.rs
+  s_243209e7a7ea3a::t_ca594399cf05a9 334,337,340-387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7f32bc46c0a4d86dae50e643bca0bf6031365462",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

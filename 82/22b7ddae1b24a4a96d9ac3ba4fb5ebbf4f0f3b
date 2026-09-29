@@ -1,0 +1,31 @@
+crates/kanban-server/src/suite/portable_adoption.rs
+  s_243209e7a7ea3a::t_e169c95d035071 87-88,91,95,99-102,105,107,111,114
+  s_243209e7a7ea3a::t_c44a6ff082dcce 48-57,60-61,65,69-72,75,77,81
+  s_5bc67a1cfe9276::t_87c71104576b79 84
+crates/kanban-server/src/suite.rs
+  s_243209e7a7ea3a::t_928be2617ea87e 419-427,430-432,449-455
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8222b7ddae1b24a4a96d9ac3ba4fb5ebbf4f0f3b",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    },
+    "s_5bc67a1cfe9276": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ec42-643b-7981-b17a-0c8ac90fcea8",
+        "model": "unknown"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

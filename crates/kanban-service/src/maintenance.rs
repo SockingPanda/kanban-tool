@@ -4241,29 +4241,40 @@ mod tests {
 
     #[tokio::test]
     async fn replace_backup_journal_failure_is_retryable_without_fact_loss() {
-        let (source_directory, source, _source_path) =
-            store("maintenance-backup-journal-source").await;
-        source.initialize().await.expect("initialize source");
-        source
+        let (directory, target, _target_path) = store("maintenance-backup-journal").await;
+        target.initialize().await.expect("initialize target");
+        let incoming = target
             .create_task(
                 "default",
                 create_input("t_backup_incoming", None, "backup journal incoming"),
             )
             .await
             .expect("source task");
-        let export_path = source_directory.path().join("portable.jsonl");
-        source.export(&export_path).await.expect("portable export");
-
-        let (_target_directory, target, _target_path) =
-            store("maintenance-backup-journal-target").await;
-        target.initialize().await.expect("initialize target");
+        let export_path = directory.path().join("portable.jsonl");
+        target.export(&export_path).await.expect("portable export");
         target
-            .create_task(
-                "default",
-                create_input("t_backup_existing", None, "backup journal existing"),
+            .update_task(
+                &incoming.id,
+                crate::test_support::UpdateTaskInput {
+                    planning: Default::default(),
+                    request_id: None,
+                    request_fingerprint: None,
+                    expected_lock_version: incoming.lock_version,
+                    actor: "tester".to_owned(),
+                    title: Some("backup journal existing".to_owned()),
+                    description: None,
+                    assignee: None,
+                    priority: None,
+                    scheduled_at: None,
+                    due_at: None,
+                    max_retries: None,
+                    metadata_json: None,
+                    event_id: "e_backup_existing".to_owned(),
+                    now: now_ms(),
+                },
             )
             .await
-            .expect("existing task");
+            .expect("change target fact after snapshot");
         target.set_import_failpoint(super::FAILPOINT_BACKUP_JOURNAL);
         let first = target
             .import(&export_path, true)
@@ -4277,18 +4288,9 @@ mod tests {
             )
             .await
             .expect("tasks after backup journal fault");
-        assert!(
-            tasks
-                .tasks
-                .iter()
-                .any(|task| task.id == "t_backup_existing")
-        );
-        assert!(
-            !tasks
-                .tasks
-                .iter()
-                .any(|task| task.id == "t_backup_incoming")
-        );
+        assert_eq!(tasks.tasks.len(), 1);
+        assert_eq!(tasks.tasks[0].id, "t_backup_incoming");
+        assert_eq!(tasks.tasks[0].title, "backup journal existing");
 
         let resumed = target
             .import(&export_path, true)
@@ -4302,18 +4304,9 @@ mod tests {
             )
             .await
             .expect("replaced tasks");
-        assert!(
-            tasks
-                .tasks
-                .iter()
-                .any(|task| task.id == "t_backup_incoming")
-        );
-        assert!(
-            !tasks
-                .tasks
-                .iter()
-                .any(|task| task.id == "t_backup_existing")
-        );
+        assert_eq!(tasks.tasks.len(), 1);
+        assert_eq!(tasks.tasks[0].id, "t_backup_incoming");
+        assert_eq!(tasks.tasks[0].title, "backup journal incoming");
     }
 
     #[tokio::test]

@@ -546,7 +546,7 @@ async fn modern_requests_can_overlap_and_busy_does_not_start_another_call() {
         &format!("http://{}", listener.local_addr().unwrap()),
         "default",
         json!({
-            "limits": {"max_in_flight": 1, "timeout_ms": 5000}
+            "limits": {"max_in_flight": 1, "timeout_ms": 1000}
         }),
         true,
     )

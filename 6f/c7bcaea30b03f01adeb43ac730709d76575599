@@ -1,0 +1,30 @@
+xtask/src/release.rs
+  s_243209e7a7ea3a::t_82ba8f662c9640 2715-2724,2728,2749-2752,2754-2755
+  s_243209e7a7ea3a::t_0b82059c2bc5b5 2730,2736,2753
+  s_243209e7a7ea3a::t_f1f8b736a7ef17 2756-2758
+  s_3d08a238c1b77b::t_1f185db28a4d89 2759
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6fc7bcaea30b03f01adeb43ac730709d76575599",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    },
+    "s_3d08a238c1b77b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ec7d-a8f8-7dd2-a6c2-648e0252330d",
+        "model": "unknown"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

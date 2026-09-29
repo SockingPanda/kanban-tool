@@ -77,7 +77,7 @@ pub struct Mcp {
 
 impl Mcp {
     pub async fn start(url: &str, board: &str) -> Self {
-        Self::start_with_config(url, board, json!({"profile": "all"}), false).await
+        Self::start_with_config(url, board, json!({"profile": "all"}), true).await
     }
 
     pub async fn start_with_config(url: &str, board: &str, config: Value, discover: bool) -> Self {

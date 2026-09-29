@@ -1,0 +1,23 @@
+crates/kanban-service/src/store_operations/tasks/list_tests.rs
+  s_243209e7a7ea3a::t_5d4176eee5dd73 387-430
+  s_243209e7a7ea3a::t_42cbbe1220414e 383,522-526
+  s_243209e7a7ea3a::t_5a1c77c1f02bff 384-386,431-436,441-444,446-454,456-459,461-488,490-493,495,500,503-509,512-521
+  s_243209e7a7ea3a::t_c563973105efed 438-440,445,455,460,489,527
+  s_243209e7a7ea3a::t_6d30436bb14bab 528
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "65d4ae628143ec6ed6cda5948e14cee7d92da02d",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

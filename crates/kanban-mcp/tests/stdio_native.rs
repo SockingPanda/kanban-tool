@@ -434,7 +434,7 @@ async fn modern_disabled_tools_cannot_be_reached_through_resources_or_prompts() 
         "http://127.0.0.1:1",
         "default",
         json!({
-            "profile": "read_only", "disabled_tools": ["task_show"], "limits": {"page_size": 2}
+            "profile": "read_only", "disabled_tools": ["task_show"]
         }),
         true,
     )

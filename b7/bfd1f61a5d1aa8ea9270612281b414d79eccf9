@@ -1,0 +1,31 @@
+xtask/src/affected/rust_scope.rs
+  s_243209e7a7ea3a::t_0ba93ef3368a82 178-181,183-186,191-194,198-201
+  s_243209e7a7ea3a::t_898f2c82c06429 1-177,182,187-190,195-197,202-205
+crates/kanban-service/src/capability_tests.rs
+  s_243209e7a7ea3a::t_898f2c82c06429 9-17,20,27,55,127-147,155-157,162-166,169-170,173,179-182
+  s_243209e7a7ea3a::t_0ba93ef3368a82 178
+crates/kanban-service/src/object_model/tests.rs
+  s_243209e7a7ea3a::t_898f2c82c06429 275,289-294,299-308,482-487,489-548,551,555-556,560-562,569,572,577-578
+justfile
+  s_243209e7a7ea3a::t_898f2c82c06429 69-71
+scripts/rust-focused.sh
+  s_243209e7a7ea3a::t_898f2c82c06429 1-39
+xtask/src/affected.rs
+  s_243209e7a7ea3a::t_898f2c82c06429 2,53-55,72-73,110-111,292-294,300-304,312-317,320,776-777
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b7bfd1f61a5d1aa8ea9270612281b414d79eccf9",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

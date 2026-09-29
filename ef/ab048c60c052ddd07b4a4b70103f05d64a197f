@@ -1,0 +1,19 @@
+xtask/tests/tooling.rs
+  s_243209e7a7ea3a::t_a631a67b18e436 376-378,383,388,393,399,404,445,450-451,454,464,467-468,475
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "efab048c60c052ddd07b4a4b70103f05d64a197f",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

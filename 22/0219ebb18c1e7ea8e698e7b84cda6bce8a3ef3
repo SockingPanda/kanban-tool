@@ -1,0 +1,19 @@
+crates/kanban-service/src/maintenance.rs
+  s_243209e7a7ea3a::t_0c96a0955e7726 4007-4023,4062-4063,4071-4099,4110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "220219ebb18c1e7ea8e698e7b84cda6bce8a3ef3",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

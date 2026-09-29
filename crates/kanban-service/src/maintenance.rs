@@ -4004,6 +4004,23 @@ mod tests {
             )
             .await
             .expect("fixture task");
+        source
+            .create_task("default", create_input("t_parent", None, "Parent fixture"))
+            .await
+            .expect("parent task");
+        source
+            .create_task("default", create_input("t_child", None, "Child fixture"))
+            .await
+            .expect("child task");
+        let source_connection = source.connection().await.expect("source connection");
+        source_connection
+            .execute(
+                "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES ('b_default', 't_parent', 't_child', 424242)",
+                (),
+            )
+            .await
+            .expect("dependency");
+        drop(source_connection);
 
         let backup_path = source_directory.path().join("verified.db");
         let backup = source.backup(&backup_path).await.expect("verified backup");
@@ -4042,6 +4059,8 @@ mod tests {
             .await
             .expect("imported tasks");
         assert!(tasks.tasks.iter().any(|task| task.id == "t_maintenance"));
+        assert!(tasks.tasks.iter().any(|task| task.id == "t_parent"));
+        assert!(tasks.tasks.iter().any(|task| task.id == "t_child"));
 
         let repeated = target
             .import(&export_path, false)
@@ -4049,6 +4068,35 @@ mod tests {
             .expect("repeated portable import is idempotent");
         assert_eq!(repeated.journal_id, import.journal_id);
         assert_eq!(repeated.phase, "completed");
+        let target_connection = target.connection().await.expect("target connection");
+        let mut rows = target_connection
+            .query(
+                "SELECT parent_task_id, child_task_id, created_at FROM task_dependencies",
+                (),
+            )
+            .await
+            .expect("dependency query");
+        let row = rows
+            .next()
+            .await
+            .expect("dependency row result")
+            .expect("dependency row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("parent"), "parent").expect("parent text"),
+            "t_parent"
+        );
+        assert_eq!(
+            text_value(row.get_value(1).expect("child"), "child").expect("child text"),
+            "t_child"
+        );
+        assert_eq!(
+            integer_value(row.get_value(2).expect("created_at"), "created_at")
+                .expect("created_at integer"),
+            424242
+        );
+        assert!(rows.next().await.expect("next dependency").is_none());
+        drop(rows);
+        drop(target_connection);
         assert_eq!(
             target
                 .list_tasks(
@@ -4059,7 +4107,7 @@ mod tests {
                 .expect("repeated tasks")
                 .tasks
                 .len(),
-            1
+            3
         );
     }
 
@@ -4307,63 +4355,6 @@ mod tests {
         assert_eq!(tasks.tasks.len(), 1);
         assert_eq!(tasks.tasks[0].id, "t_backup_incoming");
         assert_eq!(tasks.tasks[0].title, "backup journal incoming");
-    }
-
-    #[tokio::test]
-    async fn portable_import_preserves_explicit_ids_times_and_relations() {
-        let (source_directory, source, _source_path) = store("maintenance-facts-source").await;
-        source.initialize().await.expect("initialize source");
-        source
-            .create_task("default", create_input("t_parent", None, "Parent fixture"))
-            .await
-            .expect("parent task");
-        source
-            .create_task("default", create_input("t_child", None, "Child fixture"))
-            .await
-            .expect("child task");
-        let source_connection = source.connection().await.expect("source connection");
-        source_connection
-            .execute(
-                "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES ('b_default', 't_parent', 't_child', 424242)",
-                (),
-            )
-            .await
-            .expect("dependency");
-        let export_path = source_directory.path().join("facts.jsonl");
-        source.export(&export_path).await.expect("portable export");
-
-        let (_target_directory, target, _target_path) = store("maintenance-facts-target").await;
-        target.initialize().await.expect("initialize target");
-        target
-            .import(&export_path, false)
-            .await
-            .expect("portable import");
-        let target_connection = target.connection().await.expect("target connection");
-        let mut rows = target_connection
-            .query(
-                "SELECT parent_task_id, child_task_id, created_at FROM task_dependencies",
-                (),
-            )
-            .await
-            .expect("dependency query");
-        let row = rows
-            .next()
-            .await
-            .expect("dependency row result")
-            .expect("dependency row");
-        assert_eq!(
-            text_value(row.get_value(0).expect("parent"), "parent").expect("parent text"),
-            "t_parent"
-        );
-        assert_eq!(
-            text_value(row.get_value(1).expect("child"), "child").expect("child text"),
-            "t_child"
-        );
-        assert_eq!(
-            integer_value(row.get_value(2).expect("created_at"), "created_at")
-                .expect("created_at integer"),
-            424242
-        );
     }
 
     #[tokio::test]

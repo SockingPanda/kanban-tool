@@ -2712,19 +2712,28 @@ esac
 
     #[test]
     fn package_process_evidence_binds_live_proc_identity_path_argv_and_hash() {
-        let pid = std::process::id();
+        struct TestChild(std::process::Child);
+        impl Drop for TestChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        let child = TestChild(Command::new("sleep").arg("60").spawn().expect("test child"));
+        let pid = child.0.id();
         let executable = fs::canonicalize(format!("/proc/{pid}/exe")).expect("test executable");
         let identity = process_identity(pid).expect("test identity");
         let argv = process_argv(pid).expect("test argv");
-        let sha = sha256_process_exe(pid).expect("test executable hash");
+        let sha = sha256_file(&executable).expect("test executable hash");
         validate_package_process_evidence(pid, &identity, &argv, &executable, &sha, "test")
-            .expect("current test process should satisfy its own evidence");
+            .expect("test child should satisfy its own process evidence");
 
         assert!(
             validate_package_process_evidence(pid, "0:0", &argv, &executable, &sha, "test",)
                 .is_err()
         );
-        let mut forged_argv = argv;
+        let mut forged_argv = argv.clone();
         forged_argv.push("--forged".to_owned());
         assert!(
             validate_package_process_evidence(
@@ -2733,6 +2742,17 @@ esac
                 &forged_argv,
                 &executable,
                 &sha,
+                "test",
+            )
+            .is_err()
+        );
+        assert!(
+            validate_package_process_evidence(
+                pid,
+                &identity,
+                &argv,
+                &executable,
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "test",
             )
             .is_err()

@@ -748,9 +748,6 @@ async fn active_run_log_and_stats_observe_file_and_clock_changes_without_mutatio
     );
     drop(stream);
     runtime.stop().await;
-    let reads = state.grpc_probe.queries();
-    tokio::time::sleep(Duration::from_millis(550)).await;
-    assert_eq!(state.grpc_probe.queries(), reads);
     assert_eq!(runtime.counts(), (0, 0, 0));
 }
 

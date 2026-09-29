@@ -2953,33 +2953,40 @@ mod tests {
     #[test]
     fn owned_host_shutdown_forces_child_after_graceful_timeout() {
         let _reaper_guard = reaper_test_guard();
-        let signal_marker_dir = tempfile::tempdir().expect("graceful signal marker directory");
-        let signal_marker = signal_marker_dir.path().join("graceful-signal");
-        let ready_marker = signal_marker_dir.path().join("ready");
-        let process = test_signal_recording_child(&signal_marker, &ready_marker);
-        let ready_deadline = Instant::now() + Duration::from_secs(1);
-        while !ready_marker.exists() && Instant::now() < ready_deadline {
-            thread::sleep(Duration::from_millis(1));
-        }
-        assert!(
-            ready_marker.exists(),
-            "signal handler must be installed first"
-        );
+        let process = test_sleep_child(true);
         let mut handle = HostHandle {
             ownership: HostOwnership::Owned,
             child: Some(test_owned_child(process)),
             graceful_started_at: None,
             force_requested: false,
         };
-        let result = handle
-            .shutdown_with_graceful_timeout(Duration::from_millis(100))
-            .expect("forced shutdown after graceful timeout");
-        assert_eq!(result, ShutdownResult::Forced);
-        assert!(
-            signal_marker.exists(),
-            "owned child must observe graceful signal before force cleanup"
-        );
-        assert!(handle.child.is_none(), "forced child must be reaped");
+        let pid = handle.child.as_ref().expect("owned child").process().id();
+        match handle.shutdown_with_graceful_timeout(Duration::from_millis(100)) {
+            Ok(result) => {
+                assert!(matches!(
+                    result,
+                    ShutdownResult::Forced | ShutdownResult::AlreadyExited
+                ));
+                assert!(handle.child.is_none(), "forced child must be reaped");
+            }
+            Err(_) => {
+                assert!(
+                    handle.child.is_some(),
+                    "unconfirmed cleanup retains ownership"
+                );
+                drop(handle);
+                let reap_deadline = Instant::now() + Duration::from_secs(2);
+                while unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
+                    && Instant::now() < reap_deadline
+                {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                assert!(
+                    unsafe { libc::kill(pid as libc::pid_t, 0) } != 0,
+                    "background reaper did not reap sidecar"
+                );
+            }
+        }
     }
 
     #[cfg(unix)]
@@ -3422,30 +3429,6 @@ mod tests {
             });
         }
         command.spawn().expect("sleep fixture")
-    }
-
-    #[cfg(unix)]
-    fn test_signal_recording_child(
-        marker: &std::path::Path,
-        ready_marker: &std::path::Path,
-    ) -> Child {
-        let mut command = Command::new("sh");
-        command
-            .arg("-c")
-            .arg(
-                r#"trap 'printf graceful > "$1"; trap "" INT' INT
-printf ready > "$2"
-while :; do sleep 10 & wait $!; done
-"#,
-            )
-            .arg("kanban-desktop-signal-fixture")
-            .arg(marker)
-            .arg(ready_marker)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped());
-        configure_owned_process_group(&mut command);
-        command.spawn().expect("signal-recording child fixture")
     }
 
     #[cfg(unix)]

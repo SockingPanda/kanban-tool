@@ -39,25 +39,30 @@ async fn http1_query(host: &Host) -> TcpStream {
     socket
 }
 
-async fn http1_grpc_web_disconnect_releases_query_before_heartbeat(host: &Host) {
-    let mut first = http1_query(host).await;
-    let second = http1_query(host).await;
-    resources(host, 1, 14).await;
+#[tokio::test]
+async fn http1_grpc_web_disconnect_releases_query_before_heartbeat() {
+    let host = Host::start().await;
+    let mut first = http1_query(&host).await;
+    let second = http1_query(&host).await;
+    resources(&host, 1, 14).await;
 
     // Host 不接受 HTTP/1 half-close；发送 FIN 后仍保留 socket，证明回收不依赖客户端 Drop。
     let started = Instant::now();
     first.shutdown().await.unwrap();
-    resources(host, 1, 15).await;
+    resources(&host, 1, 15).await;
     drop(second);
-    resources(host, 0, 16).await;
+    resources(&host, 0, 16).await;
     println!(
         "G07_QUERY_DISCONNECT transport=http1-grpc-web connections=2 reclaimed_ms={:.3} hubs=0 available_permits=16 retained_bytes=0 half_closed_peer_still_held=true",
         started.elapsed().as_secs_f64() * 1000.0,
     );
     drop(first);
+    host.finish().await;
 }
 
-async fn h2_stream_reset_releases_query_while_channel_remains_connected(host: &Host) {
+#[tokio::test]
+async fn h2_stream_reset_releases_query_while_channel_remains_connected() {
+    let host = Host::start().await;
     let mut client = pb::query_service_client::QueryServiceClient::connect(host.url.clone())
         .await
         .unwrap();
@@ -65,13 +70,13 @@ async fn h2_stream_reset_releases_query_while_channel_remains_connected(host: &H
     let mut second = client.watch_queries(request()).await.unwrap().into_inner();
     first.message().await.unwrap().unwrap();
     second.message().await.unwrap().unwrap();
-    resources(host, 1, 14).await;
+    resources(&host, 1, 14).await;
 
     let started = Instant::now();
     drop(first);
-    resources(host, 1, 15).await;
+    resources(&host, 1, 15).await;
     drop(second);
-    resources(host, 0, 16).await;
+    resources(&host, 0, 16).await;
     println!(
         "G07_QUERY_DISCONNECT transport=http2-rst-stream connections=2 reclaimed_ms={:.3} hubs=0 available_permits=16 retained_bytes=0 client_channel_still_held=true",
         started.elapsed().as_secs_f64() * 1000.0,
@@ -79,16 +84,9 @@ async fn h2_stream_reset_releases_query_while_channel_remains_connected(host: &H
     // 相同 channel 仍可继续请求，取消一条流没有误关整条连接。
     let mut replacement = client.watch_queries(request()).await.unwrap().into_inner();
     replacement.message().await.unwrap().unwrap();
-    resources(host, 1, 15).await;
+    resources(&host, 1, 15).await;
     drop(replacement);
-    resources(host, 0, 16).await;
+    resources(&host, 0, 16).await;
     drop(client);
-}
-
-#[tokio::test]
-async fn grpc_web_and_h2_disconnects_release_queries_on_one_host() {
-    let host = Host::start().await;
-    http1_grpc_web_disconnect_releases_query_before_heartbeat(&host).await;
-    h2_stream_reset_releases_query_while_channel_remains_connected(&host).await;
     host.finish().await;
 }

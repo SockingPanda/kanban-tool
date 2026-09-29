@@ -205,10 +205,14 @@ mod tests {
     async fn list_events_orders_by_numeric_id_uses_exclusive_cursor_and_caps_limit() {
         let (_directory, store, _path) = store("event-list-page").await;
         store.initialize().await.expect("initialize");
-        let connection = store.connection().await.expect("connection");
+        let mut connection = store.connection().await.expect("connection");
+        let transaction = connection
+            .transaction()
+            .await
+            .expect("begin page event fixture");
         for index in 0..1_005_i64 {
             let event_id = format!("e_event_page_{index}");
-            connection
+            transaction
                 .execute(
                     "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, 'b_default', NULL, NULL, 'page.event', 'tester', '{\"index\":0}', ?2)",
                     (event_id.as_str(), index),
@@ -216,6 +220,10 @@ mod tests {
                 .await
                 .expect("insert page event");
         }
+        transaction
+            .commit()
+            .await
+            .expect("commit page event fixture");
 
         let first = store
             .list_events("default", None, 0, 5_000)

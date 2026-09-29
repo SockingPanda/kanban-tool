@@ -40,7 +40,11 @@ fixture 名称 → 具体 DTO → decode → 明确字段语义 → encode → �
 返回集合、下一页游标、尾页终止、无重复和遗漏。游标绑定条件的契约变化时，用已有格式／查询
 测试补反例，而不是为每种 filter 再建一条完整 Host 旅程。
 
-## 幂等与原子性不以“第二次成功”作为全部证据
+## 观察点是契约的一部分
+
+把首次导入的关系／时间戳断言搬到重放之后，会允许“第一次漏写，重放补齐”的错误实现通过。
+合并时保留 `import → 首次事实 → replay → 同一事实且无重复`，而不是只检查最后一份结果。
+数据库重新打开后又 initialize 才检查，也只能证明“重开并初始化”后的结果；不得改称纯持久化证明。
 
 同一 request 重试应读到同一业务结果，且不会重复 event、job 或附件副作用；新的冲突 request
 仍需拒绝。失败后从实际存储读回，检查原事实及版本未出现不允许的部分变化。并发 claim 还要
@@ -48,6 +52,47 @@ fixture 名称 → 具体 DTO → decode → 明确字段语义 → encode → �
 
 这些是不同契约，不因共用 fixture 而一律合并。检查内部 SQL 次数只有在证明明确的成本边界时
 才有价值；不要将全部 SQL 的精确顺序或条数变成正常重构无法改变的约束。
+
+## 小样本需要区分错误，而不只是能执行
+
+排序：重复查询结果相同，只证明当前样本下的重复性。用独立的 ID 序列检查排序；scheduled_at
+与 due_at 不要给出完全相同的列值，否则互换 SQL 列也通过。NULL、平局和反向排序按所需契约
+设计，不为每一列再建数据库。
+
+替换：快照为 A、B，目标为 A′、C；A′ 与 A 同 ID 不同内容，B 来源独有，C 目标独有。失败后
+仍应是 A′、C，成功后精确是 A、B。只改同 ID 的标题不能区分 replace 与 upsert；只新增 C
+又不能证明已有值会恢复。可以在本测试自己的源库导出后构造目标状态，不必重建第二份 schema，
+但 fixture 写入仍遵守 owner 边界，不能改变生产 adapter 的 mutation path。
+
+进程：身份校验需要真实 `/proc` 和实际文件，不需要大型测试可执行文件。小型真实子进程保留
+身份、argv、路径、哈希正反例；哈希预期不由同一个被测函数生成。自有子进程需要有界终止／回收；
+不要将“省下测试二进制的哈希成本”说成生产身份校验变快。
+
+批量准备：已提交数据的分页契约可在一次事务里按有限批次插入，仍跨真实查询上限和尾批边界。
+逐批可见性、outbox 发布、崩溃点或 rollback 是目标时，原提交边界不能合并。直接写入 fixture
+不等于验证了业务命令生成这些数据的正确性。
+
+## 时限与关闭协议分开证明
+
+低层时间策略用可控时钟或私有时限参数；真实 I/O 场景仍经过生产路径，watchdog 只防挂死。
+信号忽略若已在 pre-exec 安装，不需要机械添加 ready 文件；需要运行中的 handler 时则明确握手。
+并发 busy 检查应由首调用持有 permit 的事实驱动，不能依赖观察者在短时限内一定获得调度。
+跨进程测试不能用父进程的 Tokio pause 代替对子进程时限的控制。
+
+合法的 deferred reaper 结果不是失败，但任意 Err 后由 Drop 杀死进程，不能证明 shutdown
+按预期执行了优雅请求、等待和强制升级。区分允许的 cleanup 结果与无关错误，终止方式、ownership
+和最终回收各保留所需证据。若 stop 已 abort 并 join 所有关联任务，可去掉为等待它们而设置的
+尾部 sleep；只发送停止通知则不能这样推断。
+
+## 单次 gate 的缓存先于全局缓存
+
+工作区成员、Rust include 解析和 schema validator 可在一次命令内复用。保持来源与校验对象
+绑定，覆盖所有条目与负例，保留原错误传播和文件过滤语义。两个集合 zip 需要有明确同长度与顺序
+保证，不能把短集合遍历完成当成全量验证。复用也可能延长对象驻留时间，观察峰值内存。
+
+共享 HTTP/Vite 服务器只在顺序场景、固定配置、逐例请求已结束且失败路径可清理时采用。reset
+回调不是清除已启动的流；考虑与全局 concurrent 配置的关系。多个数据源共享可变模型是不同风险，
+不能从“服务器复用有效”推出“任意状态均可共享”。
 
 ## 环境复用不是状态复用
 
@@ -63,5 +108,7 @@ fixture 名称 → 具体 DTO → decode → 明确字段语义 → encode → �
 - [Google：Unit Testing](https://abseil.io/resources/swe-book/html/ch12.html)：以行为命名、明确断言与失败信息；重构实现不应机械改写所有测试。
 - [Google：Change-Detector Tests](https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html)：避免只复制实现而缺少独立预期的测试。
 - [nextest：Why process-per-test](https://nexte.st/docs/design/why-process-per-test/)：进程隔离的默认执行模型及其共享状态限制。
+- [Tokio：pause](https://docs.rs/tokio/latest/tokio/time/fn.pause.html)：虚拟时间与运行时范围；不能推广到 std 时钟或外部子进程。
+- [Vitest：test context](https://vitest.dev/api/test)：并发、顺序测试与 fixture 生命周期需按当前版本核对。
 
 外部资料解释取舍，不替代当前代码契约；工具行为发生变化时重新核对官方文档。

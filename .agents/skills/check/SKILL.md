@@ -1,6 +1,6 @@
 ---
 name: check
-description: 为 kanban-tool 的 Rust、Web、Desktop、schema、文档和仓库规则改动选择并执行当前 justfile 中最小充分的验证；区分文档结构与 rustdoc 验证，核对 base、未跟踪文件、技能路由和真实证据。不负责功能实现、发布或 Git 提交。
+description: 为 kanban-tool 的 Rust、Web、Desktop、schema、文档和仓库规则改动选择并执行当前 justfile 中最小充分的验证；在排查慢编译、重复构建或 feature 组合时核对构建范围与可比证据。不负责功能实现、发布或 Git 提交。
 ---
 
 # 项目验证
@@ -26,7 +26,7 @@ description: 为 kanban-tool 的 Rust、Web、Desktop、schema、文档和仓库
 | Markdown 内容、导航或纯文档目录 | `just docs-structure-check`、`just diff-check` | 修改 rustdoc/include、Rust 示例或公开 Rust 契约时运行 `just docs-check` |
 | `AGENTS.md`、repo skill | 上述检查与 `just agents-check` | 改动 guard 时补 `just check-p xtask`、`just test-p xtask`、`just clippy-p xtask` |
 | Cargo owner、仓库工具或协作规则 | `just repo-check` | 工具行为变化补 xtask 对应测试；共享构建锁变化补 `just target-tools` |
-| 单 Rust package | 对应 `check-p`、`test-p`、`clippy-p` | 跨 package 或公开契约变化再扩大测试 |
+| 单 Rust package | 现有定向 gate；只需类型反馈时用 `check-p` | 对照实际 targets／features 选择测试与 Clippy，跨包或公开契约变化再扩大 |
 | Web UI 或 application | 对应 `web-typecheck`、`web-lint`、`web-test` | Host、查询订阅、artifact 或实际交互变化按验收补 build/真实 Host 证据 |
 | Protobuf、wire 或生成契约 | 对应 owner 测试、`grpc-contracts-check` 或 `web-contracts-check` | schema/catalog 变化补 `schema-check` 和必要的 surface 测试 |
 | Desktop 或打包布局 | 对应 Desktop recipe | 真正改变包内容时补 package/smoke；普通 UI 文案不机械打完整包 |
@@ -52,6 +52,19 @@ root；本地 root 的选择见 [协作指南](../../../docs/collaboration.md)�
 
 `git diff --check` 不覆盖未跟踪文件。新文件还需进入对应 owner 检查并人工审阅；没有提交授权时不得为了
 让 diff 好看而擅自 stage。不得把目录存在、命令存在或测试名称存在当作行为正确。
+
+## 构建反馈与性能证据
+
+删除编译步骤前比较 package、target、feature、profile 与配置覆盖；test build、Clippy、非 test cfg
+和 doctest 不是同一件事。能由后续步骤覆盖的前置 check 可退出该 gate，但独立类型反馈入口保留。
+以当前脚本区分定向、无参数、完整门禁，不将单一路径的变化推广到所有调用者。
+
+慢编译先记录重新构建原因与实际编译单元；兼容的包可集中验证，不用 all-features 掩盖关闭路径
+或叶子包缺失依赖声明。复用一个约定的 target 和构建 owner，不开任务级缓存或并发写 target。
+
+性能结论分为“源码确认少做了什么”“带条件的实测”“待验证假设”。分别记录锁等待、构建、测试
+和总 wall time；总收益看配对整条路径，不能把删掉某一步的旧耗时直接当作总收益。只读静态审核
+不自动执行性能实验。需要时按需读取 [Rust 构建反馈](references/build-feedback.md)。
 
 ## 停止条件
 

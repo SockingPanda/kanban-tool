@@ -5,18 +5,26 @@ mod tests {
     #[tokio::test]
     async fn vector32_roundtrip_dimension_and_cosine_are_real_turso_capabilities() {
         let (_directory, store, _path) = store("vector-capability").await;
-        store.initialize().await.expect("initialize");
         let connection = store.connection().await.expect("connection");
+        // 此处只验证真实引擎的向量能力，不重复执行整个业务 schema 的迁移与 seed。
+        // canonical retrieval_vectors 的约束仍由持久化和向量业务用例负责。
         connection
             .execute(
-                "INSERT INTO retrieval_vectors(id, embedding, dimensions, embedding_model, content_hash, created_at, updated_at) VALUES ('vec_test', vector32('[1.0, 0.0]'), 2, 'test', 'hash', 1, 1)",
+                "CREATE TABLE capability_vectors(id TEXT PRIMARY KEY, embedding BLOB NOT NULL, dimensions INTEGER NOT NULL)",
+                (),
+            )
+            .await
+            .expect("vector capability table");
+        connection
+            .execute(
+                "INSERT INTO capability_vectors(id, embedding, dimensions) VALUES ('vec_test', vector32('[1.0, 0.0]'), 2)",
                 (),
             )
             .await
             .expect("vector32 insert");
         let mut rows = connection
             .query(
-                "SELECT typeof(embedding), dimensions, vector_distance_cos(embedding, vector32('[1.0, 0.0]')) FROM retrieval_vectors WHERE id='vec_test'",
+                "SELECT typeof(embedding), dimensions, vector_distance_cos(embedding, vector32('[1.0, 0.0]')) FROM capability_vectors WHERE id='vec_test'",
                 (),
             )
             .await
@@ -44,7 +52,7 @@ mod tests {
         assert!(distance.abs() < 1e-6, "cosine distance was {distance}");
         let mut mismatch_rows = connection
             .query(
-                "SELECT vector_distance_cos(embedding, vector32('[1.0]')) FROM retrieval_vectors WHERE id='vec_test'",
+                "SELECT vector_distance_cos(embedding, vector32('[1.0]')) FROM capability_vectors WHERE id='vec_test'",
                 (),
             )
             .await
@@ -116,23 +124,27 @@ mod tests {
             )
             .await
             .expect("fts insert");
-        let mut rows = connection
-            .query(
-                "SELECT fts_score(content, ?1), fts_highlight(content, '<b>', '</b>', ?1) FROM retrieval_documents WHERE fts_match(content, ?1)",
-                ["alpha"],
-            )
-            .await
-            .expect("fts query");
-        let row = rows.next().await.expect("fts row").expect("fts match");
-        let score = match row.get_value(0).expect("score") {
-            turso::Value::Real(value) => value,
-            turso::Value::Integer(value) => value as f64,
-            value => panic!("unexpected fts score: {value:?}"),
-        };
-        assert!(score.is_finite(), "fts score was {score}");
-        let highlighted =
-            text_value(row.get_value(1).expect("highlight"), "highlight").expect("highlight text");
-        assert!(highlighted.contains("<b>alpha</b>"));
+        // 查询对象限定在局部作用域，不带着未结束的结果集进入下一次写操作。
+        {
+            let mut rows = connection
+                .query(
+                    "SELECT fts_score(content, ?1), fts_highlight(content, '<b>', '</b>', ?1) FROM retrieval_documents WHERE fts_match(content, ?1)",
+                    ["alpha"],
+                )
+                .await
+                .expect("fts query");
+            let row = rows.next().await.expect("fts row").expect("fts match");
+            let score = match row.get_value(0).expect("score") {
+                turso::Value::Real(value) => value,
+                turso::Value::Integer(value) => value as f64,
+                value => panic!("unexpected fts score: {value:?}"),
+            };
+            assert!(score.is_finite(), "fts score was {score}");
+            let highlighted = text_value(row.get_value(1).expect("highlight"), "highlight")
+                .expect("highlight text");
+            assert!(highlighted.contains("<b>alpha</b>"));
+            assert!(rows.next().await.expect("fts query exhausted").is_none());
+        }
         connection
             .execute(
                 "UPDATE retrieval_documents SET content='gamma', updated_at=2 WHERE id='doc_fts'",
@@ -140,47 +152,34 @@ mod tests {
             )
             .await
             .expect("fts update");
-        let mut rows = connection
-            .query(
-                "SELECT COUNT(*) FROM retrieval_documents WHERE fts_match(content, 'alpha')",
-                (),
-            )
-            .await
-            .expect("fts post-update query");
-        let row = rows
-            .next()
-            .await
-            .expect("fts update count row")
-            .expect("fts update count");
-        assert_eq!(
-            integer_value(
-                row.get_value(0).expect("fts update count"),
-                "fts update count"
-            )
-            .expect("fts update count integer"),
-            0
-        );
+        assert_eq!(fts_hits(&connection, "alpha").await, 0, "更新应移除旧词");
+        assert_eq!(fts_hits(&connection, "gamma").await, 1, "更新应索引新词");
+
         connection
             .execute("DELETE FROM retrieval_documents WHERE id='doc_fts'", ())
             .await
             .expect("fts delete");
+        // 必须查询删除前确实存在的词；再次查询 alpha 会让失效的 DELETE 也通过。
+        assert_eq!(fts_hits(&connection, "gamma").await, 0, "删除应移除现有词");
+    }
+
+    async fn fts_hits(connection: &turso::Connection, term: &str) -> i64 {
         let mut rows = connection
             .query(
-                "SELECT COUNT(*) FROM retrieval_documents WHERE fts_match(content, 'alpha')",
-                (),
+                "SELECT COUNT(*) FROM retrieval_documents WHERE fts_match(content, ?1)",
+                [term],
             )
             .await
-            .expect("fts post-delete query");
+            .expect("fts count query");
         let row = rows
             .next()
             .await
             .expect("fts count row")
-            .expect("fts count");
-        assert_eq!(
-            integer_value(row.get_value(0).expect("fts count"), "fts count")
-                .expect("fts count integer"),
-            0
-        );
+            .expect("fts count result");
+        let count = integer_value(row.get_value(0).expect("fts count"), "fts count")
+            .expect("fts count integer");
+        assert!(rows.next().await.expect("fts count exhausted").is_none());
+        count
     }
 
     #[tokio::test]

@@ -1,4 +1,5 @@
 mod documentation;
+mod rust_scope;
 
 use std::{collections::BTreeMap, path::Path, process::Command};
 
@@ -49,6 +50,9 @@ pub(crate) struct Plan {
     pub(crate) changed_files: Vec<String>,
     pub(crate) classifications: BTreeMap<String, Vec<String>>,
     pub(crate) recipes: Vec<Recipe>,
+    /// 非空时作为 rust-fast 的参数；其它 recipe 不消费该列表。
+    pub(crate) rust_packages: Vec<String>,
+    pub(crate) rust_scope_reason: Option<String>,
     pub(crate) sources: Sources,
 }
 
@@ -65,7 +69,8 @@ pub(crate) fn run(root: &Path, command: &str, base: &str) -> ToolResult<()> {
     let base = normalise_base(base)?;
     let sources = git::changed_sources(root, &base)?;
     let full_docs = documentation::needs_full_check(root, &sources.merged())?;
-    let plan = build_plan_with_documentation(base, sources, full_docs);
+    let mut plan = build_plan_with_documentation(base, sources, full_docs);
+    rust_scope::refine(root, &mut plan);
     match command {
         "plan" => print_plan(&plan),
         "json" => println!(
@@ -102,6 +107,8 @@ fn build_plan_with_documentation(base: String, sources: Sources, full_docs: bool
         changed_files,
         classifications,
         recipes,
+        rust_packages: Vec::new(),
+        rust_scope_reason: None,
         sources,
     }
 }
@@ -282,12 +289,19 @@ fn print_plan(plan: &Plan) {
             }
         }
     }
+    if let Some(reason) = &plan.rust_scope_reason {
+        println!("rust_scope: {reason}");
+    }
     println!("recipes:");
     if plan.recipes.is_empty() {
         println!("  - <none>");
     } else {
         for recipe in &plan.recipes {
-            println!("  - {}", recipe.name());
+            if *recipe == Recipe::RustFast && !plan.rust_packages.is_empty() {
+                println!("  - {} {}", recipe.name(), plan.rust_packages.join(" "));
+            } else {
+                println!("  - {}", recipe.name());
+            }
         }
     }
 }
@@ -295,9 +309,15 @@ fn print_plan(plan: &Plan) {
 fn execute(root: &Path, plan: &Plan) -> ToolResult<()> {
     for recipe in &plan.recipes {
         let name = recipe.name();
-        println!("+ just {name}");
+        let packages: &[String] = if *recipe == Recipe::RustFast {
+            &plan.rust_packages
+        } else {
+            &[]
+        };
+        println!("+ just {name} {}", packages.join(" "));
         let status = Command::new("just")
             .arg(name)
+            .args(packages)
             .current_dir(root)
             .status()
             .map_err(|error| std::io::Error::other(format!("执行 just {name} 失败: {error}")))?;
@@ -753,6 +773,8 @@ mod tests {
             changed_files: vec!["README.md".to_owned()],
             classifications: BTreeMap::new(),
             recipes: vec![Recipe::DocsCheck, Recipe::DiffCheck],
+            rust_packages: Vec::new(),
+            rust_scope_reason: None,
             sources: Sources::default(),
         };
         let old_path = env::var_os("PATH");

@@ -66,11 +66,9 @@ check-p package:
 check-windows-p package:
     scripts/cargo-build-lock.sh -- cargo check --locked -p {{package}} --target x86_64-pc-windows-gnu
 
-rust-fast:
-    just fmt
-    just check-core
-    just test-core
-    just clippy-core
+# 不传包名保持原有 core gate；affected 传入 owner 与工作区依赖消费者。
+rust-fast *packages:
+    bash scripts/rust-focused.sh "$@"
 
 test-core *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \

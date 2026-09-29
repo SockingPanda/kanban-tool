@@ -272,6 +272,7 @@ async fn module_membership_is_many_to_many() {
     let a = create(&s, "module", "A", json!({})).await;
     let b = create(&s, "module", "B", json!({})).await;
     let t = task(&s).await;
+    // 先从容器端写入，再从任务端增补；在一个场景中覆盖两个写入方向。
     refs(
         &s,
         "a",
@@ -285,16 +286,26 @@ async fn module_membership_is_many_to_many() {
     let t = fresh(&s, &t).await;
     refs(
         &s,
-        "b",
-        &b,
-        "module.tasks",
-        std::slice::from_ref(&t.id),
-        std::slice::from_ref(&t),
+        "b-inverse",
+        &t,
+        "task.modules",
+        &[a.id.clone(), b.id.clone()],
+        // a 的边未变化；expected 只列出实际变动的对端 b。
+        std::slice::from_ref(&b),
     )
     .await
     .unwrap();
     let t = fresh(&s, &t).await;
-    assert_eq!(t.properties["task.modules"].len(), 2);
+    let actual = &t.properties["task.modules"];
+    assert_eq!(actual.len(), 2);
+    assert!(actual.contains(&PropertyValue::Object(a.id.clone())));
+    assert!(actual.contains(&PropertyValue::Object(b.id.clone())));
+    for module in [&a, &b] {
+        assert_eq!(
+            fresh(&s, module).await.properties["module.tasks"],
+            vec![PropertyValue::Object(t.id.clone())]
+        );
+    }
     let c = s.store.connection().await.unwrap();
     assert_eq!(
         store::count(
@@ -349,26 +360,6 @@ async fn transfer_requires_old_and_new_container_versions_and_is_atomic() {
         vec![PropertyValue::Object(b.id.clone())]
     );
     assert!(fresh(&s, &a).await.properties["cycle.tasks"].is_empty());
-}
-#[tokio::test]
-async fn inverse_write_uses_same_engine() {
-    let (_dir, s) = fixture().await;
-    let a = create(&s, "module", "A", json!({})).await;
-    let t = task(&s).await;
-    refs(
-        &s,
-        "inverse",
-        &t,
-        "task.modules",
-        std::slice::from_ref(&a.id),
-        std::slice::from_ref(&a),
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        fresh(&s, &a).await.properties["module.tasks"],
-        vec![PropertyValue::Object(t.id.clone())]
-    );
 }
 #[tokio::test]
 async fn acyclic_relation_rejects_cycle_and_rolls_back() {
@@ -488,48 +479,103 @@ async fn workflow_close_freezes_members_and_does_not_mutate_task_state() {
 #[tokio::test]
 async fn reference_filter_and_pagination_work_from_both_sides() {
     let (_dir, s) = fixture().await;
-    let a = create(&s, "module", "A", json!({})).await;
+    // 三个匹配对象、每页两个：最小成本覆盖完整页、尾页与游标终止。
+    let mut modules = Vec::new();
+    for title in ["A", "B", "C"] {
+        modules.push(create(&s, "module", title, json!({})).await);
+    }
+    let _unlinked = create(&s, "module", "Unlinked", json!({})).await;
     let t = task(&s).await;
-    refs(
-        &s,
-        "attach",
-        &a,
-        "module.tasks",
-        std::slice::from_ref(&t.id),
-        std::slice::from_ref(&t),
-    )
-    .await
-    .unwrap();
-    let a = fresh(&s, &a).await;
-    let page = s
+    let mut expected = modules
+        .iter()
+        .map(|module| module.id.clone())
+        .collect::<Vec<_>>();
+    expected.sort();
+    refs(&s, "attach", &t, "task.modules", &expected, &modules)
+        .await
+        .unwrap();
+    let t = fresh(&s, &t).await;
+    let catalog_version = s.object_catalog().await.unwrap().version;
+    let ids = |items: &[ObjectRecord]| {
+        items
+            .iter()
+            .map(|object| object.id.clone())
+            .collect::<Vec<_>>()
+    };
+
+    let mut references = ReferenceQuery {
+        board_id: "b_default".into(),
+        object_id: t.id.clone(),
+        property_key: "task.modules".into(),
+        limit: 2,
+        after_id: None,
+        expected_version: t.version.clone(),
+        expected_catalog_version: catalog_version,
+    };
+    let first = s.object_references(references.clone()).await.unwrap();
+    assert_eq!(ids(&first.items), expected[..2].to_vec());
+    assert_eq!(first.next_id.as_deref(), Some(expected[1].as_str()));
+    references.after_id = first.next_id;
+    let last = s.object_references(references).await.unwrap();
+    assert_eq!(ids(&last.items), expected[2..].to_vec());
+    assert!(last.next_id.is_none());
+
+    let mut query = ObjectQuery {
+        board_id: "b_default".into(),
+        type_key: Some("module".into()),
+        text: None,
+        filters: vec![PropertyFilter::Contains {
+            property_key: "module.tasks".into(),
+            value: PropertyValue::Object(t.id.clone()),
+        }],
+        include_archived: false,
+        limit: 2,
+        after: None,
+    };
+    let first = s.object_list(query.clone()).await.unwrap();
+    assert_eq!(ids(&first.items), expected[..2].to_vec());
+    assert_eq!(
+        first.next.as_ref().map(|cursor| cursor.after_id.as_str()),
+        Some(expected[1].as_str())
+    );
+    query.after = first.next;
+    let last = s.object_list(query).await.unwrap();
+    assert_eq!(ids(&last.items), expected[2..].to_vec());
+    assert!(last.next.is_none());
+
+    // 保留原有正向引用与反向 contains 契约，不用分页增强替代它们。
+    let module = fresh(&s, &modules[0]).await;
+    let forward = s
         .object_references(ReferenceQuery {
             board_id: "b_default".into(),
-            object_id: a.id.clone(),
+            object_id: module.id.clone(),
             property_key: "module.tasks".into(),
             limit: 1,
             after_id: None,
-            expected_version: a.version,
-            expected_catalog_version: s.object_catalog().await.unwrap().version,
+            expected_version: module.version,
+            expected_catalog_version: catalog_version,
         })
         .await
         .unwrap();
-    assert_eq!(page.items[0].id, t.id);
-    let result = s
+    assert_eq!(ids(&forward.items), vec![t.id.clone()]);
+    assert!(forward.next_id.is_none());
+    let inverse = s
         .object_list(ObjectQuery {
             board_id: "b_default".into(),
             type_key: Some("task".into()),
             text: None,
             filters: vec![PropertyFilter::Contains {
                 property_key: "task.modules".into(),
-                value: PropertyValue::Object(a.id),
+                value: PropertyValue::Object(module.id),
             }],
             include_archived: false,
-            limit: 10,
+            limit: 2,
             after: None,
         })
         .await
         .unwrap();
-    assert_eq!(result.items.len(), 1);
+    assert_eq!(ids(&inverse.items), vec![t.id]);
+    assert!(inverse.next.is_none());
 }
 #[tokio::test]
 async fn copied_cardinality_flags_cannot_be_forged() {

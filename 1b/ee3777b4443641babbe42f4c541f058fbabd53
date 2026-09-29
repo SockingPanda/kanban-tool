@@ -1,0 +1,34 @@
+.agents/skills/test-design/agents/openai.yaml
+  s_243209e7a7ea3a::t_78f91af6bfbbff 1-6
+.agents/skills/style/SKILL.md
+  s_243209e7a7ea3a::t_78f91af6bfbbff 26-28
+.agents/skills/test-design/SKILL.md
+  s_243209e7a7ea3a::t_78f91af6bfbbff 1-97
+xtask/src/check/agents.rs
+  s_243209e7a7ea3a::t_78f91af6bfbbff 44,100,341,393
+.agents/skills/test-design/references/patterns.md
+  s_243209e7a7ea3a::t_78f91af6bfbbff 1-67
+.agents/skills/check/SKILL.md
+  s_243209e7a7ea3a::t_78f91af6bfbbff 19-21,49-51
+  s_243209e7a7ea3a::t_9119f441d846a5 52
+.agents/skills/test-design/references/evaluation.md
+  s_243209e7a7ea3a::t_78f91af6bfbbff 1-50
+AGENTS.md
+  s_243209e7a7ea3a::t_78f91af6bfbbff 57,79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1bee3777b4443641babbe42f4c541f058fbabd53",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

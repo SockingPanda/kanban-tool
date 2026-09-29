@@ -43,6 +43,14 @@ description: 在 kanban-tool 新增、修改、合并或删除测试，修复行
 先核对当前依赖与持久化 owner，不把其他项目的 SQLite/Turso 方案代入本仓库。跨层多测仅在
 增加新的边界证据时保留；不在每个 CLI/MCP/Web/Server 入口复制整份业务矩阵。
 
+## 模块结构与执行目标
+
+纯 DTO 样本放回 protocol；存储事实和故障检查放在 service；Host／router 与 stdio 只保留实际边界。
+在已有测试目标内用子模块表达契约，不为每个测试文件新增 integration-test binary。物理拆文件本身
+不会缩小 Cargo 的编译单元；跨 owner 下沉、减少重复编译依赖与必要的调度入口才可能降低构建成本。
+移动时一起核对 `mod` 接线、include 路径、Cargo 显式 target、feature 开关与过滤器。不得只把文件
+搬进 `tests/` 就当作已被运行；不要将无条件格式测试移入仅在 schema feature 下启用的目标。
+
 ## 保留、下沉、合并与删除
 
 同一行为的输入变体用具名表项表达；默认保留每项期望值和错误上下文，不写通用测试 DSL。

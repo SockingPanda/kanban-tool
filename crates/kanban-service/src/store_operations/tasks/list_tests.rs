@@ -412,9 +412,9 @@ mod tests {
                             ELSE 100
                         END,
                         due_at = CASE id
-                            WHEN 't_sort_1' THEN 300
+                            WHEN 't_sort_1' THEN 100
                             WHEN 't_sort_2' THEN NULL
-                            ELSE 100
+                            ELSE 300
                         END,
                         created_at = CASE id
                             WHEN 't_sort_1' THEN 100
@@ -486,10 +486,10 @@ mod tests {
                 TaskListSort::UpdatedAtDesc,
                 ["t_sort_1", "t_sort_3", "t_sort_2"],
             ),
-            (TaskListSort::DueAt, ["t_sort_3", "t_sort_1", "t_sort_2"]),
+            (TaskListSort::DueAt, ["t_sort_1", "t_sort_3", "t_sort_2"]),
             (
                 TaskListSort::DueAtDesc,
-                ["t_sort_1", "t_sort_3", "t_sort_2"],
+                ["t_sort_3", "t_sort_1", "t_sort_2"],
             ),
         ];
         for (sort, expected) in sorts {

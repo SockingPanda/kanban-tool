@@ -10,6 +10,9 @@ use serde_json::json;
 #[path = "rpc/fixtures.rs"]
 mod fixtures;
 
+#[path = "rpc/fixture_contracts.rs"]
+mod fixture_contracts;
+
 #[path = "rpc/query.rs"]
 mod queries;
 

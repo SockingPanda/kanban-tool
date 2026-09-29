@@ -540,7 +540,7 @@ async fn modern_business_failure_is_not_a_protocol_error_and_preserves_the_conne
 }
 
 #[tokio::test]
-async fn modern_requests_can_overlap_and_busy_does_not_start_another_call() {
+async fn modern_timeout_is_a_business_failure_and_preserves_the_connection() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let mut mcp = Mcp::start_with_config(
         &format!("http://{}", listener.local_addr().unwrap()),
@@ -555,15 +555,19 @@ async fn modern_requests_can_overlap_and_busy_does_not_start_another_call() {
         .send_request("tools/call", json!({"name": "board_list", "arguments": {}}))
         .await;
     let (_socket, _) = timeout(WAIT, listener.accept()).await.unwrap().unwrap();
-    let failure = mcp.call_error("board_list", json!({})).await;
-    assert_eq!(failure["code"], "busy");
-    assert_eq!(failure["retry_safe"], true);
+    // stdio 只证明真实超时的协议映射；占位和 busy 在 execution 的受控 Future 中验证。
     let first = mcp.receive_for(first_id).await;
     assert_eq!(first["result"]["isError"], true);
     assert_eq!(
         first["result"]["_meta"]["io.github.sockingpanda.kanban-tool/error"]["code"],
         "timeout"
     );
+    assert!(
+        first.get("error").is_none(),
+        "业务超时不能变成 JSON-RPC 协议错误"
+    );
+    let discovery = mcp.request("server/discover", json!({})).await;
+    support::assert_cached_result(&discovery["result"]);
     mcp.finish().await;
 }
 

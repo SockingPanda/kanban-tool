@@ -34,13 +34,44 @@ async function closeHttpServer(server: Server): Promise<void> {
   await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
 }
 
+// 复用 listener，但每例都等待连接和异步 handler 结束；不能只替换 handler 指针。
+function requestDrainer(server: Server) {
+  const sockets = new Set<import("node:net").Socket>()
+  server.on("connection", socket => {
+    sockets.add(socket)
+    socket.once("close", () => sockets.delete(socket))
+  })
+  return async () => {
+    await Promise.all([...sockets].map(socket => new Promise<void>(resolve => {
+      socket.once("close", () => resolve())
+      socket.destroy()
+    })))
+  }
+}
+
 async function fixture(
   kind: "dev" | "preview",
 ) {
-  let handler: (request: IncomingMessage, response: ServerResponse) => void = (_request, response) => {
+  type Handler = (request: IncomingMessage, response: ServerResponse) => void | Promise<void>
+  const unset: Handler = (_request, response) => {
     response.writeHead(500).end("没有为该用例设置上游 handler")
   }
-  const upstream = createHttpServer((request, response) => handler(request, response))
+  let handler = unset
+  let resetting = false
+  const pending = new Set<Promise<void>>()
+  const failures: unknown[] = []
+  const upstream = createHttpServer((request, response) => {
+    if (resetting) { response.destroy(); return }
+    const current = handler
+    const work: Promise<void> = Promise.resolve().then(() => current(request, response)).catch(error => {
+      const interrupted = resetting && error instanceof Error && "code" in error
+        && (error.code === "ECONNRESET" || error.code === "ERR_STREAM_PREMATURE_CLOSE")
+      if (!interrupted) failures.push(error)
+      response.destroy()
+    }).finally(() => pending.delete(work))
+    pending.add(work)
+  })
+  const drainUpstream = requestDrainer(upstream)
   await new Promise<void>(resolve => upstream.listen(0, "127.0.0.1", resolve))
   const root = await mkdtemp(join(tmpdir(), "kanban-host-proxy-"))
   await mkdir(join(root, "dist"))
@@ -49,32 +80,55 @@ async function fixture(
   await writeFile(join(root, "dist/manifest.json"), JSON.stringify({ owner: "local-preview" }))
   vi.stubEnv("KANBAN_HOST_URL", serverOrigin(upstream))
   const common = { configFile, root, mode: "test", logLevel: "silent" as const }
+  function wrap(host: Server, stop: () => Promise<void>) {
+    const drainHost = requestDrainer(host)
+    async function resetRequests() {
+      resetting = true
+      handler = unset
+      try {
+        await drainHost()
+        await drainUpstream()
+        await Promise.all([...pending])
+        if (failures.length) throw new AggregateError(failures.splice(0), "上游 handler 失败")
+      } finally {
+        resetting = false
+      }
+    }
+    return {
+      origin: serverOrigin(host), upstreamOrigin: serverOrigin(upstream),
+      setHandler: (next: Handler) => { handler = next },
+      resetRequests,
+      close: async () => {
+        try { await resetRequests() } finally {
+          try { await stop() } finally {
+            try { await closeHttpServer(upstream) } finally {
+              await rm(root, { recursive: true, force: true })
+            }
+          }
+        }
+      },
+    }
+  }
+  let stop: (() => Promise<void>) | undefined
   try {
     if (kind === "dev") {
       const vite = await createServer({ ...common,
         server: { host: "127.0.0.1", port: 0, strictPort: true, watch: null, hmr: false, ws: false },
         optimizeDeps: { noDiscovery: true, include: [] },
       })
+      stop = () => vite.close()
       await vite.listen()
-      return { origin: serverOrigin(vite.httpServer!), upstreamOrigin: serverOrigin(upstream),
-        setHandler: (next: typeof handler) => { handler = next },
-        close: async () => {
-          await vite.close()
-          await closeHttpServer(upstream)
-          await rm(root, { recursive: true, force: true })
-        } }
+      return wrap(vite.httpServer!, stop)
     }
     const vite = await preview({ ...common, preview: { host: "127.0.0.1", port: 0, strictPort: true } })
-    return { origin: serverOrigin(vite.httpServer), upstreamOrigin: serverOrigin(upstream),
-      setHandler: (next: typeof handler) => { handler = next },
-      close: async () => {
-        await closeHttpServer(vite.httpServer)
-        await closeHttpServer(upstream)
-        await rm(root, { recursive: true, force: true })
-      } }
+    stop = () => closeHttpServer(vite.httpServer)
+    return wrap(vite.httpServer, stop)
   } catch (error) {
-    await closeHttpServer(upstream)
-    await rm(root, { recursive: true, force: true })
+    try { await stop?.() } finally {
+      try { await closeHttpServer(upstream) } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    }
     throw error
   }
 }
@@ -87,7 +141,8 @@ async function readBody(request: IncomingMessage): Promise<Buffer> {
 
 function send(origin: string, path: string, headers: OutgoingHttpHeaders | readonly string[] = {}, body?: Buffer) {
   return new Promise<{ status: number | undefined; headers: IncomingMessage["headers"]; body: Buffer }>((resolve, reject) => {
-    const request = httpRequest(`${origin}${path}`, { method: body === undefined ? "GET" : "POST", headers }, response => {
+    // 每例会主动关闭连接；避免全局 Agent 在相邻用例复用刚被关闭的空闲 socket。
+    const request = httpRequest(`${origin}${path}`, { method: body === undefined ? "GET" : "POST", headers, agent: false }, response => {
       void readBody(response).then(bytes => resolve({ status: response.statusCode, headers: response.headers, body: bytes }), reject)
     })
     request.on("error", reject)
@@ -95,7 +150,7 @@ function send(origin: string, path: string, headers: OutgoingHttpHeaders | reado
   })
 }
 
-describe("KANBAN_HOST_URL", () => {
+describe.sequential("KANBAN_HOST_URL", () => {
   test("默认端口与已支持的 loopback origin", () => {
     expect(resolveKanbanHostUrl()).toBe("http://127.0.0.1:8721")
     for (const origin of ["http://localhost:18721", "http://[::1]:18721", "https://127.0.0.1:18721"]) {
@@ -113,7 +168,7 @@ describe("KANBAN_HOST_URL", () => {
   })
 })
 
-describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind => {
+describe.sequential.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind => {
   let value: Awaited<ReturnType<typeof fixture>> | undefined
 
   function currentFixture(): Awaited<ReturnType<typeof fixture>> {
@@ -125,10 +180,8 @@ describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind =>
     value = await fixture(kind)
   })
 
-  afterEach(() => {
-    value?.setHandler((_request, response) => {
-      response.writeHead(500).end("没有为该用例设置上游 handler")
-    })
+  afterEach(async () => {
+    await value?.resetRequests()
   })
 
   afterAll(async () => {
@@ -143,7 +196,7 @@ describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind =>
     const value = currentFixture()
     const received: Array<{ url?: string; method?: string; headers: IncomingMessage["headers"]; body: Buffer }> = []
     value.setHandler((request, response) => {
-      void readBody(request).then(body => {
+      return readBody(request).then(body => {
         received.push({ url: request.url, method: request.method, headers: request.headers, body })
         response.writeHead(200, { "Content-Type": "application/grpc-web+proto" }).end(body)
       })

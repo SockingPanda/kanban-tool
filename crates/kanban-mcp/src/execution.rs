@@ -1,6 +1,8 @@
 //! 读取资源和执行工具共用的调度限制；此处不实现领域状态机或重试。
 
-use std::time::Duration;
+use std::{future::Future, time::Duration};
+
+use tokio::sync::Semaphore;
 
 use rmcp::{
     ErrorData as McpError, RoleServer,
@@ -37,27 +39,17 @@ impl KanbanMcp {
                 None,
             ));
         }
-        let _permit = self.in_flight.try_acquire().map_err(|_| {
-            Failure::new(
-                "busy",
-                "MCP 当前并发已满，请稍后重试",
-                OperationStatus::NotStarted,
-                true,
-            )
-            .into_internal()
-        })?;
         let cancellation = context.ct.clone();
-        let call = ToolCallContext::new(self, request, context);
-        // 取消后丢弃 handler/gRPC Future。SDK 发送层会丢弃对应响应。
-        tokio::select! {
-            biased;
-            _ = cancellation.cancelled() => {
-                Err(Failure::new("cancelled", "调用已取消，写入结果未知", OperationStatus::Unknown, false).into_internal())
-            }
-            result = tokio::time::timeout(Duration::from_millis(self.config.limits.timeout_ms), self.router.call(call)) => {
-                result.unwrap_or_else(|_| Err(Failure::new("timeout", "调用超时，写入结果未知", OperationStatus::Unknown, true).into_internal()))
-            }
-        }
+        run_limited(
+            &self.in_flight,
+            Duration::from_millis(self.config.limits.timeout_ms),
+            cancellation.cancelled(),
+            || {
+                self.router
+                    .call(ToolCallContext::new(self, request, context))
+            },
+        )
+        .await
     }
 
     pub(crate) fn finish_tool(
@@ -114,3 +106,36 @@ impl KanbanMcp {
         Ok(result.into())
     }
 }
+
+/// 获取 permit 后才创建调用；超时和取消丢弃同一个 handler Future，不重试领域操作。
+async fn run_limited<T, F>(
+    in_flight: &Semaphore,
+    timeout: Duration,
+    cancellation: impl Future<Output = ()>,
+    call: impl FnOnce() -> F,
+) -> Result<T, McpError>
+where
+    F: Future<Output = Result<T, McpError>>,
+{
+    let _permit = in_flight.try_acquire().map_err(|_| {
+        Failure::new(
+            "busy",
+            "MCP 当前并发已满，请稍后重试",
+            OperationStatus::NotStarted,
+            true,
+        )
+        .into_internal()
+    })?;
+    tokio::select! {
+        biased;
+        _ = cancellation => {
+            Err(Failure::new("cancelled", "调用已取消，写入结果未知", OperationStatus::Unknown, false).into_internal())
+        }
+        result = tokio::time::timeout(timeout, call()) => {
+            result.unwrap_or_else(|_| Err(Failure::new("timeout", "调用超时，写入结果未知", OperationStatus::Unknown, true).into_internal()))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

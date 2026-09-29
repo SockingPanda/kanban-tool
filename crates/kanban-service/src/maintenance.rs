@@ -3424,6 +3424,9 @@ fn json_error(error: serde_json::Error) -> StoreError {
 
 #[cfg(test)]
 mod tests {
+    mod portable_roundtrip;
+    mod replace_recovery;
+
     use std::{collections::BTreeMap, fs, path::Path, sync::Arc, time::Duration};
 
     use tokio::sync::Notify;
@@ -3994,124 +3997,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn verified_backup_and_portable_export_import_roundtrip() {
-        let (source_directory, source, _source_path) = store("maintenance-source").await;
-        source.initialize().await.expect("initialize source");
-        source
-            .create_task(
-                "default",
-                create_input("t_maintenance", None, "Maintenance fixture"),
-            )
-            .await
-            .expect("fixture task");
-        source
-            .create_task("default", create_input("t_parent", None, "Parent fixture"))
-            .await
-            .expect("parent task");
-        source
-            .create_task("default", create_input("t_child", None, "Child fixture"))
-            .await
-            .expect("child task");
-        let source_connection = source.connection().await.expect("source connection");
-        source_connection
-            .execute(
-                "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES ('b_default', 't_parent', 't_child', 424242)",
-                (),
-            )
-            .await
-            .expect("dependency");
-        drop(source_connection);
-
-        let backup_path = source_directory.path().join("verified.db");
-        let backup = source.backup(&backup_path).await.expect("verified backup");
-        assert!(backup_path.is_file());
-        assert!(backup.bytes > 0);
-        assert!(backup.checksum_sha256.starts_with("sha256:"));
-
-        let export_path = source_directory.path().join("portable.jsonl");
-        let export = source.export(&export_path).await.expect("portable export");
-        assert!(export.record_count > 0);
-        assert!(export_path.is_file());
-
-        let (_target_directory, target, _target_path) = store("maintenance-target").await;
-        target.initialize().await.expect("initialize target");
-        let import = target
-            .import(&export_path, false)
-            .await
-            .expect("portable import");
-        assert!(import.imported_records > 0);
-        assert_eq!(import.phase, "completed");
-        assert!(!import.restart_required);
-        assert!(import.rebuild_jobs_enqueued > 0);
-        assert!(
-            !target
-                .maintenance_status()
-                .await
-                .expect("target status")
-                .owner
-                .active
-        );
-        let tasks = target
-            .list_tasks(
-                "default",
-                crate::store_operations::StoreTaskListOptions::default(),
-            )
-            .await
-            .expect("imported tasks");
-        assert!(tasks.tasks.iter().any(|task| task.id == "t_maintenance"));
-        assert!(tasks.tasks.iter().any(|task| task.id == "t_parent"));
-        assert!(tasks.tasks.iter().any(|task| task.id == "t_child"));
-
-        let repeated = target
-            .import(&export_path, false)
-            .await
-            .expect("repeated portable import is idempotent");
-        assert_eq!(repeated.journal_id, import.journal_id);
-        assert_eq!(repeated.phase, "completed");
-        let target_connection = target.connection().await.expect("target connection");
-        let mut rows = target_connection
-            .query(
-                "SELECT parent_task_id, child_task_id, created_at FROM task_dependencies",
-                (),
-            )
-            .await
-            .expect("dependency query");
-        let row = rows
-            .next()
-            .await
-            .expect("dependency row result")
-            .expect("dependency row");
-        assert_eq!(
-            text_value(row.get_value(0).expect("parent"), "parent").expect("parent text"),
-            "t_parent"
-        );
-        assert_eq!(
-            text_value(row.get_value(1).expect("child"), "child").expect("child text"),
-            "t_child"
-        );
-        assert_eq!(
-            integer_value(row.get_value(2).expect("created_at"), "created_at")
-                .expect("created_at integer"),
-            424242
-        );
-        assert!(rows.next().await.expect("next dependency").is_none());
-        drop(rows);
-        drop(target_connection);
-        assert_eq!(
-            target
-                .list_tasks(
-                    "default",
-                    crate::store_operations::StoreTaskListOptions::default(),
-                )
-                .await
-                .expect("repeated tasks")
-                .tasks
-                .len(),
-            3
-        );
-    }
-
-    #[tokio::test]
     async fn portable_checksum_failure_leaves_empty_target_bootstrap_intact() {
         let (source_directory, source, _source_path) = store("maintenance-checksum-source").await;
         source.initialize().await.expect("initialize source");
@@ -4285,76 +4170,6 @@ mod tests {
         .await
         .expect("rebuild job count");
         assert!(jobs > 0);
-    }
-
-    #[tokio::test]
-    async fn replace_backup_journal_failure_is_retryable_without_fact_loss() {
-        let (directory, target, _target_path) = store("maintenance-backup-journal").await;
-        target.initialize().await.expect("initialize target");
-        let incoming = target
-            .create_task(
-                "default",
-                create_input("t_backup_incoming", None, "backup journal incoming"),
-            )
-            .await
-            .expect("source task");
-        let export_path = directory.path().join("portable.jsonl");
-        target.export(&export_path).await.expect("portable export");
-        target
-            .update_task(
-                &incoming.id,
-                crate::test_support::UpdateTaskInput {
-                    planning: Default::default(),
-                    request_id: None,
-                    request_fingerprint: None,
-                    expected_lock_version: incoming.lock_version,
-                    actor: "tester".to_owned(),
-                    title: Some("backup journal existing".to_owned()),
-                    description: None,
-                    assignee: None,
-                    priority: None,
-                    scheduled_at: None,
-                    due_at: None,
-                    max_retries: None,
-                    metadata_json: None,
-                    event_id: "e_backup_existing".to_owned(),
-                    now: now_ms(),
-                },
-            )
-            .await
-            .expect("change target fact after snapshot");
-        target.set_import_failpoint(super::FAILPOINT_BACKUP_JOURNAL);
-        let first = target
-            .import(&export_path, true)
-            .await
-            .expect_err("backup journal fault must surface before replace transaction");
-        assert!(first.to_string().contains("故障注入"));
-        let tasks = target
-            .list_tasks(
-                "default",
-                crate::store_operations::StoreTaskListOptions::default(),
-            )
-            .await
-            .expect("tasks after backup journal fault");
-        assert_eq!(tasks.tasks.len(), 1);
-        assert_eq!(tasks.tasks[0].id, "t_backup_incoming");
-        assert_eq!(tasks.tasks[0].title, "backup journal existing");
-
-        let resumed = target
-            .import(&export_path, true)
-            .await
-            .expect("prepared replace journal retries backup and transaction");
-        assert_eq!(resumed.phase, "completed");
-        let tasks = target
-            .list_tasks(
-                "default",
-                crate::store_operations::StoreTaskListOptions::default(),
-            )
-            .await
-            .expect("replaced tasks");
-        assert_eq!(tasks.tasks.len(), 1);
-        assert_eq!(tasks.tasks[0].id, "t_backup_incoming");
-        assert_eq!(tasks.tasks[0].title, "backup journal incoming");
     }
 
     #[tokio::test]

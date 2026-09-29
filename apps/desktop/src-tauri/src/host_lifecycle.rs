@@ -2953,6 +2953,7 @@ mod tests {
     #[test]
     fn owned_host_shutdown_forces_child_after_graceful_timeout() {
         let _reaper_guard = reaper_test_guard();
+        // SIGINT ignore 在 pre_exec 中安装；该子进程不会主动走 graceful exit。
         let process = test_sleep_child(true);
         let mut handle = HostHandle {
             ownership: HostOwnership::Owned,
@@ -2961,31 +2962,43 @@ mod tests {
             force_requested: false,
         };
         let pid = handle.child.as_ref().expect("owned child").process().id();
-        match handle.shutdown_with_graceful_timeout(Duration::from_millis(100)) {
-            Ok(result) => {
-                assert!(matches!(
-                    result,
-                    ShutdownResult::Forced | ShutdownResult::AlreadyExited
-                ));
+        let grace = Duration::from_millis(100);
+        let started = Instant::now();
+        let result = handle.shutdown_with_graceful_timeout(grace);
+        assert!(started.elapsed() >= grace, "不得在 grace 到期前走强制清理");
+        match result {
+            Ok(ShutdownResult::Forced) => {
                 assert!(handle.child.is_none(), "forced child must be reaped");
+                assert_eq!(unsafe { libc::kill(pid as libc::pid_t, 0) }, -1);
+                assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
             }
-            Err(_) => {
+            Err(ShutdownError::Io(message))
+                if message == "强制停止已发出，但尚未确认 sidecar reap；保留 ownership 供重试" =>
+            {
+                let child = handle
+                    .child
+                    .as_ref()
+                    .expect("pending reap retains ownership");
                 assert!(
-                    handle.child.is_some(),
-                    "unconfirmed cleanup retains ownership"
+                    child.group_signal_sent,
+                    "pending reap 之前必须实际请求强制清理"
                 );
                 drop(handle);
-                let reap_deadline = Instant::now() + Duration::from_secs(2);
-                while unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
-                    && Instant::now() < reap_deadline
-                {
+                let deadline = Instant::now() + Duration::from_secs(2);
+                loop {
+                    // ESRCH 才证明已回收；EPERM 等探测错误不能冒充进程消失。
+                    if unsafe { libc::kill(pid as libc::pid_t, 0) } == -1 {
+                        assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+                        break;
+                    }
+                    assert!(
+                        Instant::now() < deadline,
+                        "background reaper did not reap sidecar"
+                    );
                     thread::sleep(Duration::from_millis(10));
                 }
-                assert!(
-                    unsafe { libc::kill(pid as libc::pid_t, 0) } != 0,
-                    "background reaper did not reap sidecar"
-                );
             }
+            other => panic!("强制关闭契约遇到无关结果: {other:?}"),
         }
     }
 

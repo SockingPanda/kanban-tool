@@ -6,21 +6,16 @@ use kanban_protocol::rpc::v1 as pb;
 #[cfg(feature = "legacy-sqlite-import")]
 use serde_json::Value;
 use std::collections::BTreeMap;
-use tokio::sync::OnceCell;
 use tower::ServiceExt;
 
 use crate::{AppState, build_router};
 
-static LEGACY_RPC_FLOW: OnceCell<()> = OnceCell::const_new();
-
-pub(crate) async fn ensure_legacy_rpc_flow() {
-    LEGACY_RPC_FLOW
-        .get_or_init(|| async {
-            run_legacy_rpc_flow()
-                .await
-                .expect("legacy SQLite v30 RPC flow");
-        })
-        .await;
+// feature 开启时验证真实导入及附件；关闭时验证 RPC 明确返回 Unimplemented。
+#[tokio::test]
+async fn legacy_rpc_matches_feature_contract() {
+    run_legacy_rpc_flow()
+        .await
+        .expect("legacy SQLite v30 RPC flow");
 }
 
 async fn run_legacy_rpc_flow() -> Result<(), String> {

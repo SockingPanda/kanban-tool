@@ -331,20 +331,14 @@ mod maintenance_adoption {
     use serde::{Serialize, de::DeserializeOwned};
     use serde_json::Value;
     use std::collections::BTreeMap;
-    use tokio::sync::OnceCell;
     use tower::ServiceExt;
 
-    use super::legacy_adoption::ensure_legacy_rpc_flow;
     use crate::{AppState, build_router};
 
-    static RPC_FLOW: OnceCell<()> = OnceCell::const_new();
-
-    async fn ensure_rpc_flow() {
-        RPC_FLOW
-            .get_or_init(|| async {
-                run_rpc_flow().await.expect("maintenance RPC flow");
-            })
-            .await;
+    // 只验证 RPC 边界的真实往返；静态格式契约不再触发此流程。
+    #[tokio::test]
+    async fn maintenance_rpc_exercises_real_router() {
+        run_rpc_flow().await.expect("maintenance RPC flow");
     }
 
     async fn run_rpc_flow() -> Result<(), String> {
@@ -577,200 +571,95 @@ mod maintenance_adoption {
         Ok(())
     }
 
-    fn assert_fixture_roundtrip<T>(raw: &str)
+    // 格式契约没有数据库前置条件。每个失败都携带 fixture 名称。
+    fn fixture_roundtrip<T>(name: &str, raw: &str) -> Result<(), String>
     where
         T: DeserializeOwned + Serialize,
     {
-        let expected: Value = serde_json::from_str(raw).expect("maintenance fixture JSON");
-        let value: T = serde_json::from_value(expected.clone()).expect("maintenance fixture DTO");
-        assert_eq!(
-            serde_json::to_value(value).expect("serialize maintenance DTO"),
-            expected
+        let expected: Value =
+            serde_json::from_str(raw).map_err(|error| format!("{name}: fixture JSON: {error}"))?;
+        let value: T =
+            serde_json::from_str(raw).map_err(|error| format!("{name}: DTO 解码: {error}"))?;
+        let actual =
+            serde_json::to_value(value).map_err(|error| format!("{name}: DTO 编码: {error}"))?;
+        if !actual.is_object() {
+            return Err(format!("{name}: 编码结果不是对象"));
+        }
+        if actual != expected {
+            return Err(format!(
+                "{name}: 往返不一致\nexpected={expected}\nactual={actual}"
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn maintenance_fixture_contracts() {
+        macro_rules! check {
+            ($ty:ty, $name:literal) => {
+                fixture_roundtrip::<$ty>(
+                    $name,
+                    include_str!(concat!(
+                        "../../../schemas/fixtures/api/",
+                        $name,
+                        ".v1.valid.json"
+                    )),
+                )
+            };
+        }
+
+        // 收集所有格式失败，避免合并后只能看到第一个不兼容的 fixture。
+        let results = [
+            check!(MaintenancePathRequest, "maintenance-path-request"),
+            check!(MaintenanceImportRequest, "maintenance-import-request"),
+            check!(MaintenancePathRequest, "maintenance-backup-request"),
+            check!(MaintenancePathRequest, "maintenance-export-request"),
+            check!(MaintenanceRunRequest, "maintenance-run-request"),
+            check!(MaintenanceRunRequest, "maintenance-rebuild-request"),
+            check!(MaintenanceRunRequest, "maintenance-cleanup-request"),
+            check!(LegacyImportRequest, "maintenance-import-v30-request"),
+            check!(BackupResponse, "maintenance-backup-response"),
+            check!(ExportResponse, "maintenance-export-response"),
+            check!(ImportResponse, "maintenance-import-response"),
+            check!(VacuumResponse, "maintenance-vacuum-response"),
+            check!(MaintenanceStatusResponse, "maintenance-status-response"),
+            check!(MaintenanceRunResponse, "maintenance-run-response"),
+            check!(MaintenanceRebuildResponse, "maintenance-rebuild-response"),
+            check!(MaintenanceRunResponse, "maintenance-cleanup-response"),
+            check!(LegacyImportResponse, "maintenance-import-v30-response"),
+            check!(CheckpointResponse, "checkpoint-response"),
+            check!(DoctorResponse, "doctor-response"),
+        ];
+        let failures = results
+            .into_iter()
+            .filter_map(Result::err)
+            .collect::<Vec<_>>();
+        assert!(
+            failures.is_empty(),
+            "maintenance 格式契约失败:\n{}",
+            failures.join("\n")
         );
-    }
 
-    macro_rules! adoption_pair {
-        ($producer:ident, $consumer:ident, $ty:ty, $fixture:expr) => {
-            #[tokio::test]
-            async fn $producer() {
-                ensure_rpc_flow().await;
-                assert_fixture_roundtrip::<$ty>($fixture);
-            }
-
-            #[tokio::test]
-            async fn $consumer() {
-                ensure_rpc_flow().await;
-                let value: $ty = serde_json::from_str($fixture).expect("maintenance fixture DTO");
-                let encoded = serde_json::to_value(value).expect("serialize maintenance DTO");
-                assert!(encoded.is_object());
-            }
-        };
-    }
-
-    macro_rules! legacy_adoption_pair {
-        ($producer:ident, $consumer:ident, $ty:ty, $fixture:expr) => {
-            #[tokio::test]
-            async fn $producer() {
-                ensure_rpc_flow().await;
-                ensure_legacy_rpc_flow().await;
-                assert_fixture_roundtrip::<$ty>($fixture);
-            }
-
-            #[tokio::test]
-            async fn $consumer() {
-                ensure_rpc_flow().await;
-                ensure_legacy_rpc_flow().await;
-                let value: $ty = serde_json::from_str($fixture).expect("maintenance fixture DTO");
-                let encoded = serde_json::to_value(value).expect("serialize maintenance DTO");
-                assert!(encoded.is_object());
-            }
-        };
-    }
-
-    adoption_pair!(
-        maintenance_path_request_producer,
-        maintenance_path_request_consumer,
-        MaintenancePathRequest,
-        include_str!("../../../schemas/fixtures/api/maintenance-path-request.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_import_request_producer,
-        maintenance_import_request_consumer,
-        MaintenanceImportRequest,
-        include_str!("../../../schemas/fixtures/api/maintenance-import-request.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_backup_request_producer,
-        maintenance_backup_request_consumer,
-        MaintenancePathRequest,
-        include_str!("../../../schemas/fixtures/api/maintenance-backup-request.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_export_request_producer,
-        maintenance_export_request_consumer,
-        MaintenancePathRequest,
-        include_str!("../../../schemas/fixtures/api/maintenance-export-request.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_run_request_producer,
-        maintenance_run_request_consumer,
-        MaintenanceRunRequest,
-        include_str!("../../../schemas/fixtures/api/maintenance-run-request.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_rebuild_request_producer,
-        maintenance_rebuild_request_consumer,
-        MaintenanceRunRequest,
-        include_str!("../../../schemas/fixtures/api/maintenance-rebuild-request.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_cleanup_request_producer,
-        maintenance_cleanup_request_consumer,
-        MaintenanceRunRequest,
-        include_str!("../../../schemas/fixtures/api/maintenance-cleanup-request.v1.valid.json")
-    );
-    legacy_adoption_pair!(
-        legacy_import_v30_request_producer,
-        legacy_import_v30_request_consumer,
-        LegacyImportRequest,
-        include_str!("../../../schemas/fixtures/api/maintenance-import-v30-request.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_backup_response_producer,
-        maintenance_backup_response_consumer,
-        BackupResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-backup-response.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_export_response_producer,
-        maintenance_export_response_consumer,
-        ExportResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-export-response.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_import_response_producer,
-        maintenance_import_response_consumer,
-        ImportResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-import-response.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_vacuum_response_producer,
-        maintenance_vacuum_response_consumer,
-        VacuumResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-vacuum-response.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_status_response_producer,
-        maintenance_status_response_consumer,
-        MaintenanceStatusResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-status-response.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_run_response_producer,
-        maintenance_run_response_consumer,
-        MaintenanceRunResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-run-response.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_rebuild_response_producer,
-        maintenance_rebuild_response_consumer,
-        MaintenanceRebuildResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-rebuild-response.v1.valid.json")
-    );
-    adoption_pair!(
-        maintenance_cleanup_response_producer,
-        maintenance_cleanup_response_consumer,
-        MaintenanceRunResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-cleanup-response.v1.valid.json")
-    );
-    legacy_adoption_pair!(
-        legacy_import_v30_response_producer,
-        legacy_import_v30_response_consumer,
-        LegacyImportResponse,
-        include_str!("../../../schemas/fixtures/api/maintenance-import-v30-response.v1.valid.json")
-    );
-
-    #[tokio::test]
-    async fn checkpoint_response_contract_consumes_producer_fixture() {
-        ensure_rpc_flow().await;
-        let response: CheckpointResponse = serde_json::from_str(include_str!(
+        // 保留原有 fixture 语义断言；不将静态示例称作真实 WAL 或 doctor 证据。
+        let checkpoint: CheckpointResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/checkpoint-response.v1.valid.json"
         ))
         .expect("checkpoint response fixture");
-        assert_eq!(response.data.log_frames, response.data.checkpointed_frames);
-    }
+        assert_eq!(
+            checkpoint.data.log_frames,
+            checkpoint.data.checkpointed_frames
+        );
+        assert!(checkpoint.data.busy >= 0);
+        assert!(checkpoint.data.checkpointed_frames <= checkpoint.data.log_frames);
 
-    #[tokio::test]
-    async fn checkpoint_response_reports_real_wal_field_relationships() {
-        ensure_rpc_flow().await;
-        let response: CheckpointResponse = serde_json::from_str(include_str!(
-            "../../../schemas/fixtures/api/checkpoint-response.v1.valid.json"
-        ))
-        .expect("checkpoint response fixture");
-        assert!(response.data.busy >= 0);
-        assert!(response.data.checkpointed_frames <= response.data.log_frames);
-    }
-
-    #[tokio::test]
-    async fn doctor_response_contract_consumes_producer_fixture() {
-        ensure_rpc_flow().await;
-        let response: DoctorResponse = serde_json::from_str(include_str!(
+        let doctor: DoctorResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/doctor-response.v1.valid.json"
         ))
         .expect("doctor response fixture");
-        assert!(response.data.ok);
-        assert_eq!(response.data.derived_stores.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn doctor_response_maps_real_non_default_report_before_fixture_normalization() {
-        ensure_rpc_flow().await;
-        let response: DoctorResponse = serde_json::from_str(include_str!(
-            "../../../schemas/fixtures/api/doctor-response.v1.valid.json"
-        ))
-        .expect("doctor response fixture");
-        assert_eq!(response.data.integrity_check, "ok");
-        assert_eq!(response.data.user_version, 1);
+        assert!(doctor.data.ok);
+        assert_eq!(doctor.data.derived_stores.len(), 1);
+        assert_eq!(doctor.data.integrity_check, "ok");
+        assert_eq!(doctor.data.user_version, 1);
     }
 }
 

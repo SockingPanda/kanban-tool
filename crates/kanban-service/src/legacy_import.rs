@@ -1749,6 +1749,7 @@ mod tests {
         assert!(!shm.exists());
     }
 
+    #[cfg(not(unix))]
     #[tokio::test]
     async fn initialized_default_target_is_logically_empty() {
         let directory = tempfile::tempdir().expect("temporary target directory");
@@ -1827,13 +1828,22 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn publish_rejects_canonical_symlink() {
+    async fn initialized_default_target_is_logically_empty_and_publish_rejects_canonical_symlink() {
         use std::os::unix::fs::symlink;
 
         let directory = tempfile::tempdir().expect("temporary publish directory");
         let path = directory.path().join("target.turso");
         let store = TursoStore::open(&path).await.expect("open target");
         store.initialize().await.expect("initialize target");
+        let connection = store.connection().await.expect("target connection");
+        let counts = target_counts(&connection).await.expect("target counts");
+        assert!(
+            logical_empty(&connection, &counts)
+                .await
+                .expect("empty proof")
+        );
+        drop(connection);
+
         let staging = directory.path().join("staging");
         let target = directory.path().join("canonical");
         fs::create_dir_all(&staging).expect("staging root");

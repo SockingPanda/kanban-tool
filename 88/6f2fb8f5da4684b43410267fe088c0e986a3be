@@ -1,0 +1,22 @@
+crates/kanban-mcp/tests/stdio_native.rs
+  s_243209e7a7ea3a::t_19e27ffe55419d 17-23,445,495,557,583
+  s_243209e7a7ea3a::t_fc953f14b1ebc3 656
+crates/kanban-mcp/tests/stdio_native/support.rs
+  s_243209e7a7ea3a::t_19e27ffe55419d 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "886f2fb8f5da4684b43410267fe088c0e986a3be",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

@@ -201,7 +201,9 @@ fn affected_json_tracks_explicit_base_renames_and_untracked_documents() {
         value["recipes"],
         serde_json::json!(["docs-check", "diff-check"])
     );
-    assert_eq!(value.as_object().unwrap().len(), 5);
+    assert_eq!(value["rust_packages"], serde_json::json!([]));
+    assert!(value["rust_scope_reason"].is_null());
+    assert_eq!(value.as_object().unwrap().len(), 7);
 
     git(&["commit", "--quiet", "-m", "fixture rename"]);
     let value = plan(&base);

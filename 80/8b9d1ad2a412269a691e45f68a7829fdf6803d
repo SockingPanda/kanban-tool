@@ -1,0 +1,28 @@
+.agents/skills/test-design/references/evaluation.md
+  s_243209e7a7ea3a::t_3d930446030ed1 24-42
+.agents/skills/check/SKILL.md
+  s_243209e7a7ea3a::t_3d930446030ed1 3,29,56-67
+  s_243209e7a7ea3a::t_2fcacfae90f322 68
+.agents/skills/check/references/build-feedback.md
+  s_243209e7a7ea3a::t_3d930446030ed1 1-107
+.agents/skills/test-design/SKILL.md
+  s_243209e7a7ea3a::t_3d930446030ed1 26-27,52-56,68-71,83-95,104-106
+.agents/skills/test-design/references/patterns.md
+  s_243209e7a7ea3a::t_3d930446030ed1 43-47,56-96,111-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "808b9d1ad2a412269a691e45f68a7829fdf6803d",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

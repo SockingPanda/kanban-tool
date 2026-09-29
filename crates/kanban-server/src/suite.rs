@@ -8,149 +8,137 @@ mod labels_adoption {
     use serde::{Serialize, de::DeserializeOwned};
     use serde_json::Value;
 
-    fn fixture(path: &str) -> Value {
-        serde_json::from_str(match path {
-            "list-board-labels-path" => {
-                include_str!("../../../schemas/fixtures/api/list-board-labels-path.v1.valid.json")
-            }
-            "list-board-labels-response" => include_str!(
-                "../../../schemas/fixtures/api/list-board-labels-response.v1.valid.json"
+    // 格式契约保留独立字段预期；不把静态 fixture 反序列化称为真实 router 证据。
+    fn check_fixture<T>(
+        name: &str,
+        raw: &str,
+        expected_fields: fn(&T) -> bool,
+        expectation: &str,
+    ) -> Result<(), String>
+    where
+        T: DeserializeOwned + Serialize,
+    {
+        let expected: Value =
+            serde_json::from_str(raw).map_err(|error| format!("{name}: fixture JSON: {error}"))?;
+        let value: T =
+            serde_json::from_str(raw).map_err(|error| format!("{name}: DTO 解码: {error}"))?;
+        if !expected_fields(&value) {
+            return Err(format!("{name}: 字段预期不成立: {expectation}"));
+        }
+        let actual =
+            serde_json::to_value(value).map_err(|error| format!("{name}: DTO 编码: {error}"))?;
+        if actual != expected {
+            return Err(format!(
+                "{name}: 往返不一致\nexpected={expected}\nactual={actual}"
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn label_fixture_contracts() {
+        macro_rules! check {
+            ($ty:ty, $name:literal, $expected:expr) => {
+                check_fixture::<$ty>(
+                    $name,
+                    include_str!(concat!(
+                        "../../../schemas/fixtures/api/",
+                        $name,
+                        ".v1.valid.json"
+                    )),
+                    $expected,
+                    stringify!($expected),
+                )
+            };
+        }
+
+        let results = [
+            check!(BoardLabelPath, "list-board-labels-path", |value| {
+                value.board == "fixture"
+            }),
+            check!(
+                ListBoardLabelsResponse,
+                "list-board-labels-response",
+                |value| { value.data.is_empty() }
             ),
-            "create-board-label-path" => {
-                include_str!("../../../schemas/fixtures/api/create-board-label-path.v1.valid.json")
-            }
-            "create-board-label-request" => include_str!(
-                "../../../schemas/fixtures/api/create-board-label-request.v1.valid.json"
+            check!(BoardLabelPath, "create-board-label-path", |value| {
+                value.board == "fixture"
+            }),
+            check!(
+                CreateBoardLabelRequest,
+                "create-board-label-request",
+                |value| { value.name == "fixture" }
             ),
-            "create-board-label-response" => include_str!(
-                "../../../schemas/fixtures/api/create-board-label-response.v1.valid.json"
+            check!(
+                CreateBoardLabelResponse,
+                "create-board-label-response",
+                |value| { value.data.name == "fixture" }
             ),
-            "delete-board-label-path" => {
-                include_str!("../../../schemas/fixtures/api/delete-board-label-path.v1.valid.json")
-            }
-            "delete-board-label-query" => {
-                include_str!("../../../schemas/fixtures/api/delete-board-label-query.v1.valid.json")
-            }
-            "delete-board-label-response" => include_str!(
-                "../../../schemas/fixtures/api/delete-board-label-response.v1.valid.json"
+            check!(DeleteBoardLabelPath, "delete-board-label-path", |value| {
+                value.board == "fixture" && value.label_id == "l_fixture"
+            }),
+            check!(DeleteBoardLabelQuery, "delete-board-label-query", |value| {
+                !value.force
+            }),
+            check!(
+                DeleteBoardLabelResponse,
+                "delete-board-label-response",
+                |value| {
+                    value.data.label.name == "fixture"
+                        && value.data.forced
+                        && value.data.removed_task_bindings == 1
+                }
             ),
-            "list-task-labels-path" => {
-                include_str!("../../../schemas/fixtures/api/list-task-labels-path.v1.valid.json")
-            }
-            "list-task-labels-response" => include_str!(
-                "../../../schemas/fixtures/api/list-task-labels-response.v1.valid.json"
+            check!(ListTaskLabelsPath, "list-task-labels-path", |value| {
+                value.task_id == "t_fixture"
+            }),
+            check!(
+                ListTaskLabelsResponse,
+                "list-task-labels-response",
+                |value| {
+                    value
+                        .data
+                        .first()
+                        .is_some_and(|label| label.name == "后端-api")
+                }
             ),
-            "add-task-label-path" => {
-                include_str!("../../../schemas/fixtures/api/add-task-label-path.v1.valid.json")
-            }
-            "add-task-label-request" => {
-                include_str!("../../../schemas/fixtures/api/add-task-label-request.v1.valid.json")
-            }
-            "add-task-label-response" => {
-                include_str!("../../../schemas/fixtures/api/add-task-label-response.v1.valid.json")
-            }
-            "remove-task-label-path" => {
-                include_str!("../../../schemas/fixtures/api/remove-task-label-path.v1.valid.json")
-            }
-            "remove-task-label-response" => include_str!(
-                "../../../schemas/fixtures/api/remove-task-label-response.v1.valid.json"
+            check!(AddTaskLabelPath, "add-task-label-path", |value| {
+                value.task_id == "t_fixture"
+            }),
+            check!(AddTaskLabelRequest, "add-task-label-request", |value| {
+                value
+                    .label_names()
+                    .is_ok_and(|names| names == vec!["后端-api"])
+            }),
+            check!(AddTaskLabelResponse, "add-task-label-response", |value| {
+                value.data.labels.len() == 1
+                    && value
+                        .meta
+                        .as_ref()
+                        .is_some_and(|meta| meta.created_labels.len() == 1)
+            }),
+            check!(RemoveTaskLabelPath, "remove-task-label-path", |value| {
+                value.label_id == "l_fixture"
+            }),
+            check!(
+                RemoveTaskLabelResponse,
+                "remove-task-label-response",
+                |value| { value.data.labels.is_empty() }
             ),
-            other => panic!("unknown label fixture: {other}"),
-        })
-        .expect("label fixture JSON")
-    }
-
-    #[test]
-    fn list_board_labels_path_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<BoardLabelPath>("list-board-labels-path");
-    }
-
-    #[test]
-    fn list_board_labels_path_fixture_is_consumed_by_real_router() {
-        let path: BoardLabelPath = serde_json::from_value(fixture("list-board-labels-path"))
-            .expect("list board labels path fixture");
-        assert_eq!(path.board, "fixture");
-    }
-
-    #[test]
-    fn list_board_labels_response_fixture_is_produced_by_real_router() {
-        assert_fixture_roundtrip::<ListBoardLabelsResponse>("list-board-labels-response");
-    }
-
-    #[test]
-    fn list_board_labels_response_fixture_is_consumed_by_contract_root() {
-        let response: ListBoardLabelsResponse =
-            serde_json::from_value(fixture("list-board-labels-response"))
-                .expect("list board labels response fixture");
-        assert!(response.data.is_empty());
-    }
-
-    #[test]
-    fn create_board_label_path_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<BoardLabelPath>("create-board-label-path");
-    }
-
-    #[test]
-    fn create_board_label_path_fixture_is_consumed_by_real_router() {
-        let path: BoardLabelPath = serde_json::from_value(fixture("create-board-label-path"))
-            .expect("create board label path fixture");
-        assert_eq!(path.board, "fixture");
-    }
-
-    #[test]
-    fn create_board_label_request_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<CreateBoardLabelRequest>("create-board-label-request");
-    }
-
-    #[test]
-    fn create_board_label_request_fixture_is_consumed_by_real_router() {
-        let request: CreateBoardLabelRequest =
-            serde_json::from_value(fixture("create-board-label-request"))
-                .expect("create board label request fixture");
-        assert_eq!(request.name, "fixture");
-    }
-
-    #[test]
-    fn create_board_label_response_fixture_is_produced_by_real_router() {
-        assert_fixture_roundtrip::<CreateBoardLabelResponse>("create-board-label-response");
-    }
-
-    #[test]
-    fn create_board_label_response_fixture_is_consumed_by_contract_root() {
-        let response: CreateBoardLabelResponse =
-            serde_json::from_value(fixture("create-board-label-response"))
-                .expect("create board label response fixture");
-        assert_eq!(response.data.name, "fixture");
-    }
-
-    #[test]
-    fn delete_board_label_path_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<DeleteBoardLabelPath>("delete-board-label-path");
-    }
-
-    #[test]
-    fn delete_board_label_path_fixture_is_consumed_by_real_router() {
-        let path: DeleteBoardLabelPath = serde_json::from_value(fixture("delete-board-label-path"))
-            .expect("delete board label path fixture");
-        assert_eq!(path.board, "fixture");
-        assert_eq!(path.label_id, "l_fixture");
-    }
-
-    #[test]
-    fn delete_board_label_query_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<DeleteBoardLabelQuery>("delete-board-label-query");
-    }
-
-    #[test]
-    fn delete_board_label_query_fixture_is_consumed_by_real_router() {
-        let query: DeleteBoardLabelQuery =
-            serde_json::from_value(fixture("delete-board-label-query"))
-                .expect("delete board label query fixture");
-        assert!(!query.force);
+        ];
+        let failures = results
+            .into_iter()
+            .filter_map(Result::err)
+            .collect::<Vec<_>>();
+        assert!(
+            failures.is_empty(),
+            "label 格式契约失败:\n{}",
+            failures.join("\n")
+        );
     }
 
     #[tokio::test]
-    async fn delete_board_label_response_fixture_is_produced_by_real_router() {
+    async fn delete_board_label_router_returns_removal_report() {
         use crate::test_support::{decode_response, parts, rpc_request};
         use kanban_protocol::rpc::v1 as pb;
         use std::collections::BTreeMap;
@@ -196,123 +184,6 @@ mod labels_adoption {
         assert_eq!(deleted.data.removed_task_bindings, 0);
         assert!(!deleted.data.removed_semantics);
         assert_eq!(deleted.data.removed_atoms, 0);
-    }
-
-    #[test]
-    fn delete_board_label_response_fixture_is_consumed_by_contract_root() {
-        let response: DeleteBoardLabelResponse =
-            serde_json::from_value(fixture("delete-board-label-response"))
-                .expect("delete board label response fixture");
-        assert_eq!(response.data.label.name, "fixture");
-        assert!(response.data.forced);
-        assert_eq!(response.data.removed_task_bindings, 1);
-    }
-
-    fn assert_fixture_roundtrip<T>(name: &str)
-    where
-        T: DeserializeOwned + Serialize,
-    {
-        let expected = fixture(name);
-        let value: T = serde_json::from_value(expected.clone()).expect("fixture DTO");
-        assert_eq!(
-            serde_json::to_value(value).expect("serialize DTO"),
-            expected
-        );
-    }
-
-    #[test]
-    fn list_task_labels_path_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<ListTaskLabelsPath>("list-task-labels-path");
-    }
-
-    #[test]
-    fn list_task_labels_path_fixture_is_consumed_by_real_router() {
-        let path: ListTaskLabelsPath = serde_json::from_value(fixture("list-task-labels-path"))
-            .expect("list task labels path fixture");
-        assert_eq!(path.task_id, "t_fixture");
-    }
-
-    #[test]
-    fn list_task_labels_response_fixture_is_produced_by_real_router() {
-        assert_fixture_roundtrip::<ListTaskLabelsResponse>("list-task-labels-response");
-    }
-
-    #[test]
-    fn list_task_labels_response_fixture_is_consumed_by_contract_root() {
-        let response: ListTaskLabelsResponse =
-            serde_json::from_value(fixture("list-task-labels-response"))
-                .expect("list task labels response fixture");
-        assert_eq!(response.data[0].name, "后端-api");
-    }
-
-    #[test]
-    fn add_task_label_path_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<AddTaskLabelPath>("add-task-label-path");
-    }
-
-    #[test]
-    fn add_task_label_path_fixture_is_consumed_by_real_router() {
-        let path: AddTaskLabelPath = serde_json::from_value(fixture("add-task-label-path"))
-            .expect("add task label path fixture");
-        assert_eq!(path.task_id, "t_fixture");
-    }
-
-    #[test]
-    fn add_task_label_request_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<AddTaskLabelRequest>("add-task-label-request");
-    }
-
-    #[test]
-    fn add_task_label_request_fixture_is_consumed_by_real_router() {
-        let request: AddTaskLabelRequest =
-            serde_json::from_value(fixture("add-task-label-request"))
-                .expect("add task label request fixture");
-        assert_eq!(
-            request.label_names().expect("label names"),
-            vec!["后端-api"]
-        );
-    }
-
-    #[test]
-    fn add_task_label_response_fixture_is_produced_by_real_router() {
-        assert_fixture_roundtrip::<AddTaskLabelResponse>("add-task-label-response");
-    }
-
-    #[test]
-    fn add_task_label_response_fixture_is_consumed_by_contract_root() {
-        let response: AddTaskLabelResponse =
-            serde_json::from_value(fixture("add-task-label-response"))
-                .expect("add task label response fixture");
-        assert_eq!(response.data.labels.len(), 1);
-        assert_eq!(
-            response.meta.expect("created labels").created_labels.len(),
-            1
-        );
-    }
-
-    #[test]
-    fn remove_task_label_path_dto_serializes_to_committed_fixture() {
-        assert_fixture_roundtrip::<RemoveTaskLabelPath>("remove-task-label-path");
-    }
-
-    #[test]
-    fn remove_task_label_path_fixture_is_consumed_by_real_router() {
-        let path: RemoveTaskLabelPath = serde_json::from_value(fixture("remove-task-label-path"))
-            .expect("remove task label path fixture");
-        assert_eq!(path.label_id, "l_fixture");
-    }
-
-    #[test]
-    fn remove_task_label_response_fixture_is_produced_by_real_router() {
-        assert_fixture_roundtrip::<RemoveTaskLabelResponse>("remove-task-label-response");
-    }
-
-    #[test]
-    fn remove_task_label_response_fixture_is_consumed_by_contract_root() {
-        let response: RemoveTaskLabelResponse =
-            serde_json::from_value(fixture("remove-task-label-response"))
-                .expect("remove task label response fixture");
-        assert!(response.data.labels.is_empty());
     }
 }
 

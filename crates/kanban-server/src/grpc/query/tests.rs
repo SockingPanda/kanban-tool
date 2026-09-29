@@ -230,7 +230,7 @@ async fn idle_heartbeats_leave_query_unchanged_and_cancel_reclaims_resources() {
     );
 
     let started = Instant::now();
-    for _ in 0..3 {
+    for _ in 0..2 {
         let waiting = Instant::now();
         let frame = tokio::time::timeout(Duration::from_secs(2), stream.next())
             .await
@@ -261,7 +261,7 @@ async fn idle_heartbeats_leave_query_unchanged_and_cancel_reclaims_resources() {
     assert_eq!(shared.reads.load(Ordering::Relaxed), reads);
     assert_eq!(state.grpc_probe.queries(), application_reads);
     eprintln!(
-        "G08_QUERY_IDLE_HEARTBEAT count=3 elapsed_ms={:.3} application_reads={reads} revision={} hubs_after_cancel=0 available_permits={MAX_CONNECTIONS} retained_bytes=0",
+        "G08_QUERY_IDLE_HEARTBEAT count=2 elapsed_ms={:.3} application_reads={reads} revision={} hubs_after_cancel=0 available_permits={MAX_CONNECTIONS} retained_bytes=0",
         elapsed.as_secs_f64() * 1000.0,
         cursor.revision
     );

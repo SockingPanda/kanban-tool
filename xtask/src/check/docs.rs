@@ -1,12 +1,16 @@
-use std::{collections::BTreeSet, fs, path::Path};
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use xtask::ToolResult;
 
 use crate::{
     document::{is_external_link, markdown_targets},
     repository::{
-        ensure_regular_directory, ensure_regular_file, include_targets, repository_files,
-        same_file, workspace_members,
+        ensure_regular_directory, ensure_regular_file, include_targets, is_vendored_source,
+        repository_files, same_file, workspace_members,
     },
 };
 
@@ -17,8 +21,8 @@ pub(crate) fn run(root: &Path) -> ToolResult<()> {
     super::agents::check_agents_document_contract(root, &agents_text)?;
     check_documentation_entrypoints(root, &agents_text)?;
     check_markdown_links(root)?;
-    check_include_str_targets(root)?;
-    check_crate_readme_includes(root, &agents_text)?;
+    let rust_sources = check_include_str_targets(root)?;
+    check_crate_readme_includes(root, &agents_text, &rust_sources)?;
     check_adr_index(root)?;
     println!(
         "ok: 文档入口、Context glossary、文档链接、include_str!、crate README、ADR index 和 workspace crate map 已通过"
@@ -281,22 +285,38 @@ fn check_markdown_links(root: &Path) -> ToolResult<()> {
     Ok(())
 }
 
-fn check_include_str_targets(root: &Path) -> ToolResult<()> {
+struct RustSource {
+    path: PathBuf,
+    include_targets: Vec<PathBuf>,
+}
+
+// 同一份排序后的 Rust 扫描结果同时服务目标校验和 crate README 检查。
+fn check_include_str_targets(root: &Path) -> ToolResult<Vec<RustSource>> {
+    let mut sources = Vec::new();
     for path in repository_files(root, "rs")? {
         let text = fs::read_to_string(&path)?;
-        for target in include_targets(root, &path, &text)? {
+        let targets = include_targets(root, &path, &text)?;
+        for target in &targets {
             // `concat!(env!("CARGO_MANIFEST_DIR"), "/base/", $literal)` 在宏定义处
             // 只能解析到基础目录；具体文件由每个宏展开和 rustdoc 编译继续校验。
             if target.is_dir() {
                 continue;
             }
-            ensure_regular_file(&target, "include_str! 目标")?;
+            ensure_regular_file(target, "include_str! 目标")?;
         }
+        sources.push(RustSource {
+            path,
+            include_targets: targets,
+        });
     }
-    Ok(())
+    Ok(sources)
 }
 
-fn check_crate_readme_includes(root: &Path, agents_text: &str) -> ToolResult<()> {
+fn check_crate_readme_includes(
+    root: &Path,
+    agents_text: &str,
+    rust_sources: &[RustSource],
+) -> ToolResult<()> {
     let members = workspace_members(root)?;
     super::agents::check_workspace_map_members(agents_text, &members)?;
     for member in members {
@@ -309,15 +329,21 @@ fn check_crate_readme_includes(root: &Path, agents_text: &str) -> ToolResult<()>
         };
         ensure_regular_file(&readme, "workspace crate README")?;
 
-        let included = repository_files(&member_root, "rs")?
-            .into_iter()
-            .map(|source| {
-                let text = fs::read_to_string(&source)?;
-                Ok(include_targets(root, &source, &text)?
-                    .into_iter()
-                    .any(|target| same_file(&target, &readme)))
+        // 全仓列表按路径排序，过滤后仍保留 member 内原有顺序。
+        // 同时重用 member 局部的 vendor 排除规则。
+        let included = rust_sources
+            .iter()
+            .filter(|source| {
+                source.path.starts_with(&member_root)
+                    && !is_vendored_source(&member_root, &source.path)
             })
-            .collect::<ToolResult<Vec<_>>>()?
+            .map(|source| {
+                source
+                    .include_targets
+                    .iter()
+                    .any(|target| same_file(target, &readme))
+            })
+            .collect::<Vec<_>>()
             .into_iter()
             .any(|included| included);
         if !included {

@@ -1,0 +1,22 @@
+crates/kanban-cli/tests/cli_history_adoption.rs
+  s_243209e7a7ea3a::t_9adc157bd373a1 183,189,191,193,204-205
+  s_243209e7a7ea3a::t_08a43a7a9df352 5,169-182,184-188,192,194-197
+  s_243209e7a7ea3a::t_9358a5c31e9511 160-166,190,198-203,206-207
+  s_243209e7a7ea3a::t_e24af6a75c3838 168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e1df16a0e89145e08b6875106ef5d29717b0cc1",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

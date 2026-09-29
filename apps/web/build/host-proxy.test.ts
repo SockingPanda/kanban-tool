@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { createServer, preview } from "vite"
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest"
 
 import { resolveKanbanHostUrl } from "./host-proxy"
 
@@ -36,9 +36,11 @@ async function closeHttpServer(server: Server): Promise<void> {
 
 async function fixture(
   kind: "dev" | "preview",
-  handler: (request: IncomingMessage, response: ServerResponse) => void,
 ) {
-  const upstream = createHttpServer(handler)
+  let handler: (request: IncomingMessage, response: ServerResponse) => void = (_request, response) => {
+    response.writeHead(500).end("没有为该用例设置上游 handler")
+  }
+  const upstream = createHttpServer((request, response) => handler(request, response))
   await new Promise<void>(resolve => upstream.listen(0, "127.0.0.1", resolve))
   const root = await mkdtemp(join(tmpdir(), "kanban-host-proxy-"))
   await mkdir(join(root, "dist"))
@@ -55,6 +57,7 @@ async function fixture(
       })
       await vite.listen()
       return { origin: serverOrigin(vite.httpServer!), upstreamOrigin: serverOrigin(upstream),
+        setHandler: (next: typeof handler) => { handler = next },
         close: async () => {
           await vite.close()
           await closeHttpServer(upstream)
@@ -63,6 +66,7 @@ async function fixture(
     }
     const vite = await preview({ ...common, preview: { host: "127.0.0.1", port: 0, strictPort: true } })
     return { origin: serverOrigin(vite.httpServer), upstreamOrigin: serverOrigin(upstream),
+      setHandler: (next: typeof handler) => { handler = next },
       close: async () => {
         await closeHttpServer(vite.httpServer)
         await closeHttpServer(upstream)
@@ -91,8 +95,6 @@ function send(origin: string, path: string, headers: OutgoingHttpHeaders | reado
   })
 }
 
-afterEach(() => vi.unstubAllEnvs())
-
 describe("KANBAN_HOST_URL", () => {
   test("默认端口与已支持的 loopback origin", () => {
     expect(resolveKanbanHostUrl()).toBe("http://127.0.0.1:8721")
@@ -112,96 +114,119 @@ describe("KANBAN_HOST_URL", () => {
 })
 
 describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind => {
+  let value: Awaited<ReturnType<typeof fixture>> | undefined
+
+  function currentFixture(): Awaited<ReturnType<typeof fixture>> {
+    if (!value) throw new Error("Vite proxy fixture was not initialized")
+    return value
+  }
+
+  beforeAll(async () => {
+    value = await fixture(kind)
+  })
+
+  afterEach(() => {
+    value?.setHandler((_request, response) => {
+      response.writeHead(500).end("没有为该用例设置上游 handler")
+    })
+  })
+
+  afterAll(async () => {
+    try {
+      await value?.close()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   test("两个正式 RPC service使用同一个 Host，原样转发方法、Content-Type 与字节", async () => {
+    const value = currentFixture()
     const received: Array<{ url?: string; method?: string; headers: IncomingMessage["headers"]; body: Buffer }> = []
-    const value = await fixture(kind, (request, response) => {
+    value.setHandler((request, response) => {
       void readBody(request).then(body => {
         received.push({ url: request.url, method: request.method, headers: request.headers, body })
         response.writeHead(200, { "Content-Type": "application/grpc-web+proto" }).end(body)
       })
     })
     const payload = Buffer.from([0, 0, 0, 0, 3, 8, 1, 0])
-    try {
-      for (const path of rpcPaths) {
-        const result = await send(value.origin, path, {
-          Origin: value.origin, "Content-Type": "application/grpc-web+proto", "X-Grpc-Web": "1",
-          "X-Forwarded-Host": "attacker.invalid", Forwarded: "host=attacker.invalid",
-          ...(path === rpcPaths[1] ? { Expect: "100-continue" } : {}),
-        }, payload)
-        expect(result.status).toBe(200)
-        expect(result.headers["content-type"]).toBe("application/grpc-web+proto")
-        expect(result.body).toEqual(payload)
-      }
-      expect(received.map(request => request.url)).toEqual(rpcPaths)
-      for (const request of received) {
-        expect(request.method).toBe("POST")
-        expect(request.headers.host).toBe(new URL(value.upstreamOrigin).host)
-        expect(request.headers.origin).toBe(value.upstreamOrigin)
-        expect(request.headers["content-type"]).toBe("application/grpc-web+proto")
-        expect(request.headers["x-grpc-web"]).toBe("1")
-        expect(request.headers["x-forwarded-host"]).toBeUndefined()
-        expect(request.headers.forwarded).toBeUndefined()
-        expect(request.body).toEqual(payload)
-      }
-    } finally { await value.close() }
+    for (const path of rpcPaths) {
+      const result = await send(value.origin, path, {
+        Origin: value.origin, "Content-Type": "application/grpc-web+proto", "X-Grpc-Web": "1",
+        "X-Forwarded-Host": "attacker.invalid", Forwarded: "host=attacker.invalid",
+        ...(path === rpcPaths[1] ? { Expect: "100-continue" } : {}),
+      }, payload)
+      expect(result.status).toBe(200)
+      expect(result.headers["content-type"]).toBe("application/grpc-web+proto")
+      expect(result.body).toEqual(payload)
+    }
+    expect(received.map(request => request.url)).toEqual(rpcPaths)
+    for (const request of received) {
+      expect(request.method).toBe("POST")
+      expect(request.headers.host).toBe(new URL(value.upstreamOrigin).host)
+      expect(request.headers.origin).toBe(value.upstreamOrigin)
+      expect(request.headers["content-type"]).toBe("application/grpc-web+proto")
+      expect(request.headers["x-grpc-web"]).toBe("1")
+      expect(request.headers["x-forwarded-host"]).toBeUndefined()
+      expect(request.headers.forwarded).toBeUndefined()
+      expect(request.body).toEqual(payload)
+    }
   })
 
   test("metadata 与健康检查共用 Host，本地 /app/ 与 strict preview CSP 保留", async () => {
+    const value = currentFixture()
     const paths: string[] = []
     const origins: Array<string | undefined> = []
-    const value = await fixture(kind, (request, response) => {
+    value.setHandler((request, response) => {
       paths.push(request.url ?? "")
       origins.push(request.headers.origin)
       response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ owner: "host", path: request.url }))
     })
-    try {
-      for (const path of ["/app/runtime.json", "/app/manifest.json?fresh=1", "/health"]) {
-        const result = await send(value.origin, path)
-        expect(result.status).toBe(200)
-        expect(JSON.parse(result.body.toString())).toEqual({ owner: "host", path })
-      }
-      expect(paths).toEqual(["/app/runtime.json", "/app/manifest.json?fresh=1", "/health"])
-      expect(origins).toEqual([undefined, undefined, undefined])
-      const page = await send(value.origin, "/app/")
-      expect(page.status).toBe(200)
-      expect(page.body.toString()).toContain(kind === "dev" ? "本地 Vite 页面" : "本地 preview 页面")
-      for (const retired of ['/api/v1/boards', '/kanban.framework.v1.WorkspaceService/WatchChanges', '/kanban.v1.WorkspaceService/WatchChanges']) {
-        await send(value.origin, retired)
-      }
-      expect(paths).toHaveLength(3)
-      if (kind === "preview") expect(page.headers["content-security-policy"]).toBe(strictCsp)
-    } finally { await value.close() }
+    for (const path of ["/app/runtime.json", "/app/manifest.json?fresh=1", "/health"]) {
+      const result = await send(value.origin, path)
+      expect(result.status).toBe(200)
+      expect(JSON.parse(result.body.toString())).toEqual({ owner: "host", path })
+    }
+    expect(paths).toEqual(["/app/runtime.json", "/app/manifest.json?fresh=1", "/health"])
+    expect(origins).toEqual([undefined, undefined, undefined])
+    const page = await send(value.origin, "/app/")
+    expect(page.status).toBe(200)
+    expect(page.body.toString()).toContain(kind === "dev" ? "本地 Vite 页面" : "本地 preview 页面")
+    for (const retired of ['/api/v1/boards', '/kanban.framework.v1.WorkspaceService/WatchChanges', '/kanban.v1.WorkspaceService/WatchChanges']) {
+      await send(value.origin, retired)
+    }
+    expect(paths).toHaveLength(3)
+    if (kind === "preview") expect(page.headers["content-security-policy"]).toBe(strictCsp)
   })
 
   test("重复或无效 Origin、不同端口 Origin 与非 loopback Host 均在上游之前拒绝", async () => {
+    const value = currentFixture()
     let calls = 0
-    const value = await fixture(kind, (_request, response) => { calls += 1; response.end() })
+    value.setHandler((_request, response) => { calls += 1; response.end() })
     const host = new URL(value.origin).host
-    try {
-      const attempts: Array<OutgoingHttpHeaders | readonly string[]> = [
-        { Host: host, Origin: "https://attacker.invalid" },
-        { Host: host, Origin: value.upstreamOrigin },
-        { Host: host, Origin: "null" },
-        { Host: host, Origin: value.origin + "/" },
-        { Host: host, Origin: value.origin + " invalid" },
-        ["Host", host, "Origin", value.origin, "Origin", value.origin],
-        ["Host", host, "Host", host, "Origin", value.origin],
-        { Host: "192.168.1.2:1421" },
-        { Host: "attacker.invalid" },
-      ]
-      for (const headers of attempts) {
-        const result = await send(value.origin, rpcPaths[0], headers, Buffer.from([0]))
-        expect(result.status).toBe(403)
-      }
-      expect(calls).toBe(0)
-    } finally { await value.close() }
+    const attempts: Array<OutgoingHttpHeaders | readonly string[]> = [
+      { Host: host, Origin: "https://attacker.invalid" },
+      { Host: host, Origin: value.upstreamOrigin },
+      { Host: host, Origin: "null" },
+      { Host: host, Origin: value.origin + "/" },
+      { Host: host, Origin: value.origin + " invalid" },
+      ["Host", host, "Origin", value.origin, "Origin", value.origin],
+      ["Host", host, "Host", host, "Origin", value.origin],
+      { Host: "192.168.1.2:1421" },
+      { Host: "attacker.invalid" },
+    ]
+    for (const headers of attempts) {
+      const result = await send(value.origin, rpcPaths[0], headers, Buffer.from([0]))
+      expect(result.status).toBe(403)
+    }
+    expect(calls).toBe(0)
   })
 
   test("首个 stream chunk 在上游结束前到达，Abort 会关闭上游 stream", async () => {
+    const value = currentFixture()
     const closed = deferred<void>()
     const first = Buffer.from([0, 0, 0, 0, 2, 8, 1])
     let ended = false
-    const value = await fixture(kind, (_request, response) => {
+    value.setHandler((_request, response) => {
       response.on("close", () => { ended = true; closed.resolve() })
       response.writeHead(200, { "Content-Type": "application/grpc-web+proto" })
       response.write(first)
@@ -222,15 +247,15 @@ describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind =>
       await reader.cancel().catch(() => undefined)
     } finally {
       abort.abort()
-      await value.close()
     }
   })
 
   test("上游重定向不会被代理跟随到另一个 target", async () => {
+    const value = currentFixture()
     let redirectedCalls = 0
     const redirect = createHttpServer((_request, response) => { redirectedCalls += 1; response.end("不应访问") })
     await new Promise<void>(resolve => redirect.listen(0, "127.0.0.1", resolve))
-    const value = await fixture(kind, (_request, response) => {
+    value.setHandler((_request, response) => {
       response.writeHead(307, { Location: `${serverOrigin(redirect)}/remote` }).end()
     })
     try {
@@ -239,7 +264,6 @@ describe.each(["dev", "preview"] as const)("Vite %s 实际同源代理", kind =>
       expect(result.headers.location).toBe(`${serverOrigin(redirect)}/remote`)
       expect(redirectedCalls).toBe(0)
     } finally {
-      await value.close()
       await closeHttpServer(redirect)
     }
   })

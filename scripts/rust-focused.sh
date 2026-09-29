@@ -26,11 +26,12 @@ done
 # 与 rust-full 一致：普通 Rust gate 不执行 Desktop 资源打包。
 export TAURI_CONFIG='{"bundle":{"resources":[]}}'
 cargo fmt "${packages[@]}" -- --check
-scripts/cargo-build-lock.sh -- cargo check --locked --tests "${packages[@]}"
 
 # 两个 runner 都只运行 test targets；doctest 继续由 docs-check 独立负责。
 # 定向开发默认 fail-fast；完整 gate 的 no-fail-fast 行为保持不变。
 # 包名已明确给定；仅有编译目标的包允许零测试，与 cargo test 保持一致。
+# 测试编译覆盖 test targets，末尾的 clippy --all-targets 覆盖其它目标；
+# 这里不再提前对同一包运行 cargo check。独立 check-p/check-core 入口仍保留。
 if cargo nextest --version >/dev/null 2>&1; then
     scripts/cargo-build-lock.sh -- cargo nextest run --locked --tests --no-tests pass "${packages[@]}"
 else

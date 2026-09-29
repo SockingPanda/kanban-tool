@@ -3,9 +3,9 @@ mod tests {
     use crate::test_support::*;
 
     #[tokio::test]
-    async fn fresh_database_bootstraps_canonical_tables() {
-        let (_directory, store, _path) = store("bootstrap").await;
-        store.initialize().await.expect("initialize");
+    async fn fresh_database_bootstraps_schema_and_remains_idempotent() {
+        let (_directory, store, path) = store("bootstrap").await;
+        store.initialize().await.expect("first initialize");
 
         let connection = store.connection().await.expect("connection");
         let mut rows = connection
@@ -53,13 +53,7 @@ mod tests {
                 "missing table {required}"
             );
         }
-    }
-
-    #[tokio::test]
-    async fn fresh_database_records_full_turso_lineage() {
-        let (_directory, store, _path) = store("lineage").await;
-        store.initialize().await.expect("initialize");
-        let connection = store.connection().await.expect("connection");
+        drop(rows);
         let mut rows = connection
             .query(
                 "SELECT schema_family, name, checksum FROM schema_migrations ORDER BY version",
@@ -81,6 +75,57 @@ mod tests {
         assert_eq!(ledger[0].2, crate::schema::CURRENT_V1_SCHEMA_FINGERPRINT);
         assert_eq!(ledger[1].1, "002_turso_full_feature_baseline");
         assert_eq!(ledger[1].2, crate::migration::full_schema_fingerprint());
+        drop(rows);
+        drop(connection);
+
+        store.initialize().await.expect("second initialize");
+
+        let boards = store.list_boards(false).await.expect("list boards");
+        assert_eq!(boards.len(), 1);
+        assert_eq!(boards[0].slug, "default");
+
+        let columns = store
+            .list_board_columns("default")
+            .await
+            .expect("list columns");
+        assert_eq!(columns.len(), 9);
+        assert_eq!(
+            columns
+                .iter()
+                .map(|column| (column.status.as_str(), column.position, column.hidden))
+                .collect::<Vec<_>>(),
+            vec![
+                ("triage", 10, false),
+                ("todo", 20, false),
+                ("scheduled", 30, false),
+                ("ready", 40, false),
+                ("running", 50, false),
+                ("blocked", 60, false),
+                ("review", 70, false),
+                ("done", 80, false),
+                ("archived", 90, true),
+            ]
+        );
+
+        drop(store);
+        let reopened = TursoStore::open(path).await.expect("reopen database");
+        reopened.initialize().await.expect("reinitialize database");
+        assert_eq!(
+            reopened
+                .list_boards(false)
+                .await
+                .expect("list after reopen")
+                .len(),
+            1
+        );
+        assert_eq!(
+            reopened
+                .list_board_columns("b_default")
+                .await
+                .expect("columns by id")
+                .len(),
+            9
+        );
     }
 
     #[tokio::test]
@@ -388,60 +433,6 @@ PRAGMA foreign_keys = ON;
             .await
             .expect_err("trigger drift must fail closed");
         assert!(error.to_string().contains("trigger"));
-    }
-
-    #[tokio::test]
-    async fn initialize_is_idempotent_and_seeds_default_board_columns() {
-        let (_directory, store, path) = store("idempotent").await;
-        store.initialize().await.expect("first initialize");
-        store.initialize().await.expect("second initialize");
-
-        let boards = store.list_boards(false).await.expect("list boards");
-        assert_eq!(boards.len(), 1);
-        assert_eq!(boards[0].slug, "default");
-
-        let columns = store
-            .list_board_columns("default")
-            .await
-            .expect("list columns");
-        assert_eq!(columns.len(), 9);
-        assert_eq!(
-            columns
-                .iter()
-                .map(|column| (column.status.as_str(), column.position, column.hidden))
-                .collect::<Vec<_>>(),
-            vec![
-                ("triage", 10, false),
-                ("todo", 20, false),
-                ("scheduled", 30, false),
-                ("ready", 40, false),
-                ("running", 50, false),
-                ("blocked", 60, false),
-                ("review", 70, false),
-                ("done", 80, false),
-                ("archived", 90, true),
-            ]
-        );
-
-        drop(store);
-        let reopened = TursoStore::open(path).await.expect("reopen database");
-        reopened.initialize().await.expect("reinitialize database");
-        assert_eq!(
-            reopened
-                .list_boards(false)
-                .await
-                .expect("list after reopen")
-                .len(),
-            1
-        );
-        assert_eq!(
-            reopened
-                .list_board_columns("b_default")
-                .await
-                .expect("columns by id")
-                .len(),
-            9
-        );
     }
 
     #[tokio::test]

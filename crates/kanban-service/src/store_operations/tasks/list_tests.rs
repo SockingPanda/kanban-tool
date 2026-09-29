@@ -380,54 +380,151 @@ mod tests {
         assert_eq!(empty_page.total, 3);
         assert!(empty_page.tasks.is_empty());
 
+        // 构造不同排序值与次级键平局，让单次查询能核对排序和稳定 tie-break。
+        let connection = store.connection().await.expect("sort fixture connection");
+        connection
+            .execute(
+                r#"
+                    UPDATE tasks
+                    SET status = CASE id
+                            WHEN 't_sort_1' THEN 'todo'
+                            WHEN 't_sort_2' THEN 'ready'
+                            ELSE 'todo'
+                        END,
+                        position = CASE id
+                            WHEN 't_sort_1' THEN 10
+                            WHEN 't_sort_2' THEN 30
+                            ELSE 10
+                        END,
+                        priority = CASE id
+                            WHEN 't_sort_1' THEN 2
+                            WHEN 't_sort_2' THEN 1
+                            ELSE 2
+                        END,
+                        assignee = CASE id
+                            WHEN 't_sort_1' THEN 'zeta'
+                            WHEN 't_sort_2' THEN NULL
+                            ELSE 'alpha'
+                        END,
+                        scheduled_at = CASE id
+                            WHEN 't_sort_1' THEN 300
+                            WHEN 't_sort_2' THEN NULL
+                            ELSE 100
+                        END,
+                        due_at = CASE id
+                            WHEN 't_sort_1' THEN 300
+                            WHEN 't_sort_2' THEN NULL
+                            ELSE 100
+                        END,
+                        created_at = CASE id
+                            WHEN 't_sort_1' THEN 100
+                            WHEN 't_sort_2' THEN 300
+                            ELSE 100
+                        END,
+                        updated_at = CASE id
+                            WHEN 't_sort_1' THEN 300
+                            WHEN 't_sort_2' THEN 100
+                            ELSE 200
+                        END
+                    WHERE id IN ('t_sort_1', 't_sort_2', 't_sort_3')
+                "#,
+                (),
+            )
+            .await
+            .expect("set sort fixture values");
+
+        let position_expected = ["t_sort_1", "t_sort_3", "t_sort_2"];
         let sorts = [
-            TaskListSort::Seq,
-            TaskListSort::SeqDesc,
-            TaskListSort::Title,
-            TaskListSort::TitleDesc,
-            TaskListSort::Status,
-            TaskListSort::StatusDesc,
-            TaskListSort::Position,
-            TaskListSort::PositionDesc,
-            TaskListSort::Priority,
-            TaskListSort::PriorityDesc,
-            TaskListSort::Assignee,
-            TaskListSort::AssigneeDesc,
-            TaskListSort::ScheduledAt,
-            TaskListSort::ScheduledAtDesc,
-            TaskListSort::CreatedAt,
-            TaskListSort::CreatedAtDesc,
-            TaskListSort::UpdatedAt,
-            TaskListSort::UpdatedAtDesc,
-            TaskListSort::DueAt,
-            TaskListSort::DueAtDesc,
+            (TaskListSort::Seq, ["t_sort_1", "t_sort_2", "t_sort_3"]),
+            (TaskListSort::SeqDesc, ["t_sort_3", "t_sort_2", "t_sort_1"]),
+            (TaskListSort::Title, ["t_sort_2", "t_sort_3", "t_sort_1"]),
+            (
+                TaskListSort::TitleDesc,
+                ["t_sort_1", "t_sort_3", "t_sort_2"],
+            ),
+            (TaskListSort::Status, ["t_sort_1", "t_sort_3", "t_sort_2"]),
+            (
+                TaskListSort::StatusDesc,
+                ["t_sort_2", "t_sort_3", "t_sort_1"],
+            ),
+            (TaskListSort::Position, position_expected),
+            (
+                TaskListSort::PositionDesc,
+                ["t_sort_2", "t_sort_3", "t_sort_1"],
+            ),
+            (TaskListSort::Priority, ["t_sort_2", "t_sort_1", "t_sort_3"]),
+            (
+                TaskListSort::PriorityDesc,
+                ["t_sort_3", "t_sort_1", "t_sort_2"],
+            ),
+            (TaskListSort::Assignee, ["t_sort_2", "t_sort_3", "t_sort_1"]),
+            (
+                TaskListSort::AssigneeDesc,
+                ["t_sort_1", "t_sort_3", "t_sort_2"],
+            ),
+            (
+                TaskListSort::ScheduledAt,
+                ["t_sort_3", "t_sort_1", "t_sort_2"],
+            ),
+            (
+                TaskListSort::ScheduledAtDesc,
+                ["t_sort_1", "t_sort_3", "t_sort_2"],
+            ),
+            (
+                TaskListSort::CreatedAt,
+                ["t_sort_1", "t_sort_3", "t_sort_2"],
+            ),
+            (
+                TaskListSort::CreatedAtDesc,
+                ["t_sort_2", "t_sort_3", "t_sort_1"],
+            ),
+            (
+                TaskListSort::UpdatedAt,
+                ["t_sort_2", "t_sort_3", "t_sort_1"],
+            ),
+            (
+                TaskListSort::UpdatedAtDesc,
+                ["t_sort_1", "t_sort_3", "t_sort_2"],
+            ),
+            (TaskListSort::DueAt, ["t_sort_3", "t_sort_1", "t_sort_2"]),
+            (
+                TaskListSort::DueAtDesc,
+                ["t_sort_1", "t_sort_3", "t_sort_2"],
+            ),
         ];
-        for sort in sorts {
+        for (sort, expected) in sorts {
             let options = TaskListOptions {
                 sort,
                 ..TaskListOptions::default()
             };
-            let first = store
-                .list_tasks("default", options.clone())
-                .await
-                .expect("sort task list");
-            let second = store
+            let page = store
                 .list_tasks("default", options)
                 .await
-                .expect("repeat sort task list");
-            assert_eq!(
-                first
-                    .tasks
-                    .iter()
-                    .map(|task| task.id.as_str())
-                    .collect::<Vec<_>>(),
-                second
-                    .tasks
-                    .iter()
-                    .map(|task| task.id.as_str())
-                    .collect::<Vec<_>>()
-            );
+                .expect("sort task list");
+            let actual = page
+                .tasks
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(actual.as_slice(), expected.as_slice(), "sort {sort:?}");
         }
+
+        let repeated_position = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    sort: TaskListSort::Position,
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("repeat tied position sort");
+        let repeated_ids = repeated_position
+            .tasks
+            .iter()
+            .map(|task| task.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(repeated_ids.as_slice(), position_expected.as_slice());
 
         let error = store
             .list_tasks(

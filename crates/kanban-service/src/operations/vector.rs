@@ -338,8 +338,7 @@ mod tests {
         let status = service.vector_status("default").await.expect("status");
 
         assert_eq!(
-            status.backend,
-            "turso-vector32",
+            status.backend, "turso-vector32",
             "vector_service_reads_degraded_status_without_provider"
         );
         assert!(

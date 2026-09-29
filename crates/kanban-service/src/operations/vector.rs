@@ -331,15 +331,60 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn vector_service_reads_degraded_status_without_provider() {
+    async fn vector_service_without_provider_preserves_read_and_validation_contracts() {
         let (_directory, service) = service().await;
 
+        // 这些检查都只读同一份未配置 provider 的新库，可以共用昂贵的 schema 初始化。
         let status = service.vector_status("default").await.expect("status");
 
-        assert_eq!(status.backend, "turso-vector32");
-        assert!(!status.enabled);
-        assert!(status.message.contains("未配置"));
-        assert_eq!(status.board_dirty, Some(false));
+        assert_eq!(
+            status.backend,
+            "turso-vector32",
+            "vector_service_reads_degraded_status_without_provider"
+        );
+        assert!(
+            !status.enabled,
+            "vector_service_reads_degraded_status_without_provider"
+        );
+        assert!(
+            status.message.contains("未配置"),
+            "vector_service_reads_degraded_status_without_provider"
+        );
+        assert_eq!(
+            status.board_dirty,
+            Some(false),
+            "vector_service_reads_degraded_status_without_provider"
+        );
+
+        let error = service
+            .query_vector_chunks(VectorChunkQueryCommand {
+                board: "default".to_owned(),
+                q: "query".to_owned(),
+                embedding_model: None,
+                limit: 5,
+            })
+            .await
+            .expect_err("provider must be degraded");
+        assert!(
+            error.to_string().contains("degraded"),
+            "vector_service_preserves_degraded_embedding_error: {error}"
+        );
+
+        let error = service
+            .query_vector_label_atoms(VectorLabelAtomQueryCommand {
+                board: "default".to_owned(),
+                q: " ".to_owned(),
+                embedding_model: None,
+                polarity: None,
+                limit: 5,
+                include_vector: false,
+            })
+            .await
+            .expect_err("empty query");
+        assert!(
+            error.to_string().contains("非空 q"),
+            "vector_service_rejects_invalid_query_before_provider_access: {error}"
+        );
     }
 
     #[tokio::test]
@@ -419,38 +464,6 @@ mod tests {
         assert_eq!(ready.running_jobs, 0);
         assert_eq!(ready.failed_jobs, 0);
         provider.join().expect("mock provider");
-    }
-
-    #[tokio::test]
-    async fn vector_service_preserves_degraded_embedding_error() {
-        let (_directory, service) = service().await;
-        let error = service
-            .query_vector_chunks(VectorChunkQueryCommand {
-                board: "default".to_owned(),
-                q: "query".to_owned(),
-                embedding_model: None,
-                limit: 5,
-            })
-            .await
-            .expect_err("provider must be degraded");
-        assert!(error.to_string().contains("degraded"));
-    }
-
-    #[tokio::test]
-    async fn vector_service_rejects_invalid_query_before_provider_access() {
-        let (_directory, service) = service().await;
-        let error = service
-            .query_vector_label_atoms(VectorLabelAtomQueryCommand {
-                board: "default".to_owned(),
-                q: " ".to_owned(),
-                embedding_model: None,
-                polarity: None,
-                limit: 5,
-                include_vector: false,
-            })
-            .await
-            .expect_err("empty query");
-        assert!(error.to_string().contains("非空 q"));
     }
 
     fn mock_ollama() -> (String, thread::JoinHandle<()>) {

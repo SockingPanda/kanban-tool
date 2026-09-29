@@ -1,0 +1,20 @@
+apps/web/tests/support/render.tsx
+  s_243209e7a7ea3a::t_68cd4d0b4c3341 8
+  s_243209e7a7ea3a::t_b8a2b55e4271c9 9,12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26708ab09a9a52f9a9f2ff777cb309ec50f6b4ed",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

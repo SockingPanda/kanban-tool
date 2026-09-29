@@ -1,0 +1,19 @@
+crates/kanban-mcp/tests/stdio_native.rs
+  s_243209e7a7ea3a::t_f79c02fb0b75e5 437
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "67104a137628fcfdf7407f8a4f59dd66b9a0ea53",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

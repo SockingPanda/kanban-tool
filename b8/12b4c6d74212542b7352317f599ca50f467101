@@ -1,0 +1,23 @@
+xtask/src/check/docs.rs
+  s_243209e7a7ea3a::t_82ea5a8375931f 289-290,305,335,343
+  s_243209e7a7ea3a::t_3a37c47d871cb6 332-333
+  s_243209e7a7ea3a::t_993d048c424f2a 341,344,346
+  s_243209e7a7ea3a::t_75034dbc2ee820 12-13,24-25,288,291-292,294-295,298-299,307-310,312,315-319,334,336-339,342
+  s_243209e7a7ea3a::t_b77ab107249cfd 1-5,293
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b812b4c6d74212542b7352317f599ca50f467101",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

@@ -14,7 +14,13 @@ use tokio::{
 
 #[tokio::test]
 async fn stdio_catalog_keeps_tool_contracts_and_rejects_host_admin() {
-    let mut mcp = Mcp::start("http://127.0.0.1:1", "default").await;
+    let mut mcp = Mcp::start_with_config(
+        "http://127.0.0.1:1",
+        "default",
+        json!({"profile": "all"}),
+        true,
+    )
+    .await;
     let tools = mcp.list_all("tools/list", "tools").await;
     let names: Vec<_> = tools
         .iter()
@@ -436,7 +442,7 @@ async fn modern_disabled_tools_cannot_be_reached_through_resources_or_prompts() 
         json!({
             "profile": "read_only", "disabled_tools": ["task_show"], "limits": {"page_size": 2}
         }),
-        true,
+        false,
     )
     .await;
     let tools = mcp.list_all("tools/list", "tools").await;
@@ -486,7 +492,7 @@ async fn modern_cursor_scope_and_uri_validation_fail_without_host_io() {
         "http://127.0.0.1:1",
         "default",
         json!({"limits": {"page_size": 1}}),
-        true,
+        false,
     )
     .await;
     let first = mcp.request("tools/list", json!({})).await;
@@ -548,7 +554,7 @@ async fn modern_requests_can_overlap_and_busy_does_not_start_another_call() {
         json!({
             "limits": {"max_in_flight": 1, "timeout_ms": 5000}
         }),
-        true,
+        false,
     )
     .await;
     let first_id = mcp
@@ -574,7 +580,7 @@ async fn planning_mcp_profiles_membership_nullability_and_frozen_snapshots() {
         &host.url,
         "default",
         json!({"profile":"work","disabled_tools":["module_archive"]}),
-        true,
+        false,
     )
     .await;
     let tools = mcp.list_all("tools/list", "tools").await;
@@ -647,7 +653,7 @@ async fn planning_mcp_profiles_membership_nullability_and_frozen_snapshots() {
     assert_eq!(denied["code"], "invalid_transition");
     mcp.finish().await;
     let mut readonly =
-        Mcp::start_with_config(&host.url, "default", json!({"profile":"read_only"}), true).await;
+        Mcp::start_with_config(&host.url, "default", json!({"profile":"read_only"}), false).await;
     let tools = readonly.list_all("tools/list", "tools").await;
     let names: Vec<_> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"module_show") && names.contains(&"cycle_task_list"));

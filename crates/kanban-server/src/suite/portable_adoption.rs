@@ -44,7 +44,45 @@ async fn run_portable_flow() -> Result<(), String> {
         kanban_service::adoption_test_support::validate_portable_export(&source_path, &export_path)
             .await?;
     assert_fixture_records(&records)?;
+
+    // 在已填充的 host 上制造明确的旧事实，再走真实 replace；这也避免为
+    // replacement 单独初始化一份数据库。最终全目录比对会证明 stale board 被删除。
+    let stale_board = source
+        .application()
+        .create_board(kanban_service::CreateBoardCommand {
+            slug: "portable-replace-stale".to_owned(),
+            name: "portable-replace-stale".to_owned(),
+            description: None,
+            actor: "portable-adoption".to_owned(),
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    assert_eq!(stale_board.slug, "portable-replace-stale");
+    let replaced = source
+        .application()
+        .import(
+            export_path.to_str().ok_or("portable path is not UTF-8")?,
+            true,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    assert_eq!(replaced.phase, "completed");
+    assert!(!replaced.restart_required);
+    let replaced_export_path = directory.path().join("portable-replace.jsonl");
+    source
+        .application()
+        .export(
+            replaced_export_path
+                .to_str()
+                .ok_or("replace export path is not UTF-8")?,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
     drop(source);
+    kanban_service::adoption_test_support::assert_portable_facts_equal(
+        &export_path,
+        &replaced_export_path,
+    )?;
 
     let import_path = directory.path().join("portable-import.db");
     let target = AppState::open(&import_path, "portable-adoption")
@@ -74,36 +112,6 @@ async fn run_portable_flow() -> Result<(), String> {
     kanban_service::adoption_test_support::assert_portable_facts_equal(
         &export_path,
         &imported_export_path,
-    )?;
-
-    let replace_path = directory.path().join("portable-replace.db");
-    let replace_target = AppState::open(&replace_path, "portable-adoption")
-        .await
-        .map_err(|error| error.to_string())?;
-    let replaced = replace_target
-        .application()
-        .import(
-            export_path.to_str().ok_or("portable path is not UTF-8")?,
-            true,
-        )
-        .await
-        .map_err(|error| error.to_string())?;
-    assert_eq!(replaced.phase, "completed");
-    assert!(!replaced.restart_required);
-    let replaced_export_path = directory.path().join("portable-replace.jsonl");
-    replace_target
-        .application()
-        .export(
-            replaced_export_path
-                .to_str()
-                .ok_or("replace export path is not UTF-8")?,
-        )
-        .await
-        .map_err(|error| error.to_string())?;
-    drop(replace_target);
-    kanban_service::adoption_test_support::assert_portable_facts_equal(
-        &export_path,
-        &replaced_export_path,
     )?;
     Ok(())
 }

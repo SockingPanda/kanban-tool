@@ -398,7 +398,6 @@ mod maintenance_adoption {
             .map_err(|error| error.to_string())?;
         let target_router = build_router(target);
         let import = target_router
-            .clone()
             .oneshot(rpc_request(
                 "MaintenanceImport",
                 pb::MaintenanceImportRequest::from_parts(
@@ -417,12 +416,20 @@ mod maintenance_adoption {
         assert_eq!(import.data.phase, "completed");
         assert!(!import.data.restart_required);
 
-        let replace_target_path = directory.path().join("rpc-replace-target.db");
-        let replace_target = AppState::open(&replace_target_path, "adoption-owner")
+        // 让当前 host 含有快照之外的事实，验证 replace 真正清除旧记录。
+        let stale_board = source
+            .application()
+            .create_board(kanban_service::CreateBoardCommand {
+                slug: "rpc-replace-stale".to_owned(),
+                name: "rpc-replace-stale".to_owned(),
+                description: None,
+                actor: "adoption-owner".to_owned(),
+            })
             .await
             .map_err(|error| error.to_string())?;
-        let replace_router = build_router(replace_target);
-        let replace = replace_router
+        assert_eq!(stale_board.slug, "rpc-replace-stale");
+        let replace = router
+            .clone()
             .oneshot(rpc_request(
                 "MaintenanceImport",
                 pb::MaintenanceImportRequest::from_parts(
@@ -439,6 +446,13 @@ mod maintenance_adoption {
         let replace: ImportResponse =
             decode_response::<pb::MaintenanceImportResponse, _>(replace).await;
         assert_eq!(replace.data.phase, "completed");
+        let boards = source
+            .application()
+            .list_boards(true)
+            .await
+            .map_err(|error| error.to_string())?;
+        assert!(boards.iter().any(|board| board.slug == "default"));
+        assert!(!boards.iter().any(|board| board.slug == "rpc-replace-stale"));
         Ok(())
     }
 

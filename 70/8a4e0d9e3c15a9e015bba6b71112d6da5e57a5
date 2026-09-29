@@ -1,0 +1,20 @@
+crates/kanban-server/src/suite.rs
+  s_243209e7a7ea3a::t_93691eef6ea79b 59-62,67-70,72-75,83-90,95-103,109-111,123-126
+  s_243209e7a7ea3a::t_78f91af6bfbbff 11-58,64-66,77-82,92-94,105-108,112-122,128-137,141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "708a4e0d9e3c15a9e015bba6b71112d6da5e57a5",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

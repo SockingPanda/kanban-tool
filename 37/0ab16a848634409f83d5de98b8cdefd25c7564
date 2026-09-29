@@ -1,0 +1,20 @@
+crates/kanban-server/src/grpc/tests/queries/disconnect.rs
+  s_243209e7a7ea3a::t_54f4f46bda0d02 42,60,86-92
+  s_243209e7a7ea3a::t_432d76a74482a1 43-45,50,52,68,72,74,82,84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "370ab16a848634409f83d5de98b8cdefd25c7564",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

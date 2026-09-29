@@ -1,0 +1,25 @@
+apps/desktop/src-tauri/src/host_lifecycle.rs
+  s_243209e7a7ea3a::t_4432ee053dc99f 3435-3436,3438-3440
+  s_243209e7a7ea3a::t_2504a8fbc09cfb 2958-2963,3437,3443
+  s_243209e7a7ea3a::t_7af959731ee3a1 2956-2957,2974-2982,3427,3432-3434,3441-3442,3444-3448
+  s_243209e7a7ea3a::t_97d3e446054437 897-903,934,948-950,3449
+  s_243209e7a7ea3a::t_22297805538dbe 2964-2967
+  s_243209e7a7ea3a::t_5af55d9e6cd59b 3428-3431
+  s_243209e7a7ea3a::t_98470cb4e4dea3 3450
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c77a729b2b921bd1233601e735fe40d8e8b1d1c",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

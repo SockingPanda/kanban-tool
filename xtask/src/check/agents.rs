@@ -67,8 +67,13 @@ pub(crate) fn check_agents_document_contract(_root: &Path, text: &str) -> ToolRe
 }
 
 pub(crate) fn check_workspace_map(root: &Path, agents_text: &str) -> ToolResult<()> {
+    let members = workspace_members(root)?;
+    check_workspace_map_members(agents_text, &members)
+}
+
+pub(crate) fn check_workspace_map_members(agents_text: &str, members: &[String]) -> ToolResult<()> {
     let workspace_section = section_body(agents_text, "## 3. 工作区地图")?;
-    for member in workspace_members(root)? {
+    for member in members {
         let map_key = member
             .rsplit('/')
             .next()

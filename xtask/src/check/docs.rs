@@ -297,8 +297,8 @@ fn check_include_str_targets(root: &Path) -> ToolResult<()> {
 }
 
 fn check_crate_readme_includes(root: &Path, agents_text: &str) -> ToolResult<()> {
-    super::agents::check_workspace_map(root, agents_text)?;
     let members = workspace_members(root)?;
+    super::agents::check_workspace_map_members(agents_text, &members)?;
     for member in members {
         let member_root = root.join(&member);
         ensure_regular_directory(&member_root, "workspace crate")?;

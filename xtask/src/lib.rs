@@ -430,8 +430,9 @@ pub fn write_generated(repo_root: &Path) -> ToolResult<()> {
 
 pub fn check_contract(repo_root: &Path) -> ToolResult<()> {
     audit_inventory()?;
-    validate_generated_schemas()?;
-    validate_fixtures(repo_root)?;
+    let mut validators = Vec::with_capacity(schema_registry().len());
+    validate_generated_schemas_with(|validator| validators.push(validator))?;
+    validate_fixtures_with_validators(repo_root, &validators)?;
     check_fixture_tree(repo_root)?;
     check_committed_artifacts(repo_root)
 }
@@ -472,14 +473,21 @@ pub fn check_committed_artifacts(repo_root: &Path) -> ToolResult<()> {
 }
 
 pub fn validate_generated_schemas() -> ToolResult<()> {
+    validate_generated_schemas_with(drop)
+}
+
+fn validate_generated_schemas_with(
+    mut use_validator: impl FnMut(jsonschema::Validator),
+) -> ToolResult<()> {
     for root in schema_registry() {
         let schema = schema_document(root);
         jsonschema::meta::validate(&schema)
             .map_err(|error| failure(format!("{} metaschema 校验失败: {error}", root.id)))?;
-        jsonschema::options()
+        let validator = jsonschema::options()
             .with_draft(Draft::Draft202012)
             .build(&schema)
             .map_err(|error| failure(format!("{} validator 编译失败: {error}", root.id)))?;
+        use_validator(validator);
     }
     Ok(())
 }
@@ -492,22 +500,41 @@ pub fn validate_fixtures(repo_root: &Path) -> ToolResult<()> {
             .build(&schema)
             .map_err(|error| failure(format!("{} validator 编译失败: {error}", root.id)))?;
 
-        let valid = read_json(&repo_root.join(root.valid_fixture))?;
-        if let Err(error) = validator.validate(&valid) {
-            return Err(failure(format!(
-                "{} schema fixture 校验失败（instance {}）: {error}",
-                root.valid_fixture,
-                error.instance_path()
-            )));
-        }
+        validate_fixture_pair(repo_root, root, &validator)?;
+    }
+    Ok(())
+}
 
-        let invalid = read_json(&repo_root.join(root.invalid_fixture))?;
-        if validator.is_valid(&invalid) {
-            return Err(failure(format!(
-                "{} 负例 fixture 未被拒绝（root {}）",
-                root.invalid_fixture, root.id
-            )));
-        }
+fn validate_fixtures_with_validators(
+    repo_root: &Path,
+    validators: &[jsonschema::Validator],
+) -> ToolResult<()> {
+    for (root, validator) in schema_registry().iter().zip(validators) {
+        validate_fixture_pair(repo_root, root, validator)?;
+    }
+    Ok(())
+}
+
+fn validate_fixture_pair(
+    repo_root: &Path,
+    root: &SchemaRoot,
+    validator: &jsonschema::Validator,
+) -> ToolResult<()> {
+    let valid = read_json(&repo_root.join(root.valid_fixture))?;
+    if let Err(error) = validator.validate(&valid) {
+        return Err(failure(format!(
+            "{} schema fixture 校验失败（instance {}）: {error}",
+            root.valid_fixture,
+            error.instance_path()
+        )));
+    }
+
+    let invalid = read_json(&repo_root.join(root.invalid_fixture))?;
+    if validator.is_valid(&invalid) {
+        return Err(failure(format!(
+            "{} 负例 fixture 未被拒绝（root {}）",
+            root.invalid_fixture, root.id
+        )));
     }
     Ok(())
 }

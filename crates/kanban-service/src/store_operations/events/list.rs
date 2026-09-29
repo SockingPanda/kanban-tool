@@ -210,15 +210,29 @@ mod tests {
             .transaction()
             .await
             .expect("begin page event fixture");
-        for index in 0..1_005_i64 {
-            let event_id = format!("e_event_page_{index}");
+        const INSERT_CHUNK_SIZE: usize = 100;
+        for start in (0..1_005_i64).step_by(INSERT_CHUNK_SIZE) {
+            let end = (start + INSERT_CHUNK_SIZE as i64).min(1_005);
+            let mut sql = String::from(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES ",
+            );
+            let mut params = Vec::with_capacity(((end - start) * 2) as usize);
+            for index in start..end {
+                if index != start {
+                    sql.push(',');
+                }
+                let parameter = ((index - start) * 2) + 1;
+                sql.push_str(&format!(
+                    "(?{parameter}, 'b_default', NULL, NULL, 'page.event', 'tester', '{{\"index\":0}}', ?{})",
+                    parameter + 1
+                ));
+                params.push(Value::Text(format!("e_event_page_{index}")));
+                params.push(Value::Integer(index));
+            }
             transaction
-                .execute(
-                    "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, 'b_default', NULL, NULL, 'page.event', 'tester', '{\"index\":0}', ?2)",
-                    (event_id.as_str(), index),
-                )
+                .execute(sql, params)
                 .await
-                .expect("insert page event");
+                .expect("insert page events");
         }
         transaction
             .commit()

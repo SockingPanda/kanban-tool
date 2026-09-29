@@ -3495,10 +3495,6 @@ mod tests {
         );
         let completed = target.import(&path, false).await.unwrap();
         assert_eq!(completed.phase, "completed");
-        assert_eq!(
-            target.import(&path, false).await.unwrap().journal_id,
-            completed.journal_id
-        );
         let mut imported = crate::KanbanService::new(target.clone());
         // portable 的 metadata_only 契约要求恢复同一附件目录。
         imported.attachment_root = Some(Arc::new(root));

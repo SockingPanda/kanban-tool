@@ -1,0 +1,25 @@
+crates/kanban-server/src/suite.rs
+  s_243209e7a7ea3a::t_14db9ba4389634 338-341,574-575,585-588,592-593,596-602,606-641,643-644,652-653,655,659-662
+  s_243209e7a7ea3a::t_be7751c26a668b 579-584,589-591,603-605,648-651
+crates/kanban-server/src/suite/legacy_adoption.rs
+  s_243209e7a7ea3a::t_14db9ba4389634 13-18
+crates/kanban-server/src/suite/portable_adoption.rs
+  s_243209e7a7ea3a::t_be7751c26a668b 123-127,172-179
+  s_243209e7a7ea3a::t_14db9ba4389634 1-6,13-17,19,46,112-122,128-129,146-148,153-171,180-183,185-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bfa5e8e9a3a28485f822234bab4fb6a9fe0efc34",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}

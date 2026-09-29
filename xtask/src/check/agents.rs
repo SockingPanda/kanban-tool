@@ -80,7 +80,7 @@ pub(crate) fn check_workspace_map_members(agents_text: &str, members: &[String])
             .filter(|name| *name != "src-tauri")
             .unwrap_or(member.as_str());
         if !section_contains_bullet(workspace_section, map_key)
-            && !section_contains_bullet(workspace_section, &member)
+            && !section_contains_bullet(workspace_section, member)
         {
             return Err(std::io::Error::other(format!(
                 "根 AGENTS.md 工作区地图缺少 workspace member: {member}"

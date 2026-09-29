@@ -593,35 +593,71 @@ mod tests {
             )
             .await
             .expect("task");
-        let connection = store.connection().await.expect("connection");
+        let mut connection = store.connection().await.expect("connection");
+        let transaction = connection
+            .transaction()
+            .await
+            .expect("begin ontology review fixture");
+
+        let mut observation_sql = String::from(
+            "INSERT INTO label_ontology_observations(id,board_id,task_id,task_ref_snapshot,task_snapshot_json,capture_fingerprint,created_by,created_by_type,created_at) VALUES ",
+        );
+        let mut observation_params = Vec::with_capacity(101 * 5);
         for index in 0..101 {
-            let observation_id = format!("lor_review_{index}");
-            let signal_id = format!("los_review_{index}");
-            connection
-                .execute(
-                    "INSERT INTO label_ontology_observations(id,board_id,task_id,task_ref_snapshot,task_snapshot_json,capture_fingerprint,created_by,created_by_type,created_at) VALUES (:observation,'b_default',:task,:task_ref,'{}',:fingerprint,'tester','user',:created)",
-                    turso::named_params! {
-                        ":observation": observation_id.as_str(),
-                        ":task": task.id.as_str(),
-                        ":task_ref": format!("default#{index}").as_str(),
-                        ":fingerprint": format!("review-{index}").as_str(),
-                        ":created": index as i64 + 1,
-                    },
-                )
-                .await
-                .expect("observation row");
-            connection
-                .execute(
-                    "INSERT INTO label_ontology_signals(id,board_id,observation_id,kind,status,proposed_action,rationale,signal_key,created_at,updated_at) VALUES (:signal,'b_default',:observation,'vocabulary_gap','open','observe','review','review-key',:created,:created)",
-                    turso::named_params! {
-                        ":signal": signal_id.as_str(),
-                        ":observation": observation_id.as_str(),
-                        ":created": index as i64 + 1,
-                    },
-                )
-                .await
-                .expect("signal row");
+            if index > 0 {
+                observation_sql.push(',');
+            }
+            let parameter = index * 5 + 1;
+            observation_sql.push_str(&format!(
+                "(?{parameter},'b_default',?{},?{},'{{}}',?{},'tester','user',?{})",
+                parameter + 1,
+                parameter + 2,
+                parameter + 3,
+                parameter + 4,
+            ));
+            observation_params.extend([
+                Value::Text(format!("lor_review_{index}")),
+                Value::Text(task.id.to_string()),
+                Value::Text(format!("default#{index}")),
+                Value::Text(format!("review-{index}")),
+                Value::Integer(index as i64 + 1),
+            ]);
         }
+        transaction
+            .execute(observation_sql, observation_params)
+            .await
+            .expect("observation rows");
+
+        let mut signal_sql = String::from(
+            "INSERT INTO label_ontology_signals(id,board_id,observation_id,kind,status,proposed_action,rationale,signal_key,created_at,updated_at) VALUES ",
+        );
+        let mut signal_params = Vec::with_capacity(101 * 3);
+        for index in 0..101 {
+            if index > 0 {
+                signal_sql.push(',');
+            }
+            let parameter = index * 3 + 1;
+            signal_sql.push_str(&format!(
+                "(?{parameter},'b_default',?{},'vocabulary_gap','open','observe','review','review-key',?{},?{})",
+                parameter + 1,
+                parameter + 2,
+                parameter + 2,
+            ));
+            signal_params.extend([
+                Value::Text(format!("los_review_{index}")),
+                Value::Text(format!("lor_review_{index}")),
+                Value::Integer(index as i64 + 1),
+            ]);
+        }
+        transaction
+            .execute(signal_sql, signal_params)
+            .await
+            .expect("signal rows");
+        transaction
+            .commit()
+            .await
+            .expect("commit ontology review fixture");
+
         let groups = store
             .review_label_ontology("default", "label", false, 1)
             .await

@@ -1,0 +1,20 @@
+apps/web/build/host-proxy.test.ts
+  s_243209e7a7ea3a::t_6deec949640699 117,119-123,129,135-139,143,176,202,225,254
+  s_243209e7a7ea3a::t_2b43fe4e6c883a 9,40-43,60,69,118,124-128,130-134,140-141,145,152-172,179,184-198,204,206-221,229,258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a12e4277ad495862952b0848a0b3bde98df1a6c",
+  "prompts": {},
+  "sessions": {
+    "s_243209e7a7ea3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e2bd-bbf9-7e63-b57d-7b945c2d6013",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Zebra Linux <q1033416242@gmail.com>"
+    }
+  }
+}
